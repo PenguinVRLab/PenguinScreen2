@@ -213,7 +213,7 @@ extern R5900cpu GSDumpReplayerCpu;
 
 bool VMManager::PerformEarlyHardwareChecks(const char** error)
 {
-#define COMMON_DOWNLOAD_MESSAGE "PenguinScreen2 builds can be downloaded from https://pcsx2.net/downloads/"
+#define COMMON_DOWNLOAD_MESSAGE "PenguinScreen2 builds can be downloaded from https://github.com/PenguinVRLab/PenguinScreen2/releases"
 
 #if defined(ARCH_X86)
 	// On Windows, this gets called as a global object constructor, before any of our objects are constructed.
@@ -1456,10 +1456,10 @@ VMBootResult VMManager::Initialize(const VMBootParameters& boot_params, Error* e
 			Error::SetStringFmt(error,
 				TRANSLATE_FS("VMManager",
 					"PenguinScreen2 requires a PlayStation 2 BIOS in order to run.\n\n"
-					"For legal reasons, you will need to obtain this BIOS from a PlayStation 2 unit which you own.\n\n"
-					"For step-by-step help with this process, please consult the setup guide at {}.\n\n"
-					"PenguinScreen2 will be able to run once you've placed your BIOS image inside the folder named \"bios\" within the data directory "
-					"(Tools Menu -> Open Data Directory)."),
+					"For legal reasons, you must dump this BIOS from a PlayStation 2 console you own — it is never included or downloaded. "
+					"For step-by-step help dumping it, see the guide at {}.\n\n"
+					"Easiest fix: drop the BIOS file into the \"PS2-BIOS\" folder in your home directory and restart PenguinScreen2 — it will be found automatically. "
+					"(Any BIOS folder also works via Settings -> BIOS.)"),
 				PCSX2_DOCUMENTATION_BIOS_URL_SHORTENED);
 			return VMBootResult::StartupFailure;
 		}

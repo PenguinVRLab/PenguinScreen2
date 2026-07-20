@@ -2089,7 +2089,7 @@ void MainWindow::checkForUpdates(bool display_message, bool force_check)
 			message = tr("<p>Sorry, you are trying to update a PenguinScreen2 version which is not an official GitHub release. To "
 						 "prevent incompatibilities, the auto-updater is only enabled on official builds.</p>"
 						 "<p>To obtain an official build, please download from the link below:</p>"
-						 "<p><a href=\"https://pcsx2.net/downloads/\">https://pcsx2.net/downloads/</a></p>");
+						 "<p><a href=\"https://github.com/PenguinVRLab/PenguinScreen2/releases\">https://github.com/PenguinVRLab/PenguinScreen2/releases</a></p>");
 #else
 			message = tr("Automatic updating is not supported on the current platform.");
 #endif

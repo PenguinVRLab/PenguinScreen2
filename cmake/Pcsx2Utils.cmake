@@ -44,6 +44,18 @@ function(detect_compiler)
 endfunction()
 
 function(get_git_version_info)
+	# PenguinScreen2 release stamp: a git-less derived tree carries its
+	# version in PS2_VERSION (written by the derive) — read it, skip git.
+	if(EXISTS ${PROJECT_SOURCE_DIR}/PS2_VERSION)
+		file(READ ${PROJECT_SOURCE_DIR}/PS2_VERSION PS2_VERSION_STAMP)
+		string(STRIP "${PS2_VERSION_STAMP}" PS2_VERSION_STAMP)
+		message(STATUS "Using PS2_VERSION stamp: ${PS2_VERSION_STAMP}")
+		set(PCSX2_GIT_REV "${PS2_VERSION_STAMP}" PARENT_SCOPE)
+		set(PCSX2_GIT_TAG "" PARENT_SCOPE)
+		set(PCSX2_GIT_HASH "" PARENT_SCOPE)
+		set(PCSX2_GIT_DATE "" PARENT_SCOPE)
+		return()
+	endif()
 	set(PCSX2_GIT_REV "")
 	set(PCSX2_GIT_TAG "")
 	set(PCSX2_GIT_HASH "")

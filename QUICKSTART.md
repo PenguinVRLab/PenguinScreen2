@@ -97,9 +97,17 @@ Two cases where you'll see a screen anyway:
    points the emulator's OpenXR at it. Leave it running. (On laptops with
    two GPUs it automatically uses the powerful one; see §7 if you ever need
    to override that.)
-2. On the **headset**, open the **WiVRn** app — it finds your PC on the
-   network and connects.
-3. Back on the PC, the emulator is up. Boot a game from the library (or
+2. On the **headset**, open the **WiVRn** app and connect to your PC:
+   - On most desktop Linux, the PC shows up in the list by itself.
+   - **On SteamOS it will NOT** (the OS blocks mDNS announcements) — choose
+     **Add server / Connect by IP** and type the address the launcher
+     printed (it detects and prints your PC's IP for exactly this reason).
+3. **First time only — pairing.** A fresh WiVRn accepts no headset until
+   it's paired once: in the WiVRn window on the PC click **Pair new
+   headset** (a PIN appears), connect from the headset, enter the PIN.
+   The headset drops into a WiVRn waiting room — paired forever. The
+   launcher detects an unpaired install and walks you through this.
+4. Back on the PC, the emulator is up. Boot a game from the library (or
    insert a disc).
 
 You should now be looking at the game on a virtual screen in the headset,
@@ -154,6 +162,12 @@ at the universal Screen tier out of the box.
 
 - **No image in the headset** — is `launch-vr-session.sh` still running on
   the PC, and did the headset's WiVRn app connect? Both must be up.
+- **The PC never appears in the headset's server list** — normal on SteamOS
+  (mDNS publishing is blocked). Use **Connect by IP** with the address the
+  launcher printed.
+- **"Connection refused" when connecting by IP** — the headset isn't paired
+  yet. In the WiVRn window on the PC: **Pair new headset** → enter the PIN
+  on the headset. One-time.
 - **Your BIOS file doesn't appear in the list** — names never matter (files
   are detected by content), so a missing entry means the file isn't a valid
   BIOS dump. Re-dump it from your console.

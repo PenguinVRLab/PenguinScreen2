@@ -34,10 +34,14 @@ commit-pinned module; from-source is the enthusiast path.
 ## Bundled in the flatpak (pinned)
 - Runtime: org.kde.Platform **6.10** · SDK: org.kde.Sdk **6.10**
 - Toolchain: llvm **20.1.8** (SDK extension) *(re-validate at cut)*
-- ffmpeg: org.freedesktop.Platform.ffmpeg-full **25.08** (add-extension —
-  bundle installs must `flatpak install flathub
-  org.freedesktop.Platform.ffmpeg-full//25.08` first; a bundle has no
-  remote to auto-install it from)
+- ffmpeg: the org.kde.Platform runtime provides the libavcodec/libavformat
+  the app links against — **nothing extra is required to launch** (validated:
+  the sonames resolve from the runtime's own codec set). The optional
+  `org.freedesktop.Platform.ffmpeg-full` add-extension only adds extra
+  patent-encumbered codecs; if Flathub offers a branch matching your
+  freedesktop runtime it will be picked up automatically — never install a
+  pinned branch by hand (field finding 2026-07-20: a stale pinned branch
+  simply doesn't exist on Flathub and the install errors out).
 - Dependency modules: commit-pinned in the manifest in this tree —
   the manifest IS the exact list
 

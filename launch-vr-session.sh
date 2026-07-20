@@ -90,7 +90,49 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 3. Point OpenXR at WiVRn and launch the emulator
+# 3. Tell the user EXACTLY how to connect the headset (SteamOS field reality)
+# ---------------------------------------------------------------------------
+# LAN IP: `hostname` does not exist on SteamOS — read the routing table.
+LAN_IP=$(ip route get 1.1.1.1 2>/dev/null | grep -oE 'src [0-9.]+' | awk '{print $2}')
+[ -z "$LAN_IP" ] && LAN_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+
+# Auto-discovery: SteamOS ships avahi with user service publishing disabled,
+# so the headset can NEVER find this PC by itself there — the server log says
+# "Cannot create entry group ... Not permitted". Detect it and say so instead
+# of letting the user wait for a listing that will never appear.
+DISCOVERY="should appear in the list automatically"
+if grep -qi "Cannot create entry group" "$HOME/wivrn.log" 2>/dev/null; then
+	DISCOVERY="will NOT appear automatically (this OS blocks mDNS publishing)"
+fi
+
+# Pairing: a fresh WiVRn accepts no headset until it has been paired once via
+# the dashboard (PIN). Paired headsets live in known_keys.json — empty or
+# absent means this is a first run.
+KNOWN="$HOME/.var/app/io.github.wivrn.wivrn/config/wivrn/known_keys.json"
+PAIRED=0
+if [ -s "$KNOWN" ] && grep -q '"key"' "$KNOWN" 2>/dev/null; then
+	PAIRED=1
+fi
+
+echo
+echo "================== HEADSET CONNECTION =================="
+echo ">> This PC's address: ${LAN_IP:-<could not detect — check your network>}"
+echo ">> In the headset's WiVRn app, this PC $DISCOVERY."
+echo ">>    Not listed? Choose 'Add server' / 'Connect by IP' and type: ${LAN_IP:-<PC IP>}"
+if [ "$PAIRED" = "0" ]; then
+	echo ">>"
+	echo ">> FIRST RUN — pair the headset once (takes a minute, never again):"
+	echo ">>    1. In the WiVRn window on THIS PC, click 'Pair new headset' — a PIN appears."
+	echo ">>    2. In the headset's WiVRn app, connect to this PC (by IP if not listed)."
+	echo ">>    3. Enter the PIN when asked. The headset drops into a waiting room — done."
+	echo ">>"
+	echo ">> Press Enter here once the headset shows the WiVRn waiting room..."
+	read -r _ || true
+fi
+echo "========================================================"
+
+# ---------------------------------------------------------------------------
+# 4. Point OpenXR at WiVRn and launch the emulator
 # ---------------------------------------------------------------------------
 WIVRN_JSON=$(find ~/.local/share/flatpak /var/lib/flatpak -name openxr_wivrn.json 2>/dev/null | head -1)
 if [ -n "$WIVRN_JSON" ]; then
@@ -99,7 +141,7 @@ else
 	echo ">> WARNING: WiVRn OpenXR manifest not found; using the system's active runtime."
 fi
 
-echo ">> Put the headset on and connect from its WiVRn app. Launching..."
+echo ">> Launching..."
 if flatpak info "$APP_ID" >/dev/null 2>&1; then
 	exec flatpak run --env=XR_RUNTIME_JSON="${XR_RUNTIME_JSON:-}" "$APP_ID"
 elif command -v pcsx2-qt >/dev/null 2>&1; then

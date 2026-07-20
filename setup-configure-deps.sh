@@ -59,4 +59,6 @@ echo
 echo "Done. Two folders are ready in your home directory:"
 echo "  $BIOS_DIR   <- your PS2 BIOS goes here"
 echo "  $GAMES_DIR  <- your game images go here"
-echo "Drop your files in, then launch — no further setup."
+echo "Drop your files in, then run ./launch-vr-session.sh — it starts the VR"
+echo "link and walks you through connecting the headset (first time: a one-off"
+echo "PIN pairing; on SteamOS you'll connect by IP — the launcher prints it)."

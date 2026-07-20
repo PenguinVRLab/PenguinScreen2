@@ -36,6 +36,6 @@
   </requires>
   <content_rating type="oars-1.1"/>
     <releases>
-    <release version="v1.0-226-g12d79af83" date="2026-07-20 09:37:03 -0500" />
+    <release version="1.0-rc" date="2026-07-20 11:12:46 -0500" />
   </releases>
   </component>

@@ -72,12 +72,26 @@ fi
 SOCK="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/wivrn/comp_ipc"
 server_up() { pgrep -f "wivrn-serve[r]" >/dev/null && [ -S "$SOCK" ]; }
 
+STARTED_BY_US=0
 if server_up; then
+	# A GPU override can only apply when THIS script starts the server — an
+	# explicit PSCREEN2_GPU that silently no-ops is worse than an error
+	# (strict-review #7).
+	if [ "$GPU_MODE" != "auto" ] && [ "$GPU_MODE" != "off" ]; then
+		echo "!! PSCREEN2_GPU=$GPU_MODE cannot apply: a WiVRn server is ALREADY running"
+		echo "!! and GPU selection happens at server start. To apply the override:"
+		echo "!!   1. Disconnect the headset (take it off / close its WiVRn app)."
+		echo "!!   2. Stop the server:  flatpak kill io.github.wivrn.wivrn"
+		echo "!!      (never stop it while the headset is connected — known crash)"
+		echo "!!   3. Re-run:  PSCREEN2_GPU=$GPU_MODE bash $0"
+		exit 1
+	fi
 	echo ">> WiVRn server already running (GPU forcing not re-applied)."
 else
 	echo ">> Starting WiVRn..."
 	setsid nohup flatpak run "${WIVRN_ENV[@]}" io.github.wivrn.wivrn \
 		> "$HOME/wivrn.log" 2>&1 < /dev/null &
+	STARTED_BY_US=1
 	for _ in $(seq 1 40); do server_up && break; sleep 0.5; done
 	if ! server_up; then
 		echo "!! WiVRn did not come up — see ~/wivrn.log"
@@ -92,53 +106,101 @@ fi
 # ---------------------------------------------------------------------------
 # 3. Tell the user EXACTLY how to connect the headset (SteamOS field reality)
 # ---------------------------------------------------------------------------
-# LAN IP: `hostname` does not exist on SteamOS — read the routing table.
+# LAN IP: `hostname` does not exist on SteamOS — read the routing table, then
+# fall back to the interface table (works with no default route), then to
+# hostname -I where it exists (strict-review G8).
 LAN_IP=$(ip route get 1.1.1.1 2>/dev/null | grep -oE 'src [0-9.]+' | awk '{print $2}')
+[ -z "$LAN_IP" ] && LAN_IP=$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1)
 [ -z "$LAN_IP" ] && LAN_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
 
 # Auto-discovery: SteamOS ships avahi with user service publishing disabled,
-# so the headset can NEVER find this PC by itself there — the server log says
-# "Cannot create entry group ... Not permitted". Detect it and say so instead
-# of letting the user wait for a listing that will never appear.
-DISCOVERY="should appear in the list automatically"
-if grep -qi "Cannot create entry group" "$HOME/wivrn.log" 2>/dev/null; then
+# so the headset can NEVER find this PC by itself there. Detect the OS
+# directly (primary signal — the server log only exists when WE started the
+# server, strict-review #11); the log line is confirmation when present.
+IS_STEAMOS=0
+grep -qs '^ID=steamos' /etc/os-release && IS_STEAMOS=1
+if [ "$IS_STEAMOS" = "1" ] || grep -qsi "Cannot create entry group" "$HOME/wivrn.log"; then
 	DISCOVERY="will NOT appear automatically (this OS blocks mDNS publishing)"
+elif [ "$STARTED_BY_US" = "1" ]; then
+	DISCOVERY="should appear in the list automatically"
+else
+	DISCOVERY="may or may not appear in the list (server was already running)"
 fi
 
 # Pairing: a fresh WiVRn accepts no headset until it has been paired once via
-# the dashboard (PIN). Paired headsets live in known_keys.json — empty or
-# absent means this is a first run.
-KNOWN="$HOME/.var/app/io.github.wivrn.wivrn/config/wivrn/known_keys.json"
+# its window (PIN). Paired headsets live in known_keys.json — check both the
+# flatpak data dir and the native config dir (strict-review #45).
+paired_now() {
+	local k
+	for k in "$HOME/.var/app/io.github.wivrn.wivrn/config/wivrn/known_keys.json" \
+		"${XDG_CONFIG_HOME:-$HOME/.config}/wivrn/known_keys.json"; do
+		[ -s "$k" ] && grep -q '"key"' "$k" 2>/dev/null && return 0
+	done
+	return 1
+}
 PAIRED=0
-if [ -s "$KNOWN" ] && grep -q '"key"' "$KNOWN" 2>/dev/null; then
-	PAIRED=1
-fi
+paired_now && PAIRED=1
 
 echo
 echo "================== HEADSET CONNECTION =================="
 echo ">> This PC's address: ${LAN_IP:-<could not detect — check your network>}"
 echo ">> In the headset's WiVRn app, this PC $DISCOVERY."
 echo ">>    Not listed? Choose 'Add server' / 'Connect by IP' and type: ${LAN_IP:-<PC IP>}"
+echo ">>    Connected before but failing now? The PC's address may have CHANGED —"
+echo ">>    compare with the address above and re-add the server if it differs."
 if [ "$PAIRED" = "0" ]; then
 	echo ">>"
 	echo ">> FIRST RUN — pair the headset once (takes a minute, never again):"
-	echo ">>    1. In the WiVRn window on THIS PC, click 'Pair new headset' — a PIN appears."
+	echo ">>    0. On the headset: install the WiVRn app first if you haven't (free)."
+	echo ">>    1. In the WiVRn window on THIS PC, follow its first-run wizard, or"
+	echo ">>       click 'Pair a new headset' (Headsets page) — a PIN appears."
 	echo ">>    2. In the headset's WiVRn app, connect to this PC (by IP if not listed)."
 	echo ">>    3. Enter the PIN when asked. The headset drops into a waiting room — done."
 	echo ">>"
-	echo ">> Press Enter here once the headset shows the WiVRn waiting room..."
-	read -r _ || true
+	echo ">> Waiting for pairing to complete (this continues automatically)..."
+	# Gate on the pairing STATE, not on a keypress: with no tty (double-click
+	# launch) a `read` would hit EOF and fall straight through, launching the
+	# emulator unpaired — the exact failure this gate exists to stop
+	# (strict-review #3). On a tty, Enter skips the wait (advanced users).
+	[ -t 0 ] && echo ">>    (or press Enter to skip waiting — advanced)"
+	while ! paired_now; do
+		if [ -t 0 ]; then
+			if read -r -t 2 _ 2>/dev/null; then
+				echo ">> Skipping the pairing wait."
+				break
+			fi
+		else
+			sleep 2
+		fi
+	done
+	paired_now && echo ">> Headset paired."
 fi
+echo ">> Keep the headset ON and connected while a game starts — VR initializes"
+echo ">> at game boot, and a dozing headset means a flat first boot."
 echo "========================================================"
 
 # ---------------------------------------------------------------------------
 # 4. Point OpenXR at WiVRn and launch the emulator
 # ---------------------------------------------------------------------------
-WIVRN_JSON=$(find ~/.local/share/flatpak /var/lib/flatpak -name openxr_wivrn.json 2>/dev/null | head -1)
-if [ -n "$WIVRN_JSON" ]; then
-	export XR_RUNTIME_JSON="$WIVRN_JSON"
-else
-	echo ">> WARNING: WiVRn OpenXR manifest not found; using the system's active runtime."
+# Canonical deploy paths first — an unscoped find over whole flatpak trees
+# walks the OSTree object store (multi-second stall, and it can pin a stale
+# scope; strict-review #12). Respect a pre-set XR_RUNTIME_JSON.
+if [ -z "${XR_RUNTIME_JSON:-}" ]; then
+	WIVRN_JSON=""
+	for d in "$HOME/.local/share/flatpak" /var/lib/flatpak; do
+		j="$d/app/io.github.wivrn.wivrn/current/active/files/share/openxr/1/openxr_wivrn.json"
+		if [ -f "$j" ]; then WIVRN_JSON="$j"; break; fi
+	done
+	if [ -z "$WIVRN_JSON" ]; then
+		WIVRN_JSON=$(find "$HOME/.local/share/flatpak/app/io.github.wivrn.wivrn" \
+			/var/lib/flatpak/app/io.github.wivrn.wivrn \
+			-name openxr_wivrn.json 2>/dev/null | head -1)
+	fi
+	if [ -n "$WIVRN_JSON" ]; then
+		export XR_RUNTIME_JSON="$WIVRN_JSON"
+	else
+		echo ">> WARNING: WiVRn OpenXR manifest not found; using the system's active runtime."
+	fi
 fi
 
 echo ">> Launching..."

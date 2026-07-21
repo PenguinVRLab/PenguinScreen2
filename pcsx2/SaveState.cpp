@@ -976,7 +976,10 @@ static bool SaveState_AddToZip(zip_t* zf, ArchiveEntryList* srclist, SaveStateSc
 		}
 		else
 		{
-			StringUtil::Strlcpy(vi->version, "Unknown", std::size(vi->version));
+			// Untagged builds still carry a meaningful GitRev — release-stamped
+			// derived trees report e.g. "1.0-rc" there (strict-review #17/#19);
+			// writing the literal "Unknown" threw that information away.
+			StringUtil::Strlcpy(vi->version, BuildVersion::GitRev, std::size(vi->version));
 		}
 
 		zip_source_t* const zs = zip_source_buffer(zf, vi, sizeof(*vi), 1);
@@ -1107,12 +1110,13 @@ static bool CheckVersion(const std::string& filename, zip_t* zf, Error* error)
 		std::string current_emulator_version = BuildVersion::GitTag;
 		if (current_emulator_version.empty())
 		{
-			current_emulator_version = "Unknown";
+			// Same fallback as the save path: untagged builds have a usable rev.
+			current_emulator_version = BuildVersion::GitRev;
 		}
 		Error::SetString(error, fmt::format(TRANSLATE_FS("SaveState","This save state was created with PenguinScreen2 version {0}. It is no longer compatible "
 											"with your current PenguinScreen2 version {1}.\n\n"
 											"If you have any unsaved progress on this save state, you can download the compatible PenguinScreen2 version {0} "
-											"from pcsx2.net, load the save state, and save your progress to the memory card."),
+											"from https://github.com/PenguinVRLab/PenguinScreen2/releases, load the save state, and save your progress to the memory card."),
 											version_string, current_emulator_version));
 		return false;
 	}

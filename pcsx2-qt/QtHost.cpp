@@ -1445,6 +1445,27 @@ bool QtHost::InitializeConfig()
 			SaveSettings();
 	}
 
+	// The ~/PS2-BIOS drop-folder promise must hold on EVERY launch, not only a
+	// fresh install (strict-review #5/#9 + G2): the no-BIOS dialog tells users
+	// to drop a BIOS there and restart, but the first-run block above never
+	// re-runs once the config file exists. If the configured BIOS folder holds
+	// no valid BIOS and the drop folder does, adopt it now. Idempotent — once
+	// adopted (or once the configured folder gains a BIOS) this no-ops.
+	{
+		const std::string drop_bios =
+			Path::Combine(QDir::homePath().toStdString(), "PS2-BIOS");
+		std::string cur_bios = s_base_settings_interface->GetStringValue("Folders", "Bios", "bios");
+		if (!Path::IsAbsolute(cur_bios))
+			cur_bios = Path::Combine(EmuFolders::DataRoot, cur_bios);
+		if (cur_bios != drop_bios && !DropFolderHasBios(cur_bios) && DropFolderHasBios(drop_bios))
+		{
+			Console.WriteLn("BIOS folder '%s' has no valid BIOS but '%s' does — adopting the drop folder.",
+				cur_bios.c_str(), drop_bios.c_str());
+			s_base_settings_interface->SetStringValue("Folders", "Bios", drop_bios.c_str());
+			s_base_settings_interface->Save();
+		}
+	}
+
 	// Layer secrets ini on top
 	const std::string secrets_path = Path::Combine(EmuFolders::Settings, "secrets.ini");
 	const bool secrets_settings_exists = FileSystem::FileExists(secrets_path.c_str());

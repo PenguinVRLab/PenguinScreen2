@@ -2,14 +2,14 @@
 # PenguinScreen2 — one-time setup.
 #
 # What this does (and all it does):
-#   1. Installs the VR runtime dependencies (WiVRn).
-#   2. Creates two folders in your home directory:
+#   1. Creates two folders in your home directory:
 #        ~/PS2-BIOS    <- drop your dumped PS2 BIOS here (any filename)
 #        ~/PS2-Games   <- drop your dumped game images here (any filename)
+#   2. Installs the VR runtime dependencies (WiVRn).
 #
-# That's it — there is no configuration step. On its first launch the
-# emulator sees a BIOS in ~/PS2-BIOS, adopts both folders by itself, and
-# opens straight to your game library.
+# That's it — there is no configuration step. On launch the emulator sees a
+# BIOS in ~/PS2-BIOS, adopts both folders by itself, and opens straight to
+# your game library.
 #
 # It never downloads or installs a BIOS or games — those are yours, dumped
 # from your own console and discs. Running this script again is safe.
@@ -18,23 +18,11 @@ set -euo pipefail
 
 BIOS_DIR="$HOME/PS2-BIOS"
 GAMES_DIR="$HOME/PS2-Games"
+DEPS_OK=1
 
 # ---------------------------------------------------------------------------
-# 1. Dependencies (the only step that touches system packages)
-# ---------------------------------------------------------------------------
-# WiVRn (the VR runtime link between PC and headset) ships on Flathub. Add
-# Flathub if needed, then install it. The app's own runtime is pulled when you
-# install the .flatpak bundle (see the Quickstart), so this only needs WiVRn.
-if command -v flatpak >/dev/null; then
-	flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-	flatpak install -y flathub io.github.wivrn.wivrn || \
-		echo "WARN: WiVRn install failed — install it manually: flatpak install flathub io.github.wivrn.wivrn"
-else
-	echo "WARN: flatpak not found — install flatpak first, then re-run this script."
-fi
-
-# ---------------------------------------------------------------------------
-# 2. The two drop folders
+# 1. The two drop folders — FIRST, so a network/flatpak failure below can
+#    never leave the machine without them (strict-review #16)
 # ---------------------------------------------------------------------------
 mkdir -p "$BIOS_DIR" "$GAMES_DIR"
 
@@ -55,10 +43,40 @@ own.
 EOF
 fi
 
+# ---------------------------------------------------------------------------
+# 2. Dependencies (the only step that touches packages) — user scope
+#    throughout: no polkit prompts, and it matches the --user app install
+#    the INSTALL steps use (strict-review #16 + G7)
+# ---------------------------------------------------------------------------
+if command -v flatpak >/dev/null; then
+	flatpak remote-add --user --if-not-exists flathub \
+		https://flathub.org/repo/flathub.flatpakrepo || {
+		echo "WARN: could not add the Flathub remote (network?) — WiVRn not installed."
+		DEPS_OK=0
+	}
+	if [ "$DEPS_OK" = "1" ]; then
+		flatpak install --user -y flathub io.github.wivrn.wivrn || {
+			echo "WARN: WiVRn install failed — install it manually:"
+			echo "      flatpak install --user flathub io.github.wivrn.wivrn"
+			DEPS_OK=0
+		}
+	fi
+else
+	echo "WARN: flatpak not found — install flatpak first, then re-run this script."
+	DEPS_OK=0
+fi
+
 echo
-echo "Done. Two folders are ready in your home directory:"
+echo "Two folders are ready in your home directory:"
 echo "  $BIOS_DIR   <- your PS2 BIOS goes here"
 echo "  $GAMES_DIR  <- your game images go here"
-echo "Drop your files in, then run ./launch-vr-session.sh — it starts the VR"
-echo "link and walks you through connecting the headset (first time: a one-off"
-echo "PIN pairing; on SteamOS you'll connect by IP — the launcher prints it)."
+if [ "$DEPS_OK" = "1" ]; then
+	echo "WiVRn (the VR link) is installed."
+	echo "Drop your files in, then run:  bash launch-vr-session.sh"
+	echo "It starts the VR link and walks you through connecting the headset"
+	echo "(first time: a one-off PIN pairing; on SteamOS you'll connect by IP —"
+	echo "the launcher prints it)."
+else
+	echo "!! WiVRn is NOT installed yet (see the warning above) — fix that and"
+	echo "!! re-run this script before launching. The drop folders are ready."
+fi

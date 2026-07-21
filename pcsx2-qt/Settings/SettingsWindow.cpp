@@ -190,18 +190,21 @@ void SettingsWindow::setupUi(const GameList::Entry* game)
 		QString help_text =
 			tr("<strong>Achievements Settings</strong><hr>"
 			   "These options control the RetroAchievements implementation in PenguinScreen2, allowing you to earn achievements in your games.");
-		if (Achievements::IsUsingRAIntegration())
-		{
-			QLabel* placeholder_label =
-				new QLabel(tr("RAIntegration is being used, built-in RetroAchievements support is disabled."), m_ui.settingsContainer);
-			placeholder_label->setAlignment(Qt::AlignLeft | Qt::AlignTop);
-			addWidget(placeholder_label, std::move(title), std::move(icon_text), std::move(help_text));
-		}
-		else
-		{
-			addWidget((m_achievement_settings = new AchievementSettingsWidget(this, m_ui.settingsContainer)), std::move(title),
-				std::move(icon_text), std::move(help_text));
-		}
+		// Fork decision (see the force-disable in Pcsx2Config LoadSave):
+		// PenguinScreen2 is not registered with RetroAchievements as its own
+		// client, so the whole feature stays unreachable until it is — the old
+		// settings page's Login button performed a real credential POST to
+		// retroachievements.org while presenting as upstream PCSX2
+		// (strict-review #10). Show why instead of a dead-end page.
+		QLabel* placeholder_label = new QLabel(
+			tr("RetroAchievements support is disabled in this build.\n\n"
+			   "PenguinScreen2 is not yet registered with RetroAchievements as its own "
+			   "client, so achievements (and the RetroAchievements login) are unavailable. "
+			   "The feature will return in a future release once registration is complete."),
+			m_ui.settingsContainer);
+		placeholder_label->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+		placeholder_label->setWordWrap(true);
+		addWidget(placeholder_label, std::move(title), std::move(icon_text), std::move(help_text));
 	}
 
 #ifdef ENABLE_VR

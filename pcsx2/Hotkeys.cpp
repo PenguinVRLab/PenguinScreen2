@@ -163,7 +163,9 @@ DEFINE_HOTKEY("OpenPauseMenu", TRANSLATE_NOOP("Hotkeys", "Navigation"), TRANSLAT
 			FullscreenUI::OpenPauseMenu();
 	})
 #ifdef ENABLE_VR
-DEFINE_HOTKEY("VRRecenterHead", TRANSLATE_NOOP("Hotkeys", "Graphics"), TRANSLATE_NOOP("Hotkeys", "VR: Recenter Head Camera"),
+// Category "VR", not "Graphics": the docs say "Settings → Hotkeys → VR" and
+// more VR hotkeys are coming — make the docs true (strict-review #21).
+DEFINE_HOTKEY("VRRecenterHead", TRANSLATE_NOOP("Hotkeys", "VR"), TRANSLATE_NOOP("Hotkeys", "VR: Recenter Head Camera"),
 	[](s32 pressed) {
 		if (!pressed)
 		{

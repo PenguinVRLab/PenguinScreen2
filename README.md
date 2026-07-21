@@ -7,10 +7,10 @@ from your own PC or Steam Deck.
 PenguinScreen2 is **built on [PCSX2](https://pcsx2.net)**, the long-running
 open-source PlayStation 2 emulator. The emulation is PCSX2's work and lineage;
 PenguinScreen2 adds the VR presentation layer, per-game 3D tuning, and the
-profile system. The emulator is free software (**GPL-3.0** — see
-`COPYING.GPLv3`); the bundled launch VR profiles are the author's own work,
-provided under a separate non-commercial license (see
-`bin/resources/vr-profiles/LICENSE.md`).
+profile system. The emulator — VR code included — is free software
+(**GPL-3.0-or-later** — see `COPYING.GPLv3`); the bundled launch VR profiles
+are the author's own work, provided under a separate non-commercial license
+(see `bin/resources/vr-profiles/LICENSE.md`).
 
 ## What you need
 

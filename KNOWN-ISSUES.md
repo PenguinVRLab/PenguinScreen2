@@ -19,9 +19,10 @@ here so a quirk you notice has an explanation instead of a surprise.
 
 - **ESPN NFL 2K5 — brief rendering flicker in some scenes.** Field texture or
   on-field detail can momentarily flicker, most visible right after loading a
-  scene. This is a bug in the underlying **PCSX2 Vulkan renderer** (it happens
-  in stock PCSX2 too, not something the VR layer introduced) — we've reported
-  it upstream. It's timing-related: once the shader cache is warm (after the
+  scene. This is a bug in the underlying **PCSX2 Vulkan renderer** (it
+  reproduces in stock PCSX2 too), though our per-eye stereo rendering makes
+  it show up more often than it would flat — an upstream report is prepared
+  and will be filed. It's timing-related: once the shader cache is warm (after the
   scene has been shown once), it largely settles. Not harmful, just visible.
 - **Very-near objects can feel like "too much depth" in some games.** If
   something close (a car dashboard, a player right in front of you) is hard

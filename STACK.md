@@ -46,13 +46,20 @@ commit-pinned module; from-source is the enthusiast path.
   the manifest IS the exact list
 
 ## Host-side requirements (documented, never bundled)
-- OpenXR runtime: WiVRn *(version validated at cut)* / Monado *(version)*
+- OpenXR runtime: **WiVRn 26.6.x** (26.6.1 validated end-to-end on the
+  Ubuntu dev rig; 26.6.2 field-run on SteamOS). WiVRn bundles Monado as its
+  runtime. Keep the PC server and the headset's WiVRn app on matching
+  versions — mismatches refuse to connect.
   - the runtime runs on the HOST; the flatpak reaches it through the
     active-runtime discovery path (`xdg-config/openxr`) and the WiVRn socket
-- GPU drivers: Mesa *(version at cut)* (AMD/Intel; SteamOS native). NVIDIA
-  hosts: the flatpak NVIDIA driver extension auto-matches your host driver.
-- Validated hosts this release: *(SteamOS version / Ubuntu version at cut)*
+- GPU drivers: Mesa (AMD/Intel; SteamOS native). NVIDIA hosts: the flatpak
+  NVIDIA driver extension auto-matches your host driver.
+- Validated hosts this release: Ubuntu dev rig (NVIDIA, full VR chain incl.
+  in-headset) — validated; SteamOS / Steam Deck — install chain field-tested,
+  in-headset validation in progress (see KNOWN-ISSUES).
 
 ## Known-hazard versions
-- *(populated from validation at cut, e.g. WiVRn versions with stop-order
-  issues)*
+- **WiVRn 26.6.x stop-order hazard:** stopping the PC server while a headset
+  client is still connected can crash the server. Disconnect the headset
+  first (close its WiVRn app), then stop the server. The launcher never
+  stops a running server for exactly this reason.

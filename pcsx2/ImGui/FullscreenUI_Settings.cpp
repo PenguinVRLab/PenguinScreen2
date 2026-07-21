@@ -1809,7 +1809,10 @@ void FullscreenUI::DrawSettingsWindow()
 			SettingsPage::MemoryCard,
 			SettingsPage::NetworkHDD,
 			SettingsPage::Folders,
-			SettingsPage::Achievements,
+			// SettingsPage::Achievements intentionally absent: RetroAchievements
+			// is force-disabled fork-wide until this fork is registered with RA
+			// as its own client (strict-review #10) — the page's Login posted
+			// real credentials to RA presenting as upstream PCSX2.
 			SettingsPage::Controller,
 			SettingsPage::Hotkey,
 			SettingsPage::Advanced,

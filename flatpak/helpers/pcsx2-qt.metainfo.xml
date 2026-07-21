@@ -4,7 +4,7 @@
   <id>org.penguinvr.penguinscreen2</id>
   <launchable type="desktop-id">org.penguinvr.penguinscreen2.desktop</launchable>
   <metadata_license>CC0-1.0</metadata_license>
-  <project_license>GPL-3.0+</project_license>
+  <project_license>GPL-3.0-or-later</project_license>
   <name>PenguinScreen2</name>
   <developer id="org.penguinvr">
     <name>PenguinVR</name>
@@ -36,6 +36,6 @@
   </requires>
   <content_rating type="oars-1.1"/>
     <releases>
-    <release version="1.0-rc" date="2026-07-20 11:12:46 -0500" />
+    <release version="1.0-rc" date="2026-07-21" />
   </releases>
   </component>

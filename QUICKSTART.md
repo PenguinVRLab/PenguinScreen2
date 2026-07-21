@@ -32,14 +32,18 @@ home — ever. (See the README's "fully offline by design.")
 PenguinScreen2 ships as a single **`.flatpak` bundle** you download. Install it:
 
 ```
-# one-time: add Flathub so the app's runtime can be pulled automatically
-flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-# install PenguinScreen2 from the file you downloaded
-flatpak install --bundle PenguinScreen2-<version>.flatpak
+# one-time: add Flathub (user scope — no password) so the app's runtime can
+# be pulled automatically
+flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+# install PenguinScreen2 from the file you downloaded (user scope, like
+# everything in this guide — the two scopes don't share runtimes)
+flatpak install --user -y ./PenguinScreen2-<version>.flatpak
 ```
 
-If the install reports a missing runtime, install it explicitly and retry:
-`flatpak install flathub org.kde.Platform//6.10`.
+First install pulls about 1 GB of shared runtime from Flathub — let it
+finish. If the install reports a missing runtime, install it explicitly and
+retry: `flatpak install --user flathub org.kde.Platform//6.10`.
+Reinstalling the same version (retesting)? Add `--reinstall`.
 
 Then run the one-time VR setup below.
 
@@ -181,5 +185,6 @@ at the universal Screen tier out of the box.
   a mistake; the dialog names the file and the reason. Fix or remove it.
 - **Known visual quirks on specific games** — see `KNOWN-ISSUES.md`.
 
-Built on PCSX2. Your BIOS and games are yours; the VR is ours; the emulator
-is free software. Have fun.
+Built on PCSX2. Your BIOS and games are yours; the tuned VR profiles are our
+work (CC BY-NC); the emulator — VR code included — is free software
+(GPL-3.0-or-later). Have fun.

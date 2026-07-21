@@ -80,6 +80,8 @@
       "post-install": [
         "cp -a bin \"${FLATPAK_DEST}\"",
         "install -Dm644 \"${FLATPAK_BUILDER_BUILDDIR}/COPYING.GPLv3\" \"${FLATPAK_DEST}/share/licenses/${FLATPAK_ID}/COPYING.GPLv3\"",
+        "install -Dm644 \"${FLATPAK_BUILDER_BUILDDIR}/pcsx2/Docs/GPL.txt\" \"${FLATPAK_DEST}/bin/resources/docs/GPL.txt\"",
+        "install -Dm644 \"${FLATPAK_BUILDER_BUILDDIR}/bin/docs/ThirdPartyLicenses.html\" \"${FLATPAK_DEST}/bin/resources/docs/ThirdPartyLicenses.html\"",
         "install -Dm644 \"${FLATPAK_BUILDER_BUILDDIR}/bin/resources/icons/AppIconLarge.png\" \"${FLATPAK_DEST}/share/icons/hicolor/512x512/apps/org.penguinvr.penguinscreen2.png\"",
         "install -Dm644 \"${FLATPAK_BUILDER_BUILDDIR}/flatpak/helpers/pcsx2-qt.desktop\" \"${FLATPAK_DEST}/share/applications/org.penguinvr.penguinscreen2.desktop\"",
         "desktop-file-edit --set-key=Icon --set-value=org.penguinvr.penguinscreen2 \"${FLATPAK_DEST}/share/applications/org.penguinvr.penguinscreen2.desktop\"",

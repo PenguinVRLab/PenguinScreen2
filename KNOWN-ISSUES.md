@@ -24,6 +24,12 @@ here so a quirk you notice has an explanation instead of a surprise.
   it show up more often than it would flat — an upstream report is prepared
   and will be filed. It's timing-related: once the shader cache is warm (after the
   scene has been shown once), it largely settles. Not harmful, just visible.
+- **A game can boot "flat" if the headset was asleep when it started.** VR
+  initializes once per game boot; if the headset had dozed off (taken off,
+  proximity sensor) at that moment, that boot stays on the flat desktop
+  window. Keep the headset on while a game starts — or quit to the library
+  and boot the game again with the headset awake. A mid-session retry is on
+  the roadmap.
 - **Very-near objects can feel like "too much depth" in some games.** If
   something close (a car dashboard, a player right in front of you) is hard
   to fuse into one image, that's the per-game stereo strength. The launch

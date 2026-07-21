@@ -24,6 +24,7 @@
     "--socket=pulseaudio",
     "--talk-name=org.freedesktop.ScreenSaver",
     "--filesystem=xdg-run/gamescope-0:ro",
+    "--filesystem=/run/udev:ro",
     "--filesystem=xdg-config/openxr:ro",
     "--filesystem=xdg-run/wivrn",
     "--filesystem=~/.var/app/io.github.wivrn.wivrn:ro",

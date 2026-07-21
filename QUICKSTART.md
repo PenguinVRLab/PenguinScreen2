@@ -20,7 +20,9 @@ software never includes: your own PS2 BIOS and your own game discs/images.**
 - **Your own PS2 BIOS**, dumped from a console you own.
 - **Your own PS2 games** — dumped disc images (`.iso`, `.bin`, `.chd`,
   `.cso`, `.zso`, `.gz`, `.mdf`) **or a physical PS2 disc in the drive**
-  (PenguinScreen2 reads original discs directly).
+  (PenguinScreen2 reads original discs directly — any ordinary DVD-capable
+  drive works; no special hardware. Discs do **not** appear in the game
+  library: boot them via **System → Start Disc**, see §3).
 
 Nothing here is included or downloaded for you. No BIOS, no games, no phone
 home — ever. (See the README's "fully offline by design.")
@@ -111,8 +113,9 @@ Two cases where you'll see a screen anyway:
    headset** (a PIN appears), connect from the headset, enter the PIN.
    The headset drops into a WiVRn waiting room — paired forever. The
    launcher detects an unpaired install and walks you through this.
-4. Back on the PC, the emulator is up. Boot a game from the library (or
-   insert a disc).
+4. Back on the PC, the emulator is up. Boot a game from the library — or,
+   for a physical disc, use **System → Start Disc** (a disc in the drive
+   never shows up in the library by itself).
 
 You should now be looking at the game on a virtual screen in the headset,
 tracking with your head.
@@ -181,6 +184,12 @@ at the universal Screen tier out of the box.
   GPU's PCI id) or `PSCREEN2_GPU=off`.
 - **A game boots flat / no depth** — it has no stereo profile yet; that's
   expected for non-launch titles (Screen tier).
+- **Start Disc says "no CD/DVD-ROM devices"** — three causes, in order:
+  the drive must be DVD-capable (`udevadm info /dev/sr0 | grep ID_CDROM_DVD`
+  should print `=1`); your user must be able to read it (be in the `optical`
+  group on SteamOS/Arch, `cdrom` on Debian/Ubuntu — check with `groups`);
+  and flatpak builds **before rc3** could not see drives at all (a sandbox
+  hole was missing) — update to the current build.
 - **"Invalid VR profile" dialog at launch** — a profile file you edited has
   a mistake; the dialog names the file and the reason. Fix or remove it.
 - **Known visual quirks on specific games** — see `KNOWN-ISSUES.md`.

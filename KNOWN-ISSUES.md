@@ -15,15 +15,32 @@ here so a quirk you notice has an explanation instead of a surprise.
   starts with the launch titles and grows. A game with no stereo profile
   runs flat-on-a-screen — that's expected, not a fault.
 
+## VR connection
+
+- **On SteamOS, WiVRn's own window can say "Server failed to start".** SteamOS
+  ships the system mDNS service (Avahi) with announcements disabled, and WiVRn's
+  server treats being refused permission to announce itself as fatal — so
+  starting it from its own dashboard fails on that OS. **`launch-vr-session.sh`
+  works around this** (it starts the server in a mode that doesn't announce),
+  which is why the headset then connects **by IP**. Want the PC to appear in the
+  headset's list by itself instead? Run `enable-vr-discovery.sh` once — see the
+  Quickstart, §4. This is an OS/WiVRn interaction, not an emulator fault.
+- **The PC's address can change.** Home networks hand out addresses that change
+  after a reboot or a lease expiry, so a headset entry that worked yesterday can
+  fail today. The launcher prints the current address every time — re-add the
+  server on the headset if it differs. (Auto-discovery, above, avoids this
+  entirely.)
+
 ## Visual quirks on specific games
 
-- **ESPN NFL 2K5 — brief rendering flicker in some scenes.** Field texture or
-  on-field detail can momentarily flicker, most visible right after loading a
-  scene. This is a bug in the underlying **PCSX2 Vulkan renderer** (it
-  reproduces in stock PCSX2 too), though our per-eye stereo rendering makes
-  it show up more often than it would flat — an upstream report is prepared
-  and will be filed. It's timing-related: once the shader cache is warm (after the
-  scene has been shown once), it largely settles. Not harmful, just visible.
+- **ESPN NFL 2K5 — brief flicker just after a scene loads.** On-field detail
+  can flicker for a moment the first time a scene is shown, and settles once
+  that scene has been displayed once. The fingerprint (it goes away when warm)
+  points at shader/pipeline compilation rather than anything VR-specific — but
+  we have not proven that, and we don't label a bug as somebody else's without
+  evidence. Not harmful, just visible. *(A separate and much sharper
+  field-geometry flicker in this game was a synchronization bug; it is **fixed**
+  in this build.)*
 - **A game can boot "flat" if the headset was asleep when it started.** VR
   initializes once per game boot; if the headset had dozed off (taken off,
   proximity sensor) at that moment, that boot stays on the flat desktop

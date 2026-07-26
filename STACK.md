@@ -7,8 +7,9 @@ release runbook's Verify step 5 from the actual release build.
 
 ## Building from source: the required libraries
 
-`./build.sh` probes these before configuring. CMake minimums (from the
-build system itself):
+The source repo's `build.sh` probes these before configuring (building from
+source means a source checkout — that script is not part of the install kit).
+CMake minimums (from the build system itself):
 
 | Dependency | Minimum | Distro package usually OK? |
 |---|---|---|
@@ -27,7 +28,7 @@ build system itself):
 | X11/XRandR, Wayland, extra-cmake-modules, libbacktrace | any | yes |
 
 For the newer-than-distro set: build each into one local prefix and pass
-`-DCMAKE_PREFIX_PATH=$HOME/deps` to `./build.sh` (forwarded to cmake). The
+`-DCMAKE_PREFIX_PATH=$HOME/deps` to that script (forwarded to cmake). The
 **flatpak avoids all of this** — its manifest pins every one of these as a
 commit-pinned module; from-source is the enthusiast path.
 

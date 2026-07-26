@@ -76,6 +76,18 @@ if [ "$DEPS_OK" = "1" ]; then
 	echo "It starts the VR link and walks you through connecting the headset"
 	echo "(first time: a one-off PIN pairing; on SteamOS you'll connect by IP —"
 	echo "the launcher prints it)."
+	# Offer auto-discovery where it's actually blocked. Deliberately NOT run
+	# automatically: it needs admin rights and edits a system config, so it stays
+	# the user's explicit choice (everything else in this script is user-scope).
+	if grep -qsE '^[[:space:]]*disable-user-service-publishing[[:space:]]*=[[:space:]]*yes' \
+			/etc/avahi/avahi-daemon.conf; then
+		echo
+		echo "Optional — headset AUTO-DISCOVERY (so you never type an IP):"
+		echo "  This OS ships with the network announcement disabled, so the headset"
+		echo "  can't find this PC by itself. To turn it on (asks for your password):"
+		echo "      bash enable-vr-discovery.sh"
+		echo "  Re-run that once after a SteamOS update. Happy typing the IP? Skip it."
+	fi
 else
 	echo "!! WiVRn is NOT installed yet (see the warning above) — fix that and"
 	echo "!! re-run this script before launching. The drop folders are ready."

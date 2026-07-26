@@ -106,19 +106,48 @@ Two cases where you'll see a screen anyway:
 2. On the **headset**, open the **WiVRn** app and connect to your PC:
    - On most desktop Linux, the PC shows up in the list by itself.
    - **On SteamOS it will NOT** (the OS blocks mDNS announcements) — choose
-     **Add server / Connect by IP** and type the address the launcher
-     printed (it detects and prints your PC's IP for exactly this reason).
+     **Add server / Connect by IP**, type the address the launcher printed,
+     and use port **9757**. (Want it to just appear in the list instead? See
+     **Auto-discovery** below — one optional command.)
 3. **First time only — pairing.** A fresh WiVRn accepts no headset until
-   it's paired once: in the WiVRn window on the PC click **Pair new
-   headset** (a PIN appears), connect from the headset, enter the PIN.
-   The headset drops into a WiVRn waiting room — paired forever. The
-   launcher detects an unpaired install and walks you through this.
+   it's paired once. Connect from the headset; when it asks for a **PIN**,
+   read the PIN the launcher printed **in its terminal on the PC** and enter
+   it on the headset. The headset drops into a WiVRn waiting room — paired
+   forever. The launcher detects an unpaired install and walks you through
+   this.
 4. Back on the PC, the emulator is up. Boot a game from the library — or,
    for a physical disc, use **System → Start Disc** (a disc in the drive
    never shows up in the library by itself).
 
 You should now be looking at the game on a virtual screen in the headset,
 tracking with your head.
+
+**Optional — Auto-discovery (skip typing the IP).** SteamOS ships with the
+mDNS announcement disabled — that announce is what lets the headset find the PC
+by itself, which is why you Connect by IP above. To turn it on, run once (it
+asks for your password):
+
+```
+bash enable-vr-discovery.sh
+```
+
+Then **stop the VR link and start it again** — whether the PC advertises itself
+is decided when the link starts, so a session already running won't pick up the
+change:
+
+```
+pkill -f wivrn-server     # take the headset off first
+./launch-vr-session.sh
+```
+
+After that the PC appears in the headset's server list by name — no IP typing.
+**Re-run `enable-vr-discovery.sh` once after a SteamOS *update*** (updates reset
+system files and revert the change; plain reboots are fine). Prefer to just type
+the IP each time? You never need this script.
+
+> WiVRn's own window (`flatpak run io.github.wivrn.wivrn`) is where codec,
+> bitrate and unpair live. It attaches to the running link — it won't start a
+> second one.
 
 ---
 
@@ -169,12 +198,23 @@ at the universal Screen tier out of the box.
 
 - **No image in the headset** — is `launch-vr-session.sh` still running on
   the PC, and did the headset's WiVRn app connect? Both must be up.
+- **WiVRn's own window says "Server failed to start"** — expected on SteamOS:
+  the OS blocks the mDNS announcement and WiVRn treats that refusal as fatal.
+  Start VR with `./launch-vr-session.sh` instead (it starts the server in a mode
+  that doesn't announce, then tells you the IP to connect to). To make the
+  dashboard work — and get auto-discovery — run `enable-vr-discovery.sh` once
+  (§4).
 - **The PC never appears in the headset's server list** — normal on SteamOS
   (mDNS publishing is blocked). Use **Connect by IP** with the address the
   launcher printed.
-- **"Connection refused" when connecting by IP** — the headset isn't paired
-  yet. In the WiVRn window on the PC: **Pair new headset** → enter the PIN
-  on the headset. One-time.
+- **"Connection refused" when connecting by IP** — the headset isn't paired.
+  On a *first* headset the launcher prints the **PIN** in its terminal. For **any
+  other** headset (a second one, a factory-reset one, or after restoring a
+  backup) WiVRn will not offer a PIN by itself — ask for one:
+  ```
+  flatpak run --command=wivrnctl io.github.wivrn.wivrn pair
+  ```
+  Then enter that PIN on the headset. (Also check you used port **9757**.)
 - **Your BIOS file doesn't appear in the list** — names never matter (files
   are detected by content), so a missing entry means the file isn't a valid
   BIOS dump. Re-dump it from your console.

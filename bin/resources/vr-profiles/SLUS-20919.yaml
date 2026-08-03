@@ -1,0 +1,23 @@
+# SPDX-FileCopyrightText: 2026 Patrick Carey
+# SPDX-License-Identifier: CC-BY-NC-4.0
+# PenguinScreen2 shipped profile — generated, data only.
+# Copyright (c) 2026 Patrick Carey. Licensed CC BY-NC 4.0 (non-commercial
+# use/share/adapt with attribution); COMMERCIAL RIGHTS RESERVED. This is
+# DATA, not part of the GPL emulator — see LICENSE.md in this folder.
+# To customize: COPY this file into your user profiles folder and edit
+# the copy — a user file for the same serial overrides this one at
+# launch. Do not edit here (read-only in flatpak installs).
+
+SLUS-20919:
+  name: "ESPN NFL 2K5"
+  crcs: [0x42F9D5AF, 0xC0272027]
+  tier: stereo
+  stereo:
+    separation: 0.007
+    convergence: 0.005
+    uvDraws: screen
+    pinUniformQ: true
+    scenes:
+      - { when: { address: 0x00A97884, equals: 1, width: 1 }, convergence: 16.0, label: menu }
+  camera:
+    padLook: { maxLookDeg: 18, engageDeg: 2, curve: 0.7 }

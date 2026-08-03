@@ -803,8 +803,6 @@ static const u16* TwoBytes[256] = {
 	NULL,       NULL,       NULL,       NULL,       NULL,       NULL,       NULL,       NULL,       NULL,       NULL,       NULL,       NULL,       NULL,       NULL,       NULL,       NULL,
 };
 
-// requires two bytes on input (second CAN be 0), returns unicode mapping, assigns used bytes (1/2)
-// This function takes a u8 by design - we do NOT want sign extension of the characters!!
 wchar_t ShiftJIS_ConvertChar(const u8* input, int& used)
 {
 	const uint FirstByte = input[0];
@@ -816,13 +814,8 @@ wchar_t ShiftJIS_ConvertChar(const u8* input, int& used)
 	}
 	else
 	{
-		//if( !pxAssert( NumBytes[FirstByte] != 0 ) )
 		if( NumBytes[FirstByte] == 0 )
 		{
-			// FIXME : Hackfixed a null pointer in FFX (during opening scenes).  It tries to
-			// print an 0xfc/0x0a combo, followed by a NULL.  Other IOP prints seem to have valid
-			// Shift-JIS encodings.  not sure what's going on yet, so this needs reviewed sometime
-			//   --air
 			used = 1; return (u16)FirstByte;
 		}
 
@@ -834,9 +827,6 @@ wchar_t ShiftJIS_ConvertChar(const u8* input, int& used)
 std::string ShiftJIS_ConvertString( const char* src )
 {
 	std::string result;
-
-	// Implementation Notes:
-	//  * The length of the result (in chars) cannot exceed the length of the source.
 
 	result.reserve( strlen(src) * 2 );
 
@@ -854,7 +844,6 @@ std::string ShiftJIS_ConvertString( const char* src, int maxlen )
 {
 	std::string result;
 
-	// The length of the result (in chars) cannot exceed the length of the source.
 	result.reserve( maxlen );
 
 	const char* endpt = src + maxlen;

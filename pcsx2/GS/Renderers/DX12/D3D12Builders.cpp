@@ -24,7 +24,7 @@ void D3D12::GraphicsPipelineBuilder::Clear()
 }
 
 wil::com_ptr_nothrow<ID3D12PipelineState> D3D12::GraphicsPipelineBuilder::Create(
-	ID3D12Device* device, bool clear /*= true*/)
+	ID3D12Device* device, bool clear )
 {
 	wil::com_ptr_nothrow<ID3D12PipelineState> ps;
 	HRESULT hr = device->CreateGraphicsPipelineState(&m_desc, IID_PPV_ARGS(ps.put()));
@@ -41,7 +41,7 @@ wil::com_ptr_nothrow<ID3D12PipelineState> D3D12::GraphicsPipelineBuilder::Create
 }
 
 wil::com_ptr_nothrow<ID3D12PipelineState> D3D12::GraphicsPipelineBuilder::Create(
-	ID3D12Device* device, D3D12ShaderCache& cache, bool clear /*= true*/)
+	ID3D12Device* device, D3D12ShaderCache& cache, bool clear )
 {
 	wil::com_ptr_nothrow<ID3D12PipelineState> pso = cache.GetPipelineState(device, m_desc);
 	if (!pso)
@@ -164,7 +164,7 @@ void D3D12::GraphicsPipelineBuilder::SetNoStencilState()
 
 void D3D12::GraphicsPipelineBuilder::SetBlendState(u32 rt, bool blend_enable, D3D12_BLEND src_factor,
 	D3D12_BLEND dst_factor, D3D12_BLEND_OP op, D3D12_BLEND alpha_src_factor, D3D12_BLEND alpha_dst_factor,
-	D3D12_BLEND_OP alpha_op, u8 write_mask /*= 0xFF*/)
+	D3D12_BLEND_OP alpha_op, u8 write_mask )
 {
 	m_desc.BlendState.RenderTarget[rt].BlendEnable = blend_enable;
 	m_desc.BlendState.RenderTarget[rt].SrcBlend = src_factor;
@@ -179,7 +179,7 @@ void D3D12::GraphicsPipelineBuilder::SetBlendState(u32 rt, bool blend_enable, D3
 		m_desc.BlendState.IndependentBlendEnable = TRUE;
 }
 
-void D3D12::GraphicsPipelineBuilder::SetColorWriteMask(u32 rt, u8 write_mask /* = D3D12_COLOR_WRITE_ENABLE_ALL */)
+void D3D12::GraphicsPipelineBuilder::SetColorWriteMask(u32 rt, u8 write_mask )
 {
 	m_desc.BlendState.RenderTarget[rt].RenderTargetWriteMask = write_mask;
 }
@@ -226,7 +226,7 @@ void D3D12::ComputePipelineBuilder::Clear()
 }
 
 wil::com_ptr_nothrow<ID3D12PipelineState> D3D12::ComputePipelineBuilder::Create(
-	ID3D12Device* device, bool clear /*= true*/)
+	ID3D12Device* device, bool clear )
 {
 	wil::com_ptr_nothrow<ID3D12PipelineState> ps;
 	HRESULT hr = device->CreateComputePipelineState(&m_desc, IID_PPV_ARGS(ps.put()));
@@ -243,7 +243,7 @@ wil::com_ptr_nothrow<ID3D12PipelineState> D3D12::ComputePipelineBuilder::Create(
 }
 
 wil::com_ptr_nothrow<ID3D12PipelineState> D3D12::ComputePipelineBuilder::Create(
-	ID3D12Device* device, D3D12ShaderCache& cache, bool clear /*= true*/)
+	ID3D12Device* device, D3D12ShaderCache& cache, bool clear )
 {
 	wil::com_ptr_nothrow<ID3D12PipelineState> pso = cache.GetPipelineState(device, m_desc);
 	if (!pso)
@@ -280,7 +280,7 @@ void D3D12::RootSignatureBuilder::Clear()
 	m_num_descriptor_ranges = 0;
 }
 
-wil::com_ptr_nothrow<ID3D12RootSignature> D3D12::RootSignatureBuilder::Create(bool clear /*= true*/)
+wil::com_ptr_nothrow<ID3D12RootSignature> D3D12::RootSignatureBuilder::Create(bool clear )
 {
 	wil::com_ptr_nothrow<ID3D12RootSignature> rs = GSDevice12::GetInstance()->CreateRootSignature(&m_desc);
 	if (!rs)
@@ -354,7 +354,6 @@ u32 D3D12::RootSignatureBuilder::AddDescriptorTable(
 	return index;
 }
 
-// Allows using ranges of non-contiguous shader registers in a single descriptor table.
 u32 D3D12::RootSignatureBuilder::AddDescriptorTableMultiRange(u32 num_ranges,
 	D3D12_DESCRIPTOR_RANGE_TYPE* rt, u32* start_shader_reg, u32* num_shader_regs, D3D12_SHADER_VISIBILITY visibility)
 {

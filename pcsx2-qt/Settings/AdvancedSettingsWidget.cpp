@@ -63,32 +63,27 @@ AdvancedSettingsWidget::AdvancedSettingsWidget(SettingsWindow* settings_dialog, 
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.backupSaveStates, "EmuCore", "BackupSavestate", true);
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.saveStateOnShutdown, "EmuCore", "SaveStateOnShutdown", false);
 
-	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.pineEnable, "EmuCore", "EnablePINE", false);
-	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_ui.pineSlot, "EmuCore", "PINESlot", 28011);
 
-	dialog()->registerWidgetHelp(m_ui.eeRoundingMode, tr("Rounding Mode"), tr("Chop/Zero (Default)"), tr("Changes how PCSX2 handles rounding while emulating the Emotion Engine's Floating Point Unit (EE FPU). "
+	dialog()->registerWidgetHelp(m_ui.eeRoundingMode, tr("Rounding Mode"), tr("Chop/Zero (Default)"), tr("Changes how PenguinScreen2 handles rounding while emulating the Emotion Engine's Floating Point Unit (EE FPU). "
 																										 "Because the various FPUs in the PS2 are non-compliant with international standards, some games may need different modes to do math correctly. The default value handles the vast majority of games; <b>modifying this setting when a game is not having a visible problem can cause instability.</b>"));
 	dialog()->registerWidgetHelp(m_ui.eeDivRoundingMode, tr("Division Rounding Mode"), tr("Nearest (Default)"), tr("Determines how the results of floating-point division are rounded. Some games need specific settings; <b>modifying this setting when a game is not having a visible problem can cause instability.</b>"));
 
 	dialog()->registerWidgetHelp(m_ui.eeClampMode, tr("Clamping Mode"), tr("Normal (Default)"),
-		tr("Changes how PCSX2 handles keeping floats in a standard x86 range. "
+		tr("Changes how PenguinScreen2 handles keeping floats in a standard x86 range. "
 		   "The default value handles the vast majority of games; <b>modifying this setting when a game is not having a visible problem can cause instability.</b>"));
 
 	dialog()->registerWidgetHelp(m_ui.eeRecompiler, tr("Enable Recompiler"), tr("Checked"),
 		tr("Performs just-in-time binary translation of 64-bit MIPS-IV machine code to x86."));
 
-	//: Wait loop: When the game makes the CPU do nothing (loop/spin) while it waits for something to happen (usually an interrupt).
 	dialog()->registerWidgetHelp(m_ui.eeWaitLoopDetection, tr("Wait Loop Detection"), tr("Checked"),
 		tr("Moderate speedup for some games, with no known side effects."));
 
 	dialog()->registerWidgetHelp(m_ui.eeCache, tr("Enable Cache (Slow)"), tr("Unchecked"), tr("Interpreter only, provided for diagnostic."));
 
-	//: INTC = Name of a PS2 register, leave as-is. "spin" = to make a cpu (or gpu) actively do nothing while you wait for something.  Like spinning in a circle, you're moving but not actually going anywhere.
 	dialog()->registerWidgetHelp(m_ui.eeINTCSpinDetection, tr("INTC Spin Detection"), tr("Checked"),
 		tr("Huge speedup for some games, with almost no compatibility side effects."));
 
 	dialog()->registerWidgetHelp(m_ui.eeFastmem, tr("Enable Fast Memory Access"), tr("Checked"),
-		//: "Backpatching" = To edit previously generated code to change what it does (in this case, we generate direct memory accesses, then backpatch them to jump to a fancier handler function when we realize they need the fancier handler function)
 		tr("Uses backpatching to avoid register flushing on every memory access."));
 
 	dialog()->registerWidgetHelp(m_ui.pauseOnTLBMiss, tr("Pause On TLB Miss"), tr("Unchecked"),
@@ -99,31 +94,28 @@ AdvancedSettingsWidget::AdvancedSettingsWidget(SettingsWindow* settings_dialog, 
 	dialog()->registerWidgetHelp(m_ui.extraMemory, tr("Enable Extended RAM (Dev Console)"), tr("Unchecked"),
 		tr("Exposes additional memory to the virtual machine, expanding the EE and IOP memory to 128MB and 8MB respectively."));
 
-	dialog()->registerWidgetHelp(m_ui.vu0RoundingMode, tr("VU0 Rounding Mode"), tr("Chop/Zero (Default)"), tr("Changes how PCSX2 handles rounding while emulating the Emotion Engine's Vector Unit 0 (EE VU0). "
+	dialog()->registerWidgetHelp(m_ui.vu0RoundingMode, tr("VU0 Rounding Mode"), tr("Chop/Zero (Default)"), tr("Changes how PenguinScreen2 handles rounding while emulating the Emotion Engine's Vector Unit 0 (EE VU0). "
 																											  "The default value handles the vast majority of games; <b>modifying this setting when a game is not having a visible problem will cause stability issues and/or crashes.</b>"));
 
-	dialog()->registerWidgetHelp(m_ui.vu1RoundingMode, tr("VU1 Rounding Mode"), tr("Chop/Zero (Default)"), tr("Changes how PCSX2 handles rounding while emulating the Emotion Engine's Vector Unit 1 (EE VU1). "
+	dialog()->registerWidgetHelp(m_ui.vu1RoundingMode, tr("VU1 Rounding Mode"), tr("Chop/Zero (Default)"), tr("Changes how PenguinScreen2 handles rounding while emulating the Emotion Engine's Vector Unit 1 (EE VU1). "
 																											  "The default value handles the vast majority of games; <b>modifying this setting when a game is not having a visible problem will cause stability issues and/or crashes.</b>"));
 
 	dialog()->registerWidgetHelp(m_ui.vu0ClampMode, tr("VU0 Clamping Mode"), tr("Normal (Default)"),
-		tr("Changes how PCSX2 handles keeping floats in a standard x86 range in the Emotion Engine's Vector Unit 0 (EE VU0). "
+		tr("Changes how PenguinScreen2 handles keeping floats in a standard x86 range in the Emotion Engine's Vector Unit 0 (EE VU0). "
 		   "The default value handles the vast majority of games; <b>modifying this setting when a game is not having a visible problem can cause instability.</b>"));
 	dialog()->registerWidgetHelp(m_ui.vu1ClampMode, tr("VU1 Clamping Mode"), tr("Normal (Default)"),
-		tr("Changes how PCSX2 handles keeping floats in a standard x86 range in the Emotion Engine's Vector Unit 1 (EE VU1). "
+		tr("Changes how PenguinScreen2 handles keeping floats in a standard x86 range in the Emotion Engine's Vector Unit 1 (EE VU1). "
 		   "The default value handles the vast majority of games; <b>modifying this setting when a game is not having a visible problem can cause instability.</b>"));
 
 	dialog()->registerWidgetHelp(m_ui.instantVU1, tr("Enable Instant VU1"), tr("Checked"),
 		tr("Runs VU1 instantly. Provides a modest speed improvement in most games. "
 		   "Safe for most games, but a few games may exhibit graphical errors."));
 
-	//: VU0 = Vector Unit 0. One of the PS2's processors.
 	dialog()->registerWidgetHelp(m_ui.vu0Recompiler, tr("Enable VU0 Recompiler (Micro Mode)"), tr("Checked"), tr("Enables VU0 Recompiler."));
 
-	//: VU1 = Vector Unit 1. One of the PS2's processors.
 	dialog()->registerWidgetHelp(m_ui.vu1Recompiler, tr("Enable VU1 Recompiler"), tr("Checked"), tr("Enables VU1 Recompiler."));
 
 	dialog()->registerWidgetHelp(
-		//: mVU = PCSX2's recompiler for VU (Vector Unit) code (full name: microVU)
 		m_ui.vuFlagHack, tr("mVU Flag Hack"), tr("Checked"), tr("Good speedup and high compatibility, may cause graphical errors."));
 
 	dialog()->registerWidgetHelp(m_ui.iopRecompiler, tr("Enable Recompiler"), tr("Checked"),
@@ -146,7 +138,6 @@ AdvancedSettingsWidget::AdvancedSettingsWidget(SettingsWindow* settings_dialog, 
 		   "resume directly from where you left off next time."));
 
 	dialog()->registerWidgetHelp(m_ui.backupSaveStates, tr("Create Save State Backups"), tr("Checked"),
-		//: Do not translate the ".backup" extension.
 		tr("Creates a backup copy of a save state if it already exists when the save is created. The backup copy has a .backup suffix."));
 }
 
@@ -171,7 +162,6 @@ int AdvancedSettingsWidget::getGlobalClampingModeIndex(int vunum) const
 
 int AdvancedSettingsWidget::getClampingModeIndex(int vunum) const
 {
-	// This is so messy... maybe we should just make the mode an int in the settings too...
 	const bool base = dialog()->isPerGameSettings() ? 1 : 0;
 	std::optional<bool> default_false = dialog()->isPerGameSettings() ? std::nullopt : std::optional<bool>(false);
 	std::optional<bool> default_true = dialog()->isPerGameSettings() ? std::nullopt : std::optional<bool>(true);
@@ -190,9 +180,9 @@ int AdvancedSettingsWidget::getClampingModeIndex(int vunum) const
 	if (first.has_value() && first.value())
 		return base + 1;
 	else if (first.has_value())
-		return base + 0; // none
+		return base + 0;
 	else
-		return 0; // no per game override
+		return 0;
 }
 
 void AdvancedSettingsWidget::setClampingMode(int vunum, int index)

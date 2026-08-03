@@ -10,7 +10,6 @@ namespace usb_pad
 {
 	static void SetConstantForce(FFDevice* ffdev, int force)
 	{
-		//parsed_ff_data ff;
 
 		int level = ff_lg_u8_to_s16(force);
 		ffdev->SetConstantForce(level);
@@ -61,7 +60,6 @@ namespace usb_pad
 	{
 		parsed_ff_data ff;
 
-		//noideaTM
 		ff.u.condition.center = 0;
 		ff.u.condition.deadband = 0;
 		int s1 = frict.s1 & 1 ? -1 : 1;
@@ -79,10 +77,9 @@ namespace usb_pad
 	static void SetAutoCenter(FFDevice* ffdev, const autocenter& effect)
 	{
 		DevCon.WriteLn("%s: k1 %d k2 %d clip %d\n", __func__, effect.k1, effect.k2, effect.clip);
-		ffdev->SetAutoCenter((effect.k1 * effect.clip / 255) * 100 / 255); // FIXME
+		ffdev->SetAutoCenter((effect.k1 * effect.clip / 255) * 100 / 255);
 	}
 
-	// Unless passing ff packets straight to a device, parse it here
 	void PadState::ParseFFData(const ff_data* ffdata, bool isDFP)
 	{
 		if (!mFFdev)
@@ -106,7 +103,7 @@ namespace usb_pad
 							mFFstate.slot_type[i] = ffdata->type;
 					}
 					break;
-				case CMD_DOWNLOAD_AND_PLAY: //0x01
+				case CMD_DOWNLOAD_AND_PLAY:
 				{
 					for (int i = 0; i < 4; i++)
 					{
@@ -150,9 +147,7 @@ namespace usb_pad
 						case FTYPE_HIGH_RESOLUTION_SPRING:
 							SetSpringForce(mFFdev.get(), ffdata->u.spring, FF_LG_CAPS_HIGH_RES_COEF | FF_LG_CAPS_HIGH_RES_DEADBAND);
 							break;
-						case FTYPE_VARIABLE: //Ramp-like
-							//SetRampVariable(mFFdev, ffdata->u.variable);
-							//SetConstantForce(mFFdev, ffdata->u.params[0]);
+						case FTYPE_VARIABLE:
 							if (slots & (1 << 0))
 							{
 								if (ffdata->u.variable.t1 && ffdata->u.variable.s1)
@@ -207,7 +202,7 @@ namespace usb_pad
 					}
 				}
 				break;
-				case CMD_STOP: //0x03
+				case CMD_STOP:
 				{
 					for (int i = 0; i < 4; i++)
 					{
@@ -219,7 +214,6 @@ namespace usb_pad
 									mFFdev->DisableForce(EFF_CONSTANT);
 									break;
 								case FTYPE_VARIABLE:
-									//mFFdev->DisableRamp();
 									mFFdev->DisableForce(EFF_CONSTANT);
 									break;
 								case FTYPE_SPRING:
@@ -244,14 +238,13 @@ namespace usb_pad
 					}
 				}
 				break;
-				case CMD_DEFAULT_SPRING_ON: //0x04
+				case CMD_DEFAULT_SPRING_ON:
 					DevCon.WriteLn("CMD_DEFAULT_SPRING_ON: unhandled cmd\n");
 					break;
-				case CMD_DEFAULT_SPRING_OFF: //0x05
+				case CMD_DEFAULT_SPRING_OFF:
 				{
 					if (slots == 0x0F)
 					{
-						//just release force
 						SetConstantForce(mFFdev.get(), 127);
 					}
 					else
@@ -260,28 +253,25 @@ namespace usb_pad
 					}
 				}
 				break;
-				case CMD_NORMAL_MODE: //0x08
+				case CMD_NORMAL_MODE:
 					DevCon.WriteLn("CMD_NORMAL_MODE: unhandled cmd\n");
 					break;
-				case CMD_SET_LED: //0x09
+				case CMD_SET_LED:
 					DevCon.WriteLn("CMD_SET_LED: unhandled cmd\n");
 					break;
-				case CMD_RAW_MODE: //0x0B
+				case CMD_RAW_MODE:
 					DevCon.WriteLn("CMD_RAW_MODE: unhandled cmd\n");
 					break;
-				case CMD_SET_DEFAULT_SPRING: //0x0E
+				case CMD_SET_DEFAULT_SPRING:
 					DevCon.WriteLn("CMD_SET_DEFAULT_SPRING: unhandled cmd\n");
 					break;
-				case CMD_SET_DEAD_BAND: //0x0F
+				case CMD_SET_DEAD_BAND:
 					DevCon.WriteLn("CMD_SET_DEAD_BAND: unhandled cmd\n");
 					break;
 			}
 		}
 		else
 		{
-			// 0xF8, 0x05, 0x01, 0x00
-			//if(ffdata->type == 5) //TODO
-			//	sendCrap = true;
 			if (ffdata->type == EXT_CMD_WHEEL_RANGE_900_DEGREES)
 			{
 			}
@@ -293,4 +283,4 @@ namespace usb_pad
 		}
 	}
 
-} // namespace usb_pad
+}

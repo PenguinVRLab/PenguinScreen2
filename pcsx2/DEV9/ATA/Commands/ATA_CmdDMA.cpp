@@ -6,16 +6,13 @@
 
 void ATA::DRQCmdDMADataToHost()
 {
-	//Ready to Start DMA
 	regStatus &= ~ATA_STAT_BUSY;
 	regStatus |= ATA_STAT_DRQ;
 	dmaReady = true;
 	DEV9runFIFO();
-	//PCSX2 will Start DMA
 }
 void ATA::PostCmdDMADataToHost()
 {
-	//readBuffer = null;
 	nsectorLeft = 0;
 
 	regStatus &= ~ATA_STAT_DRQ;
@@ -29,7 +26,6 @@ void ATA::PostCmdDMADataToHost()
 
 void ATA::DRQCmdDMADataFromHost()
 {
-	//Ready to Start DMA
 	if (!HDD_CanAssessOrSetError())
 		return;
 
@@ -43,7 +39,6 @@ void ATA::DRQCmdDMADataFromHost()
 	regStatus |= ATA_STAT_DRQ;
 	dmaReady = true;
 	DEV9runFIFO();
-	//PCSX2 will Start DMA
 }
 void ATA::PostCmdDMADataFromHost()
 {
@@ -80,7 +75,6 @@ int ATA::ReadDMAToFIFO(u8* buffer, int space)
 		if (space == 0 || nsector == -1)
 			return 0;
 
-		// Read to FIFO
 		const int size = std::min(space, nsector * 512 - rdTransferred);
 		memcpy(buffer, &readBuffer[rdTransferred], size);
 
@@ -107,7 +101,6 @@ int ATA::WriteDMAFromFIFO(u8* buffer, int available)
 		if (available == 0 || nsector == -1)
 			return 0;
 
-		// Write to FIFO
 		const int size = std::min(available, nsector * 512 - wrTransferred);
 		memcpy(&currentWrite[wrTransferred], buffer, size);
 
@@ -126,8 +119,6 @@ int ATA::WriteDMAFromFIFO(u8* buffer, int available)
 	}
 	return 0;
 }
-
-//GENRAL FEATURE SET
 
 void ATA::HDD_ReadDMA(bool isLBA48)
 {
@@ -151,7 +142,6 @@ void ATA::HDD_ReadDMA(bool isLBA48)
 	else
 		regStatus |= ATA_STAT_SEEK;
 
-	//Do Sync Read
 	HDD_ReadSync(&ATA::DRQCmdDMADataToHost);
 }
 
@@ -177,6 +167,5 @@ void ATA::HDD_WriteDMA(bool isLBA48)
 	else
 		regStatus |= ATA_STAT_SEEK;
 
-	//Do Async write
 	DRQCmdDMADataFromHost();
 }

@@ -48,7 +48,6 @@ bool Vulkan::LoadVulkanLibrary(Error* error)
 	pxAssertRel(!s_vulkan_library.IsOpen(), "Vulkan module is not loaded.");
 
 #ifdef __APPLE__
-	// Check if a path to a specific Vulkan library has been specified.
 	char* libvulkan_env = getenv("LIBVULKAN_PATH");
 	if (libvulkan_env)
 		s_vulkan_library.Open(libvulkan_env, error);
@@ -58,7 +57,6 @@ bool Vulkan::LoadVulkanLibrary(Error* error)
 		return false;
 	}
 #else
-	// try versioned first, then unversioned.
 	if (!s_vulkan_library.Open(DynamicLibrary::GetVersionedFilename("vulkan", 1).c_str(), error) &&
 		!s_vulkan_library.Open(DynamicLibrary::GetVersionedFilename("vulkan").c_str(), error))
 	{

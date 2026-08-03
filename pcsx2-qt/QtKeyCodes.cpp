@@ -57,7 +57,7 @@ u8 map_text_to_keycode(const QString& text)
 		return Qt::Key_BracketLeft;
 	if (text == "}")
 		return Qt::Key_BracketRight;
-	return 0; // No remapping
+	return 0;
 }
 
 struct KeyCodeName
@@ -568,30 +568,22 @@ u32 QtUtils::KeyEventToCode(const QKeyEvent* ev)
 {
 	Qt::KeyboardModifiers modifiers = ev->modifiers();
 	const QString text = ev->text();
-	// Map special text symbols to keycodes if we're using Shift modifier.
-	// Also check that we're not using Keypad modifier otherwise "NumpadAsterisk" would return "8" keycode
-	// and "NumpadPlus" would return "Equal" keycode.
 	const bool set_keycode = (modifiers & Qt::ShiftModifier) && !(modifiers & Qt::KeypadModifier);
 	const u8 keycode = set_keycode ? map_text_to_keycode(text) : 0;
 	int key = ev->key();
 
 	if (keycode != 0)
-		key = keycode; // Override key if mapped
+		key = keycode;
 
 #ifdef __APPLE__
-	// On macOS, Qt applies the Keypad modifier regardless of whether the arrow keys, or numpad was pressed.
-	// The only way to differentiate between the keypad and the arrow keys is by the text.
-	// Hopefully some keyboard layouts don't change the numpad positioning...
 	if (modifiers & Qt::KeypadModifier && key >= Qt::Key_Insert && key <= Qt::Key_PageDown)
 	{
 		if (ev->text().isEmpty())
 		{
-			// Drop the modifier, because it's probably not actually a numpad push.
 			modifiers &= ~Qt::KeypadModifier;
 		}
 	}
 
-	// Undo Qt's swapping of Control and Command on macOS.
 	if (key == Qt::Key_Control)
 		key = Qt::Key_Meta;
 	else if (key == Qt::Key_Meta)

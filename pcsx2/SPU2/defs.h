@@ -9,14 +9,7 @@
 #include <array>
 #include <cstdio>
 
-// --------------------------------------------------------------------------------------
-//  SPU2 Register Table LUT
-// --------------------------------------------------------------------------------------
 extern const std::array<u16*, 0x401> regtable;
-
-// --------------------------------------------------------------------------------------
-//  SPU2 Memory Indexers
-// --------------------------------------------------------------------------------------
 
 #define spu2Rs16(mmem) (*(s16*)((s8*)spu2regs + ((mmem)&0x1fff)))
 #define spu2Ru16(mmem) (*(u16*)((s8*)spu2regs + ((mmem)&0x1fff)))
@@ -105,8 +98,6 @@ struct V_VolumeLR
 
 struct V_VolumeSlide
 {
-	// Holds the "original" value of the volume for this voice, prior to slides.
-	// (ie, the volume as written to the register)
 
 	union
 	{
@@ -135,7 +126,7 @@ public:
 	}
 
 	void Update();
-	void RegSet(u16 src); // used to set the volume from a register source
+	void RegSet(u16 src);
 
 #ifdef PCSX2_DEVBUILD
 	void DebugDump(FILE* dump, const char* title, const char* nameLR);
@@ -217,8 +208,8 @@ struct V_ADSR
 	std::array<CachedADSR, ADSR_PHASES> CachedPhases;
 
 	u32 Counter;
-	s32 Value; // Ranges from 0 to 0x7fff (signed values are clamped to 0) [Reg_ENVX]
-	u8 Phase; // monitors current phase of ADSR envelope
+	s32 Value;
+	u8 Phase;
 
 public:
 	void UpdateCache();
@@ -232,50 +223,34 @@ struct V_Voice
 {
 	V_VolumeSlideLR Volume;
 
-	// Envelope
 	V_ADSR ADSR;
-	// Pitch (also Reg_PITCH)
 	u16 Pitch;
-	// Loop Start address (also Reg_LSAH/L)
 	u32 LoopStartA;
-	// Sound Start address (also Reg_SSAH/L)
 	u32 StartA;
-	// Next Read Data address (also Reg_NAXH/L)
 	u32 NextA;
-	// Voice Decoding State
 	s32 Prev1;
 	s32 Prev2;
 
-	// Pitch Modulated by previous voice
 	bool Modulated;
-	// Source (Wave/Noise)
 	bool Noise;
 
 	s8 LoopMode;
 	s8 LoopFlags;
 
-	// Sample pointer (19:12 bit fixed point)
 	s32 SP;
 
-	// Last outputted audio value, used for voice modulation.
 	s32 OutX;
 
-	// SBuffer now points directly to an ADPCM cache entry.
 	s16* SBuffer;
 
-	// Each voice has a buffer of decoded samples
 	s32 DecodeFifo[32];
 	u32 DecPosWrite;
 	u32 DecPosRead;
 
-	// it takes a few ticks for voices to start on the real SPU2?
 	void Start();
 	void Stop();
 };
 
-// ** Begin Debug-only variables section **
-// Separated from the V_Voice struct to improve cache performance of
-// the Public Release build.
 struct V_VoiceDebug
 {
 	s8 FirstBlock;
@@ -288,18 +263,14 @@ struct V_VoiceDebug
 struct V_CoreDebug
 {
 	V_VoiceDebug Voices[24];
-	// Last Transfer Size
 	u32 lastsize;
 
-	// draw adma waveform in the visual debugger
 	s32 admaWaveformL[0x100];
 	s32 admaWaveformR[0x100];
 
-	// Enabled when a dma write starts, disabled when the visual debugger showed it once
 	s32 dmaFlag;
 };
 
-// Debug tracking information - 24 voices and 2 cores.
 extern V_CoreDebug DebugCores[2];
 
 struct V_Reverb
@@ -374,20 +345,20 @@ struct V_CoreRegs
 
 struct V_VoiceGates
 {
-	s32 DryL; // 'AND Gate' for Direct Output to Left Channel
-	s32 DryR; // 'AND Gate' for Direct Output for Right Channel
-	s32 WetL; // 'AND Gate' for Effect Output for Left Channel
-	s32 WetR; // 'AND Gate' for Effect Output for Right Channel
+	s32 DryL;
+	s32 DryR;
+	s32 WetL;
+	s32 WetR;
 };
 
 struct V_CoreGates
 {
-	s32 InpL; // Sound Data Input to Direct Output (Left)
-	s32 InpR; // Sound Data Input to Direct Output (Right)
-	s32 SndL; // Voice Data to Direct Output (Left)
-	s32 SndR; // Voice Data to Direct Output (Right)
-	s32 ExtL; // External Input to Direct Output (Left)
-	s32 ExtR; // External Input to Direct Output (Right)
+	s32 InpL;
+	s32 InpR;
+	s32 SndL;
+	s32 SndR;
+	s32 ExtL;
+	s32 ExtR;
 };
 
 struct VoiceMixSet
@@ -406,54 +377,50 @@ struct V_Core
 {
 	static const uint NumVoices = 24;
 
-	u32 Index; // Core index identifier.
-
-	// Voice Gates -- These are SSE-related values, and must always be
-	// first to ensure 16 byte alignment
+	u32 Index;
 
 	V_VoiceGates VoiceGates[NumVoices];
 	V_CoreGates DryGate;
 	V_CoreGates WetGate;
 
-	V_VolumeSlideLR MasterVol; // Master Volume
-	V_VolumeLR ExtVol; // Volume for External Data Input
-	V_VolumeLR InpVol; // Volume for Sound Data Input
-	V_VolumeLR FxVol; // Volume for Output from Effects
+	V_VolumeSlideLR MasterVol;
+	V_VolumeLR ExtVol;
+	V_VolumeLR InpVol;
+	V_VolumeLR FxVol;
 
 	V_Voice Voices[NumVoices];
 
-	u32 IRQA; // Interrupt Address
-	u32 TSA; // DMA Transfer Start Address
-	u32 ActiveTSA; // Active DMA TSA - Required for NFL 2k5 which overwrites it mid transfer
+	u32 IRQA;
+	u32 TSA;
+	u32 ActiveTSA;
 
-	bool IRQEnable; // Interrupt Enable
-	bool FxEnable; // Effect Enable
-	bool Mute; // Mute
+	bool IRQEnable;
+	bool FxEnable;
+	bool Mute;
 	bool AdmaInProgress;
 
-	s8 DMABits; // DMA related?
-	u8 NoiseClk; // Noise Clock
-	u32 NoiseCnt; // Noise Counter
-	u32 NoiseOut; // Noise Output
-	u16 AutoDMACtrl; // AutoDMA Status
-	s32 DMAICounter; // DMA Interrupt Counter
-	u64 LastClock; // DMA Interrupt Clock Cycle Counter
-	u32 InputDataLeft; // Input Buffer
-	u32 InputDataTransferred; // Used for simulating MADR increase (GTA VC)
+	s8 DMABits;
+	u8 NoiseClk;
+	u32 NoiseCnt;
+	u32 NoiseOut;
+	u16 AutoDMACtrl;
+	s32 DMAICounter;
+	u64 LastClock;
+	u32 InputDataLeft;
+	u32 InputDataTransferred;
 	u32 InputPosWrite;
 	u32 InputDataProgress;
 
-	V_Reverb Revb; // Reverb Registers
+	V_Reverb Revb;
 
-	s16 RevbDownBuf[2][64 * 2]; // Downsample buffer for reverb, one for each channel
-	s16 RevbUpBuf[2][64 * 2]; // Upsample buffer for reverb, one for each channel
+	s16 RevbDownBuf[2][64 * 2];
+	s16 RevbUpBuf[2][64 * 2];
 	u32 RevbSampleBufPos;
 	u32 EffectsStartA;
 	u32 EffectsEndA;
 
-	V_CoreRegs Regs; // Registers
+	V_CoreRegs Regs;
 
-	// Preserves the channel processed last cycle
 	StereoOut32 LastEffect;
 
 	u8 CoreEnabled;
@@ -461,28 +428,20 @@ struct V_Core
 	u8 AttrBit0;
 	u8 DmaMode;
 
-	// new dma only
 	bool DmaStarted;
 	u32 AutoDmaFree;
 
-	// old dma only
 	u16* DMAPtr;
-	u16* DMARPtr; // Mem pointer for DMA Reads
+	u16* DMARPtr;
 	u32 ReadSize;
 	bool IsDMARead;
 
 	u32 KeyOn;
 	u32 KeyOff;
 
-	// psxmode caches
 	u16 psxSoundDataTransferControl;
 	u16 psxSPUSTAT;
 
-	// ----------------------------------------------------------------------------------
-	//  V_Core Methods
-	// ----------------------------------------------------------------------------------
-
-	// uninitialized constructor
 	V_Core()
 		: Index(-1)
 		, DMAPtr(nullptr)
@@ -497,27 +456,17 @@ struct V_Core
 	void WriteRegPS1(u32 mem, u16 value);
 	u16 ReadRegPS1(u32 mem);
 
-	// --------------------------------------------------------------------------------------
-	//  Mixer Section
-	// --------------------------------------------------------------------------------------
-
 	StereoOut32 DoReverb(StereoOut32 Input);
 	s32 RevbGetIndexer(s32 offset);
 
 	StereoOut32 ReadInput();
 	StereoOut32 ReadInput_HiFi();
 
-	// --------------------------------------------------------------------------
-	//  DMA Section
-	// --------------------------------------------------------------------------
-
-	// Returns the index of the DMA channel (4 for Core 0, or 7 for Core 1)
 	int GetDmaIndex() const
 	{
 		return (Index == 0) ? 4 : 7;
 	}
 
-	// returns either '4' or '7'
 	char GetDmaIndexChar() const
 	{
 		return 0x30 + GetDmaIndex();
@@ -563,11 +512,8 @@ extern s32 (*ReverbDownsample)(V_Core& core, bool right);
 extern V_Core Cores[2];
 extern V_SPDIF Spdif;
 
-// Output Buffer Writing Position (the same for all data);
 extern u16 OutPos;
-// Input Buffer Reading Position (the same for all data);
 extern u16 InputPos;
-// SPU Mixing Cycles ("Ticks mixed" counter)
 extern u32 Cycles;
 
 extern s16 spu2regs[0x010000 / sizeof(s16)];
@@ -588,29 +534,14 @@ namespace SPU2Savestate
 	extern s32 FreezeIt(DataBlock& spud);
 	extern s32 ThawIt(DataBlock& spud);
 	extern s32 SizeIt();
-} // namespace SPU2Savestate
+}
 
-// --------------------------------------------------------------------------------------
-//  ADPCM Decoder Cache
-// --------------------------------------------------------------------------------------
-//  the cache data size is determined by taking the number of adpcm blocks
-//  (2MB / 16) and multiplying it by the decoded block size (28 samples).
-//  Thus: pcm_cache_data = 7,340,032 bytes (ouch!)
-//  Expanded: 16 bytes expands to 56 bytes [3.5:1 ratio]
-//    Resulting in 2MB * 3.5.
-
-// The SPU2 has a dynamic memory range which is used for several internal operations, such as
-// registers, CORE 1/2 mixing, AutoDMAs, and some other fancy stuff.  We exclude this range
-// from the cache here:
 static constexpr s32 SPU2_DYN_MEMLINE = 0x2800;
 
-// 8 short words per encoded PCM block. (as stored in SPU2 ram)
 static constexpr int pcm_WordsPerBlock = 8;
 
-// number of cachable ADPCM blocks (any blocks above the SPU2_DYN_MEMLINE)
 static constexpr int pcm_BlockCount = 0x100000 / pcm_WordsPerBlock;
 
-// 28 samples per decoded PCM block (as stored in our cache)
 static constexpr int pcm_DecodedSamplesPerBlock = 28;
 
 struct PcmCacheEntry

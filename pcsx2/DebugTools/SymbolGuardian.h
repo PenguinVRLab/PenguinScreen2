@@ -34,8 +34,6 @@ struct FunctionInfo
 	bool is_no_return = false;
 };
 
-// Guardian of the ancient symbols. This class provides a thread safe API for
-// accessing the symbol database.
 class SymbolGuardian
 {
 public:
@@ -49,13 +47,10 @@ public:
 	using ReadCallback = std::function<void(const ccc::SymbolDatabase&)>;
 	using ReadWriteCallback = std::function<void(ccc::SymbolDatabase&)>;
 
-	// Take a shared lock on the symbol database and run the callback.
 	void Read(ReadCallback callback) const noexcept;
 
-	// Take an exclusive lock on the symbol database and run the callback.
 	void ReadWrite(ReadWriteCallback callback) noexcept;
 
-	// Copy commonly used attributes of a symbol into a temporary object.
 	SymbolInfo SymbolStartingAtAddress(
 		u32 address, u32 descriptors = ccc::ALL_SYMBOL_TYPES) const;
 	SymbolInfo SymbolAfterAddress(
@@ -68,27 +63,17 @@ public:
 	bool FunctionExistsWithStartingAddress(u32 address) const;
 	bool FunctionExistsThatOverlapsAddress(u32 address) const;
 
-	// Copy commonly used attributes of a function so they can be used by the
-	// calling thread without needing to keep the lock held.
 	FunctionInfo FunctionStartingAtAddress(u32 address) const;
 	FunctionInfo FunctionOverlappingAddress(u32 address) const;
 
-	// Hash all the functions in the database and store the hashes in the
-	// original hash field of said objects.
 	static void GenerateFunctionHashes(ccc::SymbolDatabase& database, MemoryInterface& reader);
 
-	// Hash all the functions in the database that have original hashes and
-	// store the results in the current hash fields of said objects.
 	static void UpdateFunctionHashes(ccc::SymbolDatabase& database, MemoryInterface& reader);
 
-	// Hash a function and return the result.
 	static std::optional<ccc::FunctionHash> HashFunction(const ccc::Function& function, MemoryInterface& reader);
 
-	// Delete all symbols from modules that have the "is_irx" flag set.
 	void ClearIrxModules();
 
-	// Translate the name of a ccc::SymbolSource object, or return it as is if
-	// no translation is available.
 	static const char* TranslateSymbolSourceName(const char* name);
 
 protected:

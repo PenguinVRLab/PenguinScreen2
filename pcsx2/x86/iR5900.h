@@ -11,23 +11,16 @@
 
 #include "common/emitter/x86emitter.h"
 
-// Register containing a pointer to our fastmem (4GB) area
 #define RFASTMEMBASE x86Emitter::rbp
 
 extern u32 maxrecmem;
-extern u32 pc;             // recompiler pc
-extern int g_branch;       // set for branch
-extern u32 target;         // branch target
-extern u32 s_nBlockCycles; // cycles of current block recompiling
-extern bool s_nBlockInterlocked; // Current block has VU0 interlocking
+extern u32 pc;
+extern int g_branch;
+extern u32 target;
+extern u32 s_nBlockCycles;
+extern bool s_nBlockInterlocked;
 
-// x86 can use shorter displacement if it fits in an s8, so offset 144 bytes into the cpuRegs
-// This will allow us to reach r1-r16 with a shorter encoding
-// TODO: Actually figure out what things are used most often, maybe rearrange the cpuRegs struct, and point at that
 #define R5900_TEXTPTR (&cpuRegs.GPR.r[9])
-
-//////////////////////////////////////////////////////////////////////////////////////////
-//
 
 #define REC_FUNC(f) \
 	void rec##f() \
@@ -59,11 +52,9 @@ extern bool s_nBlockInterlocked; // Current block has VU0 interlocking
 
 extern bool g_recompilingDelaySlot;
 
-// Used for generating backpatch thunks for fastmem.
 u8* recBeginThunk();
 u8* recEndThunk();
 
-// used when processing branches
 bool TrySwapDelaySlot(u32 rs, u32 rt, u32 rd, bool allow_loadstore);
 void SaveBranchState();
 void LoadBranchState();
@@ -82,11 +73,8 @@ namespace R5900
 	namespace Dynarec
 	{
 		extern void recDoBranchImm(u32 branchTo, u32* jmpSkip, bool isLikely = false, bool swappedDelaySlot = false);
-	} // namespace Dynarec
-} // namespace R5900
-
-////////////////////////////////////////////////////////////////////
-// Constant Propagation - From here to the end of the header!
+	}
+}
 
 #define GPR_IS_CONST1(reg) (EE_CONST_PROP && (reg) < 32 && (g_cpuHasConstReg & (1 << (reg))))
 #define GPR_IS_CONST2(reg1, reg2) (EE_CONST_PROP && (g_cpuHasConstReg & (1 << (reg1))) && (g_cpuHasConstReg & (1 << (reg2))))
@@ -109,27 +97,19 @@ namespace R5900
 alignas(16) extern GPR_reg64 g_cpuConstRegs[32];
 extern u32 g_cpuHasConstReg, g_cpuFlushedConstReg;
 
-// finds where the GPR is stored and moves lower 32 bits to EAX
 void _eeMoveGPRtoR(const x86Emitter::xRegister32& to, int fromgpr, bool allow_preload = true);
 void _eeMoveGPRtoR(const x86Emitter::xRegister64& to, int fromgpr, bool allow_preload = true);
-void _eeMoveGPRtoM(uptr to, int fromgpr); // 32-bit only
+void _eeMoveGPRtoM(uptr to, int fromgpr);
 
 void _eeFlushAllDirty();
 void _eeOnWriteReg(int reg, int signext);
 
-// totally deletes from const, xmm, and mmx entries
-// if flush is 1, also flushes to memory
-// if 0, only flushes if not an xmm reg (used when overwriting lower 64bits of reg)
 void _deleteEEreg(int reg, int flush);
 void _deleteEEreg128(int reg);
 
 void _flushEEreg(int reg, bool clear = false);
 
 int _eeTryRenameReg(int to, int from, int fromx86, int other, int xmminfo);
-
-//////////////////////////////////////
-// Templates for code recompilation //
-//////////////////////////////////////
 
 typedef void (*R5900FNPTR)();
 typedef void (*R5900FNPTR_INFO)(int info);
@@ -161,15 +141,8 @@ typedef void (*R5900FNPTR_INFO)(int info);
 		codename(rec##fn##_const, rec##fn##_, (xmminfo)); \
 	}
 
-//
-// MMX/XMM caching helpers
-//
-
-// rd = rs op rt
 void eeRecompileCodeRC0(R5900FNPTR constcode, R5900FNPTR_INFO constscode, R5900FNPTR_INFO consttcode, R5900FNPTR_INFO noconstcode, int xmminfo);
-// rt = rs op imm16
 void eeRecompileCodeRC1(R5900FNPTR constcode, R5900FNPTR_INFO noconstcode, int xmminfo);
-// rd = rt op sa
 void eeRecompileCodeRC2(R5900FNPTR constcode, R5900FNPTR_INFO noconstcode, int xmminfo);
 
 #define FPURECOMPILE_CONSTCODE(fn, xmminfo) \
@@ -181,6 +154,5 @@ void eeRecompileCodeRC2(R5900FNPTR constcode, R5900FNPTR_INFO noconstcode, int x
 			eeFPURecompileCode(rec##fn##_xmm, R5900::Interpreter::OpcodeImpl::COP1::fn, xmminfo); \
 	}
 
-// rd = rs op rt (all regs need to be in xmm)
 int eeRecompileCodeXMM(int xmminfo);
 void eeFPURecompileCode(R5900FNPTR_INFO xmmcode, R5900FNPTR fpucode, int xmminfo);

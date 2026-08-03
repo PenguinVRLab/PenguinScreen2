@@ -7,51 +7,42 @@ extern void _vu0FinishMicro();
 
 static VURegs& vu0Regs = vuRegs[0];
 
-//------------------------------------------------------------------
-// Macro VU - Helper Macros / Functions
-//------------------------------------------------------------------
-
 using namespace R5900::Dynarec;
 
 #define printCOP2(...) (void)0
-//#define printCOP2 DevCon.Status
 
-// For now, we need to free all XMMs. Because we're not saving the nonvolatile registers when
-// we enter micro mode, they will get overriden otherwise...
 #define FLUSH_FOR_POSSIBLE_MICRO_EXEC (FLUSH_FREE_XMM | FLUSH_FREE_VU0)
 
 void setupMacroOp(int mode, const char* opName)
 {
-	// Set up reg allocation
 	microVU0.regAlloc->reset(true);
 
-	if (mode & 0x03) // Q will be read/written
+	if (mode & 0x03)
 		_freeXMMreg(xmmPQ.Id);
 
-	// Set up MicroVU ready for new op
 	printCOP2(opName);
 	microVU0.cop2 = 1;
 	microVU0.prog.IRinfo.curPC = 0;
 	microVU0.code = cpuRegs.code;
 	memset(&microVU0.prog.IRinfo.info[0], 0, sizeof(microVU0.prog.IRinfo.info[0]));
 
-	if (mode & 0x01) // Q-Reg will be Read
+	if (mode & 0x01)
 	{
 		xMOVSSZX(xmmPQ, ptr32[&vu0Regs.VI[REG_Q].UL]);
 	}
-	if (mode & 0x08 && (!CHECK_VU_FLAGHACK || g_pCurInstInfo->info & EEINST_COP2_CLIP_FLAG)) // Clip Instruction
+	if (mode & 0x08 && (!CHECK_VU_FLAGHACK || g_pCurInstInfo->info & EEINST_COP2_CLIP_FLAG))
 	{
 		microVU0.prog.IRinfo.info[0].cFlag.write     = 0xff;
 		microVU0.prog.IRinfo.info[0].cFlag.lastWrite = 0xff;
 	}
-	if (mode & 0x10 && (!CHECK_VU_FLAGHACK || g_pCurInstInfo->info & EEINST_COP2_STATUS_FLAG)) // Update Status Flag
+	if (mode & 0x10 && (!CHECK_VU_FLAGHACK || g_pCurInstInfo->info & EEINST_COP2_STATUS_FLAG))
 	{
 		microVU0.prog.IRinfo.info[0].sFlag.doFlag      = true;
 		microVU0.prog.IRinfo.info[0].sFlag.doNonSticky = true;
 		microVU0.prog.IRinfo.info[0].sFlag.write       = 0;
 		microVU0.prog.IRinfo.info[0].sFlag.lastWrite   = 0;
 	}
-	if (mode & 0x10 && (!CHECK_VU_FLAGHACK || g_pCurInstInfo->info & EEINST_COP2_MAC_FLAG)) // Update Mac Flags
+	if (mode & 0x10 && (!CHECK_VU_FLAGHACK || g_pCurInstInfo->info & EEINST_COP2_MAC_FLAG))
 	{
 		microVU0.prog.IRinfo.info[0].mFlag.doFlag      = true;
 		microVU0.prog.IRinfo.info[0].mFlag.write       = 0xff;
@@ -62,13 +53,10 @@ void setupMacroOp(int mode, const char* opName)
 
 		if (!CHECK_VU_FLAGHACK || (g_pCurInstInfo->info & EEINST_COP2_DENORMALIZE_STATUS_FLAG))
 		{
-			// flags are normalized, so denormalize before running the first instruction
 			mVUallocSFLAGd(&vu0Regs.VI[REG_STATUS_FLAG].UL, gprF0, eax, ecx);
 		}
 		else
 		{
-			// load denormalized status flag
-			// ideally we'd keep this in a register, but 32-bit...
 			xMOV(gprF0, ptr32[&vuRegs->VI[REG_STATUS_FLAG].UL]);
 		}
 	}
@@ -76,7 +64,7 @@ void setupMacroOp(int mode, const char* opName)
 
 void endMacroOp(int mode)
 {
-	if (mode & 0x02) // Q-Reg was Written To
+	if (mode & 0x02)
 	{
 		xMOVSS(ptr32[&vu0Regs.VI[REG_Q].UL], xmmPQ);
 	}
@@ -87,14 +75,11 @@ void endMacroOp(int mode)
 	{
 		if (!CHECK_VU_FLAGHACK || g_pCurInstInfo->info & EEINST_COP2_NORMALIZE_STATUS_FLAG)
 		{
-			// Normalize
 			mVUallocSFLAGc(eax, gprF0, 0);
 			xMOV(ptr32[&vu0Regs.VI[REG_STATUS_FLAG].UL], eax);
 		}
 		else if (g_pCurInstInfo->info & (EEINST_COP2_STATUS_FLAG | EEINST_COP2_DENORMALIZE_STATUS_FLAG))
 		{
-			// backup denormalized flags for the next instruction
-			// this is fine, because we'll normalize them again before this reg is accessed
 			xMOV(ptr32[&vuRegs->VI[REG_STATUS_FLAG].UL], gprF0);
 		}
 	}
@@ -115,7 +100,6 @@ void mVUFreeCOP2GPR(int hostreg)
 
 bool mVUIsReservedCOP2(int hostreg)
 {
-	// gprF1 through 3 is not correctly used in COP2 mode.
 	return (hostreg == gprT1.GetId() || hostreg == gprT2.GetId() || hostreg == gprF0.GetId());
 }
 
@@ -146,23 +130,6 @@ bool mVUIsReservedCOP2(int hostreg)
 		xADD(ptr64[&cpuRegs.cycle], scaleblockcycles_clear()); \
 		recCall(V##f); \
 	}
-
-//------------------------------------------------------------------
-// Macro VU - Instructions
-//------------------------------------------------------------------
-
-//------------------------------------------------------------------
-// Macro VU - Redirect Upper Instructions
-//------------------------------------------------------------------
-
-/* Mode information
-0x1  reads Q reg
-0x2  writes Q reg
-0x4  requires analysis pass
-0x8  write CLIP
-0x10 writes status/mac
-0x100 requires x86 regs
-*/
 
 REC_COP2_mVU0(ABS,    "ABS",    0x0);
 REC_COP2_mVU0(ITOF0,  "ITOF0",  0x0);
@@ -259,10 +226,6 @@ REC_COP2_mVU0(OPMULA, "OPMULA", 0x110);
 REC_COP2_mVU0(OPMSUB, "OPMSUB", 0x110);
 REC_COP2_mVU0(CLIP,   "CLIP",   0x108);
 
-//------------------------------------------------------------------
-// Macro VU - Redirect Lower Instructions
-//------------------------------------------------------------------
-
 REC_COP2_mVU0(DIV,   "DIV",   0x112);
 REC_COP2_mVU0(SQRT,  "SQRT",  0x112);
 REC_COP2_mVU0(RSQRT, "RSQRT", 0x112);
@@ -286,18 +249,10 @@ REC_COP2_mVU0(RGET,  "RGET",  0x104);
 REC_COP2_mVU0(RNEXT, "RNEXT", 0x104);
 REC_COP2_mVU0(RXOR,  "RXOR",  0x100);
 
-//------------------------------------------------------------------
-// Macro VU - Misc...
-//------------------------------------------------------------------
-
 void recVNOP() {}
 void recVWAITQ() {}
 INTERPRETATE_COP2_FUNC(CALLMS);
 INTERPRETATE_COP2_FUNC(CALLMSR);
-
-//------------------------------------------------------------------
-// Macro VU - Branches
-//------------------------------------------------------------------
 
 static void _setupBranchTest(u32*(jmpType)(u32), bool isLikely)
 {
@@ -305,7 +260,6 @@ static void _setupBranchTest(u32*(jmpType)(u32), bool isLikely)
 	const u32 branchTo = ((s32)_Imm_ * 4) + pc;
 	const bool swap = isLikely ? false : TrySwapDelaySlot(0, 0, 0, false);
 	_eeFlushAllDirty();
-	//xTEST(ptr32[&vif1Regs.stat._u32], 0x4);
 	xTEST(ptr32[&VU0.VI[REG_VPU_STAT].UL], 0x100);
 	recDoBranchImm(branchTo, jmpType(0), isLikely, swap);
 }
@@ -315,25 +269,19 @@ void recBC2T()  { _setupBranchTest(JZ32,  false); }
 void recBC2FL() { _setupBranchTest(JNZ32, true);  }
 void recBC2TL() { _setupBranchTest(JZ32,  true);  }
 
-//------------------------------------------------------------------
-// Macro VU - COP2 Transfer Instructions
-//------------------------------------------------------------------
-
 static void COP2_Interlock(bool mBitSync)
 {
 	if (cpuRegs.code & 1)
 	{
 		s_nBlockInterlocked = true;
 
-		// We can safely skip the _vu0FinishMicro() call, when there's nothing
-		// that can trigger a VU0 program between CFC2/CTC2/COP2 instructions.
 		if (g_pCurInstInfo->info & EEINST_COP2_SYNC_VU0)
 		{
 			iFlushCall(FLUSH_FOR_POSSIBLE_MICRO_EXEC);
 			_freeX86reg(eax);
 			xMOV(rax, ptr64[&cpuRegs.cycle]);
 			xADD(rax, scaleblockcycles_clear());
-			xMOV(ptr64[&cpuRegs.cycle], rax); // update cycles
+			xMOV(ptr64[&cpuRegs.cycle], rax);
 
 			xTEST(ptr32[&VU0.VI[REG_VPU_STAT].UL], 0x1);
 			xForwardJZ32 skipvuidle;
@@ -341,9 +289,6 @@ static void COP2_Interlock(bool mBitSync)
 			{
 				xSUB(rax, ptr64[&VU0.cycle]);
 
-				// Why do we check this here? Ratchet games, maybe others end up with flickering polygons
-				// when we use lazy COP2 sync, otherwise. The micro resumption getting deferred an extra
-				// EE block is apparently enough to cause issues.
 				if (EmuConfig.Gamefixes.VUSyncHack || EmuConfig.Gamefixes.FullVU0SyncHack)
 					xSUB(rax, ptr64[&VU0.nextBlockCycles]);
 				xCMP(rax, 4);
@@ -368,7 +313,7 @@ static void mVUSyncVU0()
 	_freeX86reg(eax);
 	xMOV(rax, ptr64[&cpuRegs.cycle]);
 	xADD(rax, scaleblockcycles_clear());
-	xMOV(ptr64[&cpuRegs.cycle], rax); // update cycles
+	xMOV(ptr64[&cpuRegs.cycle], rax);
 
 	xTEST(ptr32[&VU0.VI[REG_VPU_STAT].UL], 0x1);
 	xForwardJZ32 skipvuidle;
@@ -421,7 +366,7 @@ static void recCFC2()
 	const int regt = _allocX86reg(X86TYPE_GPR, _Rt_, MODE_WRITE);
 	pxAssert(!GPR_IS_CONST1(_Rt_));
 
-	if (_Rd_ == 0) // why would you read vi00?
+	if (_Rd_ == 0)
 	{
 		xXOR(xRegister32(regt), xRegister32(regt));
 	}
@@ -443,7 +388,7 @@ static void recCFC2()
 		xMOVSX(xRegister64(regt), ptr32[&vu0Regs.VI[REG_R].UL]);
 		xAND(xRegister64(regt), 0x7FFFFF);
 	}
-	else if (_Rd_ >= REG_STATUS_FLAG) // FixMe: Should R-Reg have upper 9 bits 0?
+	else if (_Rd_ >= REG_STATUS_FLAG)
 	{
 		xMOVSX(xRegister64(regt), ptr32[&vu0Regs.VI[_Rd_].UL]);
 	}
@@ -479,7 +424,7 @@ static void recCTC2()
 		case REG_MAC_FLAG:
 		case REG_TPC:
 		case REG_VPU_STAT:
-			break; // Read Only Regs
+			break;
 		case REG_R:
 			_eeMoveGPRtoR(eax, _Rt_);
 			xAND(eax, 0x7FFFFF);
@@ -500,16 +445,14 @@ static void recCTC2()
 
 			const int xmmtemp = _allocTempXMMreg(XMMT_INT);
 
-			//Need to update the sticky flags for microVU
 			mVUallocSFLAGd(&vu0Regs.VI[REG_STATUS_FLAG].UL);
-			xMOVDZX(xRegisterSSE(xmmtemp), eax); // TODO(Stenzek): This can be a broadcast.
+			xMOVDZX(xRegisterSSE(xmmtemp), eax);
 			xSHUF.PS(xRegisterSSE(xmmtemp), xRegisterSSE(xmmtemp), 0);
-			// Make sure the values are everywhere the need to be
 			xMOVAPS(ptr128[&vu0Regs.micro_statusflags], xRegisterSSE(xmmtemp));
 			_freeXMMreg(xmmtemp);
 			break;
 		}
-		case REG_CMSAR1: // Execute VU1 Micro SubRoutine
+		case REG_CMSAR1:
 			iFlushCall(FLUSH_NONE);
 			xMOV(arg1regd, 1);
 			xFastCall((void*)vu1Finish);
@@ -538,14 +481,10 @@ static void recCTC2()
 			}
 			break;
 		case 0:
-			// Ignore writes to vi00.
 			break;
 		default:
-			// Executing vu0 block here fixes the intro of Ratchet and Clank
-			// sVU's COP2 has a comment that "Donald Duck" needs this too...
 			if (_Rd_ < REG_STATUS_FLAG)
 			{
-				// Little bit nasty, but optimal codegen.
 				const int gprreg = _allocIfUsedGPRtoX86(_Rt_, MODE_READ);
 				const int vireg = _allocIfUsedVItoX86(_Rd_, MODE_WRITE);
 				if (vireg >= 0)
@@ -556,7 +495,6 @@ static void recCTC2()
 					}
 					else
 					{
-						// it could be in an xmm..
 						const int gprxmmreg = _checkXMMreg(XMMTYPE_GPRREG, _Rt_, MODE_READ);
 						if (gprxmmreg >= 0)
 						{
@@ -604,7 +542,6 @@ static void recCTC2()
 			}
 			else
 			{
-				// Move I direct to FPR if used.
 				if (_Rd_ == REG_I)
 				{
 					const int xmmreg = _allocVFtoXMMreg(33, MODE_WRITE);
@@ -661,19 +598,16 @@ static void recQMFC2()
 	const int ftreg = _allocVFtoXMMreg(_Rd_, MODE_READ);
 	_deleteEEreg128(_Rt_);
 
-	// const flag should've been cleared, but sanity check..
 	pxAssert(!GPR_IS_CONST1(_Rt_));
 
 	if (vf_used)
 	{
-		// store direct to state if rt is not used
 		const int rtreg = _allocIfUsedGPRtoXMM(_Rt_, MODE_WRITE);
 		if (rtreg >= 0)
 			xMOVAPS(xRegisterSSE(rtreg), xRegisterSSE(ftreg));
 		else
 			xMOVAPS(ptr128[&cpuRegs.GPR.r[_Rt_].UQ], xRegisterSSE(ftreg));
 
-		// don't cache vf00, microvu doesn't like it
 		if (_Rd_ == 0)
 			_freeXMMreg(ftreg);
 	}
@@ -701,25 +635,21 @@ static void recQMTC2()
 
 	if (_Rt_)
 	{
-		// if we have to flush to memory anyway (has a constant or is x86), force load.
 		[[maybe_unused]] const bool vf_used = EEINST_VFUSEDTEST(_Rd_);
 		const bool can_rename = EEINST_RENAMETEST(_Rt_);
 		const int rtreg = (GPR_IS_DIRTY_CONST(_Rt_) || _hasX86reg(X86TYPE_GPR, _Rt_, MODE_WRITE)) ?
 							  _allocGPRtoXMMreg(_Rt_, MODE_READ) :
                               _checkXMMreg(XMMTYPE_GPRREG, _Rt_, MODE_READ);
 		
-		// NOTE: can't transfer xmm15 to VF, it's reserved for PQ.
 		int vfreg = _checkXMMreg(XMMTYPE_VFREG, _Rd_, MODE_WRITE);
 		if (can_rename && rtreg >= 0 && rtreg != xmmPQ.GetId())
 		{
-			// rt is no longer needed, so transfer to VF.
 			if (vfreg >= 0)
 				_freeXMMregWithoutWriteback(vfreg);
 			_reallocateXMMreg(rtreg, XMMTYPE_VFREG, _Rd_, MODE_WRITE, true);
 		}
 		else
 		{
-			// copy to VF.
 			if (vfreg < 0)
 				vfreg = _allocVFtoXMMreg(_Rd_, MODE_WRITE);
 			if (rtreg >= 0)
@@ -735,10 +665,6 @@ static void recQMTC2()
 	}
 }
 
-//------------------------------------------------------------------
-// Macro VU - Tables
-//------------------------------------------------------------------
-
 void recCOP2();
 void recCOP2_BC2();
 void recCOP2_SPEC1();
@@ -748,7 +674,6 @@ void rec_C2UNK()
 	Console.Error("Cop2 bad opcode: %x", cpuRegs.code);
 }
 
-// Recompilation
 void (*recCOP2t[32])() = {
 	rec_C2UNK,     recQMFC2,      recCFC2,       rec_C2UNK,     rec_C2UNK,     recQMTC2,      recCTC2,       rec_C2UNK,
 	recCOP2_BC2,   rec_C2UNK,     rec_C2UNK,     rec_C2UNK,     rec_C2UNK,     rec_C2UNK,     rec_C2UNK,     rec_C2UNK,
@@ -800,11 +725,6 @@ void recCOP2() { recCOP2t[_Rs_](); }
 
 #if defined(LOADSTORE_RECOMPILE) && defined(CP2_RECOMPILE)
 
-/*********************************************************
-* Load and store for COP2 (VU0 unit)                     *
-* Format:  OP rt, offset(base)                           *
-*********************************************************/
-
 void recLQC2()
 {
 	if (g_pCurInstInfo->info & EEINST_COP2_SYNC_VU0)
@@ -815,7 +735,6 @@ void recLQC2()
 	vtlb_ReadRegAllocCallback alloc_cb = nullptr;
 	if (_Rt_)
 	{
-		// init regalloc after flush
 		alloc_cb = []() { return _allocVFtoXMMreg(_Rt_, MODE_WRITE); };
 	}
 
@@ -835,14 +754,11 @@ void recLQC2()
 		xmmreg = vtlb_DynGenReadQuad(128, arg1regd.GetId(), alloc_cb);
 	}
 
-	// toss away if loading to vf00
 	if (!_Rt_)
 		_freeXMMreg(xmmreg);
 
 	EE::Profiler.EmitOp(eeOpcode::LQC2);
 }
-
-////////////////////////////////////////////////////
 
 void recSQC2()
 {
@@ -851,7 +767,6 @@ void recSQC2()
 	else if (g_pCurInstInfo->info & EEINST_COP2_FINISH_VU0)
 		mVUFinishVU0();
 
-	// vf00 has to be special cased here, because of the microvu temps...
 	const int ftreg = _Rt_ ? _allocVFtoXMMreg(_Rt_, MODE_READ) : _allocTempXMMreg(XMMT_FPS);
 	if (!_Rt_)
 		xMOVAPS(xRegisterSSE(ftreg), ptr128[&vu0Regs.VF[0].F]);
@@ -885,9 +800,9 @@ REC_FUNC(SQC2);
 
 #endif
 
-} // namespace OpcodeImpl
-} // namespace Dynarec
-} // namespace R5900
+}
+}
+}
 void recCOP2_BC2() { recCOP2_BC2t[_Rt_](); }
 void recCOP2_SPEC1()
 {

@@ -10,7 +10,6 @@
 
 static __ri bool _eelog_enabled( u32 addr )
 {
-	// Selective enable/disable ability for specific register maps
 	if (eeAddrInRange(RCNT0, addr)) return false;
 	if (eeAddrInRange(RCNT1, addr)) return true;
 	if (eeAddrInRange(RCNT2, addr)) return true;
@@ -18,7 +17,6 @@ static __ri bool _eelog_enabled( u32 addr )
 
 	if (eeAddrInRange(SBUS, addr)) return false;
 
-	// INTC!
 	if (addr == INTC_STAT || addr == INTC_MASK) return false;
 
 	return true;
@@ -31,7 +29,6 @@ static __ri const char* _eelog_GetHwName( u32 addr, T val )
 
 	switch( addr )
 	{
-		//  Counters!
 		EasyCase(RCNT0_COUNT);
 		EasyCase(RCNT0_MODE);
 		EasyCase(RCNT0_TARGET);
@@ -50,13 +47,11 @@ static __ri const char* _eelog_GetHwName( u32 addr, T val )
 		EasyCase(RCNT3_MODE);
 		EasyCase(RCNT3_TARGET);
 
-		// IPU!
 		EasyCase(IPU_CMD);
 		EasyCase(IPU_CTRL);
 		EasyCase(IPU_BP);
 		EasyCase(IPU_TOP);
 
-		// GIF!
 		EasyCase(GIF_CTRL);
 		EasyCase(GIF_MODE);
 		EasyCase(GIF_STAT);
@@ -68,7 +63,6 @@ static __ri const char* _eelog_GetHwName( u32 addr, T val )
 		EasyCase(GIF_P3CNT);
 		EasyCase(GIF_P3TAG);
 
-		// VIF!
 		EasyCase(VIF0_STAT);
 		EasyCase(VIF0_FBRST);
 		EasyCase(VIF0_ERR);
@@ -114,7 +108,6 @@ static __ri const char* _eelog_GetHwName( u32 addr, T val )
 		EasyCase(VIF1_COL2);
 		EasyCase(VIF1_COL3);
 
-		// VIF DMA!
 		EasyCase(VIF0_CHCR);
 		EasyCase(VIF0_MADR);
 		EasyCase(VIF0_QWC);
@@ -129,7 +122,6 @@ static __ri const char* _eelog_GetHwName( u32 addr, T val )
 		EasyCase(VIF1_ASR0);
 		EasyCase(VIF1_ASR1);
 
-		// GIF DMA!
 		EasyCase(GIF_CHCR);
 		EasyCase(GIF_MADR);
 		EasyCase(GIF_QWC);
@@ -137,7 +129,6 @@ static __ri const char* _eelog_GetHwName( u32 addr, T val )
 		EasyCase(GIF_ASR0);
 		EasyCase(GIF_ASR1);
 
-		// IPU DMA!
 		EasyCase(fromIPU_CHCR);
 		EasyCase(fromIPU_MADR);
 		EasyCase(fromIPU_QWC);
@@ -147,7 +138,6 @@ static __ri const char* _eelog_GetHwName( u32 addr, T val )
 		EasyCase(toIPU_QWC);
 		EasyCase(toIPU_TADR);
 
-		// SIF DMA!
 		EasyCase(SIF0_CHCR);
 		EasyCase(SIF0_MADR);
 		EasyCase(SIF0_QWC);
@@ -161,8 +151,6 @@ static __ri const char* _eelog_GetHwName( u32 addr, T val )
 		EasyCase(SIF2_MADR);
 		EasyCase(SIF2_QWC);
 
-		// Scratchpad DMA!  (SPRdma)
-
 		EasyCase(fromSPR_CHCR);
 		EasyCase(fromSPR_MADR);
 		EasyCase(fromSPR_QWC);
@@ -174,7 +162,6 @@ static __ri const char* _eelog_GetHwName( u32 addr, T val )
 		EasyCase(toSPR_TADR);
 		EasyCase(toSPR_SADR);
 
-		// DMAC!
 		EasyCase(DMAC_CTRL);
 		EasyCase(DMAC_STAT);
 		EasyCase(DMAC_PCR);
@@ -185,11 +172,9 @@ static __ri const char* _eelog_GetHwName( u32 addr, T val )
 		EasyCase(DMAC_ENABLER);
 		EasyCase(DMAC_ENABLEW);
 
-		// INTC!
 		EasyCase(INTC_STAT);
 		EasyCase(INTC_MASK);
 
-		// SIO
 		EasyCase(SIO_LCR);
 		EasyCase(SIO_LSR);
 		EasyCase(SIO_IER);
@@ -199,7 +184,6 @@ static __ri const char* _eelog_GetHwName( u32 addr, T val )
 		EasyCase(SIO_TXFIFO);
 		EasyCase(SIO_RXFIFO);
 
-		// SBUS (terribly mysterious!)
 		EasyCase(SBUS_F200);
 		EasyCase(SBUS_F210);
 		EasyCase(SBUS_F220);
@@ -208,7 +192,6 @@ static __ri const char* _eelog_GetHwName( u32 addr, T val )
 		EasyCase(SBUS_F250);
 		EasyCase(SBUS_F260);
 
-		// MCH (vaguely mysterious!)
 		EasyCase(MCH_RICM);
 		EasyCase(MCH_DRD);
 	}
@@ -219,19 +202,12 @@ static __ri const char* _eelog_GetHwName( u32 addr, T val )
 #define EasyZoneR(zone) \
 	EasyZone(zone) "_reserved"
 
-	// Nothing discovered/handled : Check for "zoned" registers -- registers mirrored
-	// across large sections of memory (FIFOs mainly).
-
 	EasyZone(VIF0_FIFO);	EasyZone(VIF1_FIFO);	EasyZone(GIF_FIFO);
 
 	if( (addr >= EEMemoryMap::IPU_FIFO_Start) && (addr < EEMemoryMap::IPU_FIFO_End) )
 	{
 		return (addr & 0x10) ? "IPUin_FIFO" : "IPUout_FIFO";
 	}
-
-	// Check for "reserved" regions -- registers that most likely discard writes and
-	// return 0 when read.  To assist in having useful logs, we determine the general
-	// "zone" of the register address and return the zone name in the unknown string.
 
 	EasyZoneR(RCNT0);	EasyZoneR(RCNT1);
 	EasyZoneR(RCNT2);	EasyZoneR(RCNT3);
@@ -247,9 +223,7 @@ static __ri const char* _eelog_GetHwName( u32 addr, T val )
 	EasyZoneR(SIO);		EasyZoneR(SBUS);
 	EasyZoneR(MCH);		EasyZoneR(DMACext);
 
-	// If we get this far it's an *unknown* register; plain and simple.
-
-	return NULL; //"Unknown";
+	return NULL;
 }
 
 template< typename T>

@@ -24,11 +24,8 @@
 #include <ShlObj.h>
 #endif
 
-// This macro is actually useful for about any and every possible application of C++ equality operators.
-// Stuck here because of legacy code, new code shouldn't rely on it, it's difficult to read.
 #define OpEqu(field) (field == right.field)
 
-// Default EE/VU control registers have exceptions off, DaZ/FTZ, and the rounding mode set to Chop/Zero.
 static constexpr FPControlRegister DEFAULT_FPU_FP_CONTROL_REGISTER = FPControlRegister::GetDefault()
 																		 .DisableExceptions()
 																		 .SetDenormalsAreZero(true)
@@ -169,10 +166,11 @@ namespace EmuFolders
 	std::string Textures;
 	std::string InputProfiles;
 	std::string Videos;
+	std::string VRProfiles;
 
 	static bool ShouldUsePortableMode();
 	static std::string GetPortableModePath();
-} // namespace EmuFolders
+}
 
 TraceLogsEE::TraceLogsEE()
 {
@@ -379,7 +377,6 @@ Pcsx2Config::SpeedhackOptions::SpeedhackOptions()
 {
 	DisableAll();
 
-	// Set recommended speedhacks to enabled by default. They'll still be off globally on resets.
 	WaitLoop = true;
 	IntcStat = true;
 	vuFlagHack = true;
@@ -442,11 +439,6 @@ Pcsx2Config::RecompilerOptions::RecompilerOptions()
 {
 	bitset = 0;
 
-	//StackFrameChecks	= false;
-	//PreBlockCheckEE	= false;
-
-	// All recs are enabled by default.
-
 	EnableEE = true;
 	EnableEECache = false;
 	EnableIOP = true;
@@ -455,19 +447,10 @@ Pcsx2Config::RecompilerOptions::RecompilerOptions()
 	EnableFastmem = true;
 	PauseOnTLBMiss = false;
 
-	// vu and fpu clamping default to standard overflow.
 	vu0Overflow = true;
-	//vu0ExtraOverflow = false;
-	//vu0SignOverflow = false;
-	//vu0Underflow = false;
 	vu1Overflow = true;
-	//vu1ExtraOverflow = false;
-	//vu1SignOverflow = false;
-	//vu1Underflow = false;
 
 	fpuOverflow = true;
-	//fpuExtraOverflow = false;
-	//fpuFullMode = false;
 }
 
 void Pcsx2Config::RecompilerOptions::ApplySanityCheck()
@@ -482,7 +465,6 @@ void Pcsx2Config::RecompilerOptions::ApplySanityCheck()
 
 	if (!fpuIsRight)
 	{
-		// Values are wonky; assume the defaults.
 		fpuOverflow = RecompilerOptions().fpuOverflow;
 		fpuExtraOverflow = RecompilerOptions().fpuExtraOverflow;
 		fpuFullMode = RecompilerOptions().fpuFullMode;
@@ -497,7 +479,6 @@ void Pcsx2Config::RecompilerOptions::ApplySanityCheck()
 
 	if (!vuIsOk)
 	{
-		// Values are wonky; assume the defaults.
 		vu0Overflow = RecompilerOptions().vu0Overflow;
 		vu0ExtraOverflow = RecompilerOptions().vu0ExtraOverflow;
 		vu0SignOverflow = RecompilerOptions().vu0SignOverflow;
@@ -513,7 +494,6 @@ void Pcsx2Config::RecompilerOptions::ApplySanityCheck()
 
 	if (!vuIsOk)
 	{
-		// Values are wonky; assume the defaults.
 		vu1Overflow = RecompilerOptions().vu1Overflow;
 		vu1ExtraOverflow = RecompilerOptions().vu1ExtraOverflow;
 		vu1SignOverflow = RecompilerOptions().vu1SignOverflow;
@@ -596,8 +576,6 @@ Pcsx2Config::CpuOptions::CpuOptions()
 {
 	FPUFPCR = DEFAULT_FPU_FP_CONTROL_REGISTER;
 
-	// Rounding defaults to nearest to match old behavior.
-	// TODO: Make it default to the same as the rest of the FPU operations, at some point.
 	FPUDivFPCR = FPControlRegister(DEFAULT_FPU_FP_CONTROL_REGISTER).SetRoundMode(FPRoundMode::Nearest);
 
 	VU0FPCR = DEFAULT_VU_FP_CONTROL_REGISTER;
@@ -948,8 +926,6 @@ void Pcsx2Config::GSOptions::LoadSave(SettingsWrapper& wrap)
 	SettingsWrapEntryEx(Crop[2], "CropRight");
 	SettingsWrapEntryEx(Crop[3], "CropBottom");
 
-	// Unfortunately, because code in the GS still reads the setting by key instead of
-	// using these variables, we need to use the old names. Maybe post 2.0 we can change this.
 	SettingsWrapBitBoolEx(PCRTCAntiBlur, "pcrtc_antiblur");
 	SettingsWrapBitBoolEx(DisableInterlaceOffset, "disable_interlace_offset");
 	SettingsWrapBitBoolEx(PCRTCOffsets, "pcrtc_offsets");
@@ -1112,7 +1088,6 @@ void Pcsx2Config::GSOptions::LoadSave(SettingsWrapper& wrap)
 	if (!SWDumpDirectory.empty() && !Path::IsAbsolute(SWDumpDirectory))
 		SWDumpDirectory = Path::Combine(EmuFolders::DataRoot, SWDumpDirectory);
 
-	// Sanity check: don't dump a bunch of crap in the current working directory.
 	if (DumpGSData && (HWDumpDirectory.empty() || SWDumpDirectory.empty()))
 	{
 		Console.Error("Draw dumping is enabled but directory is unconfigured, please set one.");
@@ -1246,7 +1221,6 @@ void Pcsx2Config::SPU2Options::LoadSave(SettingsWrapper& wrap)
 		SettingsWrapBitBoolEx(MemDump, "Dump_Memory");
 		SettingsWrapBitBoolEx(RegDump, "Dump_Regs");
 
-		// If the global switch is off, save runtime checks.
 		if (wrap.IsLoading() && !DebugEnabled)
 		{
 			MsgToConsole = false;
@@ -1486,7 +1460,6 @@ const char* Pcsx2Config::GamefixOptions::GetGameFixName(GamefixId id)
 	return tbl_GamefixNames[id];
 }
 
-// all gamefixes are disabled by default.
 Pcsx2Config::GamefixOptions::GamefixOptions()
 {
 	DisableAll();
@@ -1562,7 +1535,7 @@ bool Pcsx2Config::GamefixOptions::Get(GamefixId id) const
 		default:                      return false;
 			// clang-format on
 	}
-	return false; // unreachable, but we still need to suppress warnings >_<
+	return false;
 }
 
 void Pcsx2Config::GamefixOptions::LoadSave(SettingsWrapper& wrap)
@@ -1723,7 +1696,6 @@ Pcsx2Config::EmulationSpeedOptions::EmulationSpeedOptions()
 
 void Pcsx2Config::EmulationSpeedOptions::SanityCheck()
 {
-	// Ensure Conformation of various options...
 
 	NominalScalar = std::clamp(NominalScalar, 0.05f, 10.0f);
 	TurboScalar = std::clamp(TurboScalar, 0.05f, 10.0f);
@@ -1738,8 +1710,6 @@ void Pcsx2Config::EmulationSpeedOptions::LoadSave(SettingsWrapper& wrap)
 	SettingsWrapEntry(TurboScalar);
 	SettingsWrapEntry(SlomoScalar);
 
-	// This was in the wrong place... but we can't change it without breaking existing configs.
-	//SettingsWrapBitBool(SyncToHostRefreshRate);
 	SyncToHostRefreshRate = wrap.EntryBitBool("EmuCore/GS", "SyncToHostRefreshRate", SyncToHostRefreshRate, SyncToHostRefreshRate);
 	UseVSyncForTiming = wrap.EntryBitBool("EmuCore/GS", "UseVSyncForTiming", UseVSyncForTiming, UseVSyncForTiming);
 }
@@ -1922,9 +1892,11 @@ void Pcsx2Config::AchievementsOptions::LoadSave(SettingsWrapper& wrap)
 
 	if (wrap.IsLoading())
 	{
-		//Clamp in case setting was updated manually using the INI
 		NotificationsDuration = std::clamp(NotificationsDuration, MINIMUM_NOTIFICATION_DURATION, MAXIMUM_NOTIFICATION_DURATION);
 		LeaderboardsDuration = std::clamp(LeaderboardsDuration, MINIMUM_NOTIFICATION_DURATION, MAXIMUM_NOTIFICATION_DURATION);
+
+		Enabled = false;
+		HardcoreMode = false;
 	}
 }
 
@@ -1939,10 +1911,51 @@ bool Pcsx2Config::AchievementsOptions::operator!=(const AchievementsOptions& rig
 	return !this->operator==(right);
 }
 
+Pcsx2Config::VROptions::VROptions() = default;
+
+void Pcsx2Config::VROptions::LoadSave(SettingsWrapper& wrap)
+{
+	SettingsWrapSection("VR");
+
+	SettingsWrapEntry(Enable);
+	SettingsWrapEntry(ScreenDistance);
+	SettingsWrapEntry(ScreenHeight);
+	SettingsWrapEntry(ScreenVerticalOffset);
+	SettingsWrapEntry(ScreenArcDeg);
+	SettingsWrapEntry(StereoMode);
+	SettingsWrapEntry(StereoUseProfile);
+	SettingsWrapEntry(StereoSeparation);
+	SettingsWrapEntry(StereoConvergence);
+	SettingsWrapEntry(HeadCamera);
+
+	if (wrap.IsLoading())
+	{
+		ScreenDistance = std::clamp(ScreenDistance, 0.5f, 10.0f);
+		ScreenHeight = std::clamp(ScreenHeight, 0.3f, 6.0f);
+		ScreenVerticalOffset = std::clamp(ScreenVerticalOffset, -2.0f, 2.0f);
+		ScreenArcDeg = std::clamp(ScreenArcDeg, 0.0f, 270.0f);
+		StereoSeparation = std::clamp(StereoSeparation, 0.0f, 0.1f);
+		StereoConvergence = std::clamp(StereoConvergence, 0.0f, 200.0f);
+	}
+}
+
+bool Pcsx2Config::VROptions::operator==(const VROptions& right) const
+{
+	return OpEqu(Enable) && OpEqu(ScreenDistance) && OpEqu(ScreenHeight) &&
+	       OpEqu(ScreenVerticalOffset) &&
+	       OpEqu(ScreenArcDeg) && OpEqu(StereoMode) && OpEqu(StereoUseProfile) &&
+	       OpEqu(StereoSeparation) && OpEqu(StereoConvergence) &&
+	       OpEqu(HeadCamera);
+}
+
+bool Pcsx2Config::VROptions::operator!=(const VROptions& right) const
+{
+	return !this->operator==(right);
+}
+
 Pcsx2Config::Pcsx2Config()
 {
 	bitset = 0;
-	// Set defaults for fresh installs / reset settings
 	EnablePatches = true;
 	EnableFastBoot = true;
 	EnableRecordingTools = true;
@@ -1955,17 +1968,14 @@ Pcsx2Config::Pcsx2Config()
 	ManuallySetRealTimeClock = false;
 	UseSystemLocaleFormat = false;
 
-	// To be moved to FileMemoryCard pluign (someday)
 	for (uint slot = 0; slot < 8; ++slot)
 	{
-		Mcd[slot].Enabled = !FileMcd_IsMultitapSlot(slot); // enables main 2 slots
+		Mcd[slot].Enabled = !FileMcd_IsMultitapSlot(slot);
 		Mcd[slot].Filename = FileMcd_GetDefaultName(slot);
-		// Folder memory card is autodetected later.
 		Mcd[slot].Type = MemoryCardType::File;
 	}
 
 	GzipIsoIndexTemplate = "$(f).pindex.tmp";
-	PINESlot = 28011;
 	RtcYear = 0;
 	RtcMonth = 1;
 	RtcDay = 1;
@@ -1983,7 +1993,6 @@ void Pcsx2Config::LoadSaveCore(SettingsWrapper& wrap)
 	SettingsWrapBitBool(CdvdPrecache);
 	SettingsWrapBitBool(EnablePatches);
 	SettingsWrapBitBool(EnableCheats);
-	SettingsWrapBitBool(EnablePINE);
 	SettingsWrapBitBool(EnableWideScreenPatches);
 	SettingsWrapBitBool(EnableNoInterlacingPatches);
 	SettingsWrapBitBool(EnableFastBoot);
@@ -2004,8 +2013,6 @@ void Pcsx2Config::LoadSaveCore(SettingsWrapper& wrap)
 	SettingsWrapBitBool(ManuallySetRealTimeClock);
 	SettingsWrapBitBool(UseSystemLocaleFormat);
 
-	// Process various sub-components:
-
 	Speedhacks.LoadSave(wrap);
 	Cpu.LoadSave(wrap);
 	GS.LoadSave(wrap);
@@ -2020,8 +2027,11 @@ void Pcsx2Config::LoadSaveCore(SettingsWrapper& wrap)
 
 	Achievements.LoadSave(wrap);
 
+#ifdef ENABLE_VR
+	VR.LoadSave(wrap);
+#endif
+
 	SettingsWrapEntry(GzipIsoIndexTemplate);
-	SettingsWrapEntry(PINESlot);
 	SettingsWrapEntry(RtcYear);
 	SettingsWrapEntry(RtcMonth);
 	SettingsWrapEntry(RtcDay);
@@ -2029,7 +2039,6 @@ void Pcsx2Config::LoadSaveCore(SettingsWrapper& wrap)
 	SettingsWrapEntry(RtcMinute);
 	SettingsWrapEntry(RtcSecond);
 
-	// For now, this in the derived config for backwards ini compatibility.
 	SettingsWrapEntryEx(CurrentBlockdump, "BlockDumpSaveDirectory");
 
 	BaseFilenames.LoadSave(wrap);
@@ -2038,7 +2047,6 @@ void Pcsx2Config::LoadSaveCore(SettingsWrapper& wrap)
 
 	if (wrap.IsLoading())
 	{
-		// Patches will get re-applied after loading the state so this doesn't matter too much
 		CurrentAspectRatio = GS.AspectRatio;
 		if (CurrentAspectRatio == AspectRatioType::RAuto4_3_3_2)
 		{
@@ -2130,7 +2138,6 @@ void Pcsx2Config::ClearConfiguration(SettingsInterface* dest_si)
 
 void Pcsx2Config::ClearInvalidPerGameConfiguration(SettingsInterface* si)
 {
-	// Deprecated in favor of patches.
 	si->DeleteValue("EmuCore", "EnableWideScreenPatches");
 	si->DeleteValue("EmuCore", "EnableNoInterlacingPatches");
 }
@@ -2144,12 +2151,10 @@ void EmuFolders::SetAppRoot()
 	const auto bundle_path = CocoaTools::GetNonTranslocatedBundlePath();
 	if (bundle_path.has_value())
 	{
-		// On macOS, override with the bundle path if launched from a bundle.
 		AppRoot = StringUtil::EndsWithNoCase(*bundle_path, ".app") ? Path::GetDirectory(*bundle_path) : *bundle_path;
 	}
 #endif
 
-	// logging of directories in case something goes wrong super early
 	Console.WriteLnFmt("AppRoot Directory: {}", AppRoot);
 }
 
@@ -2157,13 +2162,11 @@ bool EmuFolders::SetResourcesDirectory()
 {
 #ifndef __APPLE__
 #ifndef PCSX2_APP_DATADIR
-	// On Windows/Linux, these are in the binary directory.
 	Resources = Path::Combine(AppRoot, "resources");
 #else
 	Resources = Path::Canonicalize(Path::Combine(AppRoot, PCSX2_APP_DATADIR "/resources"));
 #endif
 #else
-	// On macOS, this is in the bundle resources directory.
 	if (auto resources = CocoaTools::GetResourcePath())
 		Resources = *resources;
 	else
@@ -2172,7 +2175,6 @@ bool EmuFolders::SetResourcesDirectory()
 
 	Console.WriteLnFmt("Resources Directory: {}", Resources);
 
-	// the resources directory should exist, bail out if not
 	if (!FileSystem::DirectoryExists(Resources.c_str()))
 	{
 		Console.Error("Resources directory is missing.");
@@ -2184,7 +2186,6 @@ bool EmuFolders::SetResourcesDirectory()
 
 bool EmuFolders::ShouldUsePortableMode()
 {
-	// Check whether portable.ini/txt exists in the program directory or the `-portable` launch arguments have been passed.
 	if (FileSystem::FileExists(Path::Combine(AppRoot, "portable.ini").c_str()) ||
 		FileSystem::FileExists(Path::Combine(AppRoot, "portable.txt").c_str()) ||
 		EmuConfig.IsPortableMode)
@@ -2205,64 +2206,54 @@ std::string EmuFolders::GetPortableModePath()
 
 bool EmuFolders::SetDataDirectory(Error* error)
 {
-	// Portable mode has the absolute priority.
 	if (!ShouldUsePortableMode())
 	{
-		// Also check if the user has overriden the DataRoot path.
 		if (EmuConfig.CustomDataPath.empty())
 		{
 #if defined(_WIN32)
-			// On Windows, use My Documents\PCSX2 to match old installs.
 			PWSTR documents_directory;
 			if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Documents, 0, NULL, &documents_directory)))
 			{
 				if (std::wcslen(documents_directory) > 0)
-					DataRoot = Path::Combine(StringUtil::WideStringToUTF8String(documents_directory), "PCSX2");
+					DataRoot = Path::Combine(StringUtil::WideStringToUTF8String(documents_directory), "PenguinScreen2");
 				CoTaskMemFree(documents_directory);
 			}
 #elif defined(__linux__) || defined(__FreeBSD__)
-			// Use $XDG_CONFIG_HOME/PCSX2 if it exists.
 			const char* xdg_config_home = getenv("XDG_CONFIG_HOME");
 			if (xdg_config_home && Path::IsAbsolute(xdg_config_home))
 			{
-				DataRoot = Path::RealPath(Path::Combine(xdg_config_home, "PCSX2"));
+				DataRoot = Path::RealPath(Path::Combine(xdg_config_home, "PenguinScreen2"));
 			}
 			else
 			{
-				// Use ~/PCSX2 for non-XDG, and ~/.config/PCSX2 for XDG.
 				const char* home_dir = getenv("HOME");
 				if (home_dir)
 				{
-					// ~/.config should exist, but just in case it doesn't and this is a fresh profile..
 					const std::string config_dir(Path::Combine(home_dir, ".config"));
 					if (!FileSystem::DirectoryExists(config_dir.c_str()))
 						FileSystem::CreateDirectoryPath(config_dir.c_str(), false);
 
-					DataRoot = Path::RealPath(Path::Combine(config_dir, "PCSX2"));
+					DataRoot = Path::RealPath(Path::Combine(config_dir, "PenguinScreen2"));
 				}
 			}
 #elif defined(__APPLE__)
-			static constexpr char MAC_DATA_DIR[] = "Library/Application Support/PCSX2";
+			static constexpr char MAC_DATA_DIR[] = "Library/Application Support/PenguinScreen2";
 			const char* home_dir = getenv("HOME");
 			if (home_dir)
 				DataRoot = Path::RealPath(Path::Combine(home_dir, MAC_DATA_DIR));
 #endif
 			}
-			else // Otherwise use the custom path provided by the user
-				DataRoot = Path::RealPath(Path::Combine(EmuConfig.CustomDataPath, "PCSX2"));
+			else
+				DataRoot = Path::RealPath(Path::Combine(EmuConfig.CustomDataPath, "PenguinScreen2"));
 		}
 
-	// Couldn't determine the data directory, or using portable mode? fallback to portable.
 	if (DataRoot.empty())
 	{
 #if defined(__linux__)
-		// Special check if we're on appimage
-		// always make sure that DataRoot
-		// is adjacent next to the appimage
 		if (getenv("APPIMAGE"))
 		{
 			std::string_view appimage_path = Path::GetDirectory(getenv("APPIMAGE"));
-			DataRoot = Path::RealPath(Path::Combine(appimage_path, "PCSX2"));
+			DataRoot = Path::RealPath(Path::Combine(appimage_path, "PenguinScreen2"));
 		}
 		else
 			DataRoot = Path::Combine(AppRoot, GetPortableModePath());
@@ -2271,10 +2262,8 @@ bool EmuFolders::SetDataDirectory(Error* error)
 #endif
 	}
 
-	// Inis is always below the data root
 	Settings = Path::Combine(DataRoot, "inis");
 
-	// Make sure it exists
 	Console.WriteLnFmt("DataRoot Directory: {}", DataRoot);
 	return (FileSystem::EnsureDirectoryExists(DataRoot.c_str(), false, error) &&
 			FileSystem::EnsureDirectoryExists(Settings.c_str(), false, error));
@@ -2296,6 +2285,7 @@ void EmuFolders::SetDefaults(SettingsInterface& si)
 	si.SetStringValue("Folders", "Videos", "videos");
 	si.SetStringValue("Folders", "DebuggerLayouts", "debuggerlayouts");
 	si.SetStringValue("Folders", "DebuggerSettings", "debuggersettings");
+	si.SetStringValue("Folders", "VRProfiles", "vrprofiles");
 }
 
 static std::string LoadPathFromSettings(SettingsInterface& si, const std::string& root, const char* name, const char* def)
@@ -2324,6 +2314,7 @@ void EmuFolders::LoadConfig(SettingsInterface& si)
 	Videos = LoadPathFromSettings(si, DataRoot, "Videos", "videos");
 	DebuggerLayouts = LoadPathFromSettings(si, Settings, "DebuggerLayouts", "debuggerlayouts");
 	DebuggerSettings = LoadPathFromSettings(si, Settings, "DebuggerSettings", "debuggersettings");
+	VRProfiles = LoadPathFromSettings(si, DataRoot, "VRProfiles", "vrprofiles");
 
 	Console.WriteLn("BIOS Directory: %s", Bios.c_str());
 	Console.WriteLn("Snapshots Directory: %s", Snapshots.c_str());
@@ -2363,6 +2354,7 @@ bool EmuFolders::EnsureFoldersExist()
 	result = FileSystem::CreateDirectoryPath(Videos.c_str(), false) && result;
 	result = FileSystem::CreateDirectoryPath(DebuggerLayouts.c_str(), false) && result;
 	result = FileSystem::CreateDirectoryPath(DebuggerSettings.c_str(), false) && result;
+	result = FileSystem::CreateDirectoryPath(VRProfiles.c_str(), false) && result;
 	return result;
 }
 

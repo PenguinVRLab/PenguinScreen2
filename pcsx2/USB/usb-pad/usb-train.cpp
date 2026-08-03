@@ -52,7 +52,6 @@ namespace usb_pad
 		CID_TC_DOWN,
 		CID_TC_LEFT,
 
-		// TCPP20009 sends the buttons in this order in the relevant byte
 		CID_TC_B,
 		CID_TC_A,
 		CID_TC_C,
@@ -60,12 +59,10 @@ namespace usb_pad
 		CID_TC_SELECT,
 		CID_TC_START,
 
-		// Ryojouhen controller has 7 buttons, map L/R onto existing indexes.
 		CID_TC_CAMERA,
 		CID_TC_L = CID_TC_C,
 		CID_TC_R = CID_TC_D,
 
-		// Train Mascon
 		CID_TC_ATS = CID_TC_D,
 		CID_TC_CLOSE = CID_TC_CAMERA,
 		CID_TC_POWER_UP,
@@ -406,9 +403,7 @@ namespace usb_pad
 
 	static u8 dct01_power(u8 value)
 	{
-		// (N) 0x81	0x6D 0x54 0x3F 0x21	0x00 (P5)
 		static std::pair<u8, u8> const notches[] = {
-			// { control_in, emulated_out },
 			{0xF8, 0x00},
 			{0xC8, 0x21},
 			{0x98, 0x3F},
@@ -427,9 +422,7 @@ namespace usb_pad
 
 	static u8 dct01_brake(u8 value)
 	{
-		// (NB) 0x79 0x8A 0x94 0x9A 0xA2 0xA8 0xAF 0xB2 0xB5 0xB9 (EB)
 		static std::pair<u8, u8> const notches[] = {
-			// { control_in, emulated_out },
 			{0xF8, 0xB9},
 			{0xE6, 0xB5},
 			{0xCA, 0xB2},
@@ -452,9 +445,7 @@ namespace usb_pad
 
 	static u8 dct02_power(u8 value)
 	{
-		// (N) 0x12 0x24 0x36 0x48 0x5A 0x6C 0x7E 0x90 0xA2 0xB4 0xC6 0xD7 0xE9 0xFB (P13)
 		static std::pair<u8, u8> const notches[] = {
-			// { control_in, emulated_out },
 			{0xF7, 0xFB},
 			{0xE4, 0xE9},
 			{0xD1, 0xD7},
@@ -480,9 +471,7 @@ namespace usb_pad
 	}
 	static u8 dct02_brake(u8 value)
 	{
-		// (NB) 0x1C 0x38 0x54 0x70 0x8B 0xA7 0xC3 0xDF 0xFB (EB)
 		static std::pair<u8, u8> const notches[] = {
-			// { control_in, emulated_out },
 			{0xF8, 0xFB},
 			{0xCA, 0xDF},
 			{0xAE, 0xC3},
@@ -504,9 +493,7 @@ namespace usb_pad
 
 	static u8 dct03_power(u8 value)
 	{
-		// (N) 0x00 0x3C 0x78 0xB4 0xF0 (P4)
 		static std::pair<u8, u8> const notches[] = {
-			// { control_in, emulated_out },
 			{0xC0, 0xF0},
 			{0x90, 0xB4},
 			{0x50, 0x78},
@@ -523,17 +510,10 @@ namespace usb_pad
 	}
 	static u8 dct03_brake(u8 value)
 	{
-		// Depending on the game, this device presents in either Non Self-Lapping or Self-Lapping mode.
-		// NSL Release   Maintain  Increase  Emergency
-		//     0x23-0x64 0x65-0x89 0x8A-0xD6 0xD7
-		// SL  Released  B1        B2        B3        B4        B5        B6        EB
-		//     0x23-0x2A 0x2B-0x3C 0x3D-0x4E 0x4F-0x63 0x64-0x8A 0x8B-0xB0 0xB1-0xD6 0xD7
 		if (0x18 >= value)
 			return 0x23;
 		if (value >= 0xF8)
 			return 0xD7;
-		// We've trimmed 0x20 (0x8 for EB, 0x18 for release) leaving us with ~0xE0.
-		// 0xD7-0x23=0xB3 represents about 80% of the number space of 0xE0, so compress the remaining input values into that range.
 		u8 offset = 0x9 + value / 85;
 		return value / 5 * 4 + offset;
 	}
@@ -543,7 +523,6 @@ namespace usb_pad
 #define swap_cd(buttons) ((button_at(buttons, CID_TC_C) << 1) | (button_at(buttons, CID_TC_D) >> 1))
 #define get_ss(buttons) (button_at(buttons, CID_TC_START) | button_at(buttons, CID_TC_SELECT))
 
-	// TrainControlID buttons are laid out in Type 2 ordering, no need to remap.
 	constexpr u8 dct01_buttons(u8 buttons) { return buttons; }
 	constexpr u8 dct02_buttons(u8 buttons)
 	{
@@ -587,7 +566,7 @@ namespace usb_pad
 				out.control = 0x1;
 				out.brake = s->passthrough ? s->data.brake : dct01_brake(s->data.brake);
 				out.power = s->passthrough ? s->data.power : dct01_power(s->data.power);
-				out.horn = 0xFF; // Button C doubles as horn.
+				out.horn = 0xFF;
 				out.hat = s->data.hatswitch;
 				out.buttons = dct01_buttons(s->data.buttons);
 				usb_packet_copy(p, &out, sizeof(out));
@@ -598,7 +577,7 @@ namespace usb_pad
 				TrainConData_Shinkansen out = {};
 				out.brake = s->passthrough ? s->data.brake : dct02_brake(s->data.brake);
 				out.power = s->passthrough ? s->data.power : dct02_power(s->data.power);
-				out.horn = 0xFF; // Button C doubles as horn, skip.
+				out.horn = 0xFF;
 				out.hat = s->data.hatswitch;
 				out.buttons = dct02_buttons(s->data.buttons);
 				usb_packet_copy(p, &out, sizeof(out));
@@ -609,7 +588,7 @@ namespace usb_pad
 				TrainConData_Ryojouhen out = {};
 				out.brake = s->passthrough ? s->data.brake : dct03_brake(s->data.brake);
 				out.power = s->passthrough ? s->data.power : dct03_power(s->data.power);
-				out.horn = 0xFF; // Dedicated horn button, skip.
+				out.horn = 0xFF;
 				out.hat = s->data.hatswitch & 0x0F;
 				out.buttons = dct03_buttons(s->data.buttons);
 				usb_packet_copy(p, &out, sizeof(out));
@@ -641,18 +620,17 @@ namespace usb_pad
 			}
 			case MASTER_CONTROLLER:
 			{
-				if (p->ep->nr == 1) // interrupt in
+				if (p->ep->nr == 1)
 				{
 					p->status = USB_RET_STALL;
 					break;
 				}
-				else if (p->ep->nr == 2) // bulk out
+				else if (p->ep->nr == 2)
 				{
-					// The game sends a reset command after ~1500ms without updates. Resend the status during the next transfer
 					s->last_handle = -1;
 					s->last_reverser = -1;
 					break;
-				} // else bulk in
+				}
 
 				s->UpdateHandles(s->power_notches, s->brake_notches);
 
@@ -761,4 +739,4 @@ namespace usb_pad
 		train_handle_destroy(&s->dev);
 		return nullptr;
 	}
-} // namespace usb_pad
+}

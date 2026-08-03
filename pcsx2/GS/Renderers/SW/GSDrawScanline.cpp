@@ -10,11 +10,9 @@
 
 #include <fstream>
 
-// Comment to disable all dynamic code generation.
 #define ENABLE_JIT_RASTERIZER
 
 #if MULTI_ISA_COMPILE_ONCE
-// Lack of a better home
 constexpr GSScanlineConstantData256B g_const_256b;
 constexpr GSScanlineConstantData128B g_const_128b;
 #endif
@@ -77,7 +75,6 @@ bool GSDrawScanline::ShouldUseCDrawScanline(u64 key)
 	if (idx == s_use_c_draw_scanline.end())
 	{
 		s_use_c_draw_scanline[key] = false;
-		// Rewrite file
 		FILE* file = fopen(fname, "w");
 		if (file)
 		{
@@ -104,7 +101,7 @@ void GSDrawScanline::BeginDraw(const GSRasterizerData& data, GSScanlineLocalData
 
 	if (global.sel.mmin && global.sel.lcm)
 	{
-		GSVector4i v = global.t.minmax.srl16(global.lod.i.extract32<0>()); //.x);
+		GSVector4i v = global.t.minmax.srl16(global.lod.i.extract32<0>());
 
 		v = v.upl16(v);
 
@@ -146,8 +143,6 @@ bool GSDrawScanline::SetupDraw(GSRasterizerData& data)
 	{
 		data.draw_edge = nullptr;
 	}
-
-	// doesn't need all bits => less functions generated
 
 	GSScanlineSelector sel;
 
@@ -268,7 +263,7 @@ void GSDrawScanline::CSetupPrim(const GSVertexSW* vertex, const u16* index, cons
 
 			if (has_z)
 			{
-				local.p.z = vertex[index[1]].t.U32[3]; // u32 z is bypassed in t.w
+				local.p.z = vertex[index[1]].t.U32[3];
 			}
 		}
 	}
@@ -455,7 +450,7 @@ __ri static bool TestAlpha(T& test, T& fm, T& zm, const T& ga, const GSScanlineG
 
 		case AFAIL_RGB_ONLY:
 			zm |= t;
-			fm |= t & T::xff000000(); // fpsm 16 bit => & 0xffff8000?
+			fm |= t & T::xff000000();
 			break;
 
 		default:
@@ -465,7 +460,7 @@ __ri static bool TestAlpha(T& test, T& fm, T& zm, const T& ga, const GSScanlineG
 	return true;
 }
 
-static const int s_offsets[] = {0, 2, 8, 10, 16, 18, 24, 26}; // columnTable16[0]
+static const int s_offsets[] = {0, 2, 8, 10, 16, 18, 24, 26};
 
 template <class T>
 __ri static void WritePixel(const T& src, int addr, int i, u32 psm, const GSScanlineGlobalData& global)
@@ -507,8 +502,6 @@ __ri void GSDrawScanline::CDrawScanline(int pixels, int left, int top, const GSV
 	VectorI uf, vf;
 	VectorI rbf, gaf;
 	VectorI cov;
-
-	// Init
 
 	int skip, steps;
 
@@ -640,8 +633,6 @@ __ri void GSDrawScanline::CDrawScanline(int pixels, int left, int top, const GSV
 			VectorI fm, zm;
 			VectorI rb, ga;
 
-			// TestZ
-
 			if (sel.zb)
 			{
 				za = (fza_base->y + fza_offset->y) % HALF_VM_SIZE;
@@ -654,10 +645,6 @@ __ri void GSDrawScanline::CDrawScanline(int pixels, int left, int top, const GSV
 					}
 					else if (sel.zoverflow)
 					{
-						// SSE only has double to int32 conversion, no double to uint32
-						// Work around this by subtracting 0x80000000 before converting, then adding it back after
-						// Since we've subtracted 0x80000000, truncating now rounds up for numbers less than 0x80000000
-						// So approximate the truncation by subtracting an extra (0.5 - ulp) and rounding instead
 						GSVector4i zl = z0.add64(VectorF::m_xc1e00000000fffff).f64toi32(false);
 						GSVector4i zh = z1.add64(VectorF::m_xc1e00000000fffff).f64toi32(false);
 #if _M_SSE >= 0x501
@@ -721,8 +708,6 @@ __ri void GSDrawScanline::CDrawScanline(int pixels, int left, int top, const GSV
 				}
 			}
 
-			// SampleTexture
-
 			if (sel.fb && sel.tfx != TFX_NONE)
 			{
 				VectorI u, v, uv[2];
@@ -746,23 +731,21 @@ __ri void GSDrawScanline::CDrawScanline(int pixels, int left, int top, const GSV
 
 					if (!sel.lcm)
 					{
-						VectorF tmp = q.log2(3) * global.l + global.k; // (-log2(Q) * (1 << L) + K) * 0x10000
+						VectorF tmp = q.log2(3) * global.l + global.k;
 
 						VectorI lod = VectorI(tmp.sat(VectorF::zero(), global.mxl), false);
 
-						if (sel.mmin == 1) // round-off mode
+						if (sel.mmin == 1)
 						{
 							lod += 0x8000;
 						}
 
 						lodi = lod.srl32<16>();
 
-						if (sel.mmin == 2) // trilinear mode
+						if (sel.mmin == 2)
 						{
 							lodf = lod.xxzzlh();
 						}
-
-						// shift u/v by (int)lod
 
 #if _M_SSE >= 0x501
 						u = u.srav32(lodi);
@@ -941,7 +924,7 @@ __ri void GSDrawScanline::CDrawScanline(int pixels, int left, int top, const GSV
 						ga = c00.srl16<8>();
 					}
 
-					if (sel.mmin != 1) // !round-off mode
+					if (sel.mmin != 1)
 					{
 						VectorI rb2, ga2;
 
@@ -1193,8 +1176,6 @@ __ri void GSDrawScanline::CDrawScanline(int pixels, int left, int top, const GSV
 				}
 			}
 
-			// AlphaTFX
-
 			if (sel.fb)
 			{
 				switch (sel.tfx)
@@ -1237,8 +1218,6 @@ __ri void GSDrawScanline::CDrawScanline(int pixels, int left, int top, const GSV
 				}
 			}
 
-			// ReadMask
-
 			if (sel.fwrite)
 			{
 				fm = global.fm;
@@ -1249,12 +1228,8 @@ __ri void GSDrawScanline::CDrawScanline(int pixels, int left, int top, const GSV
 				zm = global.zm;
 			}
 
-			// TestAlpha
-
 			if (!TestAlpha(test, fm, zm, ga, global))
 				continue;
-
-			// ColorTFX
 
 			if (sel.fwrite)
 			{
@@ -1279,8 +1254,6 @@ __ri void GSDrawScanline::CDrawScanline(int pixels, int left, int top, const GSV
 				}
 			}
 
-			// Fog
-
 			if (sel.fwrite && sel.fge)
 			{
 #if _M_SSE >= 0x501
@@ -1299,8 +1272,6 @@ __ri void GSDrawScanline::CDrawScanline(int pixels, int left, int top, const GSV
 				ga = fga.lerp16<0>(ga, fog).mix16(ga);
 			}
 
-			// ReadFrame
-
 			if (sel.fb)
 			{
 				fa = (fza_base->x + fza_offset->x) % HALF_VM_SIZE;
@@ -1317,15 +1288,12 @@ __ri void GSDrawScanline::CDrawScanline(int pixels, int left, int top, const GSV
 				}
 			}
 
-			// TestDestAlpha
-
 			if (sel.date && (sel.fpsm == 0 || sel.fpsm == 2))
 			{
 				if (sel.datm)
 				{
 					if (sel.fpsm == 2)
 					{
-						// test |= fd.srl32(15) == VectorI::zero();
 						test |= fd.sll32<16>().sra32<31>() == VectorI::zero();
 					}
 					else
@@ -1337,7 +1305,7 @@ __ri void GSDrawScanline::CDrawScanline(int pixels, int left, int top, const GSV
 				{
 					if (sel.fpsm == 2)
 					{
-						test |= fd.sll32<16>().sra32<31>(); // == VectorI::xffffffff();
+						test |= fd.sll32<16>().sra32<31>();
 					}
 					else
 					{
@@ -1348,8 +1316,6 @@ __ri void GSDrawScanline::CDrawScanline(int pixels, int left, int top, const GSV
 				if (test.alltrue())
 					continue;
 			}
-
-			// WriteMask
 
 			int fzm = 0;
 
@@ -1378,8 +1344,6 @@ __ri void GSDrawScanline::CDrawScanline(int pixels, int left, int top, const GSV
 					fzm = ~(zm == VectorI::xffffffff()).ps32().mask();
 				}
 			}
-
-			// WriteZBuf
 
 			if (sel.zwrite)
 			{
@@ -1447,8 +1411,6 @@ __ri void GSDrawScanline::CDrawScanline(int pixels, int left, int top, const GSV
 					}
 				}
 			}
-
-			// AlphaBlend
 
 			if (sel.fwrite && (sel.abe || sel.aa1))
 			{
@@ -1573,8 +1535,6 @@ __ri void GSDrawScanline::CDrawScanline(int pixels, int left, int top, const GSV
 				}
 			}
 
-			// WriteFrame
-
 			if (sel.fwrite)
 			{
 				if (sel.fpsm == 2 && sel.dthe)
@@ -1677,8 +1637,6 @@ __ri void GSDrawScanline::CDrawScanline(int pixels, int left, int top, const GSV
 
 		if (steps <= 0)
 			break;
-
-		// Step
 
 		steps -= vlen;
 
@@ -1904,8 +1862,6 @@ void GSDrawScanline::DrawRect(const GSVector4i& r, const GSVertexSW& v, GSScanli
 	pxAssert(r.y >= 0);
 	pxAssert(r.w >= 0);
 
-	// FIXME: sometimes the frame and z buffer may overlap, the outcome is undefined
-
 	u32 m;
 
 #if _M_SSE >= 0x501
@@ -1916,7 +1872,7 @@ void GSDrawScanline::DrawRect(const GSVector4i& r, const GSVertexSW& v, GSScanli
 
 	if (m != 0xffffffff)
 	{
-		u32 z = v.t.U32[3]; // (u32)v.p.z;
+		u32 z = v.t.U32[3];
 
 		if (global.sel.zpsm != 2)
 		{

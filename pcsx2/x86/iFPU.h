@@ -47,7 +47,7 @@ namespace COP1 {
 	void recBC1FL();
 	void recBC1TL();
 
-} // namespace COP1
-} // namespace OpcodeImpl
-} // namespace Dynarec
-} // namespace R5900
+}
+}
+}
+}

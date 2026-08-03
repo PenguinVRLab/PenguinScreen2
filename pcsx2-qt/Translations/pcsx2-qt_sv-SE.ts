@@ -1550,11 +1550,6 @@ Topplisteposition: {1} av {2}</translation>
       <translation>Använd väljare för sparade tillstånd</translation>
     </message>
     <message>
-      <location filename="../Settings/AdvancedSettingsWidget.ui" line="505"/>
-      <source>PINE Settings</source>
-      <translation>PINE-inställningar</translation>
-    </message>
-    <message>
       <location filename="../Settings/AdvancedSettingsWidget.ui" line="527"/>
       <source>Slot:</source>
       <translation>Plats:</translation>

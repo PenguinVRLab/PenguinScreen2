@@ -33,16 +33,15 @@ static void _vu0Exec(VURegs* VU)
 	ptr = (u32*)&VU->Micro[VU->VI[REG_TPC].UL];
 	VU->VI[REG_TPC].UL += 8;
 
-	if (ptr[1] & 0x40000000) // E flag
+	if (ptr[1] & 0x40000000)
 	{
 		VU->ebit = 2;
 	}
-	if (ptr[1] & 0x20000000 && VU == &VU0) // M flag
+	if (ptr[1] & 0x20000000 && VU == &VU0)
 	{
 		VU->flags |= VUFLAG_MFLAGSET;
-		//		Console.WriteLn("fixme: M flag set");
 	}
-	if (ptr[1] & 0x10000000) // D flag
+	if (ptr[1] & 0x10000000)
 	{
 		if (VU0.VI[REG_FBRST].UL & 0x4)
 		{
@@ -51,7 +50,7 @@ static void _vu0Exec(VURegs* VU)
 			VU->ebit = 1;
 		}
 	}
-	if (ptr[1] & 0x08000000) // T flag
+	if (ptr[1] & 0x08000000)
 	{
 		if (VU0.VI[REG_FBRST].UL & 0x8)
 		{
@@ -68,8 +67,7 @@ static void _vu0Exec(VURegs* VU)
 
 	_vuTestUpperStalls(VU, &uregs);
 
-	/* check upper flags */
-	if (ptr[1] & 0x80000000) // I flag
+	if (ptr[1] & 0x80000000)
 	{
 		_vuTestPipes(VU);
 
@@ -105,13 +103,11 @@ static void _vu0Exec(VURegs* VU)
 		{
 			if (lregs.VFwrite == uregs.VFwrite)
 			{
-				//				Console.Warning("*PCSX2*: Warning, VF write to the same reg in both lower/upper cycle");
 				discard = 1;
 			}
 			if (lregs.VFread0 == uregs.VFwrite ||
 				lregs.VFread1 == uregs.VFwrite)
 			{
-				//				Console.WriteLn("saving reg %d at pc=%x", i, VU->VI[REG_TPC].UL);
 				_VF = VU->VF[uregs.VFwrite];
 				vfreg = uregs.VFwrite;
 			}
@@ -120,7 +116,6 @@ static void _vu0Exec(VURegs* VU)
 		{
 			if (lregs.VIwrite & (1 << REG_CLIP_FLAG))
 			{
-				//Console.Warning("*PCSX2*: Warning, VI write to the same reg in both lower/upper cycle");
 				discard = 1;
 			}
 			if (lregs.VIread & (1 << REG_CLIP_FLAG))
@@ -186,12 +181,11 @@ static void _vu0Exec(VURegs* VU)
 		{
 			VU->VIBackupCycles = 0;
 			_vuFlushAll(VU);
-			VU0.VI[REG_VPU_STAT].UL &= ~0x1; /* E flag */
+			VU0.VI[REG_VPU_STAT].UL &= ~0x1;
 			vif0Regs.stat.VEW = false;
 		}
 	}
 
-	// Progress the write position of the FMAC pipeline by one place
 	if (uregs.pipe == VUPIPE_FMAC || lregs.pipe == VUPIPE_FMAC)
 		VU->fmacwritepos = (VU->fmacwritepos + 1) & 3;
 }
@@ -213,10 +207,6 @@ void vu0Exec(VURegs* VU)
 	if (VU->VF[0].f.w != 1.0f)
 		DbgCon.Error("VF[0].w != 1.0!!!!\n");
 }
-
-// --------------------------------------------------------------------------------------
-//  VU0microInterpreter
-// --------------------------------------------------------------------------------------
 
 InterpVU0 CpuIntVU0;
 
@@ -257,7 +247,6 @@ void InterpVU0::Execute(u32 cycles)
 	{
 		if (!(VU0.VI[REG_VPU_STAT].UL & 0x1))
 		{
-			// Branches advance the PC to the new location if there was a branch in the E-Bit delay slot
 			if (VU0.branch)
 			{
 				VU0.VI[REG_TPC].UL = VU0.branchpc;
@@ -278,22 +267,22 @@ void InterpVU0::Execute(u32 cycles)
 		VU0.cycle -= cycle_change;
 		switch (std::min(static_cast<int>(EmuConfig.Speedhacks.EECycleRate), static_cast<int>(cycle_change)))
 		{
-			case -3: // 50%
+			case -3:
 				cycle_change *= 2.0f;
 				break;
-			case -2: // 60%
+			case -2:
 				cycle_change *= 1.6666667f;
 				break;
-			case -1: // 75%
+			case -1:
 				cycle_change *= 1.3333333f;
 				break;
-			case 1: // 130%
+			case 1:
 				cycle_change /= 1.3f;
 				break;
-			case 2: // 180%
+			case 2:
 				cycle_change /= 1.8f;
 				break;
-			case 3: // 300%
+			case 3:
 				cycle_change /= 3.0f;
 				break;
 			default:

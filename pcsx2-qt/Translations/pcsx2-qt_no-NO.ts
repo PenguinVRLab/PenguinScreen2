@@ -1550,11 +1550,6 @@ Ledertavleposisjon: {1} av {2}</translation>
       <translation>Bruk lagretilstandsvelger</translation>
     </message>
     <message>
-      <location filename="../Settings/AdvancedSettingsWidget.ui" line="505"/>
-      <source>PINE Settings</source>
-      <translation>PINE-innstillinger</translation>
-    </message>
-    <message>
       <location filename="../Settings/AdvancedSettingsWidget.ui" line="527"/>
       <source>Slot:</source>
       <translation>Spor:</translation>

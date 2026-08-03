@@ -6,10 +6,6 @@
 #include "common/Pcsx2Defs.h"
 #include <string>
 
-// Important!  All FIFO containers in this header should be 'struct' type, not class type.
-// They are saved into the savestate as-is, and keeping them as struct ensures that the
-// layout of their contents is reliable.
-
 struct IPU_Fifo_Input
 {
 	alignas(16) u32 data[32];
@@ -26,7 +22,6 @@ struct IPU_Fifo_Output
 	alignas(16) u32 data[32];
 	int readpos, writepos;
 
-	// returns number of qw read
 	int write(const u32 * value, uint size);
 	void read(void *value, uint size);
 	void clear();

@@ -76,7 +76,7 @@ namespace usb_hid
 		"QEMU USB Mouse",
 		"QEMU USB Tablet",
 		"QEMU USB Keyboard",
-		"42", /* == remote wakeup works */
+		"42",
 		"HID Mouse",
 		"HID Tablet",
 		"HID Keyboard",
@@ -89,304 +89,261 @@ namespace usb_hid
 		"USB JIS Mini Keyboard",
 	};
 
-	/* mostly the same values as the Bochs USB Mouse device */
 	static const uint8_t qemu_mouse_dev_descriptor[] = {
-		0x12, /*  u8 bLength; */
-		0x01, /*  u8 bDescriptorType; Device */
-		0x10, 0x00, /*  u16 bcdUSB; v1.0 */
+		0x12,
+		0x01,
+		0x10, 0x00,
 
-		0x00, /*  u8  bDeviceClass; */
-		0x00, /*  u8  bDeviceSubClass; */
-		0x00, /*  u8  bDeviceProtocol; [ low/full speeds only ] */
-		0x08, /*  u8  bMaxPacketSize0; 8 Bytes */
+		0x00,
+		0x00,
+		0x00,
+		0x08,
 
-		0x27, 0x06, /*  u16 idVendor; */
-		0x01, 0x00, /*  u16 idProduct; */
-		0x00, 0x00, /*  u16 bcdDevice */
+		0x27, 0x06,
+		0x01, 0x00,
+		0x00, 0x00,
 
-		STR_MANUFACTURER, /*  u8  iManufacturer; */
-		STR_PRODUCT_MOUSE, /*  u8  iProduct; */
-		STR_SERIALNUMBER, /*  u8  iSerialNumber; */
-		0x01 /*  u8  bNumConfigurations; */
+		STR_MANUFACTURER,
+		STR_PRODUCT_MOUSE,
+		STR_SERIALNUMBER,
+		0x01
 	};
 
 	static const uint8_t qemu_mouse_config_descriptor[] = {
-		/* one configuration */
-		0x09, /*  u8  bLength; */
-		0x02, /*  u8  bDescriptorType; Configuration */
-		0x22, 0x00, /*  u16 wTotalLength; */
-		0x01, /*  u8  bNumInterfaces; (1) */
-		0x01, /*  u8  bConfigurationValue; */
-		0x04, /*  u8  iConfiguration; */
-		0xa0, /*  u8  bmAttributes;
-                 Bit 7: must be set,
-                     6: Self-powered,
-                     5: Remote wakeup,
-                     4..0: resvd */
-		50, /*  u8  MaxPower; */
+		0x09,
+		0x02,
+		0x22, 0x00,
+		0x01,
+		0x01,
+		0x04,
+		0xa0,
+		50,
 
-		/* USB 1.1:
-     * USB 2.0, single TT organization (mandatory):
-     *  one interface, protocol 0
-     *
-     * USB 2.0, multiple TT organization (optional):
-     *  two interfaces, protocols 1 (like single TT)
-     *  and 2 (multiple TT mode) ... config is
-     *  sometimes settable
-     *  NOT IMPLEMENTED
-     */
+		0x09,
+		0x04,
+		0x00,
+		0x00,
+		0x01,
+		0x03,
+		0x01,
+		0x02,
+		0x05,
 
-		/* one interface */
-		0x09, /*  u8  if_bLength; */
-		0x04, /*  u8  if_bDescriptorType; Interface */
-		0x00, /*  u8  if_bInterfaceNumber; */
-		0x00, /*  u8  if_bAlternateSetting; */
-		0x01, /*  u8  if_bNumEndpoints; */
-		0x03, /*  u8  if_bInterfaceClass; */
-		0x01, /*  u8  if_bInterfaceSubClass; */
-		0x02, /*  u8  if_bInterfaceProtocol; [usb1.1 or single tt] */
-		0x05, /*  u8  if_iInterface; */
+		0x09,
+		0x21,
+		0x01, 0x00,
+		0x00,
+		0x01,
+		0x22,
+		52, 0,
 
-		/* HID descriptor */
-		0x09, /*  u8  bLength; */
-		0x21, /*  u8 bDescriptorType; */
-		0x01, 0x00, /*  u16 HID_class */
-		0x00, /*  u8 country_code */
-		0x01, /*  u8 num_descriptors */
-		0x22, /*  u8 type; Report */
-		52, 0, /*  u16 len */
-
-		/* one endpoint (status change endpoint) */
-		0x07, /*  u8  ep_bLength; */
-		0x05, /*  u8  ep_bDescriptorType; Endpoint */
-		0x81, /*  u8  ep_bEndpointAddress; IN Endpoint 1 */
-		0x03, /*  u8  ep_bmAttributes; Interrupt */
-		0x04, 0x00, /*  u16 ep_wMaxPacketSize; */
-		0x0a, /*  u8  ep_bInterval; (255ms -- usb 2.0 spec) */
+		0x07,
+		0x05,
+		0x81,
+		0x03,
+		0x04, 0x00,
+		0x0a,
 	};
 
 	[[maybe_unused]] static const uint8_t qemu_tablet_config_descriptor[] = {
-		/* one configuration */
-		0x09, /*  u8  bLength; */
-		0x02, /*  u8  bDescriptorType; Configuration */
-		0x22, 0x00, /*  u16 wTotalLength; */
-		0x01, /*  u8  bNumInterfaces; (1) */
-		0x01, /*  u8  bConfigurationValue; */
-		0x04, /*  u8  iConfiguration; */
-		0xa0, /*  u8  bmAttributes;
-                 Bit 7: must be set,
-                     6: Self-powered,
-                     5: Remote wakeup,
-                     4..0: resvd */
-		50, /*  u8  MaxPower; */
+		0x09,
+		0x02,
+		0x22, 0x00,
+		0x01,
+		0x01,
+		0x04,
+		0xa0,
+		50,
 
-		/* USB 1.1:
-     * USB 2.0, single TT organization (mandatory):
-     *  one interface, protocol 0
-     *
-     * USB 2.0, multiple TT organization (optional):
-     *  two interfaces, protocols 1 (like single TT)
-     *  and 2 (multiple TT mode) ... config is
-     *  sometimes settable
-     *  NOT IMPLEMENTED
-     */
+		0x09,
+		0x04,
+		0x00,
+		0x00,
+		0x01,
+		0x03,
+		0x01,
+		0x02,
+		0x05,
 
-		/* one interface */
-		0x09, /*  u8  if_bLength; */
-		0x04, /*  u8  if_bDescriptorType; Interface */
-		0x00, /*  u8  if_bInterfaceNumber; */
-		0x00, /*  u8  if_bAlternateSetting; */
-		0x01, /*  u8  if_bNumEndpoints; */
-		0x03, /*  u8  if_bInterfaceClass; */
-		0x01, /*  u8  if_bInterfaceSubClass; */
-		0x02, /*  u8  if_bInterfaceProtocol; [usb1.1 or single tt] */
-		0x05, /*  u8  if_iInterface; */
+		0x09,
+		0x21,
+		0x01, 0x00,
+		0x00,
+		0x01,
+		0x22,
+		74, 0,
 
-		/* HID descriptor */
-		0x09, /*  u8  bLength; */
-		0x21, /*  u8 bDescriptorType; */
-		0x01, 0x00, /*  u16 HID_class */
-		0x00, /*  u8 country_code */
-		0x01, /*  u8 num_descriptors */
-		0x22, /*  u8 type; Report */
-		74, 0, /*  u16 len */
-
-		/* one endpoint (status change endpoint) */
-		0x07, /*  u8  ep_bLength; */
-		0x05, /*  u8  ep_bDescriptorType; Endpoint */
-		0x81, /*  u8  ep_bEndpointAddress; IN Endpoint 1 */
-		0x03, /*  u8  ep_bmAttributes; Interrupt */
-		0x08, 0x00, /*  u16 ep_wMaxPacketSize; */
-		0x0a, /*  u8  ep_bInterval; (255ms -- usb 2.0 spec) */
+		0x07,
+		0x05,
+		0x81,
+		0x03,
+		0x08, 0x00,
+		0x0a,
 	};
 
 	static const uint8_t qemu_mouse_hid_report_descriptor[] = {
-		0x05, 0x01, /* Usage Page (Generic Desktop) */
-		0x09, 0x02, /* Usage (Mouse) */
-		0xa1, 0x01, /* Collection (Application) */
-		0x09, 0x01, /*   Usage (Pointer) */
-		0xa1, 0x00, /*   Collection (Physical) */
-		0x05, 0x09, /*     Usage Page (Button) */
-		0x19, 0x01, /*     Usage Minimum (1) */
-		0x29, 0x03, /*     Usage Maximum (3) */
-		0x15, 0x00, /*     Logical Minimum (0) */
-		0x25, 0x01, /*     Logical Maximum (1) */
-		0x95, 0x03, /*     Report Count (3) */
-		0x75, 0x01, /*     Report Size (1) */
-		0x81, 0x02, /*     Input (Data, Variable, Absolute) */
-		0x95, 0x01, /*     Report Count (1) */
-		0x75, 0x05, /*     Report Size (5) */
-		0x81, 0x01, /*     Input (Constant) */
-		0x05, 0x01, /*     Usage Page (Generic Desktop) */
-		0x09, 0x30, /*     Usage (X) */
-		0x09, 0x31, /*     Usage (Y) */
-		0x09, 0x38, /*     Usage (Wheel) */
-		0x15, 0x81, /*     Logical Minimum (-0x7f) */
-		0x25, 0x7f, /*     Logical Maximum (0x7f) */
-		0x75, 0x08, /*     Report Size (8) */
-		0x95, 0x03, /*     Report Count (3) */
-		0x81, 0x06, /*     Input (Data, Variable, Relative) */
-		0xc0, /*   End Collection */
-		0xc0, /* End Collection */
+		0x05, 0x01,
+		0x09, 0x02,
+		0xa1, 0x01,
+		0x09, 0x01,
+		0xa1, 0x00,
+		0x05, 0x09,
+		0x19, 0x01,
+		0x29, 0x03,
+		0x15, 0x00,
+		0x25, 0x01,
+		0x95, 0x03,
+		0x75, 0x01,
+		0x81, 0x02,
+		0x95, 0x01,
+		0x75, 0x05,
+		0x81, 0x01,
+		0x05, 0x01,
+		0x09, 0x30,
+		0x09, 0x31,
+		0x09, 0x38,
+		0x15, 0x81,
+		0x25, 0x7f,
+		0x75, 0x08,
+		0x95, 0x03,
+		0x81, 0x06,
+		0xc0,
+		0xc0,
 	};
 
 	static const uint8_t qemu_tablet_hid_report_descriptor[] = {
-		0x05, 0x01, /* Usage Page (Generic Desktop) */
-		0x09, 0x02, /* Usage (Mouse) */
-		0xa1, 0x01, /* Collection (Application) */
-		0x09, 0x01, /*   Usage (Pointer) */
-		0xa1, 0x00, /*   Collection (Physical) */
-		0x05, 0x09, /*     Usage Page (Button) */
-		0x19, 0x01, /*     Usage Minimum (1) */
-		0x29, 0x03, /*     Usage Maximum (3) */
-		0x15, 0x00, /*     Logical Minimum (0) */
-		0x25, 0x01, /*     Logical Maximum (1) */
-		0x95, 0x03, /*     Report Count (3) */
-		0x75, 0x01, /*     Report Size (1) */
-		0x81, 0x02, /*     Input (Data, Variable, Absolute) */
-		0x95, 0x01, /*     Report Count (1) */
-		0x75, 0x05, /*     Report Size (5) */
-		0x81, 0x01, /*     Input (Constant) */
-		0x05, 0x01, /*     Usage Page (Generic Desktop) */
-		0x09, 0x30, /*     Usage (X) */
-		0x09, 0x31, /*     Usage (Y) */
-		0x15, 0x00, /*     Logical Minimum (0) */
-		0x26, 0xff, 0x7f, /*     Logical Maximum (0x7fff) */
-		0x35, 0x00, /*     Physical Minimum (0) */
-		0x46, 0xff, 0x7f, /*     Physical Maximum (0x7fff) */
-		0x75, 0x10, /*     Report Size (16) */
-		0x95, 0x02, /*     Report Count (2) */
-		0x81, 0x02, /*     Input (Data, Variable, Absolute) */
-		0x05, 0x01, /*     Usage Page (Generic Desktop) */
-		0x09, 0x38, /*     Usage (Wheel) */
-		0x15, 0x81, /*     Logical Minimum (-0x7f) */
-		0x25, 0x7f, /*     Logical Maximum (0x7f) */
-		0x35, 0x00, /*     Physical Minimum (same as logical) */
-		0x45, 0x00, /*     Physical Maximum (same as logical) */
-		0x75, 0x08, /*     Report Size (8) */
-		0x95, 0x01, /*     Report Count (1) */
-		0x81, 0x06, /*     Input (Data, Variable, Relative) */
-		0xc0, /*   End Collection */
-		0xc0, /* End Collection */
+		0x05, 0x01,
+		0x09, 0x02,
+		0xa1, 0x01,
+		0x09, 0x01,
+		0xa1, 0x00,
+		0x05, 0x09,
+		0x19, 0x01,
+		0x29, 0x03,
+		0x15, 0x00,
+		0x25, 0x01,
+		0x95, 0x03,
+		0x75, 0x01,
+		0x81, 0x02,
+		0x95, 0x01,
+		0x75, 0x05,
+		0x81, 0x01,
+		0x05, 0x01,
+		0x09, 0x30,
+		0x09, 0x31,
+		0x15, 0x00,
+		0x26, 0xff, 0x7f,
+		0x35, 0x00,
+		0x46, 0xff, 0x7f,
+		0x75, 0x10,
+		0x95, 0x02,
+		0x81, 0x02,
+		0x05, 0x01,
+		0x09, 0x38,
+		0x15, 0x81,
+		0x25, 0x7f,
+		0x35, 0x00,
+		0x45, 0x00,
+		0x75, 0x08,
+		0x95, 0x01,
+		0x81, 0x06,
+		0xc0,
+		0xc0,
 	};
 
 	static const uint8_t beatmania_dev_desc[] = {
-		0x12, /*  u8 bLength; */
-		0x01, /*  u8 bDescriptorType; Device */
-		WBVAL(0x110), /*  u16 bcdUSB; v1.10 */
+		0x12,
+		0x01,
+		WBVAL(0x110),
 
-		0x00, /*  u8  bDeviceClass; */
-		0x00, /*  u8  bDeviceSubClass; */
-		0x00, /*  u8  bDeviceProtocol; [ low/full speeds only ] */
-		0x08, /*  u8  bMaxPacketSize0; 8 Bytes */
+		0x00,
+		0x00,
+		0x00,
+		0x08,
 
-		//  0x27, 0x06, /*  u16 idVendor; */
 		WBVAL(0x0510),
-		// 0x01, 0x00, /*  u16 idProduct; */
 		WBVAL(0x0002),
-		WBVAL(0x0020), /*  u16 bcdDevice */
+		WBVAL(0x0020),
 
-		1, /*  u8  iManufacturer; */
-		2, /*  u8  iProduct; */
-		0, /*  u8  iSerialNumber; */
-		0x01 /*  u8  bNumConfigurations; */
+		1,
+		2,
+		0,
+		0x01
 	};
 
 	static const uint8_t beatmania_config_desc[] = {
-		0x09, // bLength
-		0x02, // bDescriptorType (Configuration)
-		0x22, 0x00, // wTotalLength 34
-		0x01, // bNumInterfaces 1
-		0x01, // bConfigurationValue
-		0x02, // iConfiguration (String Index)
-		0xA0, // bmAttributes Remote Wakeup
-		0x14, // bMaxPower 40mA
+		0x09,
+		0x02,
+		0x22, 0x00,
+		0x01,
+		0x01,
+		0x02,
+		0xA0,
+		0x14,
 
-		0x09, // bLength
-		0x04, // bDescriptorType (Interface)
-		0x00, // bInterfaceNumber 0
-		0x00, // bAlternateSetting
-		0x01, // bNumEndpoints 1
-		0x03, // bInterfaceClass
-		0x01, // bInterfaceSubClass
-		0x01, // bInterfaceProtocol
-		0x00, // iInterface (String Index)
+		0x09,
+		0x04,
+		0x00,
+		0x00,
+		0x01,
+		0x03,
+		0x01,
+		0x01,
+		0x00,
 
-		0x09, // bLength
-		0x21, // bDescriptorType (HID)
-		0x10, 0x01, // bcdHID 1.10
-		0x0F, // bCountryCode
-		0x01, // bNumDescriptors
-		0x22, // bDescriptorType[0] (HID)
-		0x44, 0x00, // wDescriptorLength[0] 68
+		0x09,
+		0x21,
+		0x10, 0x01,
+		0x0F,
+		0x01,
+		0x22,
+		0x44, 0x00,
 
-		0x07, // bLength
-		0x05, // bDescriptorType (Endpoint)
-		0x81, // bEndpointAddress (IN/D2H)
-		0x03, // bmAttributes (Interrupt)
-		0x08, 0x00, // wMaxPacketSize 8
-		0x0A, // bInterval 10 (unit depends on device speed)
+		0x07,
+		0x05,
+		0x81,
+		0x03,
+		0x08, 0x00,
+		0x0A,
 
-		// 34 bytes
 	};
 
 	static const uint8_t beatmania_dadada_hid_report_descriptor[] = {
-		0x05, 0x01, // Usage Page (Generic Desktop Ctrls)
-		0x09, 0x06, // Usage (Keyboard)
-		0xA1, 0x01, // Collection (Application)
-		0x05, 0x07, //   Usage Page (Kbrd/Keypad)
-		0x19, 0xE0, //   Usage Minimum (0xE0)
-		0x29, 0xE7, //   Usage Maximum (0xE7)
-		0x15, 0x00, //   Logical Minimum (0)
-		0x25, 0x01, //   Logical Maximum (1)
-		0x75, 0x01, //   Report Size (1)
-		0x95, 0x08, //   Report Count (8)
-		0x81, 0x02, //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
-		0x75, 0x08, //   Report Size (8)
-		0x95, 0x01, //   Report Count (1)
-		0x81, 0x01, //   Input (Const,Array,Abs,No Wrap,Linear,Preferred State,No Null Position)
-		0x05, 0x07, //   Usage Page (Kbrd/Keypad)
-		0x19, 0x00, //   Usage Minimum (0x00)
-		0x29, 0xFF, //   Usage Maximum (0xFF)
-		0x15, 0x00, //   Logical Minimum (0)
-		0x26, 0xFF, 0x00, //   Logical Maximum (255)
-		0x75, 0x08, //   Report Size (8)
-		0x95, 0x06, //   Report Count (6)
-		0x81, 0x00, //   Input (Data,Array,Abs,No Wrap,Linear,Preferred State,No Null Position)
-		0x05, 0x08, //   Usage Page (LEDs)
-		0x19, 0x01, //   Usage Minimum (Num Lock)
-		0x29, 0x05, //   Usage Maximum (Kana)
-		0x15, 0x00, //   Logical Minimum (0)
-		0x25, 0x01, //   Logical Maximum (1)
-		0x75, 0x01, //   Report Size (1)
-		0x95, 0x05, //   Report Count (5)
-		0x91, 0x02, //   Output (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position,Non-volatile)
-		0x75, 0x03, //   Report Size (3)
-		0x95, 0x01, //   Report Count (1)
-		0x91, 0x01, //   Output (Const,Array,Abs,No Wrap,Linear,Preferred State,No Null Position,Non-volatile)
-		0xC0, // End Collection
+		0x05, 0x01,
+		0x09, 0x06,
+		0xA1, 0x01,
+		0x05, 0x07,
+		0x19, 0xE0,
+		0x29, 0xE7,
+		0x15, 0x00,
+		0x25, 0x01,
+		0x75, 0x01,
+		0x95, 0x08,
+		0x81, 0x02,
+		0x75, 0x08,
+		0x95, 0x01,
+		0x81, 0x01,
+		0x05, 0x07,
+		0x19, 0x00,
+		0x29, 0xFF,
+		0x15, 0x00,
+		0x26, 0xFF, 0x00,
+		0x75, 0x08,
+		0x95, 0x06,
+		0x81, 0x00,
+		0x05, 0x08,
+		0x19, 0x01,
+		0x29, 0x05,
+		0x15, 0x00,
+		0x25, 0x01,
+		0x75, 0x01,
+		0x95, 0x05,
+		0x91, 0x02,
+		0x75, 0x03,
+		0x95, 0x01,
+		0x91, 0x01,
+		0xC0,
 
-		// 68 bytes
 	};
 
 	static constexpr const std::pair<QKeyCode, const char*> s_qkeycode_names[] = {
@@ -569,7 +526,6 @@ namespace usb_hid
 
 		switch (request)
 		{
-				/* hid specific requests */
 			case InterfaceRequest | USB_REQ_GET_DESCRIPTOR:
 				switch (value >> 8)
 				{
@@ -708,9 +664,6 @@ namespace usb_hid
 	{
 	}
 
-	// NOTE: This is really cruddy, reusing qemu's stuff here, when we could just do
-	// it ourselves. But this code isn't used often enough to make it worthwhile.
-
 	void UsbHIDState::QueueMouseButtonState(InputButton button, bool pressed)
 	{
 		InputEvent evt;
@@ -725,7 +678,6 @@ namespace usb_hid
 	{
 		if (axis < InputPointerAxis::WheelX)
 		{
-			// x/y
 			InputEvent evt;
 			evt.type = INPUT_EVENT_KIND_REL;
 			evt.u.rel.axis = static_cast<InputAxis>(axis);
@@ -945,7 +897,6 @@ namespace usb_hid
 
 		if (bind >= INPUT_BUTTON__MAX)
 		{
-			// axis, don't bother returning, we don't have an absolute value here anyway
 			return 0.0f;
 		}
 
@@ -953,9 +904,9 @@ namespace usb_hid
 		const HIDPointerEvent* e = &s->hid.ptr.queue[index & QUEUE_MASK];
 
 		static const int bmap[INPUT_BUTTON__MAX] = {
-			/*[INPUT_BUTTON_LEFT] =*/0x01,
-			/*[INPUT_BUTTON_MIDDLE] =*/0x04,
-			/*[INPUT_BUTTON_RIGHT] =*/0x02,
+0x01,
+0x04,
+0x02,
 			0, 0, 0, 0};
 
 		return ((e->buttons_state & bmap[bind]) != 0) ? 1.0f : 0.0f;
@@ -970,4 +921,4 @@ namespace usb_hid
 		else
 			s->QueueMouseAxisState(static_cast<InputPointerAxis>(bind - INPUT_BUTTON__MAX), value);
 	}
-} // namespace usb_hid
+}

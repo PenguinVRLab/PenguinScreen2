@@ -8,10 +8,6 @@
 
 #include "VUmicro.h"
 
-/*****************************************/
-/*          NEW FLAGS                    */ //By asadr. Thnkx F|RES :p
-/*****************************************/
-
 static __ri u32 VU_MAC_UPDATE( int shift, VURegs * VU, float f )
 {
 	u32 v = *(u32*)&f;
@@ -37,7 +33,7 @@ static __ri u32 VU_MAC_UPDATE( int shift, VURegs * VU, float f )
 		case 255:
 			VU->macflag = (VU->macflag&~(0x0101<<shift)) | (0x1000<<shift);
 			if (CHECK_VU_OVERFLOW((VU == &VU1) ? 1 : 0))
-				return s | 0x7f7fffff; /* max allowed */
+				return s | 0x7f7fffff;
 			else
 				return v;
 		default:
@@ -92,6 +88,5 @@ __ri void VU_STAT_UPDATE(VURegs * VU) {
 	if (VU->macflag & 0x00F0) newflag |= 0x2;
 	if (VU->macflag & 0x0F00) newflag |= 0x4;
 	if (VU->macflag & 0xF000) newflag |= 0x8;
-	// Save old sticky flags and D/I settings, everthing else is the new flags only
 	VU->statusflag = newflag;
 }

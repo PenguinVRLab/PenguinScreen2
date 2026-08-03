@@ -44,7 +44,6 @@ bool V_ADSR::Calculate(int voiceidx)
 
 	auto& p = CachedPhases.at(Phase);
 
-	// maybe not correct for the "infinite" settings
 	u32 counter_inc = 0x8000 >> std::max(0, p.Shift - 11);
 	s32 level_inc = p.Step << std::max(0, 11 - p.Shift);
 
@@ -70,19 +69,16 @@ bool V_ADSR::Calculate(int voiceidx)
 		Value = std::clamp<s32>(Value + level_inc, 0, INT16_MAX);
 	}
 
-	// Stay in sustain until key off or silence
 	if (Phase == PHASE_SUSTAIN)
 	{
 		return Value != 0;
 	}
 
-	// Check if target is reached to advance phase
 	if ((!p.Decr && Value >= p.Target) || (p.Decr && Value <= p.Target))
 	{
 		Phase++;
 	}
 
-	// All phases done, stop the voice
 	if (Phase > PHASE_RELEASE)
 	{
 		return false;
@@ -144,16 +140,12 @@ void V_VolumeSlide::Update()
 		}
 	}
 
-	// Allow counter_inc to be zero only in when all bits
-	// of the rate field are set
 	if (Step != 3 && Shift != 0x1f)
 	{
 		counter_inc = std::max<u32>(1, counter_inc);
 	}
 	Counter += counter_inc;
 
-	// If negative phase "increase" to -0x8000 or "decrease" towards 0
-	// Unless in Exp + Decr modes
 	if (!(Exp && Decr))
 	{
 		level_inc = Phase ? -level_inc : level_inc;

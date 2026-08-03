@@ -76,7 +76,6 @@ bool MemoryCardConvertWorker::ConvertToFile(const std::string& srcFolderName, co
 		sourceFolderMemoryCard.Read(sourceBuffer.data() + address, address, FolderMemoryCard::PageSizeRaw);
 		address += FolderMemoryCard::PageSizeRaw;
 
-		// Only report progress every 16 pages. Substantially speeds up the conversion.
 		if (address % (FolderMemoryCard::PageSizeRaw * 16) == 0)
 			this->SetProgressValue(address);
 	}
@@ -118,17 +117,9 @@ bool MemoryCardConvertWorker::ConvertToFolder(const std::string& srcFileName, co
 	}
 
 	std::vector<u8> sourceBuffer = sourceBufferOpt.value();
-	// Set progress bar to the literal number of bytes in the memcard.
-	// Plus two because there is a lag period after the Save calls complete
-	// where the progress bar stalls out; this lets us stop the progress bar
-	// just shy of 50 and 100% so it seems like it's still doing some work.
 	this->SetProgressRange((sourceBuffer.size() * 2) + 2);
 	this->SetProgressValue(0);
 
-	// Attempt the write twice. Once with writes being simulated rather than truly committed.
-	// Again with actual writes. If a file memcard has a corrupted page or something which would
-	// cause the conversion to fail, it will fail on the simulated run, with no files committed
-	// to the filesystem yet.
 	for (int i = 0; i < 2; i++)
 	{
 		bool simulateWrites = (i == 0);
@@ -141,16 +132,12 @@ bool MemoryCardConvertWorker::ConvertToFolder(const std::string& srcFileName, co
 			targetFolderMemoryCard.Save(sourceBuffer.data() + address, address, FolderMemoryCard::PageSizeRaw);
 			address += FolderMemoryCard::PageSizeRaw;
 
-			// Only report progress every 16 pages. Substantially speeds up the conversion.
 			if (address % (FolderMemoryCard::PageSizeRaw * 16) == 0)
 				this->SetProgressValue(address + (i * sourceBuffer.size()));
 		}
 
 		targetFolderMemoryCard.Close();
 
-		// If the source file Memory Card was larger than 8 MB, the raw copy will have also made the superblock of
-		// the destination folder Memory Card larger than 8 MB. For compatibility, we always want folder Memory Cards
-		// to report 8 MB, so we'll override that here. Don't do this on the simulated run, only the actual.
 		if (!simulateWrites && sourceBuffer.size() != FolderMemoryCard::TotalSizeRaw)
 		{
 			targetFolderMemoryCard.Open(destPath, config, 0, false, "", simulateWrites);

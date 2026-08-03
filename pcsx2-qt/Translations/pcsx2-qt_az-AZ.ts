@@ -1581,11 +1581,6 @@ Leaderboard Position: {1} of {2}</source>
       <translation>Çox Yüksək (Yavaş, Önərilməyib)</translation>
     </message>
     <message>
-      <location filename="../Settings/AdvancedSettingsWidget.ui" line="498"/>
-      <source>PINE Settings</source>
-      <translation>PINE Quruluşları</translation>
-    </message>
-    <message>
       <location filename="../Settings/AdvancedSettingsWidget.ui" line="520"/>
       <source>Slot:</source>
       <translation>Yuva:</translation>

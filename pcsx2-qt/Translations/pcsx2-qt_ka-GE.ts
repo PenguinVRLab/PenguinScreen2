@@ -1548,11 +1548,6 @@ Leaderboard Position: {1} of {2}</source>
       <translation type="unfinished">Use Save State Selector</translation>
     </message>
     <message>
-      <location filename="../Settings/AdvancedSettingsWidget.ui" line="505"/>
-      <source>PINE Settings</source>
-      <translation>PINE პარამეტრები</translation>
-    </message>
-    <message>
       <location filename="../Settings/AdvancedSettingsWidget.ui" line="527"/>
       <source>Slot:</source>
       <translation>ადგილი:</translation>

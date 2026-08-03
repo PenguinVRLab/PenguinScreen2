@@ -14,24 +14,15 @@
 
 using namespace R3000A;
 
-// Dma0/1   in Mdec.c
-// Dma3     in CdRom.c
-// Dma8     in PsxSpd.c
-// Dma11/12 in PsxSio2.c
-
 static void psxDmaGeneric(u32 madr, u32 bcr, u32 chcr, u32 spuCore)
 {
 	const char dmaNum = spuCore ? 7 : 4;
-
-	/*if (chcr & 0x400) DevCon.Status("SPU 2 DMA %c linked list chain mode! chcr = %x madr = %x bcr = %x\n", dmaNum, chcr, madr, bcr);
-	if (chcr & 0x40000000) DevCon.Warning("SPU 2 DMA %c Unusual bit set on 'to' direction chcr = %x madr = %x bcr = %x\n", dmaNum, chcr, madr, bcr);
-	if ((chcr & 0x1) == 0) DevCon.Status("SPU 2 DMA %c loading from spu2 memory chcr = %x madr = %x bcr = %x\n", dmaNum, chcr, madr, bcr);*/
 
 	const int size = (bcr >> 16) * (bcr & 0xFFFF);
 
 	switch (chcr)
 	{
-		case 0x01000201: //cpu to spu2 transfer
+		case 0x01000201:
 			PSXDMA_LOG("*** DMA %d - mem2spu *** %x addr = %x size = %x", dmaNum, chcr, madr, bcr);
 			if (dmaNum == 7)
 				SPU2writeDMA7Mem((u16*)iopPhysMem(madr), size * 2);
@@ -39,7 +30,7 @@ static void psxDmaGeneric(u32 madr, u32 bcr, u32 chcr, u32 spuCore)
 				SPU2writeDMA4Mem((u16*)iopPhysMem(madr), size * 2);
 			break;
 
-		case 0x01000200: //spu2 to cpu transfer
+		case 0x01000200:
 			PSXDMA_LOG("*** DMA %d - spu2mem *** %x addr = %x size = %x", dmaNum, chcr, madr, bcr);
 			if (dmaNum == 7)
 				SPU2readDMA7Mem((u16*)iopPhysMem(madr), size * 2);
@@ -54,7 +45,7 @@ static void psxDmaGeneric(u32 madr, u32 bcr, u32 chcr, u32 spuCore)
 	}
 }
 
-void psxDma4(u32 madr, u32 bcr, u32 chcr) // SPU2's Core 0
+void psxDma4(u32 madr, u32 bcr, u32 chcr)
 {
 	psxDmaGeneric(madr, bcr, chcr, 0);
 }
@@ -83,7 +74,7 @@ void spu2DMA4Irq()
 	}
 }
 
-void psxDma7(u32 madr, u32 bcr, u32 chcr) // SPU2's Core 1
+void psxDma7(u32 madr, u32 bcr, u32 chcr)
 {
 	psxDmaGeneric(madr, bcr, chcr, 1);
 }
@@ -112,15 +103,10 @@ void spu2DMA7Irq()
 }
 
 #ifndef DISABLE_PSX_GPU_DMAS
-void psxDma2(u32 madr, u32 bcr, u32 chcr) // GPU
+void psxDma2(u32 madr, u32 bcr, u32 chcr)
 {
-	//DevCon.Warning("SIF2 IOP CHCR = %x MADR = %x BCR = %x first 16bits %x", chcr, madr, bcr, iopMemRead16(madr));
 	sif2.iop.busy = true;
 	sif2.iop.end = false;
-	//SIF2Dma();
-	// todo: psxmode: dmaSIF2 appears to interface with PGPU but everything is already handled without it.
-	// it slows down psxmode if it's run.
-	//dmaSIF2();
 }
 
 void psxDma6(u32 madr, u32 bcr, u32 chcr)
@@ -141,7 +127,6 @@ void psxDma6(u32 madr, u32 bcr, u32 chcr)
 	}
 	else
 	{
-		// Unknown option
 		PSXDMA_LOG("*** DMA 6 - OT unknown *** %lx addr = %lx size = %lx", chcr, madr, bcr);
 	}
 	HW_DMA6_CHCR &= ~0x01000000;
@@ -155,12 +140,12 @@ void psxDma8(u32 madr, u32 bcr, u32 chcr)
 
 	switch (chcr & 0x01000201)
 	{
-		case 0x01000201: //cpu to dev9 transfer
+		case 0x01000201:
 			PSXDMA_LOG("*** DMA 8 - DEV9 mem2dev9 *** %lx addr = %lx size = %lx", chcr, madr, bcr);
 			DEV9writeDMA8Mem((u32*)iopPhysMem(madr), size);
 			break;
 
-		case 0x01000200: //dev9 to cpu transfer
+		case 0x01000200:
 			PSXDMA_LOG("*** DMA 8 - DEV9 dev9mem *** %lx addr = %lx size = %lx", chcr, madr, bcr);
 			DEV9readDMA8Mem((u32*)iopPhysMem(madr), size);
 			break;
@@ -205,8 +190,6 @@ void psxDma11(u32 madr, u32 bcr, u32 chcr)
 	unsigned int i, j;
 	int size = (bcr >> 16) * (bcr & 0xffff);
 	PSXDMA_LOG("*** DMA 11 - SIO2 in *** %lx addr = %lx size = %lx", chcr, madr, bcr);
-	// Set dmaBlockSize, so SIO2 knows to count based on the DMA block rather than SEND3 length.
-	// When SEND3 is written, SIO2 will automatically reset this to zero.
 	g_Sio2.dmaBlockSize = (bcr & 0xffff) * 4;
 
 	if (chcr != 0x01000201)

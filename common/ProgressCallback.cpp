@@ -133,7 +133,7 @@ namespace
 		}
 		void ModalInformation(const char* message) override { Console.WriteLn("%s", message); }
 	};
-} // namespace
+}
 
 static NullProgressCallbacks s_nullProgressCallbacks;
 ProgressCallback* ProgressCallback::NullProgressCallback = &s_nullProgressCallbacks;
@@ -176,7 +176,6 @@ void BaseProgressCallback::PopState()
 	State* state = m_saved_state;
 	m_saved_state = nullptr;
 
-	// impose the current position into the previous range
 	const u32 new_progress_value =
 		(m_progress_range != 0) ?
 			static_cast<u32>(((float)m_progress_value / (float)m_progress_range) * (float)state->progress_range) :
@@ -216,7 +215,6 @@ void BaseProgressCallback::SetProgressRange(u32 range)
 {
 	if (m_saved_state)
 	{
-		// impose the previous range on this range
 		m_progress_range = m_saved_state->progress_range * range;
 		m_base_progress_value = m_progress_value = m_saved_state->progress_value * range;
 	}

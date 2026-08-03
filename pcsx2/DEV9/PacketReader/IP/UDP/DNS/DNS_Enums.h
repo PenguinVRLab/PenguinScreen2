@@ -28,4 +28,4 @@ namespace PacketReader::IP::UDP::DNS
 		NotAuth = 9,
 		NotZone = 10,
 	};
-} // namespace PacketReader::IP::UDP
+}

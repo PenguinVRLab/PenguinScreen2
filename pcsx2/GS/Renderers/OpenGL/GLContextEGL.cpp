@@ -19,8 +19,6 @@ static std::atomic_uint32_t s_egl_refcount = 0;
 
 static bool LoadEGL()
 {
-	// We're not going to be calling this from multiple threads concurrently.
-	// So, not wrapping this in a mutex should be fine.
 	if (s_egl_refcount.fetch_add(1, std::memory_order_acq_rel) == 0)
 	{
 		pxAssert(!s_egl_library.IsOpen());
@@ -31,7 +29,6 @@ static bool LoadEGL()
 		Error error;
 		if (!s_egl_library.Open(egl_libname.c_str(), &error))
 		{
-			// Try versioned.
 			egl_libname = DynamicLibrary::GetVersionedFilename("libEGL", 1);
 			Console.WriteLnFmt("Loading EGL from {}...", egl_libname);
 			if (!s_egl_library.Open(egl_libname.c_str(), &error))
@@ -108,7 +105,6 @@ bool GLContextEGL::Initialize(std::span<const Version> versions_to_try, Error* e
 
 	Console.WriteLnFmt("eglInitialize() version: {}.{}", egl_major, egl_minor);
 
-	// Re-initialize EGL/GLAD.
 	if (!LoadGLADEGL(m_display, error))
 		return false;
 
@@ -264,7 +260,7 @@ bool GLContextEGL::ChangeSurface(const WindowInfo& new_wi)
 	return true;
 }
 
-void GLContextEGL::ResizeSurface(u32 new_surface_width /*= 0*/, u32 new_surface_height /*= 0*/)
+void GLContextEGL::ResizeSurface(u32 new_surface_width , u32 new_surface_height )
 {
 	if (new_surface_width == 0 && new_surface_height == 0)
 	{
@@ -354,7 +350,6 @@ bool GLContextEGL::CreateSurface()
 		return false;
 	}
 
-	// Some implementations may require the size to be queried at runtime.
 	EGLint surface_width, surface_height;
 	if (eglQuerySurface(m_display, m_surface, EGL_WIDTH, &surface_width) &&
 		eglQuerySurface(m_display, m_surface, EGL_HEIGHT, &surface_height))
@@ -375,7 +370,6 @@ bool GLContextEGL::CreatePBufferSurface()
 	const u32 width = std::max<u32>(m_wi.surface_width, 1);
 	const u32 height = std::max<u32>(m_wi.surface_height, 1);
 
-	// TODO: Format
 	EGLint attrib_list[] = {
 		EGL_WIDTH,
 		static_cast<EGLint>(width),

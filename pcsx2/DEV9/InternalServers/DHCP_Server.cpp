@@ -149,21 +149,14 @@ namespace InternalServers
 
 		if (autoDNS1)
 		{
-			//Auto DNS1
-			//If Adapter has DNS, add 1st entry
 			if (dnsIPs.size() >= 1)
 				dns1 = dnsIPs[0];
 
-			//Auto DNS1 & AutoDNS2
 			if (autoDNS2 && dnsIPs.size() >= 2)
 				dns2 = dnsIPs[1];
 		}
 		else if (autoDNS2)
 		{
-			//Manual DNS1 & Auto DNS2
-
-			//Use adapter's DNS2 if it has one
-			//otherwise use adapter's DNS1
 
 			if (!dnsIPs.empty())
 				dns2 = dnsIPs[std::min<size_t>(1, dnsIPs.size() - 1)];
@@ -171,8 +164,6 @@ namespace InternalServers
 		if (dns1.integer == 0 && dns2.integer != 0)
 		{
 			Console.Error("DHCP: DNS1 is zero, but DNS2 is valid, using DNS2 as DNS1");
-			//no value for DNS1, but we have a value for DNS2
-			//set DNS1 to DNS2 and zero DNS2
 			dns1 = dns2;
 			dns2 = {};
 		}
@@ -201,7 +192,6 @@ namespace InternalServers
 		PayloadPtr* udpPayload = static_cast<PayloadPtr*>(udpPacket->GetPayload());
 		DHCP_Packet dhcp = DHCP_Packet(udpPayload->data, udpPayload->GetLength());
 
-		//State
 		u8 hType = dhcp.hardwareType;
 		u8 hLen = dhcp.hardwareAddressLength;
 		u32 xID = dhcp.transactionID;
@@ -243,7 +233,6 @@ namespace InternalServers
 						Console.Error("DHCP: DNS missmatch");
 					break;
 				case 12:
-					//TODO use name?
 					break;
 				case 50:
 					if (ps2IP != ((DHCPopREQIP*)dhcp.options[i])->requestedIP)
@@ -262,14 +251,14 @@ namespace InternalServers
 				case 55:
 					reqList = ((DHCPopREQLIST*)(dhcp.options[i]))->requests;
 					break;
-				case 56: //String message
+				case 56:
 					break;
 				case 57:
 					maxMs = ((DHCPopMMSGS*)(dhcp.options[i]))->maxMessageSize;
 					break;
-				case 60: //ClassID
-				case 61: //ClientID
-				case 255: //End
+				case 60:
+				case 61:
+				case 255:
 					break;
 				default:
 					Console.Error("DHCP: Got Unhandled Option %d", dhcp.options[i]->GetCode());
@@ -289,7 +278,7 @@ namespace InternalServers
 		memcpy(retPay->clientHardwareAddress, cMac, 6);
 		retPay->magicCookie = cookie;
 
-		if (msg == 1 || msg == 3) //Fill out Requests
+		if (msg == 1 || msg == 3)
 		{
 			if (msg == 1)
 				retPay->options.push_back(new DHCPopMSG(2));
@@ -330,8 +319,8 @@ namespace InternalServers
 					case 50:
 						retPay->options.push_back(new DHCPopREQIP(ps2IP));
 						break;
-					case 53: //Msg (Already added)
-					case 54: //Server Identifier (Already Added)
+					case 53:
+					case 54:
 						break;
 					default:
 						Console.Error("DHCP: Got Unhandled Request %d", reqList[i]);
@@ -358,7 +347,6 @@ namespace InternalServers
 
 	DHCP_Server::~DHCP_Server()
 	{
-		//Delete entries in queue
 		while (!recvBuff.IsQueueEmpty())
 		{
 			UDP_Packet* retPay = nullptr;
@@ -371,4 +359,4 @@ namespace InternalServers
 			delete retPay;
 		}
 	}
-} // namespace InternalServers
+}

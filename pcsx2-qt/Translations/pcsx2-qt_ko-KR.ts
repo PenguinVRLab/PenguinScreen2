@@ -1545,11 +1545,6 @@ Leaderboard Position: {1} of {2}</source>
       <translation>상태 저장 선택기 사용</translation>
     </message>
     <message>
-      <location filename="../Settings/AdvancedSettingsWidget.ui" line="505"/>
-      <source>PINE Settings</source>
-      <translation>PINE 설정</translation>
-    </message>
-    <message>
       <location filename="../Settings/AdvancedSettingsWidget.ui" line="527"/>
       <source>Slot:</source>
       <translation>슬롯 :</translation>

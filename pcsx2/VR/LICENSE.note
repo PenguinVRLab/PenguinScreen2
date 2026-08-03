@@ -1,0 +1,35 @@
+# Copyright & licensing note — VR module
+
+The files listed below are **original works of Patrick Carey**
+(<patrickfcarey@gmail.com>), authored from scratch for this VR fork. They do not
+exist in upstream PCSX2; they were added in this fork's history.
+
+They are offered **in this repository** under the repository's license —
+`SPDX-License-Identifier: GPL-3.0`, as marked in each file's header (unchanged).
+
+The copyright holder reserves all rights in these original works, **including the
+right to license the same code under other terms in sibling projects**.
+
+Scope: this note concerns **copyright attribution only**. It does not alter the
+license under which these files are distributed in this repository, and it does not
+apply to upstream-authored PCSX2 files — whose headers are left exactly as upstream
+has them, including around any edits made to wire this module in.
+
+## Covered files
+
+### `pcsx2/VR/` — VR module (original)
+- `CameraDriver.cpp` / `.h`
+- `HeadPose.cpp` / `.h`
+- `PadLook.cpp` / `.h`
+- `StereoState.cpp` / `.h`
+- `VRInternal.h`
+- `VRManager.cpp` / `.h`
+- `VRProfileDB.cpp` / `.h`
+- `VRVulkanBridge.cpp` / `.h`
+- `XRCompositor.cpp` / `.h`
+- `XRSession.cpp` / `.h`
+
+(The VR tooling under `tools/vr/` is likewise original work of the same
+author; its own `LICENSE.note` lives beside it.)
+
+_Last updated 2026-07-16._

@@ -30,10 +30,8 @@ static u32 s_unskipped_frames_since_last_update = 0;
 static Common::Timer s_last_update_time;
 static Common::Timer s_last_frame_time;
 
-// frame number, updated by the GS thread
 static u64 s_frame_number = 0;
 
-// internal fps heuristics
 static PerformanceMetrics::InternalFPSMethod s_internal_fps_method = PerformanceMetrics::InternalFPSMethod::None;
 static u32 s_gs_framebuffer_blits_since_last_update = 0;
 static u32 s_gs_privileged_register_writes_since_last_update = 0;
@@ -167,7 +165,6 @@ void PerformanceMetrics::Update(bool gs_register_write, bool fb_blit, bool is_sk
 	s_accumulated_gpu_vs_invocations = 0;
 	s_accumulated_gpu_ps_invocations = 0;
 
-	// prefer privileged register write based framerate detection, it's less likely to have false positives
 	if (s_gs_privileged_register_writes_since_last_update > 0 && !EmuConfig.Gamefixes.BlitInternalFPSHack)
 	{
 		s_internal_fps = static_cast<float>(s_gs_privileged_register_writes_since_last_update) / time;

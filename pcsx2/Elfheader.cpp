@@ -15,20 +15,20 @@
 #pragma pack(push, 1)
 struct PSXEXEHeader
 {
-	char id[8]; // 0x000-0x007 PS-X EXE
-	char pad1[8]; // 0x008-0x00F
-	u32 initial_pc; // 0x010
-	u32 initial_gp; // 0x014
-	u32 load_address; // 0x018
-	u32 file_size; // 0x01C excluding 0x800-byte header
-	u32 unk0; // 0x020
-	u32 unk1; // 0x024
-	u32 memfill_start; // 0x028
-	u32 memfill_size; // 0x02C
-	u32 initial_sp_base; // 0x030
-	u32 initial_sp_offset; // 0x034
-	u32 reserved[5]; // 0x038-0x04B
-	char marker[0x7B4]; // 0x04C-0x7FF
+	char id[8];
+	char pad1[8];
+	u32 initial_pc;
+	u32 initial_gp;
+	u32 load_address;
+	u32 file_size;
+	u32 unk0;
+	u32 unk1;
+	u32 memfill_start;
+	u32 memfill_size;
+	u32 initial_sp_base;
+	u32 initial_sp_offset;
+	u32 reserved[5];
+	char marker[0x7B4];
 };
 static_assert(sizeof(PSXEXEHeader) == 0x800);
 #pragma pack(pop)
@@ -111,8 +111,6 @@ void ElfObject::InitElfHeaders()
 	if ((header.e_phnum > 0) && (header.e_phentsize != sizeof(ELF_PHR)))
 		Console.Error("(ELF) Size of program headers is not standard");
 
-	//getCRC();
-
 	const char* elftype = NULL;
 	switch( header.e_type )
 	{
@@ -160,7 +158,6 @@ void ElfObject::InitElfHeaders()
 
 	ELF_LOG("\n");
 
-	//applyPatches();
 }
 
 bool ElfObject::HasValidPSXHeader() const
@@ -297,19 +294,12 @@ void ElfObject::LoadSectionHeaders()
 	if (!secthead || header.e_shoff > data.size())
 		return;
 
-	// This function scares me a lot. There's a lot of potential for buffer overreads.
-	// All the accesses should be wrapped in bounds checked read() calls.
-
 	const u32 section_names_offset = secthead[(header.e_shstrndx == 0xffff ? 0 : header.e_shstrndx)].sh_offset;
 	const u8* sections_names = data.data() + section_names_offset;
 
 	for( int i = 0 ; i < header.e_shnum ; i++ )
 	{
 		ELF_LOG( "ELF32 Section Header [%x] %s", i, &sections_names[ secthead[ i ].sh_name ] );
-
-		// used by parseCommandLine
-		//if ( secthead[i].sh_flags & 0x2 )
-		//	args_ptr = std::min( args_ptr, secthead[ i ].sh_addr & 0x1ffffff );
 
 		ELF_LOG("\n");
 

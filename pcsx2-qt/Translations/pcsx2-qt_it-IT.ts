@@ -1559,11 +1559,6 @@ Posizione nella classifica: {1} di {2}</translation>
       <translation>Usa Selettore Salvataggio di Stato</translation>
     </message>
     <message>
-      <location filename="../Settings/AdvancedSettingsWidget.ui" line="505"/>
-      <source>PINE Settings</source>
-      <translation>Impostazioni PINE</translation>
-    </message>
-    <message>
       <location filename="../Settings/AdvancedSettingsWidget.ui" line="527"/>
       <source>Slot:</source>
       <translation>Slot:</translation>

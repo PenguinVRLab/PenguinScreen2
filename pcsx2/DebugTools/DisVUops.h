@@ -3,9 +3,9 @@
 
 #define _disVUOpcodes(VU) \
  \
-/*****************/ \
-/* LOWER OPCODES */ \
-/*****************/ \
+ \
+ \
+ \
  \
 MakeDisF(dis##VU##MI_DIV,		dName("DIV");     dCP232f(_Fs_, _Fsf_); dCP232f(_Ft_, _Ftf_);) \
 MakeDisF(dis##VU##MI_SQRT,		dName("SQRT");    dCP232f(_Ft_, _Ftf_);) \
@@ -79,9 +79,9 @@ MakeDisF(dis##VU##MI_XGKICK, 	dName("XGKICK"); dCP232i(_Is_);) \
 MakeDisF(dis##VU##MI_XTOP, 		dName("XTOP");   dCP232i(_It_);) \
  \
  \
-/*****************/ \
-/* UPPER OPCODES */ \
-/*****************/ \
+ \
+ \
+ \
  \
 MakeDisF(dis##VU##MI_ABS, 		dNameU("ABS");	 dCP2128f(_Ft_); dCP2128f(_Fs_);) \
 MakeDisF(dis##VU##MI_ADD, 		dNameU("ADD");	 dCP2128f(_Fd_); dCP2128f(_Fs_); dCP2128f(_Ft_);) \

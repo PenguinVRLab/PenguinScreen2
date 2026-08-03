@@ -47,10 +47,6 @@ static void MultiPause()
 
 static u32 MeasurePauseTime()
 {
-	// GetCPUTicks may have resolution as low as 1µs
-	// One call to MultiPause could take anywhere from 20ns (fast Haswell) to 400ns (slow Skylake)
-	// We want a measurement of reasonable resolution, but don't want to take too long
-	// So start at a fairly small number and increase it if it's too fast
 	for (int testcnt = 64; true; testcnt *= 2)
 	{
 		u64 start = GetCPUTicks();
@@ -69,12 +65,10 @@ static u32 MeasurePauseTime()
 
 __noinline static void UpdatePauseTime()
 {
-	u64 wait = GetCPUTicks() + GetTickFrequency() / 100; // Wake up processor (spin for 10ms)
+	u64 wait = GetCPUTicks() + GetTickFrequency() / 100;
 	while (GetCPUTicks() < wait)
 		;
 	u32 pause = MeasurePauseTime();
-	// Take a few measurements in case something weird happens during one
-	// (e.g. OS interrupt)
 	for (int i = 0; i < 4; i++)
 		pause = std::min(pause, MeasurePauseTime());
 	PAUSE_TIME = pause;
@@ -91,7 +85,6 @@ u32 ShortSpin()
 	}
 
 	u32 time = 0;
-	// Sleep for approximately 500ns
 	for (; time < 500; time += inc)
 		MultiPause();
 
@@ -106,15 +99,13 @@ static u32 GetSpinTime()
 	}
 	else
 	{
-		return 50 * 1000; // 50µs
+		return 50 * 1000;
 	}
 }
 
 const u32 SPIN_TIME_NS = GetSpinTime();
 
 #ifdef __APPLE__
-// https://alastairs-place.net/blog/2013/01/10/interesting-os-x-crash-report-tidbits/
-// https://opensource.apple.com/source/WebKit2/WebKit2-7608.3.10.0.3/Platform/spi/Cocoa/CrashReporterClientSPI.h.auto.html
 struct crash_info_t
 {
 	u64 version;
@@ -134,14 +125,12 @@ void AbortWithMessage(const char* msg)
 {
 #ifdef __APPLE__
 	gCRAnnotations.message = reinterpret_cast<size_t>(msg);
-	// Some macOS's seem to have issues displaying non-static `message`s, so throw it in here too
 	gCRAnnotations.backtrace = gCRAnnotations.message;
 #endif
 	abort();
 }
 
 #ifndef __APPLE__
-// MacOS version is in DarwinMisc
 static CPUInfo CalcCPUInfo()
 {
 	CPUInfo out;

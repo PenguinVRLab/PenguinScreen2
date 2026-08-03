@@ -119,15 +119,11 @@ void SavedAddressesView::openContextMenu(QPoint pos)
 void SavedAddressesView::contextPasteCSV()
 {
 	QString csv = QGuiApplication::clipboard()->text();
-	// Skip header
 	csv = csv.mid(csv.indexOf('\n') + 1);
 
 	for (const QString& line : csv.split('\n'))
 	{
 		QStringList fields;
-		// In order to handle text with commas in them we must wrap values in quotes to mark
-		// where a value starts and end so that text commas aren't identified as delimiters.
-		// So matches each quote pair, parse it out, and removes the quotes to get the value.
 		QRegularExpression each_quote_pair(R"("([^"]|\\.)*")");
 		QRegularExpressionMatchIterator it = each_quote_pair.globalMatch(line);
 		while (it.hasNext())

@@ -27,23 +27,19 @@ namespace x86Emitter
 		pxAssert(to.GetOperandSize() == from.GetOperandSize());
 
 		if (to == from)
-			return; // ignore redundant MOVs.
+			return;
 
 		xOpWrite(from.GetPrefix16(), from.Is8BitOp() ? 0x88 : 0x89, from, to);
 	}
 
 	void xImpl_Mov::operator()(const xIndirectVoid& dest, const xRegisterInt& from) const
 	{
-		// mov eax has a special from when writing directly to a DISP32 address
-		// (sans any register index/base registers).
 
 		xOpWrite(from.GetPrefix16(), from.Is8BitOp() ? 0x88 : 0x89, from, dest);
 	}
 
 	void xImpl_Mov::operator()(const xRegisterInt& to, const xIndirectVoid& src) const
 	{
-		// mov eax has a special from when reading directly from a DISP32 address
-		// (sans any register index/base registers).
 
 		xOpWrite(to.GetPrefix16(), to.Is8BitOp() ? 0x8a : 0x8b, to, src);
 	}
@@ -71,8 +67,6 @@ namespace x86Emitter
 		dest.xWriteImm(imm);
 	}
 
-	// preserve_flags  - set to true to disable optimizations which could alter the state of
-	//   the flags (namely replacing mov reg,0 with xor).
 	void xImpl_Mov::operator()(const xRegisterInt& to, sptr imm, bool preserve_flags) const
 	{
 		switch (to.GetOperandSize())
@@ -99,7 +93,6 @@ namespace x86Emitter
 		}
 		else if (imm == (sptr)(u32)imm || !to.IsWide())
 		{
-			// Note: MOV does not have (reg16/32,imm8) forms.
 			u8 opcode = (to_.Is8BitOp() ? 0xb0 : 0xb8) | to_.Id;
 			xOpAccWrite(to_.GetPrefix16(), opcode, 0, to_);
 			to_.xWriteImm(imm);
@@ -129,14 +122,8 @@ namespace x86Emitter
 
 	const xImpl_MovImm64 xMOV64;
 
-	// --------------------------------------------------------------------------------------
-	//  CMOVcc
-	// --------------------------------------------------------------------------------------
-
 #define ccSane() pxAssertMsg(ccType >= 0 && ccType <= 0x0f, "Invalid comparison type specifier.")
 
-// Macro useful for trapping unwanted use of EBP.
-//#define EbpAssert() pxAssert( to != ebp )
 #define EbpAssert()
 
 
@@ -154,9 +141,6 @@ namespace x86Emitter
 		xOpWrite0F(to->GetPrefix16(), 0x40 | ccType, to, sibsrc);
 	}
 
-	//void xImpl_CMov::operator()( const xDirectOrIndirect32& to, const xDirectOrIndirect32& from ) const { ccSane(); _DoI_helpermess( *this, to, from ); }
-	//void xImpl_CMov::operator()( const xDirectOrIndirect16& to, const xDirectOrIndirect16& from ) const { ccSane(); _DoI_helpermess( *this, to, from ); }
-
 	void xImpl_Set::operator()(const xRegister8& to) const
 	{
 		ccSane();
@@ -167,7 +151,6 @@ namespace x86Emitter
 		ccSane();
 		xOpWrite0F(0x90 | ccType, 0, dest);
 	}
-	//void xImpl_Set::operator()( const xDirectOrIndirect8& dest ) const		{ ccSane(); _DoI_helpermess( *this, dest ); }
 
 	void xImpl_MovExtend::operator()(const xRegister16or32or64& to, const xRegister8& from) const
 	{
@@ -267,4 +250,4 @@ namespace x86Emitter
 	const xImpl_Set xSETPE = {Jcc_ParityEven};
 	const xImpl_Set xSETPO = {Jcc_ParityOdd};
 
-} // end namespace x86Emitter
+}

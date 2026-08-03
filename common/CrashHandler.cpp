@@ -104,7 +104,6 @@ static void WriteMinidumpAndCallstack(PEXCEPTION_POINTERS exi)
 	wchar_t filename[1024] = {};
 	GenerateCrashFilename(filename, std::size(filename), s_write_directory.empty() ? nullptr : s_write_directory.c_str(), L"txt");
 
-	// might fail
 	HANDLE hFile = CreateFileW(filename, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, 0, nullptr);
 	if (exi && hFile != INVALID_HANDLE_VALUE)
 	{
@@ -144,20 +143,15 @@ static void WriteMinidumpAndCallstack(PEXCEPTION_POINTERS exi)
 
 static LONG NTAPI ExceptionHandler(PEXCEPTION_POINTERS exi)
 {
-	// if the debugger is attached, or we're recursively crashing, let it take care of it.
 	if (!s_in_crash_handler)
 		WriteMinidumpAndCallstack(exi);
 
-	// returning EXCEPTION_CONTINUE_SEARCH makes sense, except for the fact that it seems to leave zombie processes
-	// around. instead, force ourselves to terminate.
 	TerminateProcess(GetCurrentProcess(), 0xFEFEFEFEu);
 	return EXCEPTION_CONTINUE_SEARCH;
 }
 
 bool CrashHandler::Install()
 {
-	// load dbghelp at install/startup, that way we're not LoadLibrary()'ing after a crash
-	// .. because that probably wouldn't go down well.
 	HMODULE mod = StackWalker::LoadDbgHelpLibrary();
 	if (mod)
 		s_dbghelp_module.Adopt(mod);
@@ -208,13 +202,12 @@ namespace CrashHandler
 	static bool s_in_signal_handler = false;
 
 	static backtrace_state* s_backtrace_state = nullptr;
-} // namespace CrashHandler
+}
 
 const char* CrashHandler::GetSignalName(int signal_no)
 {
 	switch (signal_no)
 	{
-		// Don't need to list all of them, there's only a couple we register.
 		// clang-format off
 		case SIGSEGV: return "SIGSEGV";
 		case SIGBUS: return "SIGBUS";
@@ -246,8 +239,6 @@ void CrashHandler::AppendToBuffer(BacktraceBuffer* buf, const char* format, ...)
 	std::va_list ap;
 	va_start(ap, format);
 
-	// Hope this doesn't allocate memory... it *can*, but hopefully unlikely since
-	// it won't be the first call, and we're providing the buffer.
 	if (buf->size > 0 && buf->used < (buf->size - 1))
 	{
 		const int written = std::vsnprintf(buf->buffer + buf->used, buf->size - buf->used, format, ap);
@@ -297,7 +288,6 @@ void CrashHandler::CrashSignalHandler(int signal, siginfo_t* siginfo, void* ctx)
 {
 	std::unique_lock lock(s_crash_mutex);
 
-	// If we crash somewhere in libbacktrace, don't bother trying again.
 	if (!s_in_signal_handler)
 	{
 		s_in_signal_handler = true;
@@ -319,7 +309,6 @@ void CrashHandler::CrashSignalHandler(int signal, siginfo_t* siginfo, void* ctx)
 
 	lock.unlock();
 
-	// We can't continue from here. Just bail out and dump core.
 	std::fputs("Aborting application.\n", stderr);
 	std::fflush(stderr);
 	std::abort();
@@ -371,7 +360,6 @@ void CrashHandler::WriteDumpForCaller()
 
 void CrashHandler::CrashSignalHandler(int signal, siginfo_t* siginfo, void* ctx)
 {
-	// We can't continue from here. Just bail out and dump core.
 	std::fputs("Aborting application.\n", stderr);
 	std::fflush(stderr);
 	std::abort();

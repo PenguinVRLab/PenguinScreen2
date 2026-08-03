@@ -62,10 +62,6 @@ void DebuggerSettingsManager::loadGameSettings(BreakpointModel* bpModel)
 		return;
 	}
 
-	// Breakpoint descriptions were added at debugger settings file version 0.01. If loading
-	// saved breakpoints from a previous version (only 0.00 existed prior), the breakpoints will be
-	// missing a description. This code will add in an empty description so that the previous
-	// version, 0.00, is compatible with 0.01.
 	bool isMissingDescription = false;
 	const QJsonValue savedVersionValue = loadGameSettingsJSON().value("Version");
 	if (!savedVersionValue.isUndefined())
@@ -84,7 +80,6 @@ void DebuggerSettingsManager::loadGameSettings(BreakpointModel* bpModel)
 		}
 		QJsonObject rowObject = rowValue.toObject();
 
-		// Add empty description for saved breakpoints from debugger settings versions prior to 0.01
 		if (isMissingDescription)
 		{
 			rowObject.insert(QString("DESCRIPTION"), QJsonValue(""));

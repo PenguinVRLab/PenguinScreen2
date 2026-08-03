@@ -65,7 +65,7 @@ void DeviceProxy::InputDeviceDisconnected(USBDevice* dev, const std::string_view
 void RegisterDevice::Register()
 {
 	auto& inst = RegisterDevice::instance();
-	if (inst.Map().size()) // FIXME Don't clear proxies, singstar keeps a copy to uninit audio
+	if (inst.Map().size())
 		return;
 	inst.Add(DEVTYPE_PAD, new usb_pad::PadDevice());
 	inst.Add(DEVTYPE_MSD, new usb_msd::MsdDevice());

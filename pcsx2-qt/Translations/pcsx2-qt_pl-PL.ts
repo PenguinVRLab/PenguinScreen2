@@ -1560,11 +1560,6 @@ Pozycja w tabeli wyników: {1} z {2}</translation>
       <translation>Użyj selektora zapisu stanu gry</translation>
     </message>
     <message>
-      <location filename="../Settings/AdvancedSettingsWidget.ui" line="505"/>
-      <source>PINE Settings</source>
-      <translation>Ustawienia PINE</translation>
-    </message>
-    <message>
       <location filename="../Settings/AdvancedSettingsWidget.ui" line="527"/>
       <source>Slot:</source>
       <translation>Gniazdo:</translation>

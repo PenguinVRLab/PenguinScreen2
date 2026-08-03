@@ -20,7 +20,6 @@
 
 using namespace std::string_view_literals;
 
-// Dummy objects, need to get rid of them...
 ConsoleLogWriter<LOGLEVEL_INFO> Console;
 ConsoleLogWriter<LOGLEVEL_DEV> DevCon;
 
@@ -63,7 +62,7 @@ namespace Log
 	static HANDLE s_hConsoleStdOut = NULL;
 	static HANDLE s_hConsoleStdErr = NULL;
 #endif
-} // namespace Log
+}
 
 float Log::GetCurrentMessageTime()
 {
@@ -73,27 +72,27 @@ float Log::GetCurrentMessageTime()
 __ri void Log::WriteToConsole(LOGLEVEL level, ConsoleColors color, std::string_view message)
 {
 	static constexpr std::string_view s_ansi_color_codes[ConsoleColors_Count] = {
-		"\033[0m"sv, // default
-		"\033[30m\033[1m"sv, // black
-		"\033[32m"sv, // green
-		"\033[31m"sv, // red
-		"\033[34m"sv, // blue
-		"\033[35m"sv, // magenta
-		"\033[35m"sv, // orange (FIXME)
-		"\033[37m"sv, // gray
-		"\033[36m"sv, // cyan
-		"\033[33m"sv, // yellow
-		"\033[37m"sv, // white
-		"\033[30m\033[1m"sv, // strong black
-		"\033[31m\033[1m"sv, // strong red
-		"\033[32m\033[1m"sv, // strong green
-		"\033[34m\033[1m"sv, // strong blue
-		"\033[35m\033[1m"sv, // strong magenta
-		"\033[35m\033[1m"sv, // strong orange (FIXME)
-		"\033[37m\033[1m"sv, // strong gray
-		"\033[36m\033[1m"sv, // strong cyan
-		"\033[33m\033[1m"sv, // strong yellow
-		"\033[37m\033[1m"sv, // strong white
+		"\033[0m"sv,
+		"\033[30m\033[1m"sv,
+		"\033[32m"sv,
+		"\033[31m"sv,
+		"\033[34m"sv,
+		"\033[35m"sv,
+		"\033[35m"sv,
+		"\033[37m"sv,
+		"\033[36m"sv,
+		"\033[33m"sv,
+		"\033[37m"sv,
+		"\033[30m\033[1m"sv,
+		"\033[31m\033[1m"sv,
+		"\033[32m\033[1m"sv,
+		"\033[34m\033[1m"sv,
+		"\033[35m\033[1m"sv,
+		"\033[35m\033[1m"sv,
+		"\033[37m\033[1m"sv,
+		"\033[36m\033[1m"sv,
+		"\033[33m\033[1m"sv,
+		"\033[37m\033[1m"sv,
 	};
 
 	static constexpr size_t BUFFER_SIZE = 512;
@@ -122,7 +121,6 @@ __ri void Log::WriteToConsole(LOGLEVEL level, ConsoleColors color, std::string_v
 #ifdef _WIN32
 	const HANDLE hOutput = (level <= LOGLEVEL_WARNING) ? s_hConsoleStdErr : s_hConsoleStdOut;
 
-	// Convert to UTF-16 first so Unicode characters display correctly. NT is going to do it anyway...
 	wchar_t wbuf[BUFFER_SIZE];
 	wchar_t* wmessage_buf = wbuf;
 	int wmessage_buflen = static_cast<int>(std::size(wbuf) - 1);
@@ -167,22 +165,18 @@ void Log::SetConsoleOutputLevel(LOGLEVEL level)
 	if (was_enabled == now_enabled)
 		return;
 
-	// Worst that happens here is we write to a bad handle..
-
 #if defined(_WIN32)
 	static constexpr auto enable_virtual_terminal_processing = [](HANDLE hConsole) {
 		DWORD old_mode;
 		if (!GetConsoleMode(hConsole, &old_mode))
 			return;
 
-		// already enabled?
 		if (old_mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING)
 			return;
 
 		SetConsoleMode(hConsole, old_mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
 	};
 
-	// On windows, no console is allocated by default on a windows based application
 	static bool console_was_allocated = false;
 	static HANDLE old_stdin = NULL;
 	static HANDLE old_stdout = NULL;
@@ -196,7 +190,6 @@ void Log::SetConsoleOutputLevel(LOGLEVEL level)
 
 		if (!old_stdout)
 		{
-			// Attach to the parent console if we're running from a command window
 			if (!AttachConsole(ATTACH_PARENT_PROCESS) && !AllocConsole())
 				return;
 
@@ -251,7 +244,6 @@ __ri void Log::WriteToDebug(LOGLEVEL level, ConsoleColors color, std::string_vie
 #ifdef _WIN32
 	static constexpr size_t BUFFER_SIZE = 512;
 
-	// Convert to UTF-16 first so Unicode characters display correctly. NT is going to do it anyway...
 	wchar_t wbuf[BUFFER_SIZE];
 	wchar_t* wmessage_buf = wbuf;
 	int wmessage_buflen = static_cast<int>(std::size(wbuf) - 1);
@@ -418,9 +410,7 @@ __ri void Log::UpdateMaxLevel()
 
 void Log::ExecuteCallbacks(LOGLEVEL level, ConsoleColors color, std::string_view message)
 {
-	// TODO: Cache the message time.
 
-	// Split newlines into separate messages.
 	std::string_view::size_type start_pos = 0;
 	if (std::string_view::size_type end_pos = message.find('\n'); end_pos != std::string::npos) [[unlikely]]
 	{
@@ -453,7 +443,6 @@ void Log::ExecuteCallbacks(LOGLEVEL level, ConsoleColors color, std::string_view
 
 	if (level <= s_host_level)
 	{
-		// double check in case of race here
 		const HostCallbackType callback = s_host_callback;
 		if (callback)
 			s_host_callback(level, color, message);

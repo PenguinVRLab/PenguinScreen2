@@ -21,17 +21,17 @@
 
 #pragma pack(1)
 struct DECI2_HEADER {
-	u16		length,		//+00
-			_pad,		//+02
-			protocol;	//+04
-	char	source,		//+06
-			destination;//+07
-};			//=08
+	u16		length,
+			_pad,
+			protocol;
+	char	source,
+			destination;
+};
 
 struct DECI2_DBGP_BRK{
-	u32	address,			//+00
-		count;				//+04
-};			//=08
+	u32	address,
+		count;
+};
 #pragma pack()
 
 #define STOP	0
@@ -44,7 +44,6 @@ extern s32 runCode, runCount;
 extern Threading::KernelSemaphore* runEvent;
 
 extern s32		connected;
-													//when add linux code this might change
 
 int	writeData(const u8 *result);
 void	exchangeSD(DECI2_HEADER *h);

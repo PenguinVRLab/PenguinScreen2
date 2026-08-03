@@ -1558,11 +1558,6 @@ Līderu saraksta pozīcija: {1} no {2}</translation>
       <translation>Izmantot saglabāšanas stāvokļa atlasītāju</translation>
     </message>
     <message>
-      <location filename="../Settings/AdvancedSettingsWidget.ui" line="505"/>
-      <source>PINE Settings</source>
-      <translation>PINE Iestatījumi</translation>
-    </message>
-    <message>
       <location filename="../Settings/AdvancedSettingsWidget.ui" line="527"/>
       <source>Slot:</source>
       <translation>Slots:</translation>

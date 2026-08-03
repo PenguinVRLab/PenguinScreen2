@@ -17,32 +17,32 @@ class PadDualshock2 final : public PadBase
 public:
 	enum Inputs
 	{
-		PAD_UP, // Directional pad up
-		PAD_RIGHT, // Directional pad right
-		PAD_DOWN, // Directional pad down
-		PAD_LEFT, // Directional pad left
-		PAD_TRIANGLE, // Triangle button 
-		PAD_CIRCLE, // Circle button 
-		PAD_CROSS, // Cross button 
-		PAD_SQUARE, // Square button 
-		PAD_SELECT, // Select button
-		PAD_START, // Start button
-		PAD_L1, // L1 button
-		PAD_L2, // L2 button
-		PAD_R1, // R1 button
-		PAD_R2, // R2 button
-		PAD_L3, // Left joystick button (L3)
-		PAD_R3, // Right joystick button (R3)
-		PAD_ANALOG, // Analog mode toggle
-		PAD_PRESSURE, // Pressure modifier
-		PAD_L_UP, // Left joystick (Up) 
-		PAD_L_RIGHT, // Left joystick (Right) 
-		PAD_L_DOWN, // Left joystick (Down) 
-		PAD_L_LEFT, // Left joystick (Left) 
-		PAD_R_UP, // Right joystick (Up) 
-		PAD_R_RIGHT, // Right joystick (Right) 
-		PAD_R_DOWN, // Right joystick (Down) 
-		PAD_R_LEFT, // Right joystick (Left) 
+		PAD_UP,
+		PAD_RIGHT,
+		PAD_DOWN,
+		PAD_LEFT,
+		PAD_TRIANGLE,
+		PAD_CIRCLE,
+		PAD_CROSS,
+		PAD_SQUARE,
+		PAD_SELECT,
+		PAD_START,
+		PAD_L1,
+		PAD_L2,
+		PAD_R1,
+		PAD_R2,
+		PAD_L3,
+		PAD_R3,
+		PAD_ANALOG,
+		PAD_PRESSURE,
+		PAD_L_UP,
+		PAD_L_RIGHT,
+		PAD_L_DOWN,
+		PAD_L_LEFT,
+		PAD_R_UP,
+		PAD_R_RIGHT,
+		PAD_R_DOWN,
+		PAD_R_LEFT,
 		LENGTH,
 	};
 
@@ -63,9 +63,6 @@ private:
 
 	u32 buttons = 0xffffffffu;
 	Analogs analogs;
-	// Analog button can be held without changing its state.
-	// We track here if it is currently held down, to avoid flipping in
-	// and out of analog mode every frame.
 	bool analogPressed = false;
 	bool commandStage = false;
 	u32 responseBytes = 0;
@@ -73,37 +70,30 @@ private:
 	float axisScale = 1.0f;
 	float axisDeadzone = 0.0f;
 	std::array<float, 2> vibrationScale = {1.0f, 1.0f};
-	// When the pressure modifier binding is activated, this is multiplied against
-	// all values in pressures, to artificially reduce pressures and give players
-	// a way to simulate pressure sensitive controls.
 	float pressureModifier = 0.5f;
 	float buttonDeadzone = 0.0f;
-	// Used to store the last vibration mapping request the PS2 made for the small motor.
 	u8 smallMotorLastConfig = 0xff;
-	// Used to store the last vibration mapping request the PS2 made for the large motor.
 	u8 largeMotorLastConfig = 0xff;
 
-	// Since we reordered the buttons for better UI, we need to remap them here.
 	static constexpr std::array<u8, Inputs::LENGTH> bitmaskMapping = {{
-		12, // PAD_UP
-		13, // PAD_RIGHT
-		14, // PAD_DOWN
-		15, // PAD_LEFT
-		4, // PAD_TRIANGLE
-		5, // PAD_CIRCLE
-		6, // PAD_CROSS
-		7, // PAD_SQUARE
-		8, // PAD_SELECT
-		11, // PAD_START
-		2, // PAD_L1
-		0, // PAD_L2
-		3, // PAD_R1
-		1, // PAD_R2
-		9, // PAD_L3
-		10, // PAD_R3
-		16, // PAD_ANALOG
-		17, // PAD_PRESSURE
-		// remainder are analogs and not used here
+		12,
+		13,
+		14,
+		15,
+		4,
+		5,
+		6,
+		7,
+		8,
+		11,
+		2,
+		0,
+		3,
+		1,
+		9,
+		10,
+		16,
+		17,
 	}};
 
 	void ConfigLog();

@@ -31,18 +31,6 @@ using namespace PacketReader::IP::UDP;
 
 namespace Sessions
 {
-	/*
-	 * The default UDP_Session backend don't bind to the src port the PS2 uses.
-	 * Some games, however, sends the response to a set port, rather than the message source port 
-	 * A set of heuristics are used to determine when we should bind the port, these are;
-	 * Any broadcast & multicast packet, and any packet where the src and dst ports are close to each other
-	 * UDP_FixedPort manages the lifetime of socket bound to a specific port, and shares that socket
-	 * with any UDP_Sessions created from it.
-	 * For a UDP_Session with a parent UDP_FixedPort, packets are sent from the UDP_Session, but received
-	 * by the UDP_FixedPort, with the UDP_FixedPort asking each UDP_Session associated with it whether 
-	 * it can accept the received packet, broadcast/multicast will accept eveything, while unicast sessions
-	 * only accept packets from the address it sent to
-	 */
 
 	UDP_FixedPort::UDP_FixedPort(ConnectionKey parKey, IP_Address parAdapterIP, u16 parPort)
 		: BaseSession(parKey, parAdapterIP)
@@ -59,7 +47,7 @@ namespace Sessions
 			return;
 		}
 
-		constexpr int broadcastEnable = true; // BOOL on Windows
+		constexpr int broadcastEnable = true;
 		const int ret = setsockopt(client, SOL_SOCKET, SO_BROADCAST, reinterpret_cast<const char*>(&broadcastEnable), sizeof(broadcastEnable));
 
 		if (ret == SOCKET_ERROR)
@@ -84,7 +72,6 @@ namespace Sessions
 
 		if (!success)
 		{
-			// See Reset() for why we copy the vector.
 			std::vector<UDP_BaseSession*> connectionsCopy;
 			{
 				std::lock_guard numberlock(connectionSentry);
@@ -94,13 +81,11 @@ namespace Sessions
 
 			if (connectionsCopy.size() == 0)
 			{
-				// Can close immediately.
 				RaiseEventConnectionClosed();
 				return std::nullopt;
 			}
 			else
 			{
-				// Need to wait for child connections to close.
 				for (size_t i = 0; i < connectionsCopy.size(); i++)
 					connectionsCopy[i]->ForceClose();
 
@@ -132,12 +117,6 @@ namespace Sessions
 
 	void UDP_FixedPort::Reset()
 	{
-		/*
-		 * Reseting a session may cause that session to close itself,
-		 * when that happens, the connections vector gets modified via our close handler.
-		 * Duplicate the vector to avoid iterating over a modified collection,
-		 * this also avoids the issue of recursive locking when our close handler takes a lock.
-		 */
 		std::vector<UDP_BaseSession*> connectionsCopy;
 		{
 			std::lock_guard numberlock(connectionSentry);
@@ -150,7 +129,6 @@ namespace Sessions
 
 	UDP_Session* UDP_FixedPort::NewClientSession(ConnectionKey parNewKey, bool parIsBrodcast, bool parIsMulticast)
 	{
-		// Lock the whole function so we can't race between the open check and creating the session
 		std::lock_guard numberlock(connectionSentry);
 		if (!open.load())
 			return nullptr;
@@ -193,4 +171,4 @@ namespace Sessions
 			client = INVALID_SOCKET;
 		}
 	}
-} // namespace Sessions
+}

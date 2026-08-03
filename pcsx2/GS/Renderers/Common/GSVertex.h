@@ -14,11 +14,11 @@ struct alignas(32) GSVertex
 	{
 		struct
 		{
-			GIFRegST ST;       // S:0, T:4
-			GIFRegRGBAQ RGBAQ; // RGBA:8, Q:12
-			GIFRegXYZ XYZ;     // XY:16, Z:20
-			union { u32 UV; struct { u16 U, V; }; }; // UV:24
-			u32 FOG;        // FOG:28
+			GIFRegST ST;
+			GIFRegRGBAQ RGBAQ;
+			GIFRegXYZ XYZ;
+			union { u32 UV; struct { u16 U, V; }; };
+			u32 FOG;
 		};
 
 #if defined(ARCH_X86)

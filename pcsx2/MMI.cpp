@@ -8,14 +8,6 @@ namespace R5900 {
 namespace Interpreter {
 namespace OpcodeImpl {
 
-	/////////////////////////////////////////////////////////////////
-	// Non-MMI Instructions!
-	//
-	// Several instructions in the MMI opcode class are actually just regular
-	// instructions which have been added to "extend" the R5900's instruction
-	// set.  They're here, because if not here they'd be homeless.
-	//  - The Pcsx2 team, doing their part to fight homelessness
-
 	void MADD() {
 		s64 temp = (s64)((u64)cpuRegs.LO.UL[0] | ((u64)cpuRegs.HI.UL[0] << 32)) +
 				  ((s64)cpuRegs.GPR.r[_Rs_].SL[0] * (s64)cpuRegs.GPR.r[_Rt_].SL[0]);
@@ -77,7 +69,6 @@ namespace OpcodeImpl {
 	void MULT1() {
 		s64 temp = (s64)cpuRegs.GPR.r[_Rs_].SL[0] * cpuRegs.GPR.r[_Rt_].SL[0];
 
-		// Sign-extend into 64 bits:
 		cpuRegs.LO.SD[1] = (s32)(temp & 0xffffffff);
 		cpuRegs.HI.SD[1] = (s32)(temp >> 32);
 
@@ -87,7 +78,6 @@ namespace OpcodeImpl {
 	void MULTU1() {
 		u64 tempu = (u64)cpuRegs.GPR.r[_Rs_].UL[0] * cpuRegs.GPR.r[_Rt_].UL[0];
 
-		// According to docs, sign-extend into 64 bits even though it's an unsigned mult.
 		cpuRegs.LO.SD[1] = (s32)(tempu & 0xffffffff);
 		cpuRegs.HI.SD[1] = (s32)(tempu >> 32);
 
@@ -116,8 +106,6 @@ namespace OpcodeImpl {
 	{
 		if (cpuRegs.GPR.r[_Rt_].UL[0] != 0)
 		{
-			// note: DIVU has no sign extension when assigning back to 64 bits
-			// note 2: reference material strongly disagrees. (air)
 			cpuRegs.LO.SD[1] = (s32)(cpuRegs.GPR.r[_Rs_].UL[0] / cpuRegs.GPR.r[_Rt_].UL[0]);
 			cpuRegs.HI.SD[1] = (s32)(cpuRegs.GPR.r[_Rs_].UL[0] % cpuRegs.GPR.r[_Rt_].UL[0]);
 		}
@@ -130,13 +118,10 @@ namespace OpcodeImpl {
 
 namespace MMI {
 
-//*****************MMI OPCODES*********************************
-
 void PLZCW() {
 	if (!_Rd_)
 		return;
 
-	// Return the leading sign bits, excluding the original bit
 	cpuRegs.GPR.r[_Rd_].UL[0] = Common::CountLeadingSignBits(cpuRegs.GPR.r[_Rs_].SL[0]) - 1;
 	cpuRegs.GPR.r[_Rd_].UL[1] = Common::CountLeadingSignBits(cpuRegs.GPR.r[_Rs_].SL[1]) - 1;
 }
@@ -152,21 +137,21 @@ void PMFHL() {
 	if (!_Rd_) return;
 
 	switch (_Sa_) {
-		case 0x00: // LW
+		case 0x00:
 			cpuRegs.GPR.r[_Rd_].UL[0] = cpuRegs.LO.UL[0];
 			cpuRegs.GPR.r[_Rd_].UL[1] = cpuRegs.HI.UL[0];
 			cpuRegs.GPR.r[_Rd_].UL[2] = cpuRegs.LO.UL[2];
 			cpuRegs.GPR.r[_Rd_].UL[3] = cpuRegs.HI.UL[2];
 			break;
 
-		case 0x01: // UW
+		case 0x01:
 			cpuRegs.GPR.r[_Rd_].UL[0] = cpuRegs.LO.UL[1];
 			cpuRegs.GPR.r[_Rd_].UL[1] = cpuRegs.HI.UL[1];
 			cpuRegs.GPR.r[_Rd_].UL[2] = cpuRegs.LO.UL[3];
 			cpuRegs.GPR.r[_Rd_].UL[3] = cpuRegs.HI.UL[3];
 			break;
 
-		case 0x02: // SLW
+		case 0x02:
 			{
 				s64 TempS64 = ((u64)cpuRegs.HI.UL[0] << 32) | (u64)cpuRegs.LO.UL[0];
 
@@ -190,7 +175,7 @@ void PMFHL() {
 			}
 			break;
 
-		case 0x03: // LH
+		case 0x03:
 			cpuRegs.GPR.r[_Rd_].US[0] = cpuRegs.LO.US[0];
 			cpuRegs.GPR.r[_Rd_].US[1] = cpuRegs.LO.US[2];
 			cpuRegs.GPR.r[_Rd_].US[2] = cpuRegs.HI.US[0];
@@ -201,7 +186,7 @@ void PMFHL() {
 			cpuRegs.GPR.r[_Rd_].US[7] = cpuRegs.HI.US[6];
 			break;
 
-		case 0x04: // SH
+		case 0x04:
 			PMFHL_CLAMP(cpuRegs.GPR.r[_Rd_].US[0], cpuRegs.LO.UL[0]);
 			PMFHL_CLAMP(cpuRegs.GPR.r[_Rd_].US[1], cpuRegs.LO.UL[1]);
 			PMFHL_CLAMP(cpuRegs.GPR.r[_Rd_].US[2], cpuRegs.HI.UL[0]);
@@ -291,9 +276,6 @@ void PSRAW() {
 
 	_PSRAW(0); _PSRAW(1); _PSRAW(2); _PSRAW(3);
 }
-
-//*****************END OF MMI OPCODES**************************
-//*************************MMI0 OPCODES************************
 
 static __fi void _PADDW(int n)
 {
@@ -586,7 +568,7 @@ __fi void  _PADDSB(int n)
 
 	if (sTemp16 > 0x7F)
 		cpuRegs.GPR.r[_Rd_].UC[n] = 0x7F;
-	else if (sTemp16 < /*(s16)0xff80*/(s16)-128) // be sure
+	else if (sTemp16 < (s16)-128)
 		cpuRegs.GPR.r[_Rd_].UC[n] = 0x80;
 	else
 		cpuRegs.GPR.r[_Rd_].UC[n] = (s8)sTemp16;
@@ -607,7 +589,7 @@ static __fi void _PSUBSB( u8 n )
 
 	if (sTemp16 >= 0x7F)
 		cpuRegs.GPR.r[_Rd_].UC[n] = 0x7F;
-	else if (sTemp16 < /*(s16)0xff80*/(s16)-128) // be sure
+	else if (sTemp16 < (s16)-128)
 		cpuRegs.GPR.r[_Rd_].UC[n] = 0x80;
 	else
 		cpuRegs.GPR.r[_Rd_].UC[n] = (s8)sTemp16;
@@ -705,13 +687,10 @@ void PPAC5() {
 	_PPAC5(0); _PPAC5(1); _PPAC5(2); _PPAC5(3);
 }
 
-//***END OF MMI0 OPCODES******************************************
-//**********MMI1 OPCODES**************************************
-
 static __fi void _PABSW(int n)
 {
 	if (cpuRegs.GPR.r[_Rt_].UL[n] == 0x80000000)
-		cpuRegs.GPR.r[_Rd_].UL[n] = 0x7fffffff; //clamp
+		cpuRegs.GPR.r[_Rd_].UL[n] = 0x7fffffff;
 	else if (cpuRegs.GPR.r[_Rt_].SL[n] < 0)
 		cpuRegs.GPR.r[_Rd_].UL[n] = - cpuRegs.GPR.r[_Rt_].SL[n];
 	else
@@ -762,7 +741,7 @@ void PADSBH() {
 static __fi void _PABSH(int n)
 {
 	if (cpuRegs.GPR.r[_Rt_].US[n] == 0x8000)
-		cpuRegs.GPR.r[_Rd_].US[n] = 0x7fff; //clamp
+		cpuRegs.GPR.r[_Rd_].US[n] = 0x7fff;
 	else if (cpuRegs.GPR.r[_Rt_].SS[n] < 0)
 		cpuRegs.GPR.r[_Rd_].US[n] = - cpuRegs.GPR.r[_Rt_].SS[n];
 	else
@@ -982,8 +961,7 @@ void PEXTUB() {
 	cpuRegs.GPR.r[_Rd_].UC[15] = Rs.UC[15];
 }
 
-//int saZero = 0;
-void QFSRV() {				// JayteeMaster: changed a bit to avoid screw up
+void QFSRV() {
 	GPR_reg Rd;
 	if (!_Rd_) return;
 
@@ -991,36 +969,17 @@ void QFSRV() {				// JayteeMaster: changed a bit to avoid screw up
 	if (sa_amt == 0) {
 		cpuRegs.GPR.r[_Rd_].UD[0] = cpuRegs.GPR.r[_Rt_].UD[0];
 		cpuRegs.GPR.r[_Rd_].UD[1] = cpuRegs.GPR.r[_Rt_].UD[1];
-		//saZero++;
-		//if( saZero >= 388800 )
-			//Console.WriteLn( "SA Is Zero, Bitch: %d zeros and counting.", saZero );
 	} else {
-		//Console.WriteLn( "SA Properly Valued at: %d (after %d zeros)", sa_amt, saZero );
-		//saZero = 0;
 		if (sa_amt < 64) {
-			/*
-			cpuRegs.GPR.r[_Rd_].UD[0] = cpuRegs.GPR.r[_Rt_].UD[0] >> sa_amt;
-			cpuRegs.GPR.r[_Rd_].UD[1] = cpuRegs.GPR.r[_Rt_].UD[1] >> sa_amt;
-			cpuRegs.GPR.r[_Rd_].UD[0]|= cpuRegs.GPR.r[_Rt_].UD[1] << (64 - sa_amt);
-			cpuRegs.GPR.r[_Rd_].UD[1]|= cpuRegs.GPR.r[_Rs_].UD[0] << (64 - sa_amt);
-			*/
 			Rd.UD[0] = cpuRegs.GPR.r[_Rt_].UD[0] >> sa_amt;
 			Rd.UD[1] = cpuRegs.GPR.r[_Rt_].UD[1] >> sa_amt;
 			Rd.UD[0]|= cpuRegs.GPR.r[_Rt_].UD[1] << (64 - sa_amt);
 			Rd.UD[1]|= cpuRegs.GPR.r[_Rs_].UD[0] << (64 - sa_amt);
 			cpuRegs.GPR.r[_Rd_] = Rd;
 		} else {
-			/*
-			cpuRegs.GPR.r[_Rd_].UD[0] = cpuRegs.GPR.r[_Rt_].UD[1] >> (sa_amt - 64);
-			cpuRegs.GPR.r[_Rd_].UD[1] = cpuRegs.GPR.r[_Rs_].UD[0] >> (sa_amt - 64);
-			cpuRegs.GPR.r[_Rd_].UD[0]|= cpuRegs.GPR.r[_Rs_].UD[0] << (128 - sa_amt);
-			cpuRegs.GPR.r[_Rd_].UD[1]|= cpuRegs.GPR.r[_Rs_].UD[1] << (128 - sa_amt);
-			*/
 			Rd.UD[0] = cpuRegs.GPR.r[_Rt_].UD[1] >> (sa_amt - 64);
 			Rd.UD[1] = cpuRegs.GPR.r[_Rs_].UD[0] >> (sa_amt - 64);
 			if (sa_amt != 64) {
-				// A 64 bit shift is equivalent to a 0 bit shift because value is masked
-				// on 6 bits
 				Rd.UD[0]|= cpuRegs.GPR.r[_Rs_].UD[0] << (128u - sa_amt);
 				Rd.UD[1]|= cpuRegs.GPR.r[_Rs_].UD[1] << (128u - sa_amt);
 			}
@@ -1029,23 +988,17 @@ void QFSRV() {				// JayteeMaster: changed a bit to avoid screw up
 	}
 }
 
-//********END OF MMI1 OPCODES***********************************
-
-//*********MMI2 OPCODES***************************************
-
 static __fi void _PMADDW(int dd, int ss)
 {
 	s64 temp = ((s64)cpuRegs.GPR.r[_Rs_].SL[ss] * (s64)cpuRegs.GPR.r[_Rt_].SL[ss]);
 	s64 temp2 = temp + ((s64)cpuRegs.HI.SL[ss] << 32);
 
-	//PlayStation 2 division voodoo, for some reason only the lower half is affected
 	if (ss == 0)
 	{
 		if (((cpuRegs.GPR.r[_Rt_].SL[ss] & 0x7FFFFFFF) == 0 || (cpuRegs.GPR.r[_Rt_].SL[ss] & 0x7FFFFFFF) == 0x7FFFFFFF) &&
 			cpuRegs.GPR.r[_Rs_].SL[ss] != cpuRegs.GPR.r[_Rt_].SL[ss])
 			temp2 += 0x70000000;
 	}
-	//Multiplication error on the PS2 causes this not to be exactly >> 32 (off by 1)
 	temp2 = (s32)(temp2 / 4294967295);
 
 	cpuRegs.LO.SD[dd] = (s32)(temp & 0xffffffff) + cpuRegs.LO.SL[ss];
@@ -1086,7 +1039,6 @@ __fi void  _PMSUBW(int dd, int ss)
 	s64 temp = ((s64)cpuRegs.GPR.r[_Rs_].SL[ss] * (s64)cpuRegs.GPR.r[_Rt_].SL[ss]);
 	s64 temp2 = ((s64)cpuRegs.HI.SL[ss] << 32) - temp;
 
-	//Multiplication error on the PS2 causes this not to be exactly >> 32 (off by 1)
 	temp2 = (s32)(temp2 / 4294967295);
 
 	cpuRegs.LO.SD[dd] = cpuRegs.LO.SL[ss] - (s32)(temp & 0xffffffff);
@@ -1176,39 +1128,33 @@ void PDIVW() {
 void PCPYLD() {
 	if (!_Rd_) return;
 
-	// note: first _Rs_, since the other way when _Rd_ equals
-	// _Rs_ or _Rt_ this would screw up
 	cpuRegs.GPR.r[_Rd_].UD[1] = cpuRegs.GPR.r[_Rs_].UD[0];
 	cpuRegs.GPR.r[_Rd_].UD[0] = cpuRegs.GPR.r[_Rt_].UD[0];
 }
 
-void PMADDH() {			// JayteeMaster: changed a bit to avoid screw up
+void PMADDH() {
 	s32 temp;
 
     temp = cpuRegs.LO.UL[0] + (s32)cpuRegs.GPR.r[_Rs_].SS[0] * (s32)cpuRegs.GPR.r[_Rt_].SS[0];
     cpuRegs.LO.UL[0] = temp;
-    /* if (_Rd_) cpuRegs.GPR.r[_Rd_].UL[0] = temp; */
 
     temp = cpuRegs.LO.UL[1] + (s32)cpuRegs.GPR.r[_Rs_].SS[1] * (s32)cpuRegs.GPR.r[_Rt_].SS[1];
     cpuRegs.LO.UL[1] = temp;
 
     temp = cpuRegs.HI.UL[0] + (s32)cpuRegs.GPR.r[_Rs_].SS[2] * (s32)cpuRegs.GPR.r[_Rt_].SS[2];
     cpuRegs.HI.UL[0] = temp;
-    /* if (_Rd_) cpuRegs.GPR.r[_Rd_].UL[1] = temp; */
 
     temp = cpuRegs.HI.UL[1] + (s32)cpuRegs.GPR.r[_Rs_].SS[3] * (s32)cpuRegs.GPR.r[_Rt_].SS[3];
     cpuRegs.HI.UL[1] = temp;
 
     temp = cpuRegs.LO.UL[2] + (s32)cpuRegs.GPR.r[_Rs_].SS[4] * (s32)cpuRegs.GPR.r[_Rt_].SS[4];
     cpuRegs.LO.UL[2] = temp;
-    /* if (_Rd_) cpuRegs.GPR.r[_Rd_].UL[2] = temp; */
 
     temp = cpuRegs.LO.UL[3] + (s32)cpuRegs.GPR.r[_Rs_].SS[5] * (s32)cpuRegs.GPR.r[_Rt_].SS[5];
     cpuRegs.LO.UL[3] = temp;
 
     temp = cpuRegs.HI.UL[2] + (s32)cpuRegs.GPR.r[_Rs_].SS[6] * (s32)cpuRegs.GPR.r[_Rt_].SS[6];
     cpuRegs.HI.UL[2] = temp;
-    /* if (_Rd_) cpuRegs.GPR.r[_Rd_].UL[3] = temp; */
 
     temp = cpuRegs.HI.UL[3] + (s32)cpuRegs.GPR.r[_Rs_].SS[7] * (s32)cpuRegs.GPR.r[_Rt_].SS[7];
     cpuRegs.HI.UL[3] = temp;
@@ -1222,7 +1168,6 @@ void PMADDH() {			// JayteeMaster: changed a bit to avoid screw up
 
 }
 
-// JayteeMaster: changed a bit to avoid screw up
 __fi void  _PHMADH_LO(int dd, int n)
 {
 	s32 firsttemp =		   (s32)cpuRegs.GPR.r[_Rs_].SS[n+1] * (s32)cpuRegs.GPR.r[_Rt_].SS[n+1];
@@ -1241,7 +1186,7 @@ __fi void  _PHMADH_HI(int dd, int n)
 	cpuRegs.HI.UL[dd+1] = firsttemp;
 }
 
-void PHMADH() {				// JayteeMaster: changed a bit to avoid screw up. Also used 0,2,4,6 instead of 0,1,2,3
+void PHMADH() {
 	_PHMADH_LO(0, 0);
 	_PHMADH_HI(0, 2);
 	_PHMADH_LO(2, 4);
@@ -1268,33 +1213,29 @@ void PXOR() {
 	cpuRegs.GPR.r[_Rd_].UD[1] = cpuRegs.GPR.r[_Rs_].UD[1] ^ cpuRegs.GPR.r[_Rt_].UD[1];
 }
 
-void PMSUBH() {			// JayteeMaster: changed a bit to avoid screw up
+void PMSUBH() {
 	s32 temp;
 
     temp = cpuRegs.LO.UL[0] - (s32)cpuRegs.GPR.r[_Rs_].SS[0] * (s32)cpuRegs.GPR.r[_Rt_].SS[0];
     cpuRegs.LO.UL[0] = temp;
-    /*if (_Rd_) cpuRegs.GPR.r[_Rd_].UL[0] = temp;*/
 
     temp = cpuRegs.LO.UL[1] - (s32)cpuRegs.GPR.r[_Rs_].SS[1] * (s32)cpuRegs.GPR.r[_Rt_].SS[1];
     cpuRegs.LO.UL[1] = temp;
 
     temp = cpuRegs.HI.UL[0] - (s32)cpuRegs.GPR.r[_Rs_].SS[2] * (s32)cpuRegs.GPR.r[_Rt_].SS[2];
     cpuRegs.HI.UL[0] = temp;
-    /*if (_Rd_) cpuRegs.GPR.r[_Rd_].UL[1] = temp;*/
 
     temp = cpuRegs.HI.UL[1] - (s32)cpuRegs.GPR.r[_Rs_].SS[3] * (s32)cpuRegs.GPR.r[_Rt_].SS[3];
     cpuRegs.HI.UL[1] = temp;
 
     temp = cpuRegs.LO.UL[2] - (s32)cpuRegs.GPR.r[_Rs_].SS[4] * (s32)cpuRegs.GPR.r[_Rt_].SS[4];
     cpuRegs.LO.UL[2] = temp;
-    /*if (_Rd_) cpuRegs.GPR.r[_Rd_].UL[2] = temp;*/
 
     temp = cpuRegs.LO.UL[3] - (s32)cpuRegs.GPR.r[_Rs_].SS[5] * (s32)cpuRegs.GPR.r[_Rt_].SS[5];
     cpuRegs.LO.UL[3] = temp;
 
     temp = cpuRegs.HI.UL[2] - (s32)cpuRegs.GPR.r[_Rs_].SS[6] * (s32)cpuRegs.GPR.r[_Rt_].SS[6];
     cpuRegs.HI.UL[2] = temp;
-    /*if (_Rd_) cpuRegs.GPR.r[_Rd_].UL[3] = temp;*/
 
     temp = cpuRegs.HI.UL[3] - (s32)cpuRegs.GPR.r[_Rs_].SS[7] * (s32)cpuRegs.GPR.r[_Rt_].SS[7];
     cpuRegs.HI.UL[3] = temp;
@@ -1307,14 +1248,13 @@ void PMSUBH() {			// JayteeMaster: changed a bit to avoid screw up
 	}
 }
 
-// JayteeMaster: changed a bit to avoid screw up
 static __fi void _PHMSBH_LO(int dd, int n)
 {
 	s32 firsttemp =        (s32)cpuRegs.GPR.r[_Rs_].SS[n+1] * (s32)cpuRegs.GPR.r[_Rt_].SS[n+1];
 	s32 temp = firsttemp - (s32)cpuRegs.GPR.r[_Rs_].SS[n]   * (s32)cpuRegs.GPR.r[_Rt_].SS[n];
 
 	cpuRegs.LO.UL[dd] = temp;
-	cpuRegs.LO.UL[dd+1] = ~firsttemp;  // undocumented behaviour
+	cpuRegs.LO.UL[dd+1] = ~firsttemp;
 }
 static __fi void _PHMSBH_HI(int dd, int n)
 {
@@ -1322,10 +1262,10 @@ static __fi void _PHMSBH_HI(int dd, int n)
 	s32 temp = firsttemp - (s32)cpuRegs.GPR.r[_Rs_].SS[n]   * (s32)cpuRegs.GPR.r[_Rt_].SS[n];
 
 	cpuRegs.HI.UL[dd] = temp;
-	cpuRegs.HI.UL[dd+1] = ~firsttemp;  // undocumented behaviour
+	cpuRegs.HI.UL[dd+1] = ~firsttemp;
 }
 
-void PHMSBH() {		// JayteeMaster: changed a bit to avoid screw up
+void PHMSBH() {
 	_PHMSBH_LO(0, 0);
 	_PHMSBH_HI(0, 2);
 	_PHMSBH_LO(2, 4);
@@ -1370,33 +1310,29 @@ void PREVH () {
 	cpuRegs.GPR.r[_Rd_].US[7] = Rt.US[4];
 }
 
-void PMULTH() {			// JayteeMaster: changed a bit to avoid screw up
+void PMULTH() {
 	s32 temp;
 
     temp = (s32)cpuRegs.GPR.r[_Rs_].SS[0] * (s32)cpuRegs.GPR.r[_Rt_].SS[0];
     cpuRegs.LO.UL[0] = temp;
-    /*if (_Rd_) cpuRegs.GPR.r[_Rd_].UL[0] = temp;*/
 
     temp = (s32)cpuRegs.GPR.r[_Rs_].SS[1] * (s32)cpuRegs.GPR.r[_Rt_].SS[1];
     cpuRegs.LO.UL[1] = temp;
 
     temp = (s32)cpuRegs.GPR.r[_Rs_].SS[2] * (s32)cpuRegs.GPR.r[_Rt_].SS[2];
     cpuRegs.HI.UL[0] = temp;
-    /*if (_Rd_) cpuRegs.GPR.r[_Rd_].UL[1] = temp;*/
 
     temp = (s32)cpuRegs.GPR.r[_Rs_].SS[3] * (s32)cpuRegs.GPR.r[_Rt_].SS[3];
     cpuRegs.HI.UL[1] = temp;
 
     temp = (s32)cpuRegs.GPR.r[_Rs_].SS[4] * (s32)cpuRegs.GPR.r[_Rt_].SS[4];
     cpuRegs.LO.UL[2] = temp;
-    /*if (_Rd_) cpuRegs.GPR.r[_Rd_].UL[2] = temp;*/
 
     temp = (s32)cpuRegs.GPR.r[_Rs_].SS[5] * (s32)cpuRegs.GPR.r[_Rt_].SS[5];
     cpuRegs.LO.UL[3] = temp;
 
     temp = (s32)cpuRegs.GPR.r[_Rs_].SS[6] * (s32)cpuRegs.GPR.r[_Rt_].SS[6];
     cpuRegs.HI.UL[2] = temp;
-    /*if (_Rd_) cpuRegs.GPR.r[_Rd_].UL[3] = temp;*/
 
     temp = (s32)cpuRegs.GPR.r[_Rs_].SS[7] * (s32)cpuRegs.GPR.r[_Rt_].SS[7];
     cpuRegs.HI.UL[3] = temp;
@@ -1455,10 +1391,6 @@ void PROT3W() {
 	cpuRegs.GPR.r[_Rd_].UL[2] = Rt.UL[0];
 	cpuRegs.GPR.r[_Rd_].UL[3] = Rt.UL[3];
 }
-
-//*****END OF MMI2 OPCODES***********************************
-
-//*************************MMI3 OPCODES************************
 
 static __fi void _PMADDUW(int dd, int ss)
 {
@@ -1548,8 +1480,6 @@ void PDIVUW() {
 void PCPYUD() {
 	if (!_Rd_) return;
 
-	// note: first _Rs_, since the other way when _Rd_ equals
-	// _Rs_ or _Rt_ this would screw up
 	cpuRegs.GPR.r[_Rd_].UD[0] = cpuRegs.GPR.r[_Rs_].UD[1];
 	cpuRegs.GPR.r[_Rd_].UD[1] = cpuRegs.GPR.r[_Rt_].UD[1];
 }
@@ -1612,9 +1542,4 @@ void PEXCW() {
 	cpuRegs.GPR.r[_Rd_].UL[3] = Rt.UL[3];
 }
 
-//**********************END OF MMI3 OPCODES********************
-
-// obs:
-// QFSRV not verified
-
-}}} } // end namespace R5900::Interpreter::OpcodeImpl::MMI
+}}} }

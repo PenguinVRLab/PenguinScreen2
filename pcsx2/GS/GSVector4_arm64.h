@@ -165,13 +165,9 @@ public:
 		return v4s;
 	}
 
-	/// Makes Clang think that the whole vector is needed, preventing it from changing shuffles around because it thinks we don't need the whole vector
-	/// Useful for e.g. preventing clang from optimizing shuffles that remove possibly-denormal garbage data from vectors before computing with them
 	__forceinline GSVector4 noopt()
 	{
-		// Note: Clang is currently the only compiler that attempts to optimize vector intrinsics, if that changes in the future the implementation should be updated
 #ifdef __clang__
-		// __asm__("":"+x"(m)::);
 #endif
 		return *this;
 	}
@@ -241,8 +237,6 @@ public:
 		return GSVector4(vrndpq_f32(v4s));
 	}
 
-	// http://jrfonseca.blogspot.com/2008/09/fast-sse2-pow-tables-or-polynomials.html
-
 #define LOG_POLY0(x, c0) GSVector4(c0)
 #define LOG_POLY1(x, c0, c1) (LOG_POLY0(x, c1).madd(x, GSVector4(c0)))
 #define LOG_POLY2(x, c0, c1, c2) (LOG_POLY1(x, c1, c2).madd(x, GSVector4(c0)))
@@ -252,10 +246,6 @@ public:
 
 	__forceinline GSVector4 log2(int precision = 5) const
 	{
-		// NOTE: sign bit ignored, safe to pass negative numbers
-
-		// The idea behind this algorithm is to split the float into two parts, log2(m * 2^e) => log2(m) + log2(2^e) => log2(m) + e,
-		// and then approximate the logarithm of the mantissa (it's 1.x when normalized, a nice short range).
 
 		GSVector4 one = m_one;
 
@@ -265,8 +255,6 @@ public:
 		GSVector4 m = GSVector4::cast((i << 9) >> 9) | one;
 
 		GSVector4 p;
-
-		// Minimax polynomial fit of log2(x)/(x - 1), for x in range [1, 2[
 
 		switch (precision)
 		{
@@ -284,8 +272,6 @@ public:
 				p = LOG_POLY5(m, 3.1157899f, -3.3241990f, 2.5988452f, -1.2315303f, 3.1821337e-1f, -3.4436006e-2f);
 				break;
 		}
-
-		// This effectively increases the polynomial degree by one, but ensures that log2(1) == 0
 
 		p = p * (m - one);
 
@@ -314,12 +300,12 @@ public:
 
 	__forceinline GSVector4 addm(const GSVector4& a, const GSVector4& b) const
 	{
-		return a.madd(b, *this); // *this + a * b
+		return a.madd(b, *this);
 	}
 
 	__forceinline GSVector4 subm(const GSVector4& a, const GSVector4& b) const
 	{
-		return a.nmadd(b, *this); // *this - a * b
+		return a.nmadd(b, *this);
 	}
 
 	__forceinline GSVector4 hadd() const
@@ -382,7 +368,6 @@ public:
 
 	__forceinline GSVector4 blend32(const GSVector4& a, const GSVector4& mask) const
 	{
-		// duplicate sign bit across and bit select
 		const uint32x4_t bitmask = vreinterpretq_u32_s32(vshrq_n_s32(vreinterpretq_s32_f32(mask.v4s), 31));
 		return GSVector4(vbslq_f32(bitmask, a.v4s, v4s));
 	}
@@ -430,7 +415,6 @@ public:
 
 	__forceinline bool alltrue() const
 	{
-		// return mask() == 0xf;
 		return ~(vgetq_lane_u64(vreinterpretq_u64_f32(v4s), 0) & vgetq_lane_u64(vreinterpretq_u64_f32(v4s), 1)) == 0;
 	}
 
@@ -677,7 +661,6 @@ public:
 
 	__forceinline friend GSVector4 operator!=(const GSVector4& v1, const GSVector4& v2)
 	{
-		// NEON has no !=
 		return GSVector4(vreinterpretq_f32_u32(vmvnq_u32(vceqq_f32(v1.v4s, v2.v4s))));
 	}
 

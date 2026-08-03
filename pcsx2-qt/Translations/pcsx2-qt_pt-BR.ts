@@ -1550,11 +1550,6 @@ Posição na Tabela de Classificação: {1} de {2}</translation>
       <translation>Usar o Seletor dos Save States</translation>
     </message>
     <message>
-      <location filename="../Settings/AdvancedSettingsWidget.ui" line="505"/>
-      <source>PINE Settings</source>
-      <translation>Configurações do PINE</translation>
-    </message>
-    <message>
       <location filename="../Settings/AdvancedSettingsWidget.ui" line="527"/>
       <source>Slot:</source>
       <translation>Slot:</translation>

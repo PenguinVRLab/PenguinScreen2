@@ -3,18 +3,6 @@
 
 #pragma once
 
-// Note about terminology:
-// "Patch" in PCSX2 terminology refers to a single pnach style patch line, e.g. `patch=1,EE,001110e0,word,00000000`
-// Such patches can appear in several places:
-//  - At the "patches" folder or on the "patches.zip file inside the 'resources' folder
-//    - UI name: "Patch", Controlled via Per-Game Settings -> Patches
-//  - At the "cheats" folder
-//    - UI name: "Cheats", Controlled via Per-Game Settings -> Cheats -> Enable Cheat
-//  - At GameIndex.yaml inside a [patches] section
-//    - UI name: "Enable Compatibility Patches", controlled via Advanced section -> Enable compatability settings
-// Note: The file name has to be exactly "<Serial>_<CRC>.pnach" (For example "SLPS-25399_CD62245A.pnach")
-// Note #2: the old sytle of cheats are also supported but arent supported by the UI
-
 #include "Config.h"
 
 #include "common/MemoryInterface.h"
@@ -29,22 +17,6 @@ class IOPMemoryInterface;
 
 namespace Patch
 {
-	// "place" is the first number at a pnach line (patch=<place>,...), e.g.:
-	// - patch=1,EE,001110e0,word,00000000 <-- place is 1
-	// - patch=0,EE,0010BC88,word,48468800 <-- place is 0
-	// In PCSX2 it indicates how/when/where the patch line should be applied. If
-	// place is not one of the supported values then the patch line is never applied.
-	// PCSX2 currently supports the following values:
-	// 0 - apply the patch line once on game boot only
-	// 1 - apply the patch line continuously (technically - on every vsync)
-	// 2 - effect of 0 and 1 combined, see below
-	// 3 - apply the patch line once on game boot or when enabled in the GUI
-	// Note:
-	// - while it may seem that a value of 1 does the same as 0, but also later
-	//   continues to apply the patch on every vsync - it's not.
-	//   The current (and past) behavior is that these patches are applied at different
-	//   places at the code, and it's possible, depending on circumstances, that 0 patches
-	//   will get applied before the first vsync and therefore earlier than 1 patches.
 	enum patch_place_type : u8
 	{
 		PPT_ONCE_ON_LOAD = 0,
@@ -88,7 +60,6 @@ namespace Patch
 		u64 data;
 		u8* data_ptr;
 
-		// needed because of the pointer
 		PatchCommand() { std::memset(static_cast<void*>(this), 0, sizeof(*this)); }
 		PatchCommand(const PatchCommand& p) = delete;
 		PatchCommand(PatchCommand&& p)
@@ -139,15 +110,12 @@ namespace Patch
 		std::string description;
 		std::string author;
 
-		// This is only populated if all the patch lines in a given group have
-		// the same place value.
 		std::optional<patch_place_type> place;
 
 		std::string_view GetNamePart() const;
 		std::string_view GetNameParentPart() const;
 	};
 
-	// Config sections/keys to use to enable patches.
 	extern const char* PATCHES_CONFIG_SECTION;
 	extern const char* CHEATS_CONFIG_SECTION;
 	extern const char* PATCH_ENABLE_CONFIG_KEY;
@@ -155,10 +123,8 @@ namespace Patch
 
 	extern std::vector<PatchInfo> GetPatchInfo(const std::string_view serial, u32 crc, bool cheats, bool showAllCRCS, u32* num_unlabelled_patches);
 
-	/// Returns the path to a new cheat/patch pnach for the specified serial and CRC.
 	extern std::string GetPnachFilename(const std::string_view serial, u32 crc, bool cheats);
 
-	/// Reloads cheats/patches. If verbose is set, the number of patches loaded will be shown in the OSD.
 	extern void ReloadPatches(const std::string& serial, u32 crc, bool reload_files, bool reload_enabled_list, bool verbose, bool verbose_if_changed);
 
 	extern void UpdateActivePatches(bool reload_enabled_list, bool verbose, bool verbose_if_changed, bool apply_new_patches);
@@ -166,19 +132,13 @@ namespace Patch
 	extern bool ReloadPatchAffectingOptions();
 	extern void UnloadPatches();
 
-	/// Functions for Dynamic EE patching.
 	extern void LoadDynamicPatches(const std::vector<DynamicPatch>& patches);
 	extern void ApplyDynamicPatches(u32 pc);
 
-	/// Apply all loaded patches that should be applied when the entry point is
-	/// being recompiled.
 	extern void ApplyBootPatches();
 
-	/// Apply all loaded patches that should be applied during vsync.
 	extern void ApplyVsyncPatches();
 
-	/// Apply the patches from the provided list which have place values that
-	/// match the one specified.
 	extern void ApplyPatches(
 		const std::vector<const PatchCommand*>& patches,
 		patch_place_type place,
@@ -190,7 +150,6 @@ namespace Patch
 		MemoryInterface& ee,
 		MemoryInterface& iop);
 
-	// Get the total counts of the active game patches.
 	extern u32 GetActiveGameDBPatchesCount();
 	extern u32 GetActivePatchesCount();
 	extern u32 GetActiveCheatsCount();
@@ -199,4 +158,4 @@ namespace Patch
 	extern bool IsGloballyToggleablePatch(const PatchInfo& patch_info);
 
 	extern const char* PlaceToString(std::optional<patch_place_type> place);
-} // namespace Patch
+}

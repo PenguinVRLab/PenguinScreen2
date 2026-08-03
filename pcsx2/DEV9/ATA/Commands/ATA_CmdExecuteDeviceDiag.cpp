@@ -10,7 +10,6 @@ void ATA::PreCmdExecuteDeviceDiag()
 	regStatus &= ~ATA_STAT_READY;
 	pendingInterrupt = false;
 	dev9.irqcause &= ~ATA_INTR_INTRQ;
-	//dev9.spd.regIntStat &= unchecked((UInt16)~DEV9Header.ATA_INTR_DMA_RDY); //Is this correct?
 }
 
 void ATA::PostCmdExecuteDeviceDiag(bool sendIRQ)
@@ -20,8 +19,6 @@ void ATA::PostCmdExecuteDeviceDiag(bool sendIRQ)
 
 	SetSelectedDevice(0);
 
-	// If Device Diagnostics is performed as part of a reset
-	// then we don't raise an IRQ or set pending interrupt
 	if (sendIRQ)
 	{
 		pendingInterrupt = true;
@@ -30,16 +27,10 @@ void ATA::PostCmdExecuteDeviceDiag(bool sendIRQ)
 	}
 }
 
-//GENRAL FEATURE SET
-
 void ATA::HDD_ExecuteDeviceDiag(bool sendIRQ)
 {
 	PreCmdExecuteDeviceDiag();
-	//Perform Self Diag
-	//Log_Error("ExecuteDeviceDiag");
-	//Would check both drives, but the PS2 would only have 1
 	regError &= ~ATA_ERR_ICRC;
-	//Passed self-Diag
 	regError = (0x01 | (regError & ATA_ERR_ICRC));
 
 	regNsector = 1;

@@ -1550,11 +1550,6 @@ Posición en tabla: {1} de {2}</translation>
       <translation>Usar selector de guardados rápidos</translation>
     </message>
     <message>
-      <location filename="../Settings/AdvancedSettingsWidget.ui" line="505"/>
-      <source>PINE Settings</source>
-      <translation>Ajustes de PINE</translation>
-    </message>
-    <message>
       <location filename="../Settings/AdvancedSettingsWidget.ui" line="527"/>
       <source>Slot:</source>
       <translation>«Slot»:</translation>

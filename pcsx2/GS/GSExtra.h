@@ -9,7 +9,6 @@
 
 #include <utility>
 
-/// Like `memcmp(&a, &b, sizeof(T)) == 0` but faster
 template <typename T>
 __forceinline bool BitEqual(const T& a, const T& b)
 {
@@ -69,9 +68,7 @@ __forceinline bool BitEqual(const T& a, const T& b)
 
 extern Pcsx2Config::GSOptions GSConfig;
 
-// Maximum texture size to skip preload/hash path.
-// This is the width/height from the registers, i.e. not the power of 2.
-static constexpr u32 MAXIMUM_TEXTURE_HASH_CACHE_SIZE = 10; // 1024
+static constexpr u32 MAXIMUM_TEXTURE_HASH_CACHE_SIZE = 10;
 __fi static bool CanCacheTextureSize(u32 tw, u32 th)
 {
 	return (GSConfig.TexturePreloading == TexturePreloadingLevel::Full &&
@@ -80,15 +77,13 @@ __fi static bool CanCacheTextureSize(u32 tw, u32 th)
 
 __fi static bool CanPreloadTextureSize(u32 tw, u32 th)
 {
-	static constexpr u32 MAXIMUM_SIZE_IN_ONE_DIRECTION = 10; // 1024
-	static constexpr u32 MAXIMUM_SIZE_IN_OTHER_DIRECTION = 8; // 256
-	static constexpr u32 MAXIMUM_SIZE_IN_BOTH_DIRECTIONS = 9; // 512
+	static constexpr u32 MAXIMUM_SIZE_IN_ONE_DIRECTION = 10;
+	static constexpr u32 MAXIMUM_SIZE_IN_OTHER_DIRECTION = 8;
+	static constexpr u32 MAXIMUM_SIZE_IN_BOTH_DIRECTIONS = 9;
 
 	if (GSConfig.TexturePreloading < TexturePreloadingLevel::Partial)
 		return false;
 
-	// We use an area-based approach here. We want to hash long font maps,
-	// like 128x1024 (used in FFX), but skip 1024x512 textures (e.g. Xenosaga).
 	const u32 max_dimension = (tw > th) ? tw : th;
 	const u32 min_dimension = (tw > th) ? th : tw;
 	if (max_dimension <= MAXIMUM_SIZE_IN_BOTH_DIRECTIONS)
@@ -98,28 +93,21 @@ __fi static bool CanPreloadTextureSize(u32 tw, u32 th)
 			min_dimension <= MAXIMUM_SIZE_IN_OTHER_DIRECTION);
 }
 
-// Maximum number of mipmap levels for a texture.
-// PS2 has a max of 7 levels (1 base + 6 mips).
 static constexpr int MAXIMUM_TEXTURE_MIPMAP_LEVELS = 7;
 
-// The maximum number of duplicate frames we can skip presenting for.
 static constexpr u32 MAX_SKIPPED_DUPLICATE_FRAMES = 3;
 
 extern void* GSAllocateWrappedMemory(size_t size, size_t repeat);
 extern void GSFreeWrappedMemory(void* ptr, size_t size, size_t repeat);
 
-/// We want all allocations and pitches to be aligned to 32-bit, regardless of whether we're
-/// SSE4 or AVX2, because of multi-ISA.
 static constexpr u32 VECTOR_ALIGNMENT = 32;
 
-/// Aligns allocation/pitch size to preferred host size.
 template<typename T>
 __fi static T VectorAlign(T value)
 {
 	return Common::AlignUpPow2(value, VECTOR_ALIGNMENT);
 }
 
-/// Returns the maximum alpha value across a range of data. Assumes stride is 16 byte aligned.
 std::pair<u8, u8> GSGetRGBA8AlphaMinMax(const void* data, u32 width, u32 height, u32 stride);
 
 // clang-format off
@@ -128,11 +116,8 @@ std::pair<u8, u8> GSGetRGBA8AlphaMinMax(const void* data, u32 width, u32 height,
 	#define ALIGN_STACK(n) alignas(n) int dummy__; (void)dummy__;
 #else
 	#ifdef __GNUC__
-		// GCC removes the variable as dead code and generates some warnings.
-		// Stack is automatically realigned due to SSE/AVX operations
 		#define ALIGN_STACK(n) (void)0;
 	#else
-		// TODO Check clang behavior
 		#define ALIGN_STACK(n) alignas(n) int dummy__;
 	#endif
 #endif

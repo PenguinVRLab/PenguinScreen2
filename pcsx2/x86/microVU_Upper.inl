@@ -3,10 +3,6 @@
 
 #pragma once
 
-//------------------------------------------------------------------
-// mVUupdateFlags() - Updates status/mac flags
-//------------------------------------------------------------------
-
 #define AND_XYZW ((_XYZW_SS && modXYZW) ? (1) : (mFLAG.doFlag ? (_X_Y_Z_W) : (flipMask[_X_Y_Z_W])))
 #define ADD_XYZW ((_XYZW_SS && modXYZW) ? (_X ? 3 : (_Y ? 2 : (_Z ? 1 : 0))) : 0)
 #define SHIFT_XYZW(gprReg) \
@@ -19,11 +15,10 @@
 
 
 alignas(16) const u32 sse4_compvals[2][4] = {
-	{0x7f7fffff, 0x7f7fffff, 0x7f7fffff, 0x7f7fffff}, //1111
-	{0x7fffffff, 0x7fffffff, 0x7fffffff, 0x7fffffff}, //1111
+	{0x7f7fffff, 0x7f7fffff, 0x7f7fffff, 0x7f7fffff},
+	{0x7fffffff, 0x7fffffff, 0x7fffffff, 0x7fffffff},
 };
 
-// Note: If modXYZW is true, then it adjusts XYZW for Single Scalar operations
 static void mVUupdateFlags(mV, const xmm& reg, const xmm& regT1in = xEmptyReg, const xmm& regT2in = xEmptyReg, bool modXYZW = 1)
 {
 	const x32& mReg = gprT1;
@@ -31,7 +26,6 @@ static void mVUupdateFlags(mV, const xmm& reg, const xmm& regT1in = xEmptyReg, c
 	bool regT1b = regT1in.IsEmpty(), regT2b = false;
 	static const u16 flipMask[16] = {0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15};
 
-	//SysPrintf("Status = %d; Mac = %d\n", sFLAG.doFlag, mFLAG.doFlag);
 	if (!sFLAG.doFlag && !mFLAG.doFlag)
 		return;
 
@@ -46,65 +40,55 @@ static void mVUupdateFlags(mV, const xmm& reg, const xmm& regT1in = xEmptyReg, c
 			regT2 = mVU.regAlloc->allocReg();
 			regT2b = true;
 		}
-		xPSHUF.D(regT2, reg, 0x1B); // Flip wzyx to xyzw
+		xPSHUF.D(regT2, reg, 0x1B);
 	}
 	else
 		regT2 = reg;
 
 	if (sFLAG.doFlag)
 	{
-		mVUallocSFLAGa(sReg, sFLAG.lastWrite); // Get Prev Status Flag
+		mVUallocSFLAGa(sReg, sFLAG.lastWrite);
 		if (sFLAG.doNonSticky)
-			xAND(sReg, 0xfffc00ff); // Clear O,U,S,Z flags
+			xAND(sReg, 0xfffc00ff);
 	}
 
-	//-------------------------Check for Signed flags------------------------------
+	xMOVMSKPS(mReg,  regT2);
+	xXOR.PS  (regT1, regT1);
+	xCMPEQ.PS(regT1, regT2);
+	xMOVMSKPS(gprT2, regT1);
 
-	xMOVMSKPS(mReg,  regT2); // Move the Sign Bits of the t2reg
-	xXOR.PS  (regT1, regT1); // Clear regT1
-	xCMPEQ.PS(regT1, regT2); // Set all F's if each vector is zero
-	xMOVMSKPS(gprT2, regT1); // Used for Zero Flag Calculation
-
-	xAND(mReg, AND_XYZW); // Grab "Is Signed" bits from the previous calculation
+	xAND(mReg, AND_XYZW);
 	xSHL(mReg, 4);
 
-	//-------------------------Check for Zero flags------------------------------
-
-	xAND(gprT2, AND_XYZW); // Grab "Is Zero" bits from the previous calculation
+	xAND(gprT2, AND_XYZW);
 	xOR(mReg, gprT2);
 
-	//-------------------------Overflow Flags-----------------------------------
-	// We can't really do this because of the limited range of x86 and the value MIGHT genuinely be FLT_MAX (x86)
-	// so this will need to remain as a gamefix for the one game that needs it (Superman Returns)
-	// until some sort of soft float implementation.
 	if (sFLAG.doFlag && CHECK_VUOVERFLOWHACK)
 	{
-		//Calculate overflow
-		xAND.PS(regT1, regT2, ptr128[&sse4_compvals[1][0]]); // Remove sign flags (we don't care)
-		xCMPNLT.PS(regT1, ptr128[&sse4_compvals[0][0]]); // Compare if T1 == FLT_MAX
-		xMOVMSKPS(gprT2, regT1); // Grab sign bits  for equal results
-		xAND(gprT2, AND_XYZW); // Grab "Is FLT_MAX" bits from the previous calculation
+		xAND.PS(regT1, regT2, ptr128[&sse4_compvals[1][0]]);
+		xCMPNLT.PS(regT1, ptr128[&sse4_compvals[0][0]]);
+		xMOVMSKPS(gprT2, regT1);
+		xAND(gprT2, AND_XYZW);
 		xForwardJump32 oJMP(Jcc_Zero);
 
 		xOR(sReg, 0x820000);
 		if (mFLAG.doFlag)
 		{
-			xSHL(gprT2, 12); // Add the results to the MAC Flag
+			xSHL(gprT2, 12);
 			xOR(mReg, gprT2);
 		}
 
 		oJMP.SetTarget();
 	}
 
-	//-------------------------Write back flags------------------------------
 	if (mFLAG.doFlag)
 	{
-		SHIFT_XYZW(mReg); // If it was Single Scalar, move the flags in to the correct position
-		mVUallocMFLAGb(mVU, mReg, mFLAG.write); // Set Mac Flag
+		SHIFT_XYZW(mReg);
+		mVUallocMFLAGb(mVU, mReg, mFLAG.write);
 	}
 	if (sFLAG.doFlag)
 	{
-		xAND(mReg, 0xFF); // Ignore overflow bits, they're handled separately
+		xAND(mReg, 0xFF);
 		xOR(sReg, mReg);
 		if (sFLAG.doNonSticky)
 		{
@@ -118,36 +102,31 @@ static void mVUupdateFlags(mV, const xmm& reg, const xmm& regT1in = xEmptyReg, c
 		mVU.regAlloc->clearNeeded(regT2);
 }
 
-//------------------------------------------------------------------
-// Helper Macros and Functions
-//------------------------------------------------------------------
-
 static void (*const SSE_PS[])(microVU&, const xmm&, const xmm&, const xmm&, const xmm&) = {
-	SSE_ADDPS, // 0
-	SSE_SUBPS, // 1
-	SSE_MULPS, // 2
-	SSE_MAXPS, // 3
-	SSE_MINPS, // 4
-	SSE_ADD2PS // 5
+	SSE_ADDPS,
+	SSE_SUBPS,
+	SSE_MULPS,
+	SSE_MAXPS,
+	SSE_MINPS,
+	SSE_ADD2PS
 };
 
 static void (*const SSE_SS[])(microVU&, const xmm&, const xmm&, const xmm&, const xmm&) = {
-	SSE_ADDSS, // 0
-	SSE_SUBSS, // 1
-	SSE_MULSS, // 2
-	SSE_MAXSS, // 3
-	SSE_MINSS, // 4
-	SSE_ADD2SS // 5
+	SSE_ADDSS,
+	SSE_SUBSS,
+	SSE_MULSS,
+	SSE_MAXSS,
+	SSE_MINSS,
+	SSE_ADD2SS
 };
 
 enum clampModes
 {
-	cFt = 0x01, // Clamp Ft / I-reg / Q-reg
-	cFs = 0x02, // Clamp Fs
-	cACC = 0x04, // Clamp ACC
+	cFt = 0x01,
+	cFs = 0x02,
+	cACC = 0x04,
 };
 
-// Prints Opcode to MicroProgram Logs
 static void mVU_printOP(microVU& mVU, int opCase, microOpcode opEnum, bool isACC)
 {
 	mVUlog(microOpcodeName[opEnum]);
@@ -157,7 +136,6 @@ static void mVU_printOP(microVU& mVU, int opCase, microOpcode opEnum, bool isACC
 	opCase4 { if (isACC) { mVUlogACC(); } else { mVUlogFd(); } mVUlogQ();  }
 }
 
-// Sets Up Pass1 Info for Normal, BC, I, and Q Cases
 static void setupPass1(microVU& mVU, int opCase, bool isACC, bool noFlagUpdate)
 {
 	opCase1 { mVUanalyzeFMAC1(mVU, ((isACC) ? 0 : _Fd_), _Fs_, _Ft_); }
@@ -165,19 +143,18 @@ static void setupPass1(microVU& mVU, int opCase, bool isACC, bool noFlagUpdate)
 	opCase3 { mVUanalyzeFMAC1(mVU, ((isACC) ? 0 : _Fd_), _Fs_, 0); }
 	opCase4 { mVUanalyzeFMAC1(mVU, ((isACC) ? 0 : _Fd_), _Fs_, 0); }
 
-	if (noFlagUpdate) //Max/Min Ops
+	if (noFlagUpdate)
 		sFLAG.doFlag = false;
 }
 
-// Safer to force 0 as the result for X minus X than to do actual subtraction
 static bool doSafeSub(microVU& mVU, int opCase, int opType, bool isACC)
 {
 	opCase1
 	{
-		if ((opType == 1) && (_Ft_ == _Fs_) && (opCase == 1)) // Don't do this with BC's!
+		if ((opType == 1) && (_Ft_ == _Fs_) && (opCase == 1))
 		{
 			const xmm& Fs = mVU.regAlloc->allocReg(-1, isACC ? 32 : _Fd_, _X_Y_Z_W);
-			xPXOR(Fs, Fs); // Set to Positive 0
+			xPXOR(Fs, Fs);
 			mVUupdateFlags(mVU, Fs);
 			mVU.regAlloc->clearNeeded(Fs);
 			return true;
@@ -186,12 +163,10 @@ static bool doSafeSub(microVU& mVU, int opCase, int opType, bool isACC)
 	return false;
 }
 
-// Sets Up Ft Reg for Normal, BC, I, and Q Cases
 static void setupFtReg(microVU& mVU, xmm& Ft, xmm& tempFt, int opCase, int clampType)
 {
 	opCase1
 	{
-		// Based on mVUclamp2 -> mVUclamp1 below.
 		const bool willClamp = (clampE || ((clampType & cFt) && !clampE && (CHECK_VU_OVERFLOW(mVU.index) || CHECK_VU_SIGN_OVERFLOW(mVU.index))));
 
 		if (_XYZW_SS2)      { Ft = mVU.regAlloc->allocReg(_Ft_, 0, _X_Y_Z_W); tempFt = Ft; }
@@ -227,7 +202,6 @@ static void setupFtReg(microVU& mVU, xmm& Ft, xmm& tempFt, int opCase, int clamp
 	}
 }
 
-// Normal FMAC Opcodes
 static void mVU_FMACa(microVU& mVU, int recPass, int opCase, int opType, bool isACC, microOpcode opEnum, int clampType)
 {
 	pass1 { setupPass1(mVU, opCase, isACC, ((opType == 3) || (opType == 4))); }
@@ -268,10 +242,10 @@ static void mVU_FMACa(microVU& mVU, int recPass, int opCase, int opType, bool is
 				xPSHUF.D(ACC, ACC, shuffleSS(_X_Y_Z_W));
 			mVU.regAlloc->clearNeeded(ACC);
 		}
-		else if (opType < 3 || opType == 5) // Not Min/Max or is ADDi(5) (TODO: Reorganise this so its < 4 including ADDi)
+		else if (opType < 3 || opType == 5)
 			mVUupdateFlags(mVU, Fs, tempFt);
 
-		mVU.regAlloc->clearNeeded(Fs); // Always Clear Written Reg First
+		mVU.regAlloc->clearNeeded(Fs);
 		mVU.regAlloc->clearNeeded(Ft);
 		mVU.profiler.EmitOp(opEnum);
 	}
@@ -283,7 +257,6 @@ static void mVU_FMACa(microVU& mVU, int recPass, int opCase, int opType, bool is
 	}
 }
 
-// MADDA/MSUBA Opcodes
 static void mVU_FMACb(microVU& mVU, int recPass, int opCase, int opType, microOpcode opEnum, int clampType)
 {
 	pass1 { setupPass1(mVU, opCase, true, false); }
@@ -331,7 +304,6 @@ static void mVU_FMACb(microVU& mVU, int recPass, int opCase, int opType, microOp
 	pass4 { mVUregs.needExactMatch |= 8; }
 }
 
-// MADD Opcodes
 static void mVU_FMACc(microVU& mVU, int recPass, int opCase, microOpcode opEnum, int clampType)
 {
 	pass1 { setupPass1(mVU, opCase, false, false); }
@@ -359,7 +331,7 @@ static void mVU_FMACc(microVU& mVU, int recPass, int opCase, microOpcode opEnum,
 
 		mVUupdateFlags(mVU, Fs, tempFt);
 
-		mVU.regAlloc->clearNeeded(Fs); // Always Clear Written Reg First
+		mVU.regAlloc->clearNeeded(Fs);
 		mVU.regAlloc->clearNeeded(Ft);
 		mVU.regAlloc->clearNeeded(ACC);
 		mVU.profiler.EmitOp(opEnum);
@@ -368,7 +340,6 @@ static void mVU_FMACc(microVU& mVU, int recPass, int opCase, microOpcode opEnum,
 	pass4 { mVUregs.needExactMatch |= 8; }
 }
 
-// MSUB Opcodes
 static void mVU_FMACd(microVU& mVU, int recPass, int opCase, microOpcode opEnum, int clampType)
 {
 	pass1 { setupPass1(mVU, opCase, false, false); }
@@ -389,7 +360,7 @@ static void mVU_FMACd(microVU& mVU, int recPass, int opCase, microOpcode opEnum,
 
 		mVUupdateFlags(mVU, Fd, Fs, tempFt);
 
-		mVU.regAlloc->clearNeeded(Fd); // Always Clear Written Reg First
+		mVU.regAlloc->clearNeeded(Fd);
 		mVU.regAlloc->clearNeeded(Ft);
 		mVU.regAlloc->clearNeeded(Fs);
 		mVU.profiler.EmitOp(opEnum);
@@ -398,7 +369,6 @@ static void mVU_FMACd(microVU& mVU, int recPass, int opCase, microOpcode opEnum,
 	pass4 { mVUregs.needExactMatch |= 8; }
 }
 
-// ABS Opcode
 mVUop(mVU_ABS)
 {
 	pass1 { mVUanalyzeFMAC2(mVU, _Fs_, _Ft_); }
@@ -418,7 +388,6 @@ mVUop(mVU_ABS)
 	}
 }
 
-// OPMULA Opcode
 mVUop(mVU_OPMULA)
 {
 	pass1 { mVUanalyzeFMAC1(mVU, 0, _Fs_, _Ft_); }
@@ -427,8 +396,8 @@ mVUop(mVU_OPMULA)
 		const xmm& Ft = mVU.regAlloc->allocReg(_Ft_, 0, _X_Y_Z_W);
 		const xmm& Fs = mVU.regAlloc->allocReg(_Fs_, 32, _X_Y_Z_W);
 
-		xPSHUF.D(Fs, Fs, 0xC9); // WXZY
-		xPSHUF.D(Ft, Ft, 0xD2); // WYXZ
+		xPSHUF.D(Fs, Fs, 0xC9);
+		xPSHUF.D(Ft, Ft, 0xD2);
 		SSE_MULPS(mVU, Fs, Ft);
 		mVU.regAlloc->clearNeeded(Ft);
 		mVUupdateFlags(mVU, Fs);
@@ -444,7 +413,6 @@ mVUop(mVU_OPMULA)
 	pass4 { mVUregs.needExactMatch |= 8; }
 }
 
-// OPMSUB Opcode
 mVUop(mVU_OPMSUB)
 {
 	pass1 { mVUanalyzeFMAC1(mVU, _Fd_, _Fs_, _Ft_); }
@@ -454,8 +422,8 @@ mVUop(mVU_OPMSUB)
 		const xmm& Fs = mVU.regAlloc->allocReg(_Fs_, 0, 0xf);
 		const xmm& ACC = mVU.regAlloc->allocReg(32, _Fd_, _X_Y_Z_W);
 
-		xPSHUF.D(Fs, Fs, 0xC9); // WXZY
-		xPSHUF.D(Ft, Ft, 0xD2); // WYXZ
+		xPSHUF.D(Fs, Fs, 0xC9);
+		xPSHUF.D(Ft, Ft, 0xD2);
 		SSE_MULPS(mVU, Fs,  Ft);
 		SSE_SUBPS(mVU, ACC, Fs);
 		mVU.regAlloc->clearNeeded(Fs);
@@ -473,7 +441,6 @@ mVUop(mVU_OPMSUB)
 	pass4 { mVUregs.needExactMatch |= 8; }
 }
 
-// FTOI0/FTIO4/FTIO12/FTIO15 Opcodes
 static void mVU_FTOIx(mP, const float* addr, microOpcode opEnum)
 {
 	pass1 { mVUanalyzeFMAC2(mVU, _Fs_, _Ft_); }
@@ -484,9 +451,6 @@ static void mVU_FTOIx(mP, const float* addr, microOpcode opEnum)
 		const xmm& Fs = mVU.regAlloc->allocReg(_Fs_, _Ft_, _X_Y_Z_W, !((_Fs_ == _Ft_) && (_X_Y_Z_W == 0xf)));
 		const xmm& t1 = mVU.regAlloc->allocReg();
 
-		// cvttps2dq returns 0x8000000 for any unrepresentable values.
-		// We want it to return 0x8000000 for negative and 0x7fffffff for positive.
-		// So for unrepresentable positive values, xor with 0xffffffff to turn 0x80000000 into 0x7fffffff.
 		if (addr)
 			xMUL.PS(Fs, ptr128[addr]);
 		xPCMP.GTD(t1, Fs, ptr128[mVUglob.I32MAXF]);
@@ -504,7 +468,6 @@ static void mVU_FTOIx(mP, const float* addr, microOpcode opEnum)
 	}
 }
 
-// ITOF0/ITOF4/ITOF12/ITOF15 Opcodes
 static void mVU_ITOFx(mP, const float* addr, microOpcode opEnum)
 {
 	pass1 { mVUanalyzeFMAC2(mVU, _Fs_, _Ft_); }
@@ -517,7 +480,6 @@ static void mVU_ITOFx(mP, const float* addr, microOpcode opEnum)
 		xCVTDQ2PS(Fs, Fs);
 		if (addr)
 			xMUL.PS(Fs, ptr128[addr]);
-		//mVUclamp2(Fs, xmmT1, 15); // Clamp (not sure if this is needed)
 
 		mVU.regAlloc->clearNeeded(Fs);
 		mVU.profiler.EmitOp(opEnum);
@@ -529,7 +491,6 @@ static void mVU_ITOFx(mP, const float* addr, microOpcode opEnum)
 	}
 }
 
-// Clip Opcode
 mVUop(mVU_CLIP)
 {
 	pass1 { mVUanalyzeFMAC4(mVU, _Fs_, _Ft_); }
@@ -546,18 +507,18 @@ mVUop(mVU_CLIP)
 
 		xPAND    (t1, Fs, ptr128[mVUglob.exponent]);
 		xPXOR    (t2, t2);
-		xPCMP.EQD(t1, t2); // Denormal check
-		xPANDN   (t1, Fs); // If denormal, set to zero, which can't be greater than any nonnegative denormal in Ft
+		xPCMP.EQD(t1, t2);
+		xPANDN   (t1, Fs);
 		xPAND    (Ft, ptr128[mVUglob.absclip]);
 
-		xPXOR    (Fs, t1, ptr128[mVUglob.signbit]); // Negate
-		xPCMP.GTD(t1, Ft); // +w, +z, +y, +x
-		xPCMP.GTD(Fs, Ft); // -w, -z, -y, -x
+		xPXOR    (Fs, t1, ptr128[mVUglob.signbit]);
+		xPCMP.GTD(t1, Ft);
+		xPCMP.GTD(Fs, Ft);
 
-		xPBLEND.W (Fs, t1, 0x55); // Squish together
-		xPACK.SSWB(Fs, Fs);       // Convert u16 to u8
-		xPMOVMSKB (gprT2, Fs);    // Get bitmask
-		xAND      (gprT2, 0x3f);  // Mask unused stuff
+		xPBLEND.W (Fs, t1, 0x55);
+		xPACK.SSWB(Fs, Fs);
+		xPMOVMSKB (gprT2, Fs);
+		xAND      (gprT2, 0x3f);
 		xAND      (gprT1, 0xffffff);
 		xOR       (gprT1, gprT2);
 
@@ -575,10 +536,6 @@ mVUop(mVU_CLIP)
 	}
 }
 
-//------------------------------------------------------------------
-// Micro VU Micromode Upper instructions
-//------------------------------------------------------------------
-
 mVUop(mVU_ADD)    { mVU_FMACa(mVU, recPass, 1, 0, false, opADD,    0);  }
 mVUop(mVU_ADDi)   { mVU_FMACa(mVU, recPass, 3, 5, false, opADDi,   0);  }
 mVUop(mVU_ADDq)   { mVU_FMACa(mVU, recPass, 4, 0, false, opADDq,   0);  }
@@ -593,13 +550,13 @@ mVUop(mVU_ADDAx)  { mVU_FMACa(mVU, recPass, 2, 0, true,  opADDAx,  0);  }
 mVUop(mVU_ADDAy)  { mVU_FMACa(mVU, recPass, 2, 0, true,  opADDAy,  0);  }
 mVUop(mVU_ADDAz)  { mVU_FMACa(mVU, recPass, 2, 0, true,  opADDAz,  0);  }
 mVUop(mVU_ADDAw)  { mVU_FMACa(mVU, recPass, 2, 0, true,  opADDAw,  0);  }
-mVUop(mVU_SUB)    { mVU_FMACa(mVU, recPass, 1, 1, false, opSUB,  (_XYZW_PS)?(cFs|cFt):0);   } // Clamp (Kingdom Hearts I (VU0))
-mVUop(mVU_SUBi)   { mVU_FMACa(mVU, recPass, 3, 1, false, opSUBi, (_XYZW_PS)?(cFs|cFt):0);   } // Clamp (Kingdom Hearts I (VU0))
-mVUop(mVU_SUBq)   { mVU_FMACa(mVU, recPass, 4, 1, false, opSUBq, (_XYZW_PS)?(cFs|cFt):0);   } // Clamp (Kingdom Hearts I (VU0))
-mVUop(mVU_SUBx)   { mVU_FMACa(mVU, recPass, 2, 1, false, opSUBx, (_XYZW_PS)?(cFs|cFt):0);   } // Clamp (Kingdom Hearts I (VU0))
-mVUop(mVU_SUBy)   { mVU_FMACa(mVU, recPass, 2, 1, false, opSUBy, (_XYZW_PS)?(cFs|cFt):0);   } // Clamp (Kingdom Hearts I (VU0))
-mVUop(mVU_SUBz)   { mVU_FMACa(mVU, recPass, 2, 1, false, opSUBz, (_XYZW_PS)?(cFs|cFt):0);   } // Clamp (Kingdom Hearts I (VU0))
-mVUop(mVU_SUBw)   { mVU_FMACa(mVU, recPass, 2, 1, false, opSUBw, (_XYZW_PS)?(cFs|cFt):0);   } // Clamp (Kingdom Hearts I (VU0))
+mVUop(mVU_SUB)    { mVU_FMACa(mVU, recPass, 1, 1, false, opSUB,  (_XYZW_PS)?(cFs|cFt):0);   }
+mVUop(mVU_SUBi)   { mVU_FMACa(mVU, recPass, 3, 1, false, opSUBi, (_XYZW_PS)?(cFs|cFt):0);   }
+mVUop(mVU_SUBq)   { mVU_FMACa(mVU, recPass, 4, 1, false, opSUBq, (_XYZW_PS)?(cFs|cFt):0);   }
+mVUop(mVU_SUBx)   { mVU_FMACa(mVU, recPass, 2, 1, false, opSUBx, (_XYZW_PS)?(cFs|cFt):0);   }
+mVUop(mVU_SUBy)   { mVU_FMACa(mVU, recPass, 2, 1, false, opSUBy, (_XYZW_PS)?(cFs|cFt):0);   }
+mVUop(mVU_SUBz)   { mVU_FMACa(mVU, recPass, 2, 1, false, opSUBz, (_XYZW_PS)?(cFs|cFt):0);   }
+mVUop(mVU_SUBw)   { mVU_FMACa(mVU, recPass, 2, 1, false, opSUBw, (_XYZW_PS)?(cFs|cFt):0);   }
 mVUop(mVU_SUBA)   { mVU_FMACa(mVU, recPass, 1, 1, true,  opSUBA,   0);  }
 mVUop(mVU_SUBAi)  { mVU_FMACa(mVU, recPass, 3, 1, true,  opSUBAi,  0);  }
 mVUop(mVU_SUBAq)  { mVU_FMACa(mVU, recPass, 4, 1, true,  opSUBAq,  0);  }
@@ -607,35 +564,35 @@ mVUop(mVU_SUBAx)  { mVU_FMACa(mVU, recPass, 2, 1, true,  opSUBAx,  0);  }
 mVUop(mVU_SUBAy)  { mVU_FMACa(mVU, recPass, 2, 1, true,  opSUBAy,  0);  }
 mVUop(mVU_SUBAz)  { mVU_FMACa(mVU, recPass, 2, 1, true,  opSUBAz,  0);  }
 mVUop(mVU_SUBAw)  { mVU_FMACa(mVU, recPass, 2, 1, true,  opSUBAw,  0);  }
-mVUop(mVU_MUL)    { mVU_FMACa(mVU, recPass, 1, 2, false, opMUL,  (_XYZW_PS)?(cFs|cFt):cFs); } // Clamp (TOTA, DoM, Ice Age (VU0))
-mVUop(mVU_MULi)   { mVU_FMACa(mVU, recPass, 3, 2, false, opMULi, (_XYZW_PS)?(cFs|cFt):cFs); } // Clamp (TOTA, DoM, Ice Age (VU0))
-mVUop(mVU_MULq)   { mVU_FMACa(mVU, recPass, 4, 2, false, opMULq, (_XYZW_PS)?(cFs|cFt):cFs); } // Clamp (TOTA, DoM, Ice Age (VU0))
-mVUop(mVU_MULx)   { mVU_FMACa(mVU, recPass, 2, 2, false, opMULx, (_XYZW_PS)?(cFs|cFt):cFs); } // Clamp (TOTA, DoM, Ice Age (vu0))
-mVUop(mVU_MULy)   { mVU_FMACa(mVU, recPass, 2, 2, false, opMULy, (_XYZW_PS)?(cFs|cFt):cFs); } // Clamp (TOTA, DoM, Ice Age (VU0))
-mVUop(mVU_MULz)   { mVU_FMACa(mVU, recPass, 2, 2, false, opMULz, (_XYZW_PS)?(cFs|cFt):cFs); } // Clamp (TOTA, DoM, Ice Age (VU0))
-mVUop(mVU_MULw)   { mVU_FMACa(mVU, recPass, 2, 2, false, opMULw, (_XYZW_PS)?(cFs|cFt):cFs); } // Clamp (TOTA, DoM, Ice Age (VU0))
+mVUop(mVU_MUL)    { mVU_FMACa(mVU, recPass, 1, 2, false, opMUL,  (_XYZW_PS)?(cFs|cFt):cFs); }
+mVUop(mVU_MULi)   { mVU_FMACa(mVU, recPass, 3, 2, false, opMULi, (_XYZW_PS)?(cFs|cFt):cFs); }
+mVUop(mVU_MULq)   { mVU_FMACa(mVU, recPass, 4, 2, false, opMULq, (_XYZW_PS)?(cFs|cFt):cFs); }
+mVUop(mVU_MULx)   { mVU_FMACa(mVU, recPass, 2, 2, false, opMULx, (_XYZW_PS)?(cFs|cFt):cFs); }
+mVUop(mVU_MULy)   { mVU_FMACa(mVU, recPass, 2, 2, false, opMULy, (_XYZW_PS)?(cFs|cFt):cFs); }
+mVUop(mVU_MULz)   { mVU_FMACa(mVU, recPass, 2, 2, false, opMULz, (_XYZW_PS)?(cFs|cFt):cFs); }
+mVUop(mVU_MULw)   { mVU_FMACa(mVU, recPass, 2, 2, false, opMULw, (_XYZW_PS)?(cFs|cFt):cFs); }
 mVUop(mVU_MULA)   { mVU_FMACa(mVU, recPass, 1, 2, true,  opMULA,   0);  }
 mVUop(mVU_MULAi)  { mVU_FMACa(mVU, recPass, 3, 2, true,  opMULAi,  0);  }
 mVUop(mVU_MULAq)  { mVU_FMACa(mVU, recPass, 4, 2, true,  opMULAq,  0);  }
-mVUop(mVU_MULAx)  { mVU_FMACa(mVU, recPass, 2, 2, true,  opMULAx,  cFs);} // Clamp (TOTA, DoM, ...)
-mVUop(mVU_MULAy)  { mVU_FMACa(mVU, recPass, 2, 2, true,  opMULAy,  cFs);} // Clamp (TOTA, DoM, ...)
-mVUop(mVU_MULAz)  { mVU_FMACa(mVU, recPass, 2, 2, true,  opMULAz,  cFs);} // Clamp (TOTA, DoM, ...)
-mVUop(mVU_MULAw)  { mVU_FMACa(mVU, recPass, 2, 2, true,  opMULAw, (_XYZW_PS) ? (cFs | cFt) : cFs); } // Clamp (TOTA, DoM, ...)- Ft for Superman - Shadow Of Apokolips
+mVUop(mVU_MULAx)  { mVU_FMACa(mVU, recPass, 2, 2, true,  opMULAx,  cFs);}
+mVUop(mVU_MULAy)  { mVU_FMACa(mVU, recPass, 2, 2, true,  opMULAy,  cFs);}
+mVUop(mVU_MULAz)  { mVU_FMACa(mVU, recPass, 2, 2, true,  opMULAz,  cFs);}
+mVUop(mVU_MULAw)  { mVU_FMACa(mVU, recPass, 2, 2, true,  opMULAw, (_XYZW_PS) ? (cFs | cFt) : cFs); }
 mVUop(mVU_MADD)   { mVU_FMACc(mVU, recPass, 1,           opMADD,   0); }
 mVUop(mVU_MADDi)  { mVU_FMACc(mVU, recPass, 3,           opMADDi,  0); }
 mVUop(mVU_MADDq)  { mVU_FMACc(mVU, recPass, 4,           opMADDq,  0); }
-mVUop(mVU_MADDx)  { mVU_FMACc(mVU, recPass, 2,           opMADDx,  cFs); } // Clamp (TOTA, DoM, ...)
-mVUop(mVU_MADDy)  { mVU_FMACc(mVU, recPass, 2,           opMADDy,  cFs); } // Clamp (TOTA, DoM, ...)
-mVUop(mVU_MADDz)  { mVU_FMACc(mVU, recPass, 2,           opMADDz,  cFs); } // Clamp (TOTA, DoM, ...)
-mVUop(mVU_MADDw)  { mVU_FMACc(mVU, recPass, 2,           opMADDw, (isCOP2)?(cACC|cFt|cFs):cFs);} // Clamp (ICO (COP2), TOTA, DoM)
+mVUop(mVU_MADDx)  { mVU_FMACc(mVU, recPass, 2,           opMADDx,  cFs); }
+mVUop(mVU_MADDy)  { mVU_FMACc(mVU, recPass, 2,           opMADDy,  cFs); }
+mVUop(mVU_MADDz)  { mVU_FMACc(mVU, recPass, 2,           opMADDz,  cFs); }
+mVUop(mVU_MADDw)  { mVU_FMACc(mVU, recPass, 2,           opMADDw, (isCOP2)?(cACC|cFt|cFs):cFs);}
 mVUop(mVU_MADDA)  { mVU_FMACb(mVU, recPass, 1, 0,        opMADDA,  0);  }
 mVUop(mVU_MADDAi) { mVU_FMACb(mVU, recPass, 3, 0,        opMADDAi, 0);  }
 mVUop(mVU_MADDAq) { mVU_FMACb(mVU, recPass, 4, 0,        opMADDAq, 0);  }
-mVUop(mVU_MADDAx) { mVU_FMACb(mVU, recPass, 2, 0,        opMADDAx, cFs);} // Clamp (TOTA, DoM, ...)
-mVUop(mVU_MADDAy) { mVU_FMACb(mVU, recPass, 2, 0,        opMADDAy, cFs);} // Clamp (TOTA, DoM, ...)
-mVUop(mVU_MADDAz) { mVU_FMACb(mVU, recPass, 2, 0,        opMADDAz, cFs);} // Clamp (TOTA, DoM, ...)
-mVUop(mVU_MADDAw) { mVU_FMACb(mVU, recPass, 2, 0,        opMADDAw, cFs);} // Clamp (TOTA, DoM, ...)
-mVUop(mVU_MSUB)   { mVU_FMACd(mVU, recPass, 1,           opMSUB,  (isCOP2) ? cFs : 0); } // Clamp ( Superman - Shadow Of Apokolips)
+mVUop(mVU_MADDAx) { mVU_FMACb(mVU, recPass, 2, 0,        opMADDAx, cFs);}
+mVUop(mVU_MADDAy) { mVU_FMACb(mVU, recPass, 2, 0,        opMADDAy, cFs);}
+mVUop(mVU_MADDAz) { mVU_FMACb(mVU, recPass, 2, 0,        opMADDAz, cFs);}
+mVUop(mVU_MADDAw) { mVU_FMACb(mVU, recPass, 2, 0,        opMADDAw, cFs);}
+mVUop(mVU_MSUB)   { mVU_FMACd(mVU, recPass, 1,           opMSUB,  (isCOP2) ? cFs : 0); }
 mVUop(mVU_MSUBi)  { mVU_FMACd(mVU, recPass, 3,           opMSUBi,  0);  }
 mVUop(mVU_MSUBq)  { mVU_FMACd(mVU, recPass, 4,           opMSUBq,  0);  }
 mVUop(mVU_MSUBx)  { mVU_FMACd(mVU, recPass, 2,           opMSUBx,  0);  }

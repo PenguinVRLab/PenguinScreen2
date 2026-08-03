@@ -26,16 +26,13 @@ namespace IopMemory
 {
 using namespace Internal;
 
-//////////////////////////////////////////////////////////////////////////////////////////
-//
 mem8_t iopHwRead8_Page1( u32 addr )
 {
-	// all addresses are assumed to be prefixed with 0x1f801xxx:
 	pxAssume( (addr >> 12) == 0x1f801 );
 
 	const u32 masked_addr = addr & 0x0fff;
 
-	mem8_t ret = 0; // using a return var can be helpful in debugging.
+	mem8_t ret = 0;
 	switch( masked_addr )
 	{
 		case (HW_SIO_DATA & 0x0fff):
@@ -53,9 +50,6 @@ mem8_t iopHwRead8_Page1( u32 addr )
 		case (HW_SIO_BAUD & 0x0fff):
 			Sio0Log.Error("%s(%08X) Unexpected SIO0 BAUD 8 bit read", __FUNCTION__, addr);
 			break;
-
-		// for use of serial port ignore for now
-		//case 0x50: ret = serial_read8(); break;
 
 		mcase(HW_DEV9_DATA): ret = DEV9read8( addr ); break;
 
@@ -92,11 +86,8 @@ mem8_t iopHwRead8_Page1( u32 addr )
 	return ret;
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////
-//
 mem8_t iopHwRead8_Page3(u32 addr)
 {
-	// all addresses are assumed to be prefixed with 0x1f803xxx:
 	pxAssume((addr >> 12) == 0x1f803);
 
 	const u32 masked_addr = addr & 0x0fff;
@@ -104,10 +95,10 @@ mem8_t iopHwRead8_Page3(u32 addr)
 	mem8_t ret;
 	switch (masked_addr)
 	{
-		case 0x100: // TOOL config switches
+		case 0x100:
 			ret = 0;
 			break;
-		case 0x204: // TOOL board id
+		case 0x204:
 			ret = 0x7c;
 			break;
 		default:
@@ -119,11 +110,8 @@ mem8_t iopHwRead8_Page3(u32 addr)
 	return ret;
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////
-//
 mem8_t iopHwRead8_Page8( u32 addr )
 {
-	// all addresses are assumed to be prefixed with 0x1f808xxx:
 	pxAssume( (addr >> 12) == 0x1f808 );
 
 	mem8_t ret;
@@ -140,15 +128,11 @@ mem8_t iopHwRead8_Page8( u32 addr )
 	IopHwTraceLog<mem8_t>( addr, ret, true );
 	return ret;
 }
-//////////////////////////////////////////////////////////////////////////////////////////
-//
 template< typename T >
 static __fi T _HwRead_16or32_Page1( u32 addr )
 {
-	// all addresses are assumed to be prefixed with 0x1f801xxx:
 	pxAssume( (addr >> 12) == 0x1f801 );
 
-	// all addresses should be aligned to the data operand size:
 	pxAssume(
 		( sizeof(T) == 2 && (addr & 1) == 0 ) ||
 		( sizeof(T) == 4 && (addr & 3) == 0 )
@@ -157,9 +141,6 @@ static __fi T _HwRead_16or32_Page1( u32 addr )
 	u32 masked_addr = pgmsk( addr );
 	T ret = 0;
 
-	// ------------------------------------------------------------------------
-	// Counters, 16-bit varieties!
-	//
 	if( masked_addr >= 0x100 && masked_addr < 0x130 )
 	{
 		int cntidx = ( masked_addr >> 4 ) & 0xf;
@@ -185,9 +166,6 @@ static __fi T _HwRead_16or32_Page1( u32 addr )
 			break;
 		}
 	}
-	// ------------------------------------------------------------------------
-	// Counters, 32-bit varieties!
-	//
 	else if ( masked_addr >= 0x480 && masked_addr < 0x4b0 )
 	{
 		int cntidx = (( masked_addr >> 4 ) & 0xf) - 5;
@@ -224,16 +202,10 @@ static __fi T _HwRead_16or32_Page1( u32 addr )
 			break;
 		}
 	}
-	// ------------------------------------------------------------------------
-	// USB, with both 16 and 32 bit interfaces
-	//
 	else if ( (masked_addr >= pgmsk(HW_USB_START)) && (masked_addr < pgmsk(HW_USB_END)) )
 	{
 		ret = (sizeof(T) == 2) ? USBread16( addr ) : USBread32( addr );
 	}
-	// ------------------------------------------------------------------------
-	// SPU2, accessible in 16 bit mode only!
-	//
 	else if ( masked_addr >= pgmsk(HW_SPU2_START) && masked_addr < pgmsk(HW_SPU2_END) )
 	{
 		if( sizeof(T) == 2 )
@@ -244,12 +216,8 @@ static __fi T _HwRead_16or32_Page1( u32 addr )
 			ret = psxHu32(addr);
 		}
 	}
-	// ------------------------------------------------------------------------
-	// PS1 GPU access
-	//
 	else if ( (masked_addr >= pgmsk(HW_PS1_GPU_START)) && (masked_addr < pgmsk(HW_PS1_GPU_END)) )
 	{
-		// todo: psx mode: this is new
 		if( sizeof(T) == 2 )
 			DevCon.Warning( "HwRead16 from PS1 GPU? @ 0x%08X .. What manner of trickery is this?!", addr );
 
@@ -261,7 +229,6 @@ static __fi T _HwRead_16or32_Page1( u32 addr )
 	{
 		switch( masked_addr )
 		{
-			// ------------------------------------------------------------------------
 			case (HW_SIO_DATA & 0x0fff):
 				Console.Warning("%s(%08X) Unexpected 16 or 32 bit access to SIO0 data register!", __FUNCTION__, addr);
 				ret = g_Sio0.GetRxData();
@@ -291,13 +258,6 @@ static __fi T _HwRead_16or32_Page1( u32 addr )
 				ret = g_Sio0.GetBaud();
 				break;
 
-			// ------------------------------------------------------------------------
-			//Serial port stuff not support now ;P
-			// case 0x050: hard = serial_read32(); break;
-			//	case 0x054: hard = serial_status_read(); break;
-			//	case 0x05a: hard = serial_control_read(); break;
-			//	case 0x05e: hard = serial_baud_read(); break;
-
 			mcase(HW_ICTRL):
 				ret = psxHu32(HW_ICTRL);
 				psxHu32(HW_ICTRL) = 0;
@@ -305,12 +265,9 @@ static __fi T _HwRead_16or32_Page1( u32 addr )
 
 			mcase(HW_ICTRL+2):
 				ret = psxHu16(HW_ICTRL+2);
-				psxHu32(HW_ICTRL) = 0;	// most likely should clear all 32 bits here.
+				psxHu32(HW_ICTRL) = 0;
 			break;
 
-			// ------------------------------------------------------------------------
-			// Legacy GPU  emulation
-			//
 			mcase(0x1f8010ac) :
 				ret = psxHu32(addr);
 				DevCon.Warning("SIF2 IOP TADR?? read");
@@ -324,23 +281,19 @@ static __fi T _HwRead_16or32_Page1( u32 addr )
 				ret = psxGPUr(addr);
 			break;
 
-			mcase (0x1f801820): // MDEC
-				// ret = psxHu32(addr); // old
+			mcase (0x1f801820):
 				ret = mdecRead0();
 #if PSX_EXTRALOGS
 				DevCon.Warning("MDEC 1820 Read %x", ret);
 #endif
 			break;
 
-			mcase (0x1f801824): // MDEC
-				//ret = psxHu32(addr); // old
+			mcase (0x1f801824):
 				ret = mdecRead1();
 #if PSX_EXTRALOGS
 			DevCon.Warning("MDEC 1824 Read %x", ret);
 #endif
 			break;
-
-			// ------------------------------------------------------------------------
 
 			mcase(0x1f80146e):
 				ret = DEV9read16( addr );
@@ -356,22 +309,13 @@ static __fi T _HwRead_16or32_Page1( u32 addr )
 	return ret;
 }
 
-// Some Page 2 mess?  I love random question marks for comments!
-//case 0x1f802030: hard =   //int_2000????
-//case 0x1f802040: hard =//dip switches...??
-
-//////////////////////////////////////////////////////////////////////////////////////////
-//
 mem16_t iopHwRead16_Page1( u32 addr )
 {
 	return _HwRead_16or32_Page1<mem16_t>( addr );
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////
-//
 mem16_t iopHwRead16_Page3( u32 addr )
 {
-	// all addresses are assumed to be prefixed with 0x1f803xxx:
 	pxAssume( (addr >> 12) == 0x1f803 );
 
 	mem16_t ret = psxHu16(addr);
@@ -379,11 +323,8 @@ mem16_t iopHwRead16_Page3( u32 addr )
 	return ret;
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////
-//
 mem16_t iopHwRead16_Page8( u32 addr )
 {
-	// all addresses are assumed to be prefixed with 0x1f808xxx:
 	pxAssume( (addr >> 12) == 0x1f808 );
 
 	mem16_t ret = psxHu16(addr);
@@ -391,29 +332,21 @@ mem16_t iopHwRead16_Page8( u32 addr )
 	return ret;
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////
-//
 mem32_t iopHwRead32_Page1( u32 addr )
 {
 	return _HwRead_16or32_Page1<mem32_t>( addr );
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////
-//
 mem32_t iopHwRead32_Page3( u32 addr )
 {
-	// all addresses are assumed to be prefixed with 0x1f803xxx:
 	pxAssume( (addr >> 12) == 0x1f803 );
 	const mem32_t ret = psxHu32(addr);
 	IopHwTraceLog<mem32_t>( addr, ret, true );
 	return ret;
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////
-//
 mem32_t iopHwRead32_Page8( u32 addr )
 {
-	// all addresses are assumed to be prefixed with 0x1f808xxx:
 	pxAssume( (addr >> 12) == 0x1f808 );
 
 	u32 masked_addr = addr & 0x0fff;
@@ -429,8 +362,6 @@ mem32_t iopHwRead32_Page8( u32 addr )
 		}
 		else if ( masked_addr < 0x260 )
 		{
-			// SIO2 Send commands alternate registers.  First reg maps to Send1, second
-			// to Send2, third to Send1, etc.  And the following clever code does this:
 			const int parm = (masked_addr-0x240) / 8;
 			ret = (masked_addr & 4) ? g_Sio2.PortCtrl1[parm] : g_Sio2.PortCtrl0[parm];
 			Sio2Log.WriteLn("%s(%08X) SIO2 SEND1/2 Read (%08X)", __FUNCTION__, addr, ret);

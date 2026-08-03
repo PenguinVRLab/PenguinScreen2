@@ -17,10 +17,9 @@
 class ATA
 {
 public:
-	//Transfer
 	bool dmaReady = false;
-	int nsector = 0;     //sector count
-	int nsectorLeft = 0; //sectors left to transfer
+	int nsector = 0;
+	int nsectorLeft = 0;
 private:
 	bool lba48Supported = false;
 
@@ -43,7 +42,6 @@ private:
 	int mdmaMode;
 	int udmaMode;
 
-	//Info
 	u8 curHeads = 16;
 	u8 curSectors = 63;
 	u16 curCylinders = 0;
@@ -52,60 +50,38 @@ private:
 
 	u8 identifyData[512] = {0};
 
-	//LBA48 in use?
 	bool lba48 = false;
 
-	//Enable/disable features
 	bool fetSmartEnabled = true;
 	bool fetSecurityEnabled = false;
 	bool fetWriteCacheEnabled = true;
 	bool fetHostProtectedAreaEnabled = false;
 
-	//Regs
-	u16 regCommand; //WriteOnly, Only to be written BSY and DRQ are cleared, DMACK is not set and device is not sleeping, except for DEVICE RESET
-	//PIO Read/Write, Only to be written DMACK is not set and DRQ is 1
-	//COMMAND REG (WriteOnly) Only to be written DMACK is not set
-	//Bit 0 = 0
-	bool regControlEnableIRQ = false; //Bit 1 = 1 Disable Interrupt
-	//Bit 2 = 1 Software Reset
-	bool regControlHOBRead = false; //Bit 7 = HOB (cleared by any write to RegCommand, Sets if Low order or High order bytes are read in ATAread16)
-	//End COMMAND REG
-	u8 regError; //ReadOnly
+	u16 regCommand;
+	bool regControlEnableIRQ = false;
+	bool regControlHOBRead = false;
+	u8 regError;
 
-	//DEVICE REG (Read/Write)
 	u8 regSelect;
-	//Bit 0-3: LBA Bits 24-27 (Unused in 48bit) or Command Dependent
-	//Bit 4: Selected Device
-	//Bit 5: Obsolete (All?)
-	//Bit 6: Command Dependent
-	//Bit 7: Obsolete (All?)
-	//End COMMAND REG
-	u8 regFeature; //WriteOnly, Only to be written BSY and DRQ are cleared and DMACK is not set
+	u8 regFeature;
 	u8 regFeatureHOB;
 
-	//Following regs are Read/Write, Only to be written BSY and DRQ are cleared and DMACK is not set
-	u8 regSector; //Sector Number or LBA Low
+	u8 regSector;
 	u8 regSectorHOB;
-	u8 regLcyl; //LBA Mid
+	u8 regLcyl;
 	u8 regLcylHOB;
-	u8 regHcyl; //LBA High
+	u8 regHcyl;
 	u8 regHcylHOB;
-	//TODO handle nsector code
 	u8 regNsector;
 	u8 regNsectorHOB;
 
-	u8 regStatus; // ReadOnly. When read via AlternateStatus, pending interrupts are not cleared.
-	// When an error occurs, the SEEK bit shall not be changed until the Status Register is read,
-	// after which this bit again indicates Seek completed.
-	// A value of -1 is locked clear, a value of 1 is locked set, 0 is unlocked.
+	u8 regStatus;
 	s8 regStatusSeekLock; 
 
 	bool pendingInterrupt = false;
 
-	//Transfer
-	//Write Buffer(s)
 	bool awaitFlush = false;
-	u8* currentWrite; //array
+	u8* currentWrite;
 	u32 currentWriteLength;
 	u64 currentWriteSectors;
 
@@ -129,31 +105,22 @@ private:
 	bool ioWrite;
 	bool ioRead;
 	void (ATA::*waitingCmd)() = nullptr;
-	//Write Buffer(s)
 
-	//Read Buffer
 	int rdTransferred = 0;
 	int wrTransferred = 0;
-	//Max tranfer on 24bit is 256*512 = 128KB
-	//Max tranfer on 48bit is 65536*512 = 32MB
 	int readBufferLen;
 	u8* readBuffer = nullptr;
-	//Read Buffer
 
-	//PIO Buffer
 	int pioPtr;
 	int pioEnd;
 	u8 pioBuffer[512];
 
 	int sectorsPerInterrupt;
 	void (ATA::*pioDRQEndTransferFunc)() = nullptr;
-	//PIO Buffer
 
-	//Smart
 	bool smartAutosave = true;
 	bool smartErrors = false;
 	u8 smartSelfTestCount = 0;
-	//Smart
 
 	u8 sceSec[256 * 2] = {0};
 
@@ -175,16 +142,13 @@ public:
 	int WriteDMAFromFIFO(u8* buffer, int available);
 
 	u16 ATAreadPIO();
-	//ATAwritePIO;
 
 private:
 	void InitSparseSupport(const std::string& hddPath);
 
-	//Info
 	void CreateHDDinfo(u64 sizeSectors);
 	void CreateHDDinfoCsum();
 
-	//State
 	void ResetBegin();
 	void ResetEnd(bool hard);
 
@@ -208,7 +172,6 @@ private:
 
 	void ClearHOB();
 
-	//Transfer
 	void IO_Thread();
 	void IO_Read();
 	bool IO_Write();
@@ -224,7 +187,6 @@ private:
 	bool HDD_CanAssessOrSetError();
 	void HDD_SetErrorAtTransferEnd();
 
-	//Commands
 	void IDE_ExecCmd(u16 value);
 
 	bool PreCmd();
@@ -265,7 +227,6 @@ private:
 	void HDD_ReadPIO(bool isLBA48);
 	void HDD_ReadPIOS2();
 	void HDD_ReadPIOEndBlock();
-	//HDD_Write*
 
 	void HDD_Smart();
 	void SMART_SetAutoSaveAttribute();
@@ -277,7 +238,6 @@ private:
 	void HDD_SCE();
 	void SCE_IDENTIFY_DRIVE();
 
-	//In here temporally
 	static void WriteUInt16(u8* data, int* index, u16 value);
 	static void WriteUInt32(u8* data, int* index, u32 value);
 	static void WriteUInt64(u8* data, int* index, u64 value);

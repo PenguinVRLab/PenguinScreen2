@@ -269,8 +269,6 @@ bool SymbolTreeNode::updateDisplayString(
 
 	if (result.isEmpty())
 	{
-		// We don't know how to display objects of this type, so just show the
-		// first 4 bytes of it as a hex dump.
 		u32 value = location.read32(cpu);
 		result = QString("%1 %2 %3 %4")
 		             .arg(value & 0xff, 2, 16, QChar('0'))
@@ -620,9 +618,6 @@ void SymbolTreeNode::updateSymbolHashes(std::span<const SymbolTreeNode*> nodes, 
 	std::set<ccc::FunctionHandle> functions;
 	std::set<ccc::SourceFile*> source_files;
 
-	// Determine which functions we need to hash again, and in the case of
-	// global variables, which source files are associated with those functions
-	// so that we can check if they still match.
 	for (const SymbolTreeNode* node : nodes)
 	{
 		switch (node->symbol.descriptor())
@@ -675,7 +670,6 @@ void SymbolTreeNode::updateSymbolHashes(std::span<const SymbolTreeNode*> nodes, 
 		}
 	}
 
-	// Update the hashes for the enumerated functions.
 	for (ccc::FunctionHandle function_handle : functions)
 	{
 		ccc::Function* function = database.functions.symbol_from_handle(function_handle);
@@ -689,7 +683,6 @@ void SymbolTreeNode::updateSymbolHashes(std::span<const SymbolTreeNode*> nodes, 
 		function->set_current_hash(*hash);
 	}
 
-	// Check that the enumerated source files still have matching functions.
 	for (ccc::SourceFile* source_file : source_files)
 		source_file->check_functions_match(database);
 }
@@ -770,8 +763,6 @@ void SymbolTreeNode::sortChildrenRecursively(bool sort_by_if_type_is_known)
 		child->sortChildrenRecursively(sort_by_if_type_is_known);
 }
 
-// *****************************************************************************
-
 int SymbolTreeDisplayOptions::integerBase() const
 {
 	return m_integer_base;
@@ -806,8 +797,6 @@ std::optional<u64> SymbolTreeDisplayOptions::stringToUnsignedInteger(QString str
 	u64 value = string.toULongLong(&ok, m_integer_base);
 	if (!ok)
 	{
-		// Try parsing it as a signed integer too, just in case the user tried
-		// to use a minus sign.
 		value = static_cast<u64>(string.toLongLong(&ok, m_integer_base));
 		if (!ok)
 			return std::nullopt;
@@ -831,9 +820,6 @@ std::optional<s64> SymbolTreeDisplayOptions::stringToSignedInteger(QString strin
 	s64 value = string.toLongLong(&ok, m_integer_base);
 	if (!ok)
 	{
-		// Try to parse it as an unsigned integer too to handle bases other than
-		// decimal (see below), and to handle the case that the user entered a
-		// value that was too big for a signed integer.
 		value = static_cast<s64>(string.toULongLong(&ok, m_integer_base));
 		if (!ok)
 			return std::nullopt;
@@ -844,11 +830,8 @@ std::optional<s64> SymbolTreeDisplayOptions::stringToSignedInteger(QString strin
 
 QString SymbolTreeDisplayOptions::signedIntegerToString(s64 value, s32 size_bits) const
 {
-	// For bases other than decimal, the user most likely just wants to view the
-	// underlying representation, so we want to display it as unsigned.
 	if (m_integer_base != 10)
 	{
-		// Truncate sign extended bits.
 		u64 mask = (static_cast<u64>(1) << size_bits) - 1;
 		return unsignedIntegerToString(static_cast<u64>(value) & mask, size_bits);
 	}
@@ -858,7 +841,6 @@ QString SymbolTreeDisplayOptions::signedIntegerToString(s64 value, s32 size_bits
 	{
 		field_width = static_cast<int>(ceilf(size_bits / log2f(m_integer_base)));
 
-		// An extra character is needed for the minus sign.
 		if (value < 0)
 			field_width++;
 	}

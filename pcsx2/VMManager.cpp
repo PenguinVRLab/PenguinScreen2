@@ -3,6 +3,10 @@
 
 #include "Achievements.h"
 #include "BuildVersion.h"
+#ifdef ENABLE_VR
+#include "VR/CameraDriver.h"
+#include "VR/VRManager.h"
+#endif
 #include "CDVD/CDVD.h"
 #include "CDVD/IsoReader.h"
 #include "Counters.h"
@@ -24,7 +28,6 @@
 #include "IopBios.h"
 #include "MTGS.h"
 #include "MTVU.h"
-#include "PINE.h"
 #include "Patch.h"
 #include "PerformanceMetrics.h"
 #include "R3000A.h"
@@ -134,7 +137,6 @@ namespace VMManager
 	static void AccumulateSessionPlaytime();
 	static void ResetResumeTimestamp();
 	static void SaveSessionTime(const std::string& prev_serial);
-	static void ReloadPINE();
 
 	static float GetTargetSpeedForLimiterMode(LimiterModeType mode);
 	static void ResetFrameLimiter();
@@ -147,7 +149,7 @@ namespace VMManager
 	static void InitializeDiscordPresence();
 	static void ShutdownDiscordPresence();
 	static void PollDiscordPresence();
-} // namespace VMManager
+}
 
 static constexpr u32 SETTINGS_VERSION = 1;
 
@@ -192,7 +194,6 @@ static bool s_target_speed_can_sync_to_host = false;
 static bool s_target_speed_synced_to_host = false;
 static bool s_use_vsync_for_timing = false;
 
-// Used to track play time. We use a monotonic timer here, in case of clock changes.
 static u64 s_session_resume_timestamp = 0;
 static u64 s_session_accumulated_playtime = 0;
 
@@ -202,25 +203,22 @@ static bool s_discord_presence_active = false;
 static time_t s_discord_presence_time_epoch;
 static const char* s_discord_presence_app_id = "1458595419499139094";
 static const char* s_discord_presence_large_image_key = "4k-pcsx2";
-static const char* s_discord_presence_large_image_text = "PCSX2 PS2 Emulator";
+static const char* s_discord_presence_large_image_text = "PenguinScreen2 PS2 Emulator";
 
-// Making GSDumpReplayer.h dependent on R5900.h is a no-no, since the GS uses it.
 extern R5900cpu GSDumpReplayerCpu;
 
 bool VMManager::PerformEarlyHardwareChecks(const char** error)
 {
-#define COMMON_DOWNLOAD_MESSAGE "PCSX2 builds can be downloaded from https://pcsx2.net/downloads/"
+#define COMMON_DOWNLOAD_MESSAGE "PenguinScreen2 builds can be downloaded from https://github.com/PenguinVRLab/PenguinScreen2/releases"
 
 #if defined(ARCH_X86)
-	// On Windows, this gets called as a global object constructor, before any of our objects are constructed.
-	// So, we have to put it on the stack instead.
 	cpuinfo_initialize();
 
 	if (!cpuinfo_has_x86_sse4_1())
 	{
 		*error =
-			"PCSX2 requires the Streaming SIMD 4.1 Extensions instruction set, which your CPU does not support.\n\n"
-			"SSE4.1 is now a minimum requirement for PCSX2. You should either upgrade your CPU, or use an older build "
+			"PenguinScreen2 requires the Streaming SIMD 4.1 Extensions instruction set, which your CPU does not support.\n\n"
+			"SSE4.1 is now a minimum requirement for PenguinScreen2. You should either upgrade your CPU, or use an older build "
 			"such as 1.6.0.\n\n" COMMON_DOWNLOAD_MESSAGE;
 		return false;
 	}
@@ -228,15 +226,14 @@ bool VMManager::PerformEarlyHardwareChecks(const char** error)
 #if _M_SSE >= 0x0501
 	if (!cpuinfo_has_x86_avx2())
 	{
-		*error = "This build of PCSX2 requires the Advanced Vector Extensions 2 instruction set, which your CPU does "
+		*error = "This build of PenguinScreen2 requires the Advanced Vector Extensions 2 instruction set, which your CPU does "
 				 "not support.\n\n"
-				 "You should download and run the SSE4.1 build of PCSX2 instead, or upgrade to a CPU that supports "
+				 "You should download and run the SSE4.1 build of PenguinScreen2 instead, or upgrade to a CPU that supports "
 				 "AVX2 to use this build.\n\n" COMMON_DOWNLOAD_MESSAGE;
 		return false;
 	}
 #endif
 #elif defined(ARCH_ARM64)
-	// Check page size. If it doesn't match, it is a fatal error.
 	const size_t runtime_host_page_size = HostSys::GetRuntimePageSize();
 	if (__pagesize != runtime_host_page_size)
 	{
@@ -266,7 +263,6 @@ void VMManager::ResetResumeTimestamp()
 
 void VMManager::SetState(VMState state)
 {
-	// Some state transitions aren't valid.
 	const VMState old_state = s_state.load(std::memory_order_acquire);
 	pxAssert(state != VMState::Initializing && state != VMState::Shutdown);
 	SetTimerResolutionIncreased(state == VMState::Running);
@@ -306,7 +302,6 @@ void VMManager::SetState(VMState state)
 	}
 	else if (state == VMState::Stopping && old_state == VMState::Running)
 	{
-		// If stopping, break execution as soon as possible.
 		Cpu->ExitExecution();
 	}
 }
@@ -381,9 +376,6 @@ bool VMManager::Internal::CPUThreadInitialize()
 	Threading::SetNameOfCurrentThread("CPU Thread");
 	PerformanceMetrics::SetCPUThread(Threading::ThreadHandle::GetForCallingThread());
 
-	// On Win32, we have a bunch of things which use COM (e.g. SDL, XAudio2, etc).
-	// We need to initialize COM first, before anything else does, because otherwise they might
-	// initialize it in single-threaded/apartment mode, which can't be changed to multithreaded.
 #ifdef _WIN32
 	HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 	if (FAILED(hr))
@@ -393,7 +385,6 @@ bool VMManager::Internal::CPUThreadInitialize()
 	}
 #endif
 
-	// Use the default rounding mode, just in case it differs on some platform.
 	FPControlRegister::SetCurrent(FPControlRegister::GetDefault());
 
 	if (!cpuinfo_initialize())
@@ -415,19 +406,19 @@ bool VMManager::Internal::CPUThreadInitialize()
 
 	USBinit();
 
-	// We want settings loaded so we choose the correct renderer for big picture mode.
-	// This also sorts out input sources.
 	LoadSettings();
 
 	if (EmuConfig.Achievements.Enabled)
 		Achievements::Initialize();
 
-	ReloadPINE();
+#ifdef ENABLE_VR
+	VR::UpdateSettings();
+#endif
+
 
 	if (EmuConfig.EnableDiscordPresence)
 		InitializeDiscordPresence();
 
-	// Check for advanced settings status and warn the user if its enabled
 	if (Host::GetBaseBoolSettingValue("UI", "ShowAdvancedSettings", false))
 		Console.Warning("Settings: Advanced Settings are enabled; only proceed if you know what you're doing! No support will be provided if you have the option enabled.");
 
@@ -438,7 +429,6 @@ void VMManager::Internal::CPUThreadShutdown()
 {
 	ShutdownDiscordPresence();
 
-	PINEServer::Deinitialize();
 
 	Achievements::Shutdown(false);
 
@@ -460,7 +450,6 @@ void VMManager::Internal::CPUThreadShutdown()
 	CoUninitialize();
 #endif
 
-	// Ensure emulog gets flushed.
 	Log::SetFileOutputLevel(LOGLEVEL_NONE, std::string());
 
 	R5900SymbolImporter.ShutdownWorkerThread();
@@ -491,7 +480,6 @@ void VMManager::UpdateLoggingSettings(SettingsInterface& si)
 	if (system_console_enabled != Log::IsConsoleOutputEnabled())
 		Log::SetConsoleOutputLevel(system_console_enabled ? level : LOGLEVEL_NONE);
 
-		// Debug console only exists on Windows.
 #ifdef _WIN32
 	const bool debug_console_enabled = IsDebuggerPresent() && si.GetBoolValue("Logging", "EnableDebugConsole", false);
 	Log::SetDebugOutputLevel(debug_console_enabled ? level : LOGLEVEL_NONE);
@@ -513,13 +501,10 @@ void VMManager::UpdateLoggingSettings(SettingsInterface& si)
 	TraceLogging.IOP.Memory.Enabled = true;
 	TraceLogging.SIF.Enabled = true;
 
-	// Input Recording Logs
 	ConsoleLogging.recordingConsole.Enabled = any_logging_sinks && si.GetBoolValue("Logging", "EnableInputRecordingLogs", true);
 	ConsoleLogging.controlInfo.Enabled = any_logging_sinks && si.GetBoolValue("Logging", "EnableControllerLogs", false);
 
-	// Sync the trace settings with the config.
 	EmuConfig.Trace.SyncToConfig();
-	// Set the output level if file logging or trace logs have changed.
 	if (file_logging_enabled != Log::IsFileOutputEnabled() || (EmuConfig.Trace.Enabled && Log::GetMaxLevel() < LOGLEVEL_TRACE))
 	{
 		std::string path = Path::Combine(EmuFolders::Logs, "emulog.txt");
@@ -559,11 +544,9 @@ void VMManager::Internal::LoadStartupSettings()
 	EmuFolders::LoadConfig(*bsi);
 	EmuFolders::EnsureFoldersExist();
 
-	// We need to create the console window early, otherwise it appears behind the main window.
 	UpdateLoggingSettings(*bsi);
 
 #ifdef ENABLE_RAINTEGRATION
-	// RAIntegration switch must happen before the UI is created.
 	if (Host::GetBaseBoolSettingValue("Achievements", "UseRAIntegration", false))
 		Achievements::SwitchToRAIntegration();
 #endif
@@ -585,7 +568,6 @@ void VMManager::SetDefaultSettings(
 		SettingsSaveWrapper ssw(si);
 		temp_config.LoadSave(ssw);
 
-		// Settings not part of the Pcsx2Config struct.
 		si.SetBoolValue("EmuCore", "EnableFastBoot", true);
 
 		SetHardwareDependentDefaultSettings(si);
@@ -604,9 +586,6 @@ void VMManager::SetDefaultSettings(
 
 void VMManager::LoadSettings()
 {
-	// Switch the rounding mode back to the system default for loading settings.
-	// We might have a different mode, because this can be called during setting updates while a VM is active,
-	// and the rounding mode has an impact on the conversion of floating-point values to/from strings.
 	FPControlRegisterBackup fpcr_backup(FPControlRegister::GetDefault());
 
 	std::unique_lock<std::mutex> lock = Host::GetSettingsLock();
@@ -632,14 +611,12 @@ void VMManager::ReloadInputSources()
 	SettingsInterface* si = Host::GetSettingsInterface();
 	InputManager::ReloadSources(*si, lock);
 
-	// skip loading bindings if we're not running, since it'll get done on startup anyway
 	if (HasValidVM())
 		LoadInputBindings(*si, lock);
 }
 
 void VMManager::ReloadInputBindings(bool force)
 {
-	// skip loading bindings if we're not running, since it'll get done on startup anyway
 	if (!force && !HasValidVM())
 		return;
 
@@ -655,21 +632,17 @@ void VMManager::LoadCoreSettings(SettingsInterface& si)
 	EmuConfig.LoadSave(slw);
 	Patch::ApplyPatchSettingOverrides();
 
-	// Achievements hardcore mode disallows setting some configuration options.
 	EnforceAchievementsChallengeModeSettings();
 
-	// Remove any user-specified hacks in the config (we don't want stale/conflicting values when it's globally disabled).
 	EmuConfig.GS.MaskUserHacks();
 	EmuConfig.GS.MaskUpscalingHacks();
 
-	// Force MTVU off when playing back GS dumps, it doesn't get used.
 	if (GSDumpReplayer::IsReplayingDump())
 		EmuConfig.Speedhacks.vuThread = false;
 }
 
 void VMManager::LoadInputBindings(SettingsInterface& si, std::unique_lock<std::mutex>& lock)
 {
-	// Hotkeys use the base configuration, except if the custom hotkeys option is enabled.
 	if (SettingsInterface* isi = Host::Internal::GetInputSettingsLayer())
 	{
 		const bool use_profile_hotkeys = isi->GetBoolValue("Pad", "UseProfileHotkeyBindings", false);
@@ -679,7 +652,6 @@ void VMManager::LoadInputBindings(SettingsInterface& si, std::unique_lock<std::m
 		}
 		else
 		{
-			// Temporarily disable the input profile layer, so it doesn't take precedence.
 			Host::Internal::SetInputSettingsLayer(nullptr, lock);
 			InputManager::ReloadBindings(si, *isi, si, true, false);
 			Host::Internal::SetInputSettingsLayer(s_input_settings_interface.get(), lock);
@@ -725,10 +697,8 @@ void VMManager::ApplyGameFixes()
 {
 	if (!HasBootedELF() && !GSDumpReplayer::IsReplayingDump())
 	{
-		// Instant DMA needs to be on for this BIOS (font rendering is broken without it, possible cache issues).
 		EmuConfig.Gamefixes.InstantDMAHack = true;
 
-		// Disable user's manual hardware fixes, it might be problematic.
 		EmuConfig.GS.ManualUserHacks = false;
 		return;
 	}
@@ -740,8 +710,6 @@ void VMManager::ApplyGameFixes()
 	game->applyGameFixes(EmuConfig, EmuConfig.EnableGameFixes);
 	game->applyGSHardwareFixes(EmuConfig.GS);
 
-	// Re-remove upscaling fixes, make sure they don't apply at native res.
-	// We do this in LoadCoreSettings(), but game fixes get applied afterwards because of the unsafe warning.
 	EmuConfig.GS.MaskUpscalingHacks();
 }
 
@@ -749,7 +717,6 @@ void VMManager::ApplySettings()
 {
 	Console.WriteLn("Applying settings...");
 
-	// If we're running, ensure the threads are synced.
 	if (GetState() == VMState::Running)
 	{
 		if (THREAD_VU1)
@@ -757,8 +724,6 @@ void VMManager::ApplySettings()
 		MTGS::WaitGS(false);
 	}
 
-	// Reset to a clean Pcsx2Config. Otherwise things which are optional (e.g. gamefixes)
-	// do not use the correct default values when loading.
 	Pcsx2Config old_config(std::move(EmuConfig));
 	EmuConfig = Pcsx2Config();
 	EmuConfig.CopyRuntimeConfig(old_config);
@@ -768,11 +733,9 @@ void VMManager::ApplySettings()
 
 void VMManager::ApplyCoreSettings()
 {
-	// Lightweight version of above, called when ELF changes. This should not get called without an active VM.
 	pxAssertRel(HasValidOrInitializingVM(), "Reloading core settings requires a valid VM.");
 	Console.WriteLn("Applying core settings...");
 
-	// If we're running, ensure the threads are synced.
 	if (GetState() == VMState::Running)
 	{
 		if (THREAD_VU1)
@@ -780,8 +743,6 @@ void VMManager::ApplyCoreSettings()
 		MTGS::WaitGS(false);
 	}
 
-	// Reset to a clean Pcsx2Config. Otherwise things which are optional (e.g. gamefixes)
-	// do not use the correct default values when loading.
 	Pcsx2Config old_config(std::move(EmuConfig));
 	EmuConfig = Pcsx2Config();
 	EmuConfig.CopyRuntimeConfig(old_config);
@@ -802,7 +763,6 @@ bool VMManager::ReloadGameSettings()
 	if (!UpdateGameSettingsLayer())
 		return false;
 
-	// Patches must come first, because they can affect aspect ratio/interlacing.
 	Patch::UpdateActivePatches(true, false, true, HasValidVM());
 	ApplySettings();
 	return true;
@@ -907,14 +867,13 @@ void VMManager::Internal::UpdateEmuFolders()
 	}
 }
 
-void VMManager::RequestDisplaySize(float scale /*= 0.0f*/)
+void VMManager::RequestDisplaySize(float scale )
 {
 	int iwidth, iheight;
 	GSgetInternalResolution(&iwidth, &iheight);
 	if (iwidth <= 0 || iheight <= 0)
 		return;
 
-	// scale x not y for aspect ratio
 	float x_scale;
 	switch (GSConfig.AspectRatio)
 	{
@@ -946,7 +905,6 @@ void VMManager::RequestDisplaySize(float scale /*= 0.0f*/)
 
 	if (scale != 0.0f)
 	{
-		// unapply the upscaling, then apply the scale
 		scale = (1.0f / GSConfig.UpscaleMultiplier) * scale;
 		width *= scale;
 		height *= scale;
@@ -960,8 +918,6 @@ void VMManager::RequestDisplaySize(float scale /*= 0.0f*/)
 
 std::string VMManager::GetSerialForGameSettings()
 {
-	// If we're running an ELF, we don't want to use the serial for any ISO override
-	// for game settings, since the game settings is where we define the override.
 	std::unique_lock lock(s_info_mutex);
 	return s_elf_override.empty() ? std::string(s_disc_serial) : std::string();
 }
@@ -974,7 +930,6 @@ bool VMManager::UpdateGameSettingsLayer()
 		std::string filename(GetGameSettingsPath(GetSerialForGameSettings(), s_disc_crc));
 		if (!FileSystem::FileExists(filename.c_str()))
 		{
-			// try the legacy format (crc.ini)
 			filename = GetGameSettingsPath({}, s_disc_crc);
 		}
 
@@ -1037,7 +992,6 @@ void VMManager::UpdateDiscDetails(bool booting)
 {
 	std::string memcardFilters;
 	{
-		// Only need to protect writes with the mutex.
 		std::unique_lock lock(s_info_mutex);
 		const std::string old_serial = std::move(s_disc_serial);
 		const u32 old_crc = s_disc_crc;
@@ -1061,7 +1015,7 @@ void VMManager::UpdateDiscDetails(bool booting)
 		{
 			s_disc_serial = Path::GetFileTitle(s_elf_override);
 			s_disc_version = {};
-			s_disc_crc = 0; // set below
+			s_disc_crc = 0;
 		}
 		else
 		{
@@ -1071,7 +1025,6 @@ void VMManager::UpdateDiscDetails(bool booting)
 			title = fmt::format(TRANSLATE_FS("VMManager", "PS2 BIOS ({})"), BiosZone);
 		}
 
-		// If we're booting an ELF, use its CRC, not the disc (if any).
 		if (!s_elf_override.empty())
 			s_disc_crc = cdvdGetElfCRC(s_elf_override);
 
@@ -1098,7 +1051,6 @@ void VMManager::UpdateDiscDetails(bool booting)
 
 				std::string game_title = custom_title.empty() ? game->name : std::move(custom_title);
 
-				// Append the ELF override if we're using it with a disc.
 				if (!s_elf_override.empty())
 				{
 					title = fmt::format(
@@ -1145,7 +1097,10 @@ void VMManager::UpdateDiscDetails(bool booting)
 	UpdateGameSettingsLayer();
 	ApplySettings();
 
-	// Patches are game-dependent, thus should get applied after game settings ia loaded.
+#ifdef ENABLE_VR
+	VR::UpdateSettings();
+#endif
+
 	Patch::ReloadPatches(s_disc_serial, HasBootedELF() ? s_current_crc : 0, true, true, false, false);
 
 	ReportGameChangeToHost();
@@ -1155,7 +1110,6 @@ void VMManager::UpdateDiscDetails(bool booting)
 	if (!GSDumpReplayer::IsReplayingDump())
 	{
 		Achievements::GameChanged(s_disc_crc, s_current_crc);
-		ReloadPINE();
 		UpdateDiscordPresence(s_state.load(std::memory_order_relaxed) == VMState::Initializing);
 		FileMcd_Reopen(memcardFilters.empty() ? s_disc_serial : memcardFilters);
 	}
@@ -1173,10 +1127,6 @@ void VMManager::ClearDiscDetails()
 
 void VMManager::HandleELFChange(bool verbose_patches_if_changed)
 {
-	// Classic chicken and egg problem here. We don't want to update the running game
-	// until the game entry point actually runs, because that can update settings, which
-	// can flush the JIT, etc. But we need to apply patches for games where the entry
-	// point is in the patch (e.g. WRC 4). So. Gross, but the only way to handle it really.
 	const u32 crc_to_report = HasBootedELF() ? s_current_crc : 0;
 
 	ReportGameChangeToHost();
@@ -1253,8 +1203,6 @@ bool VMManager::AutoDetectSource(const std::string& filename, Error* error)
 		}
 		else if (IsElfFileName(filename))
 		{
-			// alternative way of booting an elf, change the elf override, and (optionally) use the disc
-			// specified in the game settings.
 			std::string disc_path = GetDiscOverrideFromGameSettings(filename);
 			if (!disc_path.empty())
 			{
@@ -1271,7 +1219,6 @@ bool VMManager::AutoDetectSource(const std::string& filename, Error* error)
 		}
 		else
 		{
-			// TODO: Maybe we should check if it's a valid iso here...
 			CDVDsys_SetFile(CDVD_SourceType::Iso, filename);
 			CDVDsys_ChangeSource(CDVD_SourceType::Iso);
 			return true;
@@ -1279,7 +1226,6 @@ bool VMManager::AutoDetectSource(const std::string& filename, Error* error)
 	}
 	else
 	{
-		// make sure we're not fast booting when we have no filename
 		CDVDsys_ChangeSource(CDVD_SourceType::NoDisc);
 		return true;
 	}
@@ -1347,9 +1293,6 @@ VMBootResult VMManager::Initialize(const VMBootParameters& boot_params, Error* e
 		return VMBootResult::StartupFailure;
 	}
 
-	// cancel any game list scanning, we need to use CDVD!
-	// TODO: we can get rid of this once, we make CDVD not use globals...
-	// (or make it thread-local, but that seems silly.)
 	Host::CancelGameListRefresh();
 
 	s_state.store(VMState::Initializing, std::memory_order_release);
@@ -1382,7 +1325,6 @@ VMBootResult VMManager::Initialize(const VMBootParameters& boot_params, Error* e
 	if (!boot_params.save_state.empty())
 		state_to_load = boot_params.save_state;
 
-	// if we're loading an indexed save state, we need to get the serial/crc from the disc.
 	if (boot_params.state_index.has_value())
 	{
 		if (boot_params.filename.empty())
@@ -1406,7 +1348,6 @@ VMBootResult VMManager::Initialize(const VMBootParameters& boot_params, Error* e
 
 	ScopedGuard unlock_cdvd = &cdvdUnlock;
 
-	// resolve source type
 	if (boot_params.source_type.has_value())
 	{
 		if (boot_params.source_type.value() == CDVD_SourceType::Iso &&
@@ -1417,20 +1358,17 @@ VMBootResult VMManager::Initialize(const VMBootParameters& boot_params, Error* e
 			return VMBootResult::StartupFailure;
 		}
 
-		// Use specified source type.
 		CDVDsys_SetFile(boot_params.source_type.value(), boot_params.filename);
 		CDVDsys_ChangeSource(boot_params.source_type.value());
 	}
 	else
 	{
-		// Automatic type detection of boot parameter based on filename.
 		if (!AutoDetectSource(boot_params.filename, error))
 			return VMBootResult::StartupFailure;
 	}
 
 	ScopedGuard close_cdvd_files(&CDVDsys_ClearFiles);
 
-	// Playing GS dumps don't need a BIOS.
 	if (!GSDumpReplayer::IsReplayingDump())
 	{
 		Console.WriteLn("Loading BIOS...");
@@ -1438,16 +1376,15 @@ VMBootResult VMManager::Initialize(const VMBootParameters& boot_params, Error* e
 		{
 			Error::SetStringFmt(error,
 				TRANSLATE_FS("VMManager",
-					"PCSX2 requires a PlayStation 2 BIOS in order to run.\n\n"
-					"For legal reasons, you will need to obtain this BIOS from a PlayStation 2 unit which you own.\n\n"
-					"For step-by-step help with this process, please consult the setup guide at {}.\n\n"
-					"PCSX2 will be able to run once you've placed your BIOS image inside the folder named \"bios\" within the data directory "
-					"(Tools Menu -> Open Data Directory)."),
+					"PenguinScreen2 requires a PlayStation 2 BIOS in order to run.\n\n"
+					"For legal reasons, you must dump this BIOS from a PlayStation 2 console you own — it is never included or downloaded. "
+					"For step-by-step help dumping it, see the guide at {}.\n\n"
+					"Easiest fix: drop the BIOS file into the \"PS2-BIOS\" folder in your home directory and restart PenguinScreen2 — it will be found automatically. "
+					"(Any BIOS folder also works via Settings -> BIOS.)"),
 				PCSX2_DOCUMENTATION_BIOS_URL_SHORTENED);
 			return VMBootResult::StartupFailure;
 		}
 
-		// Must happen after BIOS load, depends on BIOS version.
 		cdvdLoadNVRAM();
 	}
 
@@ -1462,13 +1399,10 @@ VMBootResult VMManager::Initialize(const VMBootParameters& boot_params, Error* e
 	}
 	ScopedGuard close_cdvd(&DoCDVDclose);
 
-	// Figure out which game we're running! This also loads game settings.
 	UpdateDiscDetails(true);
 
 	ScopedGuard close_memcards(&FileMcd_EmuClose);
 
-	// Read fast boot setting late so it can be overridden per-game.
-	// ELFs must be fast booted, and GS dumps are never fast booted.
 	s_fast_boot_requested =
 		(boot_params.fast_boot.value_or(static_cast<bool>(EmuConfig.EnableFastBoot)) || !s_elf_override.empty()) &&
 		(CDVDsys_GetSourceType() != CDVD_SourceType::NoDisc || !s_elf_override.empty()) &&
@@ -1494,10 +1428,6 @@ VMBootResult VMManager::Initialize(const VMBootParameters& boot_params, Error* e
 		Hle_ClearHostRoot();
 	}
 
-	// Check for resuming and 'Boot and Debug' with hardcore mode.
-	// Why do we need the boot param? Because we need some way of telling BootSystem() that
-	// the user allowed HC mode to be disabled, because otherwise we'll ResetHardcoreMode()
-	// and send ourselves into an infinite loop.
 	if (boot_params.disable_achievements_hardcore_mode || GSDumpReplayer::IsReplayingDump())
 		Achievements::DisableHardcoreMode();
 	else
@@ -1530,7 +1460,6 @@ VMBootResult VMManager::Initialize(const VMBootParameters& boot_params, Error* e
 	s_gs_open_on_initialize = MTGS::IsOpen();
 	if (!s_gs_open_on_initialize && !MTGS::WaitForOpen())
 	{
-		// we assume GS is going to report its own error
 		Error::SetString(error, TRANSLATE_STR("VMManager", "Failed to initialize GS."));
 		return VMBootResult::StartupFailure;
 	}
@@ -1605,7 +1534,6 @@ VMBootResult VMManager::Initialize(const VMBootParameters& boot_params, Error* e
 	}
 	ScopedGuard close_fw = []() { FWclose(); };
 
-	// Don't close when we return
 	close_fw.Cancel();
 	close_usb.Cancel();
 	close_dev9.Cancel();
@@ -1633,7 +1561,6 @@ VMBootResult VMManager::Initialize(const VMBootParameters& boot_params, Error* e
 
 	SetEmuThreadAffinities();
 
-	// do we want to load state?
 	if (!GSDumpReplayer::IsReplayingDump() && !state_to_load.empty())
 	{
 		if (!DoLoadState(state_to_load.c_str(), error))
@@ -1649,13 +1576,10 @@ VMBootResult VMManager::Initialize(const VMBootParameters& boot_params, Error* e
 
 void VMManager::Shutdown(bool save_resume_state)
 {
-	// we'll probably already be stopping (this is how Qt calls shutdown),
-	// but just in case, so any of the stuff we call here knows we don't have a valid VM.
 	s_state.store(VMState::Stopping, std::memory_order_release);
 
 	SetTimerResolutionIncreased(false);
 
-	// sync everything
 	if (THREAD_VU1)
 		vu1Thread.WaitVU();
 	MTGS::WaitGS();
@@ -1672,7 +1596,6 @@ void VMManager::Shutdown(bool save_resume_state)
 		}
 	}
 
-	// end input recording before clearing state
 	if (g_InputRecording.isActive())
 		g_InputRecording.stop();
 
@@ -1711,8 +1634,6 @@ void VMManager::Shutdown(bool save_resume_state)
 	FWclose();
 	FileMcd_EmuClose();
 
-	// If the fullscreen UI is running, do a hardware reset on the GS
-	// so that the texture cache and targets are all cleared.
 	if (s_gs_open_on_initialize)
 	{
 		MTGS::WaitGS(false, false, false);
@@ -1740,7 +1661,6 @@ void VMManager::Shutdown(bool save_resume_state)
 	SetEmuThreadAffinities();
 	Host::OnVMDestroyed();
 
-	// clear out any potentially-incorrect settings from the last game
 	LoadSettings();
 }
 
@@ -1764,11 +1684,6 @@ void VMManager::Reset()
 {
 	pxAssert(HasValidVM());
 
-	// If we're running, we're probably going to be executing this at event test time,
-	// at vsync, which happens in the middle of event handling. Resetting everything
-	// immediately here is a bad idea (tm), in fact, it breaks some games (e.g. TC:NYC).
-	// So, instead, we tell the rec to exit execution, _then_ reset. Paused is fine here,
-	// since the rec won't be running, so it's safe to immediately reset there.
 	if (s_state.load(std::memory_order_acquire) == VMState::Running)
 	{
 		s_state.store(VMState::Resetting, std::memory_order_release);
@@ -1778,7 +1693,6 @@ void VMManager::Reset()
 	if (!Achievements::ConfirmSystemReset())
 		return;
 
-	// Re-enforce hardcode mode constraints if we're now enabling it.
 	if (!GSDumpReplayer::IsReplayingDump() && Achievements::ResetHardcoreMode(false))
 		ApplySettings();
 
@@ -1809,7 +1723,6 @@ void VMManager::Reset()
 
 	ResetFrameLimiter();
 
-	// If we were paused, state won't be resetting, so don't flip back to running.
 	if (s_state.load(std::memory_order_acquire) == VMState::Resetting)
 		s_state.store(VMState::Running, std::memory_order_release);
 }
@@ -1823,15 +1736,12 @@ bool SaveStateBase::vmFreeze()
 	FreezeString(s_elf_path);
 	Freeze(s_elf_executed);
 
-	// We have to test all the variables here, because we could be loading a state created during ELF load, after the ELF has loaded.
 	if (IsLoading())
 	{
-		// Might need new ELF info.
 		if (s_elf_path != prev_elf)
 		{
 			if (s_elf_path.empty())
 			{
-				// Shouldn't have executed a non-existant ELF.. unless you load state created from a deleted ELF override I guess.
 				if (s_elf_executed)
 					Console.Error("Somehow executed a non-existant ELF");
 				VMManager::ClearELFInfo();
@@ -1949,7 +1859,6 @@ void VMManager::DoSaveState(const char* filename, s32 slot_for_message, bool zip
 
 	if (zip_on_thread)
 	{
-		// lock order here is important; the thread could exit before we resume here.
 		std::unique_lock lock(s_save_state_threads_mutex);
 		s_save_state_threads.emplace_back(&VMManager::ZipSaveStateOnThread, std::move(elist), std::move(screenshot),
 			std::string(filename), slot_for_message, std::move(error_callback));
@@ -1995,7 +1904,6 @@ void VMManager::ZipSaveStateOnThread(std::unique_ptr<ArchiveEntryList> elist,
 	ZipSaveState(
 		std::move(elist), std::move(screenshot), filename.c_str(), slot_for_message, std::move(error_callback));
 
-	// remove ourselves from the thread list. if we're joining, we might not be in there.
 	const auto this_id = std::this_thread::get_id();
 	std::unique_lock lock(s_save_state_threads_mutex);
 	for (auto it = s_save_state_threads.begin(); it != s_save_state_threads.end(); ++it)
@@ -2014,8 +1922,6 @@ void VMManager::WaitForSaveStateFlush()
 	std::unique_lock lock(s_save_state_threads_mutex);
 	while (!s_save_state_threads.empty())
 	{
-		// take a thread from the list and join with it. it won't self detatch then, but that's okay,
-		// since we're joining with it here.
 		std::thread save_thread(std::move(s_save_state_threads.front()));
 		s_save_state_threads.pop_front();
 		lock.unlock();
@@ -2024,7 +1930,7 @@ void VMManager::WaitForSaveStateFlush()
 	}
 }
 
-u32 VMManager::DeleteSaveStates(const char* game_serial, u32 game_crc, bool also_backups /* = true */)
+u32 VMManager::DeleteSaveStates(const char* game_serial, u32 game_crc, bool also_backups )
 {
 	WaitForSaveStateFlush();
 
@@ -2062,7 +1968,6 @@ bool VMManager::LoadState(const char* filename, Error* error)
 		return false;
 	}
 
-	// TODO: Save the current state so we don't need to reset.
 	if (!DoLoadState(filename, error))
 	{
 		Reset();
@@ -2144,7 +2049,6 @@ void VMManager::SaveStateToSlot(s32 slot, bool zip_on_thread, std::function<void
 		return;
 	}
 
-	// if it takes more than a minute.. well.. wtf.
 	Host::AddIconOSDMessage(fmt::format("SaveStateSlot{}", slot), ICON_FA_FLOPPY_DISK,
 		fmt::format(TRANSLATE_FS("VMManager", "Saving state to slot {}..."), slot), 60.0f);
 
@@ -2211,8 +2115,6 @@ void VMManager::UpdateTargetSpeed()
 
 	if (EmuConfig.EmulationSpeed.SyncToHostRefreshRate)
 	{
-		// TODO: This is accessing GS thread state.. I _think_ it should be okay, but I still hate it.
-		// We can at least avoid the query in the first place if we're not using sync to host.
 		if (const std::optional<float> host_refresh_rate = GSGetHostRefreshRate(); host_refresh_rate.has_value())
 		{
 			const float host_to_guest_ratio = host_refresh_rate.value() / frame_rate;
@@ -2274,36 +2176,27 @@ void VMManager::Internal::Throttle()
 
 	const u64 uExpectedEnd =
 		s_limiter_frame_start +
-		s_limiter_ticks_per_frame; // Compute when we would expect this frame to end, assuming everything goes perfectly perfect.
-	const u64 iEnd = GetCPUTicks(); // The current tick we actually stopped on.
-	const s64 sDeltaTime = iEnd - uExpectedEnd; // The diff between when we stopped and when we expected to.
+		s_limiter_ticks_per_frame;
+	const u64 iEnd = GetCPUTicks();
+	const s64 sDeltaTime = iEnd - uExpectedEnd;
 
-	// If frame ran too long...
 	if (sDeltaTime >= s_limiter_ticks_per_frame)
 	{
-		// ... Fudge the next frame start over a bit. Prevents fast forward zoomies.
 		s_limiter_frame_start += (sDeltaTime / s_limiter_ticks_per_frame) * s_limiter_ticks_per_frame;
 		return;
 	}
 
-	// Conversion of delta from CPU ticks (microseconds) to milliseconds
 	const s32 msec = static_cast<s32>((sDeltaTime * -1000) / static_cast<s64>(GetTickFrequency()));
 
-	// If any integer value of milliseconds exists, sleep it off.
-	// Prior comments suggested that 1-2 ms sleeps were inaccurate on some OSes;
-	// further testing suggests instead that this was utter bullshit.
 	if (msec > 1)
 	{
 		Threading::Sleep(msec - 1);
 	}
 
-	// Conversion to milliseconds loses some precision; after sleeping off whole milliseconds,
-	// spin the thread without sleeping until we finally reach our expected end time.
 	while (GetCPUTicks() < uExpectedEnd)
 	{
 	}
 
-	// Finally, set our next frame start to when this one ends
 	s_limiter_frame_start = uExpectedEnd;
 }
 
@@ -2312,7 +2205,7 @@ void VMManager::Internal::FrameRateChanged()
 	UpdateTargetSpeed();
 }
 
-void VMManager::FrameAdvance(u32 num_frames /*= 1*/)
+void VMManager::FrameAdvance(u32 num_frames )
 {
 	if (!HasValidVM())
 		return;
@@ -2548,7 +2441,6 @@ void LogGPUCapabilities()
 			std::string version = "Unknown\n";
 			if (card.find("NVIDIA") != std::string::npos)
 			{
-				// Assumes that all NVIDIA cards use the same driver
 				FILE* fnsmi = popen("nvidia-smi --query-gpu=driver_version --format=csv,noheader", "r");
 				if (fnsmi)
 				{
@@ -2561,7 +2453,6 @@ void LogGPUCapabilities()
 			}
 			else
 			{
-				// Assuming non-NVIDIA cards are using the mesa driver
 				FILE* fglxinfo = popen("glxinfo | sed -n 's/OpenGL version string:/OGL/p'", "r");
 				if (fglxinfo)
 				{
@@ -2569,12 +2460,6 @@ void LogGPUCapabilities()
 					{
 						version = std::string(buffer);
 
-						// This path is taken if the card was Intel or AMD
-						// If glxinfo is reporting NVIDIA, then it's likely that this is a multi-gpu system
-						// and that this version doesn't apply to this AMD / Intel device
-						// Alternatively we could use vulkaninfo, which allows us to select the device
-						// But I was unable to get that to work on my system
-						// So for now, we cannot get the iGPU version on NVIDIA dGPU systems
 						if (version.find("NVIDIA") != std::string::npos)
 						{
 							version = "Unknown (OpenGL default is NVIDIA)\n";
@@ -2596,7 +2481,7 @@ void LogGPUCapabilities()
 
 void VMManager::LogCPUCapabilities()
 {
-	Console.WriteLn(Color_StrongGreen, "PCSX2 %s", BuildVersion::GitRev);
+	Console.WriteLn(Color_StrongGreen, "PenguinScreen2 %s", BuildVersion::GitRev);
 	Console.WriteLnFmt("Savestate version: 0x{:x}\n", g_SaveVersion);
 	Console.WriteLn();
 
@@ -2645,7 +2530,6 @@ void VMManager::LogCPUCapabilities()
 	const size_t runtime_cache_line_size = HostSys::GetRuntimeCacheLineSize();
 	if (__cachelinesize != runtime_cache_line_size)
 	{
-		// Not fatal, but does have performance implications.
 		WARNING_LOG(
 			"Cache line size mismatch. This build was compiled with {} byte lines, but the system has {} byte lines.",
 			__cachelinesize, runtime_cache_line_size);
@@ -2660,16 +2544,13 @@ void VMManager::LogCPUCapabilities()
 
 void VMManager::InitializeCPUProviders()
 {
-#ifdef _M_X86 // TODO(Stenzek): Remove me once EE/VU/IOP recs are added.
+#ifdef _M_X86
 	recCpu.Reserve();
 	psxRec.Reserve();
 
 	CpuMicroVU0.Reserve();
 	CpuMicroVU1.Reserve();
 #else
-	// Despite not having any VU recompilers on ARM64, therefore no MTVU,
-	// we still need the thread alive. Otherwise the read and write positions
-	// of the ring buffer wont match, and various systems in the emulator end up deadlocked.
 	vu1Thread.Open();
 #endif
 
@@ -2684,15 +2565,13 @@ void VMManager::ShutdownCPUProviders()
 		dVifRelease(0);
 	}
 
-#ifdef _M_X86 // TODO(Stenzek): Remove me once EE/VU/IOP recs are added.
+#ifdef _M_X86
 	CpuMicroVU1.Shutdown();
 	CpuMicroVU0.Shutdown();
 
 	psxRec.Shutdown();
 	recCpu.Shutdown();
 #else
-	// See the comment in the InitializeCPUProviders for an explaination why we
-	// still need to manage the MTVU thread.
 	if (vu1Thread.IsOpen())
 		vu1Thread.WaitVU();
 #endif
@@ -2709,7 +2588,7 @@ void VMManager::UpdateCPUImplementations()
 		return;
 	}
 
-#ifdef _M_X86 // TODO(Stenzek): Remove me once EE/VU/IOP recs are added.
+#ifdef _M_X86
 	Cpu = CHECK_EEREC ? &recCpu : &intCpu;
 	psxCpu = CHECK_IOPREC ? &psxRec : &psxInt;
 
@@ -2729,8 +2608,7 @@ void VMManager::Internal::ClearCPUExecutionCaches()
 	Cpu->Reset();
 	psxCpu->Reset();
 
-#ifdef _M_X86 // TODO(Stenzek): Remove me once EE/VU/IOP recs are added.
-	// mVU's VU0 needs to be properly initialized for macro mode even if it's not used for micro mode!
+#ifdef _M_X86
 	if (CHECK_EEREC && !EmuConfig.Cpu.Recompiler.EnableVU0)
 		CpuMicroVU0.Reset();
 #endif
@@ -2747,16 +2625,13 @@ void VMManager::Internal::ClearCPUExecutionCaches()
 
 void VMManager::Execute()
 {
-	// Check for interpreter<->recompiler switches.
 	if (std::exchange(s_cpu_implementation_changed, false))
 	{
-		// We need to switch the cpus out, and reset the new ones if so.
 		UpdateCPUImplementations();
 		Internal::ClearCPUExecutionCaches();
 		vtlb_ResetFastmem();
 	}
 
-	// Execute until we're asked to stop.
 	Cpu->Execute();
 }
 
@@ -2780,12 +2655,9 @@ void VMManager::SetPaused(bool paused)
 
 GSVSyncMode VMManager::GetEffectiveVSyncMode()
 {
-	// Vsync off => always disabled.
 	if (!EmuConfig.GS.VsyncEnable)
 		return GSVSyncMode::Disabled;
 
-	// If there's no VM, or we're using vsync for timing, then we always use double-buffered (blocking).
-	// Try to keep the same present mode whether we're running or not, since it'll avoid flicker.
 	const VMState state = GetState();
 	const bool valid_vm = (state != VMState::Shutdown && state != VMState::Stopping);
 	if (s_target_speed_can_sync_to_host || (!valid_vm && EmuConfig.EmulationSpeed.SyncToHostRefreshRate) ||
@@ -2794,9 +2666,6 @@ GSVSyncMode VMManager::GetEffectiveVSyncMode()
 		return GSVSyncMode::FIFO;
 	}
 
-	// For PAL games, we always want to triple buffer, because otherwise we'll be tearing.
-	// Or for when we aren't using sync-to-host-refresh, to avoid dropping frames.
-	// Allow present skipping when running outside of normal speed, if mailbox isn't supported.
 	return GSVSyncMode::Mailbox;
 }
 
@@ -2824,7 +2693,6 @@ void VMManager::Internal::DisableFastBoot()
 
 	s_fast_boot_requested = false;
 
-	// Stop fast forwarding boot if enabled.
 	if (EmuConfig.EnableFastBootFastForward && !s_elf_executed)
 		UpdateTargetSpeed();
 }
@@ -2858,7 +2726,6 @@ void VMManager::Internal::ELFLoadingOnCPUThread(std::string elf_path)
 										  s_elf_path, s_current_crc, s_elf_entry_point));
 	s_elf_executed = false;
 
-	// Remove patches, if we're changing games, we don't want to be applying the patch for the old game while it's loading.
 	if (!was_running_bios)
 	{
 		Patch::ReloadPatches(s_disc_serial, 0, false, false, false, true);
@@ -2887,11 +2754,8 @@ void VMManager::Internal::EntryPointCompilingOnCPUThread()
 
 	Patch::ApplyBootPatches();
 
-	// If the config changes at this point, it's a reset, so the game doesn't currently know about the memcard
-	// so there's no need to leave the eject running.
 	FileMcd_CancelEject();
 
-	// Toss all the recs, we're going to be executing new code.
 	mmap_ResetBlockTracking();
 	ClearCPUExecutionCaches();
 
@@ -2904,14 +2768,16 @@ void VMManager::Internal::VSyncOnCPUThread()
 
 	Patch::ApplyVsyncPatches();
 
-	// Frame advance must be done *before* pumping messages, because otherwise
-	// we'll immediately reduce the counter we just set.
+#ifdef ENABLE_VR
+	VR::CameraDriver::Apply();
+	VR::ApplySceneStereo();
+#endif
+
 	if (s_frame_advance_count > 0)
 	{
 		s_frame_advance_count--;
 		if (s_frame_advance_count == 0)
 		{
-			// auto pause at the end of frame advance
 			SetState(VMState::Paused);
 		}
 	}
@@ -2928,18 +2794,13 @@ void VMManager::Internal::PollInputOnCPUThread()
 
 	if (EmuConfig.EnableRecordingTools)
 	{
-		// This code is called _before_ Counter's vsync end, and _after_ vsync start
 		if (g_InputRecording.isActive())
 		{
-			// Process any outstanding recording actions (ie. toggle mode, stop the recording, etc)
 			g_InputRecording.processRecordQueue();
 			g_InputRecording.getControls().processControlQueue();
-			// Increment our internal frame counter, used to keep track of when we hit the end, etc.
 			g_InputRecording.incFrameCounter();
 			g_InputRecording.handleExceededFrameCounter();
 		}
-		// At this point, the PAD data has been read from the user for the current frame
-		// so we can either read from it, or overwrite it!
 		g_InputRecording.handleControllerDataUpdate();
 	}
 }
@@ -2960,12 +2821,8 @@ void VMManager::CheckForCPUConfigChanges(const Pcsx2Config& old_config)
 	if (EmuConfig.Cpu.Recompiler.EnableFastmem != old_config.Cpu.Recompiler.EnableFastmem)
 		vtlb_ResetFastmem();
 
-	// did we toggle recompilers?
 	if (EmuConfig.Cpu.CpusChanged(old_config.Cpu))
 	{
-		// This has to be done asynchronously, since we're still executing the
-		// cpu when this function is called. Break the execution as soon as
-		// possible and reset next time we're called.
 		s_cpu_implementation_changed = true;
 	}
 }
@@ -2977,8 +2834,6 @@ void VMManager::CheckForGSConfigChanges(const Pcsx2Config& old_config)
 
 	Console.WriteLn("Updating GS configuration...");
 
-	// We could just check whichever NTSC or PAL is appropriate for our current mode,
-	// but people _really_ shouldn't be screwing with framerate, so whatever.
 	if (EmuConfig.GS.FramerateNTSC != old_config.GS.FramerateNTSC ||
 		EmuConfig.GS.FrameratePAL != old_config.GS.FrameratePAL)
 	{
@@ -2988,7 +2843,6 @@ void VMManager::CheckForGSConfigChanges(const Pcsx2Config& old_config)
 	else if (EmuConfig.GS.VsyncEnable != old_config.GS.VsyncEnable ||
 			 EmuConfig.GS.DisableMailboxPresentation != old_config.GS.DisableMailboxPresentation)
 	{
-		// Still need to update target speed, because of sync-to-host-refresh.
 		UpdateTargetSpeed();
 		MTGS::UpdateVSyncMode();
 	}
@@ -3017,8 +2871,6 @@ void VMManager::CheckForPatchConfigChanges(const Pcsx2Config& old_config)
 
 	Patch::UpdateActivePatches(true, false, true, HasValidVM());
 
-	// This is a bit messy, because the patch config update happens after the settings are loaded,
-	// if we disable widescreen patches, we have to reload the original settings again.
 	if (Patch::ReloadPatchAffectingOptions())
 		MTGS::ApplySettings();
 }
@@ -3050,7 +2902,6 @@ void VMManager::CheckForMemoryCardConfigChanges(const Pcsx2Config& old_config)
 
 	Console.WriteLn("Updating memory card configuration");
 
-	// force card eject when files change
 	for (u32 port = 0; port < 2; port++)
 	{
 		for (u32 slot = 0; slot < 4; slot++)
@@ -3064,7 +2915,6 @@ void VMManager::CheckForMemoryCardConfigChanges(const Pcsx2Config& old_config)
 			}
 		}
 	}
-	// force reindexing, mc folder code is janky
 	std::string sioSerial;
 	{
 		std::unique_lock lock(s_info_mutex);
@@ -3117,13 +2967,16 @@ void VMManager::CheckForConfigChanges(const Pcsx2Config& old_config)
 		USB::CheckForConfigChanges(old_config);
 	}
 
-	// For the big picture UI, we still need to update GS settings, since it's running,
-	// and we don't update its config when we start the VM.
 	if (HasValidVM() || MTGS::IsOpen())
 		CheckForGSConfigChanges(old_config);
 
 	if (EmuConfig.Achievements != old_config.Achievements)
 		Achievements::UpdateSettings(old_config.Achievements);
+
+#ifdef ENABLE_VR
+	if (EmuConfig.VR != old_config.VR)
+		VR::UpdateSettings();
+#endif
 
 	FullscreenUI::CheckForConfigChanges(old_config);
 
@@ -3139,7 +2992,6 @@ void VMManager::ReloadPatches(bool reload_files, bool reload_enabled_list, bool 
 
 	Patch::ReloadPatches(s_disc_serial, HasBootedELF() ? s_current_crc : 0, reload_files, reload_enabled_list, verbose, verbose_if_changed);
 
-	// Might change widescreen mode.
 	if (Patch::ReloadPatchAffectingOptions())
 		ApplyCoreSettings();
 }
@@ -3156,12 +3008,10 @@ void VMManager::EnforceAchievementsChallengeModeSettings()
 			rate = 1.0f;
 	};
 
-	// Can't use slow motion.
 	ClampSpeed(EmuConfig.EmulationSpeed.NominalScalar);
 	ClampSpeed(EmuConfig.EmulationSpeed.TurboScalar);
 	ClampSpeed(EmuConfig.EmulationSpeed.SlomoScalar);
 
-	// Can't use cheats.
 	if (EmuConfig.EnableCheats)
 	{
 		Host::AddIconOSDMessage("ChallengeDisableCheats", ICON_FA_TRIANGLE_EXCLAMATION,
@@ -3170,15 +3020,11 @@ void VMManager::EnforceAchievementsChallengeModeSettings()
 		EmuConfig.EnableCheats = false;
 	}
 
-	// Input recording/playback is probably an issue.
 	EmuConfig.EnableRecordingTools = false;
-	EmuConfig.EnablePINE = false;
 
-	// Framerates should be at default.
 	EmuConfig.GS.FramerateNTSC = Pcsx2Config::GSOptions::DEFAULT_FRAME_RATE_NTSC;
 	EmuConfig.GS.FrameratePAL = Pcsx2Config::GSOptions::DEFAULT_FRAME_RATE_PAL;
 
-	// You can overclock, but not underclock (since that might slow down the game and make it easier).
 	EmuConfig.Speedhacks.EECycleRate =
 		std::max<decltype(EmuConfig.Speedhacks.EECycleRate)>(EmuConfig.Speedhacks.EECycleRate, 0);
 	EmuConfig.Speedhacks.EECycleSkip = 0;
@@ -3186,7 +3032,6 @@ void VMManager::EnforceAchievementsChallengeModeSettings()
 
 void VMManager::LogUnsafeSettingsToConsole(const std::string& messages)
 {
-	// a not-great way of getting rid of the icons for the console message
 	std::string console_messages(messages);
 	for (;;)
 	{
@@ -3228,7 +3073,6 @@ void VMManager::WarnAboutUnsafeSettings()
 	const bool is_sw_renderer = EmuConfig.GS.Renderer == GSRendererType::SW;
 	if (!is_sw_renderer)
 	{
-		// HW renderer settings.
 		if (EmuConfig.GS.UpscaleMultiplier < 1.0f)
 		{
 			append(ICON_FA_TV,
@@ -3317,7 +3161,6 @@ void VMManager::WarnAboutUnsafeSettings()
 		static bool render_change_warn = false;
 		if (EmuConfig.GS.Renderer != GSRendererType::Auto && EmuConfig.GS.Renderer != GSRendererType::SW && !render_change_warn)
 		{
-			// show messagesbox
 			render_change_warn = true;
 
 			append(ICON_FA_CIRCLE_EXCLAMATION,
@@ -3473,13 +3316,11 @@ void VMManager::UpdateInhibitScreensaver(bool inhibit)
 
 void VMManager::SaveSessionTime(const std::string& prev_serial)
 {
-	// Don't save time when running dumps, just messes up your list.
 	if (GSDumpReplayer::IsReplayingDump())
 		return;
 
 	if (!prev_serial.empty())
 	{
-		// round up to seconds
 		const std::time_t etime =
 			static_cast<std::time_t>(std::round(Common::Timer::ConvertValueToSeconds(std::exchange(s_session_accumulated_playtime, 0))));
 		const std::time_t wtime = std::time(nullptr);
@@ -3554,7 +3395,6 @@ static void InitializeProcessorList()
 	std::vector<const cpuinfo_processor*> processors;
 	for (u32 i = 0; i < processor_count; i++)
 	{
-		// Ignore hyperthreads/SMT. They're not helpful for pinning.
 		const cpuinfo_processor* proc = cpuinfo_get_processor(i);
 		if (!proc || proc->smt_id != 0)
 			continue;
@@ -3562,7 +3402,6 @@ static void InitializeProcessorList()
 		processors.push_back(proc);
 	}
 
-	// Prioritize faster cores in heterogeneous CPUs.
 	std::sort(processors.begin(), processors.end(),
 		[](const cpuinfo_processor* lhs, const cpuinfo_processor* rhs) {
 			return (lhs->core->frequency > rhs->core->frequency);
@@ -3622,7 +3461,7 @@ static void InitializeProcessorList()
 	for (size_t i = 0; i < classes.size(); i++)
 	{
 		const DarwinMisc::CPUClass& cls = classes[i];
-		const bool is_big = i == 0 || i < classes.size() - 1; // Assume only one group is small
+		const bool is_big = i == 0 || i < classes.size() - 1;
 		DevCon.WriteLn("(VMManager) Found %u physical cores and %u logical cores in perf level %u (%s), assuming %s",
 			cls.num_physical, cls.num_logical, i, cls.name.c_str(), is_big ? "big" : "small");
 		(is_big ? s_big_cores : s_small_cores) += cls.num_physical;
@@ -3678,7 +3517,6 @@ void VMManager::SetEmuThreadAffinities()
 
 	if (s_processor_list.empty())
 	{
-		// not supported on this platform
 		return;
 	}
 
@@ -3695,7 +3533,6 @@ void VMManager::SetEmuThreadAffinities()
 		return;
 	}
 
-	// steal vu's thread if mtvu is off
 	const u32 ee_index = s_processor_list[0];
 	const u32 vu_index = s_processor_list[1];
 	const u32 gs_index = s_processor_list[mtvu ? 2 : 1];
@@ -3720,9 +3557,6 @@ void VMManager::SetEmuThreadAffinities()
 	INFO_LOG("  GS thread is on processor {} (0x{:x})", gs_index, gs_affinity);
 	MTGS::GetThreadHandle().SetAffinity(gs_affinity);
 
-	// Try to find some threads for the software renderer.
-	// They should be in the same cluster as the main GS thread. If they're not, for example,
-	// we had 4 P cores and 6 E cores, let the OS schedule them instead.
 	s_software_renderer_processor_list.reserve(s_processor_list.size() - (mtvu ? 3 : 2));
 	const u32 gs_cluster_id = cpuinfo_get_processor(gs_index)->cluster->cluster_id;
 	for (size_t i = mtvu ? 3 : 2; i < s_processor_list.size(); i++)
@@ -3746,18 +3580,6 @@ const std::vector<u32>& VMManager::Internal::GetSoftwareRendererProcessorList()
 	return s_software_renderer_processor_list;
 }
 
-void VMManager::ReloadPINE()
-{
-	const bool needs_reinit = (EmuConfig.EnablePINE != PINEServer::IsInitialized() ||
-							   PINEServer::GetSlot() != EmuConfig.PINESlot);
-	if (!needs_reinit)
-		return;
-
-	PINEServer::Deinitialize();
-
-	if (EmuConfig.EnablePINE)
-		PINEServer::Initialize(EmuConfig.PINESlot);
-}
 
 void VMManager::InitializeDiscordPresence()
 {
@@ -3795,7 +3617,6 @@ void VMManager::UpdateDiscordPresence(bool update_session_time)
 	if (!s_title.empty())
 		rp_title = GetTitle(prefer_english);
 
-	// https://discord.com/developers/docs/rich-presence/how-to#updating-presence-update-presence-payload-fields
 	DiscordRichPresence rp = {};
 	rp.largeImageKey = s_discord_presence_large_image_key;
 	rp.largeImageText = s_discord_presence_large_image_text;

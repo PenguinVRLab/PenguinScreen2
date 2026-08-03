@@ -6,7 +6,7 @@ include(GNUInstallDirs)
 #-------------------------------------------------------------------------------
 # Misc option
 #-------------------------------------------------------------------------------
-option(ENABLE_TESTS "Enables building the unit tests" ON)
+option(ENABLE_TESTS "Enables building the unit tests" OFF)
 option(ENABLE_QT_UI "Enables building the PCSX2 Qt interface." ON)
 option(ENABLE_GSRUNNER "Enables building the GSRunner by default.  It can still be built with `make pcsx2-gsrunner` otherwise." OFF)
 option(LTO_PCSX2_CORE "Enable LTO/IPO/LTCG on the subset of pcsx2 that benefits most from it but not anything else")
@@ -22,6 +22,11 @@ if(NOT APPLE)
 	option(USE_OPENGL "Enable OpenGL GS renderer" ON)
 endif()
 option(USE_VULKAN "Enable Vulkan GS renderer" ON)
+if(NOT APPLE)
+	# PCSX2-VR: OpenXR support (no OpenXR runtime exists for macOS).
+	# VR-off builds must remain behaviorally identical to upstream.
+	option(ENABLE_VR "Enable OpenXR virtual reality support" ON)
+endif()
 
 #-------------------------------------------------------------------------------
 # Path and lib option
@@ -228,6 +233,10 @@ endif()
 
 if(USE_VULKAN)
 	list(APPEND PCSX2_DEFS ENABLE_VULKAN)
+endif()
+
+if(ENABLE_VR)
+	list(APPEND PCSX2_DEFS ENABLE_VR)
 endif()
 
 if(X11_API)

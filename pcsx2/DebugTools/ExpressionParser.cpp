@@ -30,38 +30,38 @@ typedef struct {
 } ExpressionOpcode;
 
 const ExpressionOpcode ExpressionOpcodes[] = {
-	{ "(",	25,	1,	0,	false },	// EXOP_BRACKETL
-	{ ")",	25,	1,	0,	false },	// EXOP_BRACKETR
-	{ "[",	4,	1,	0,	false },	// EXOP_MEML
-	{ "]",	4,	1,	0,	false },	// EXOP_MEMR
-	{ ",",	5,	1,	2,	false },	// EXOP_MEMSIZE
-	{ "+",	22,	1,	1,	true  },	// EXOP_SIGNPLUS
-	{ "-",	22,	1,	1,	true  },	// EXOP_SIGNMINUS
-	{ "~",	22,	1,	1,	false },	// EXOP_BITNOT
-	{ "!",	22,	1,	1,	false },	// EXOP_LOGNOT
-	{ "*",	21,	1,	2,	false },	// EXOP_MUL
-	{ "/",	21,	1,	2,	false },	// EXOP_DIV
-	{ "%",	21,	1,	2,	false },	// EXOP_MOD
-	{ "+",	20,	1,	2,	false },	// EXOP_ADD
-	{ "-",	20,	1,	2,	false },	// EXOP_SUB
-	{ "<<",	19,	2,	2,	false },	// EXOP_SHL
-	{ ">>",	19,	2,	2,	false },	// EXOP_SHR
-	{ ">=",	18,	2,	2,	false },	// EXOP_GREATEREQUAL
-	{ ">",	18,	1,	2,	false },	// EXOP_GREATER
-	{ "<=",	18,	2,	2,	false },	// EXOP_LOWEREQUAL
-	{ "<",	18,	1,	2,	false },	// EXOP_LOWER
-	{ "==",	17,	2,	2,	false },	// EXOP_EQUAL
-	{ "!=",	17,	2,	2,	false },	// EXOP_NOTEQUAL
-	{ "&",	16,	1,	2,	false },	// EXOP_BITAND
-	{ "^",	15,	1,	2,	false },	// EXOP_XOR
-	{ "|",	14,	1,	2,	false },	// EXOP_BITOR
-	{ "&&",	13,	2,	2,	false },	// EXOP_LOGAND
-	{ "||",	12,	2,	2,	false },	// EXOP_LOGOR
-	{ "?",	10,	1,	0,	false },	// EXOP_TERTIF
-	{ ":",	11,	1,	3,	false },	// EXOP_TERTELSE
-	{ "",	0,	0,	0,	false },	// EXOP_NUMBER
-	{ "[]",	0,	0,	1,	false },	// EXOP_MEM
-	{ "",	0,	0,	0,	false }		// EXOP_NONE
+	{ "(",	25,	1,	0,	false },
+	{ ")",	25,	1,	0,	false },
+	{ "[",	4,	1,	0,	false },
+	{ "]",	4,	1,	0,	false },
+	{ ",",	5,	1,	2,	false },
+	{ "+",	22,	1,	1,	true  },
+	{ "-",	22,	1,	1,	true  },
+	{ "~",	22,	1,	1,	false },
+	{ "!",	22,	1,	1,	false },
+	{ "*",	21,	1,	2,	false },
+	{ "/",	21,	1,	2,	false },
+	{ "%",	21,	1,	2,	false },
+	{ "+",	20,	1,	2,	false },
+	{ "-",	20,	1,	2,	false },
+	{ "<<",	19,	2,	2,	false },
+	{ ">>",	19,	2,	2,	false },
+	{ ">=",	18,	2,	2,	false },
+	{ ">",	18,	1,	2,	false },
+	{ "<=",	18,	2,	2,	false },
+	{ "<",	18,	1,	2,	false },
+	{ "==",	17,	2,	2,	false },
+	{ "!=",	17,	2,	2,	false },
+	{ "&",	16,	1,	2,	false },
+	{ "^",	15,	1,	2,	false },
+	{ "|",	14,	1,	2,	false },
+	{ "&&",	13,	2,	2,	false },
+	{ "||",	12,	2,	2,	false },
+	{ "?",	10,	1,	0,	false },
+	{ ":",	11,	1,	3,	false },
+	{ "",	0,	0,	0,	false },
+	{ "[]",	0,	0,	1,	false },
+	{ "",	0,	0,	0,	false }
 };
 
 bool parseNumber(char* str, int defaultrad, int len, u64& result)
@@ -105,7 +105,7 @@ bool parseNumber(char* str, int defaultrad, int len, u64& result)
 
 	switch (r)
 	{
-	case 2: // bin
+	case 2:
 		while (len--)
 		{
 			if (*str != '0' && *str != '1') return false;
@@ -116,7 +116,7 @@ bool parseNumber(char* str, int defaultrad, int len, u64& result)
 			}
 		}
 		break;
-	case 8: // oct
+	case 8:
 		while (len--)
 		{
 			if (*str < '0' || *str > '7') return false;
@@ -124,7 +124,7 @@ bool parseNumber(char* str, int defaultrad, int len, u64& result)
 			val+=(*str++-'0');
 		}
 		break;
-	case 10: // dec
+	case 10:
 		while (len--)
 		{
 			if (*str < '0' || *str > '9') return false;
@@ -132,7 +132,7 @@ bool parseNumber(char* str, int defaultrad, int len, u64& result)
 			val += (*str++ - '0');
 		}
 		break;
-	case 16: // hex
+	case 16:
 		while (len--)
 		{
 			char c = tolower(*str++);
@@ -151,7 +151,6 @@ bool parseNumber(char* str, int defaultrad, int len, u64& result)
 	return true;
 }
 
-// Parse only a float, and return as float bits.
 static bool parseFloat(const char *str, int len, u64 &result)
 {
 	bool foundDecimal = false;
@@ -379,7 +378,7 @@ bool initPostfixExpression(const char* infix, IExpressionFunctions* funcs, Postf
 		ExpressionOpcodeType t = opcodeStack[opcodeStack.size()-1];
 		opcodeStack.pop_back();
 
-		if (t == EXOP_BRACKETL)	// opening bracket without closing one
+		if (t == EXOP_BRACKETL)
 		{
 			error = TRANSLATE("ExpressionParser", "Parenthesis not closed.");
 			return false;
@@ -387,7 +386,7 @@ bool initPostfixExpression(const char* infix, IExpressionFunctions* funcs, Postf
 		dest.push_back(ExpressionPair(EXCOMM_OP,t));
 	}
 
-#if 0			// only for testing
+#if 0
 	char test[1024];
 	int testPos = 0;
 	for (int i = 0; i < dest.size(); i++)
@@ -424,7 +423,7 @@ bool parsePostfixExpression(PostfixExpression& exp, IExpressionFunctions* funcs,
 	{
 		switch (exp[num].first)
 		{
-		case EXCOMM_CONST:	// konstante zahl
+		case EXCOMM_CONST:
 			valueStack.push_back(exp[num++].second);
 			break;
 		case EXCOMM_CONST_FLOAT:
@@ -436,7 +435,7 @@ bool parsePostfixExpression(PostfixExpression& exp, IExpressionFunctions* funcs,
 			opcode = funcs->getReferenceValue(exp[num++].second);
 			valueStack.push_back(opcode);
 			break;
-		case EXCOMM_OP:	// opcode
+		case EXCOMM_OP:
 			opcode = exp[num++].second;
 			if (valueStack.size() < ExpressionOpcodes[opcode].args)
 			{
@@ -452,7 +451,7 @@ bool parsePostfixExpression(PostfixExpression& exp, IExpressionFunctions* funcs,
 
 			switch (opcode)
 			{
-			case EXOP_MEMSIZE:	// must be followed by EXOP_MEM
+			case EXOP_MEMSIZE:
 				if (exp[num++].second != EXOP_MEM)
 				{
 					error = TRANSLATE("ExpressionParser", "Invalid memsize operator.");
@@ -476,27 +475,27 @@ bool parsePostfixExpression(PostfixExpression& exp, IExpressionFunctions* funcs,
 					valueStack.push_back(val);
 				}
 				break;
-			case EXOP_SIGNPLUS:		// keine aktion nötig
+			case EXOP_SIGNPLUS:
 				break;
-			case EXOP_SIGNMINUS:	// -0
+			case EXOP_SIGNMINUS:
 				if (useFloat)
 					valueStack.push_back(0.0-fArg[0]);
 				else
 					valueStack.push_back(0-arg[0]);
 				break;
-			case EXOP_BITNOT:			// ~b
+			case EXOP_BITNOT:
 				valueStack.push_back(~arg[0]);
 				break;
-			case EXOP_LOGNOT:			// !b
+			case EXOP_LOGNOT:
 				valueStack.push_back(!arg[0]);
 				break;
-			case EXOP_MUL:			// a*b
+			case EXOP_MUL:
 				if (useFloat)
 					valueStack.push_back(fArg[1]*fArg[0]);
 				else
 					valueStack.push_back(arg[1]*arg[0]);
 				break;
-			case EXOP_DIV:			// a/b
+			case EXOP_DIV:
 				if (arg[0] == 0)
 				{
 					error = TRANSLATE("ExpressionParser", "Division by zero.");
@@ -507,7 +506,7 @@ bool parsePostfixExpression(PostfixExpression& exp, IExpressionFunctions* funcs,
 				else
 					valueStack.push_back(arg[1]/arg[0]);
 				break;
-			case EXOP_MOD:			// a%b
+			case EXOP_MOD:
 				if (arg[0] == 0)
 				{
 					error = TRANSLATE("ExpressionParser", "Modulo by zero.");
@@ -515,78 +514,78 @@ bool parsePostfixExpression(PostfixExpression& exp, IExpressionFunctions* funcs,
 				}
 				valueStack.push_back(arg[1]%arg[0]);
 				break;
-			case EXOP_ADD:			// a+b
+			case EXOP_ADD:
 				if (useFloat)
 					valueStack.push_back(fArg[1]+fArg[0]);
 				else
 					valueStack.push_back(arg[1]+arg[0]);
 				break;
-			case EXOP_SUB:			// a-b
+			case EXOP_SUB:
 				if (useFloat)
 					valueStack.push_back(fArg[1]-fArg[0]);
 				else
 					valueStack.push_back(arg[1]-arg[0]);
 				break;
-			case EXOP_SHL:			// a<<b
+			case EXOP_SHL:
 				valueStack.push_back(arg[1]<<arg[0]);
 				break;
-			case EXOP_SHR:			// a>>b
+			case EXOP_SHR:
 				valueStack.push_back(arg[1]>>arg[0]);
 				break;
-			case EXOP_GREATEREQUAL:		// a >= b
+			case EXOP_GREATEREQUAL:
 				if (useFloat)
 					valueStack.push_back(fArg[1]>=fArg[0]);
 				else
 					valueStack.push_back(arg[1]>=arg[0]);
 				break;
-			case EXOP_GREATER:			// a > b
+			case EXOP_GREATER:
 				if (useFloat)
 					valueStack.push_back(fArg[1]>fArg[0]);
 				else
 					valueStack.push_back(arg[1]>arg[0]);
 				break;
-			case EXOP_LOWEREQUAL:		// a <= b
+			case EXOP_LOWEREQUAL:
 				if (useFloat)
 					valueStack.push_back(fArg[1]<=fArg[0]);
 				else
 					valueStack.push_back(arg[1]<=arg[0]);
 				break;
-			case EXOP_LOWER:			// a < b
+			case EXOP_LOWER:
 				if (useFloat)
 					valueStack.push_back(fArg[1]<fArg[0]);
 				else
 					valueStack.push_back(arg[1]<arg[0]);
 				break;
-			case EXOP_EQUAL:		// a == b
+			case EXOP_EQUAL:
 				if (useFloat)
 					valueStack.push_back(fArg[1] == fArg[0]);
 				else
 					valueStack.push_back(arg[1]==arg[0]);
 				break;
-			case EXOP_NOTEQUAL:			// a != b
+			case EXOP_NOTEQUAL:
 				if (useFloat)
 					valueStack.push_back(fArg[1] != fArg[0]);
 				else
 					valueStack.push_back(arg[1]!=arg[0]);
 				break;
-			case EXOP_BITAND:			// a&b
+			case EXOP_BITAND:
 				valueStack.push_back(arg[1]&arg[0]);
 				break;
-			case EXOP_XOR:			// a^b
+			case EXOP_XOR:
 				valueStack.push_back(arg[1]^arg[0]);
 				break;
-			case EXOP_BITOR:			// a|b
+			case EXOP_BITOR:
 				valueStack.push_back(arg[1]|arg[0]);
 				break;
-			case EXOP_LOGAND:			// a && b
+			case EXOP_LOGAND:
 				valueStack.push_back(arg[1]&&arg[0]);
 				break;
-			case EXOP_LOGOR:			// a || b
+			case EXOP_LOGOR:
 				valueStack.push_back(arg[1]||arg[0]);
 				break;
-			case EXOP_TERTIF:			// darf so nicht vorkommen
+			case EXOP_TERTIF:
 				return false;
-			case EXOP_TERTELSE:			// exp ? exp : exp, else muss zuerst kommen!
+			case EXOP_TERTELSE:
 				if (exp[num++].second != EXOP_TERTIF)
 				{
 					error = TRANSLATE("ExpressionParser", "Invalid tertiary operator.");

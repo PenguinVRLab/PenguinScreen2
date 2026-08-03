@@ -1545,11 +1545,6 @@ Posisi Papan Peringkat: {1} dari {2}</translation>
       <translation>Gunakan Pemilih Save State</translation>
     </message>
     <message>
-      <location filename="../Settings/AdvancedSettingsWidget.ui" line="505"/>
-      <source>PINE Settings</source>
-      <translation>Pengaturan PINE</translation>
-    </message>
-    <message>
       <location filename="../Settings/AdvancedSettingsWidget.ui" line="527"/>
       <source>Slot:</source>
       <translation>Slot:</translation>

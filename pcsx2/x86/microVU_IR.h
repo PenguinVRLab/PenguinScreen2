@@ -13,12 +13,6 @@ struct regCycleInfo
 	u8 w : 4;
 };
 
-// microRegInfo is carefully ordered for faster compares.  The "important" information is
-// housed in a union that is accessed via 'quick32' so that several u8 fields can be compared
-// using a pair of 32-bit equalities.
-// vi15 is only used if microVU const-prop is enabled (it is *not* by default).  When constprop
-// is disabled the vi15 field acts as additional padding that is required for 16 byte alignment
-// needed by the xmm compare.
 union alignas(16) microRegInfo
 {
 	struct
@@ -27,13 +21,13 @@ union alignas(16) microRegInfo
 		{
 			struct
 			{
-				u8 needExactMatch; // If set, block needs an exact match of pipeline state
-				u8 flagInfo;       // xC * 2 | xM * 2 | xS * 2 | 0 * 1 | fullFlag Valid * 1
+				u8 needExactMatch;
+				u8 flagInfo;
 				u8 q;
 				u8 p;
 				u8 xgkick;
-				u8 viBackUp;       // VI reg number that was written to on branch-delay slot
-				u8 blockType;      // 0 = Normal; 1,2 = Compile one instruction (E-bit/Branch Ending)
+				u8 viBackUp;
+				u8 blockType;
 				u8 r;
 			};
 			u64 quick64[1];
@@ -42,8 +36,8 @@ union alignas(16) microRegInfo
 
 		u32 xgkickcycles;
 		u8 unused;
-		u8 vi15v; // 'vi15' constant is valid
-		u16 vi15; // Constant Prop Info for vi15
+		u8 vi15v;
+		u16 vi15;
 
 		struct
 		{
@@ -57,98 +51,97 @@ union alignas(16) microRegInfo
 	u32  full32[96 / sizeof(u32)];
 };
 
-// Note: mVUcustomSearch needs to be updated if this is changed
 static_assert(sizeof(microRegInfo) == 96, "microRegInfo was not 96 bytes");
 
 struct microProgram;
 struct microJumpCache
 {
 	microJumpCache() : prog(NULL), x86ptrStart(NULL) {}
-	microProgram* prog; // Program to which the entry point below is part of
-	void* x86ptrStart;  // Start of code (Entry point for block)
+	microProgram* prog;
+	void* x86ptrStart;
 };
 
 struct alignas(16) microBlock
 {
-	microRegInfo    pState;      // Detailed State of Pipeline
-	microRegInfo    pStateEnd;   // Detailed State of Pipeline at End of Block (needed by JR/JALR opcodes)
-	u8*             x86ptrStart; // Start of code (Entry point for block)
-	microJumpCache* jumpCache;   // Will point to an array of entry points of size [16k/8] if block ends in JR/JALR
+	microRegInfo    pState;
+	microRegInfo    pStateEnd;
+	u8*             x86ptrStart;
+	microJumpCache* jumpCache;
 };
 
 struct microTempRegInfo
 {
-	regCycleInfo VF[2]; // Holds cycle info for Fd, VF[0] = Upper Instruction, VF[1] = Lower Instruction
-	u8 VFreg[2];        // Index of the VF reg
-	u8 VI;              // Holds cycle info for Id
-	u8 VIreg;           // Index of the VI reg
-	u8 q;               // Holds cycle info for Q reg
-	u8 p;               // Holds cycle info for P reg
-	u8 r;               // Holds cycle info for R reg (Will never cause stalls, but useful to know if R is modified)
-	u8 xgkick;          // Holds the cycle info for XGkick
+	regCycleInfo VF[2];
+	u8 VFreg[2];
+	u8 VI;
+	u8 VIreg;
+	u8 q;
+	u8 p;
+	u8 r;
+	u8 xgkick;
 };
 
 struct microVFreg
 {
-	u8 reg; // Reg Index
-	u8 x;   // X vector read/written to?
-	u8 y;   // Y vector read/written to?
-	u8 z;   // Z vector read/written to?
-	u8 w;   // W vector read/written to?
+	u8 reg;
+	u8 x;
+	u8 y;
+	u8 z;
+	u8 w;
 };
 
 struct microVIreg
 {
-	u8 reg;  // Reg Index
-	u8 used; // Reg is Used? (Read/Written)
+	u8 reg;
+	u8 used;
 };
 
 struct microConstInfo
 {
-	u8  isValid;  // Is the constant in regValue valid?
-	u32 regValue; // Constant Value
+	u8  isValid;
+	u32 regValue;
 };
 
 struct microUpperOp
 {
-	bool eBit;             // Has E-bit set
-	bool iBit;             // Has I-bit set
-	bool mBit;             // Has M-bit set
-	bool tBit;             // Has T-bit set
-	bool dBit;             // Has D-bit set
-	microVFreg VF_write;   // VF Vectors written to by this instruction
-	microVFreg VF_read[2]; // VF Vectors read by this instruction
+	bool eBit;
+	bool iBit;
+	bool mBit;
+	bool tBit;
+	bool dBit;
+	microVFreg VF_write;
+	microVFreg VF_read[2];
 };
 
 struct microLowerOp
 {
-	microVFreg VF_write;      // VF Vectors written to by this instruction
-	microVFreg VF_read[2];    // VF Vectors read by this instruction
-	microVIreg VI_write;      // VI reg written to by this instruction
-	microVIreg VI_read[2];    // VI regs read by this instruction
-	microConstInfo constJump; // Constant Reg Info for JR/JARL instructions
-	u32  branch;     // Branch Type (0 = Not a Branch, 1 = B. 2 = BAL, 3~8 = Conditional Branches, 9 = JR, 10 = JALR)
-	u32  kickcycles; // Number of xgkick cycles accumulated by this instruction
-	bool badBranch;  // This instruction is a Branch who has another branch in its Delay Slot
-	bool evilBranch; // This instruction is a Branch in a Branch Delay Slot (Instruction after badBranch)
-	bool isNOP;      // This instruction is a NOP
-	bool isFSSET;    // This instruction is a FSSET
-	bool noWriteVF;  // Don't write back the result of a lower op to VF reg if upper op writes to same reg (or if VF = 0)
-	bool backupVI;   // Backup VI reg to memory if modified before branch (branch uses old VI value unless opcode is ILW or ILWR)
-	bool memReadIs;  // Read Is (VI reg) from memory (used by branches)
-	bool memReadIt;  // Read If (VI reg) from memory (used by branches)
-	bool readFlags;  // Current Instruction reads Status, Mac, or Clip flags
-	bool isMemWrite; // Current Instruction writes to VU memory
-	bool isKick;     // Op is a kick so don't count kick cycles
+	microVFreg VF_write;
+	microVFreg VF_read[2];
+	microVIreg VI_write;
+	microVIreg VI_read[2];
+	microConstInfo constJump;
+	u32  branch;
+	u32  kickcycles;
+	bool badBranch;
+	bool evilBranch;
+	bool isNOP;
+	bool isFSSET;
+	bool noWriteVF;
+	bool backupVI;
+	bool memReadIs;
+	bool memReadIt;
+	bool readFlags;
+	bool isMemWrite;
+	bool isKick;
 };
 
 struct microFlagInst
 {
-	bool doFlag;      // Update Flag on this Instruction
-	bool doNonSticky; // Update O,U,S,Z (non-sticky) bits on this Instruction (status flag only)
-	u8   write;       // Points to the instance that should be written to (s-stage write)
-	u8   lastWrite;   // Points to the instance that was last written to (most up-to-date flag)
-	u8   read;        // Points to the instance that should be read by a lower instruction (t-stage read)
+	bool doFlag;
+	bool doNonSticky;
+	u8   write;
+	u8   lastWrite;
+	u8   read;
 };
 
 struct microFlagCycles
@@ -161,56 +154,51 @@ struct microFlagCycles
 
 struct microOp
 {
-	u8   stall;          // Info on how much current instruction stalled
-	bool isBadOp;        // Cur Instruction is a bad opcode (not a legal instruction)
-	bool isEOB;          // Cur Instruction is last instruction in block (End of Block)
-	bool isBdelay;       // Cur Instruction in Branch Delay slot
-	bool swapOps;        // Run Lower Instruction before Upper Instruction
-	bool backupVF;       // Backup mVUlow.VF_write.reg, and restore it before the Upper Instruction is called
-	bool doXGKICK;       // Do XGKICK transfer on this instruction
-	u32  XGKICKPC;       // The PC in which the XGKick has taken place, so if we break early (before it) we don run it.
-	bool doDivFlag;      // Transfer Div flag to Status Flag on this instruction
-	int  readQ;          // Q instance for reading
-	int  writeQ;         // Q instance for writing
-	int  readP;          // P instance for reading
-	int  writeP;         // P instance for writing
-	microFlagInst sFlag; // Status Flag Instance Info
-	microFlagInst mFlag; // Mac    Flag Instance Info
-	microFlagInst cFlag; // Clip   Flag Instance Info
-	microUpperOp  uOp;   // Upper Op Info
-	microLowerOp  lOp;   // Lower Op Info
+	u8   stall;
+	bool isBadOp;
+	bool isEOB;
+	bool isBdelay;
+	bool swapOps;
+	bool backupVF;
+	bool doXGKICK;
+	u32  XGKICKPC;
+	bool doDivFlag;
+	int  readQ;
+	int  writeQ;
+	int  readP;
+	int  writeP;
+	microFlagInst sFlag;
+	microFlagInst mFlag;
+	microFlagInst cFlag;
+	microUpperOp  uOp;
+	microLowerOp  lOp;
 };
 
 template <u32 pSize>
 struct microIR
 {
-	microBlock       block;           // Block/Pipeline info
-	microBlock*      pBlock;          // Pointer to a block in mVUblocks
-	microTempRegInfo regsTemp;        // Temp Pipeline info (used so that new pipeline info isn't conflicting between upper and lower instructions in the same cycle)
-	microOp          info[pSize / 2]; // Info for Instructions in current block
-	microConstInfo   constReg[16];    // Simple Const Propagation Info for VI regs within blocks
+	microBlock       block;
+	microBlock*      pBlock;
+	microTempRegInfo regsTemp;
+	microOp          info[pSize / 2];
+	microConstInfo   constReg[16];
 	u8  branch;
-	u32 cycles;    // Cycles for current block
-	u32 count;     // Number of VU 64bit instructions ran (starts at 0 for each block)
-	u32 curPC;     // Current PC
-	u32 startPC;   // Start PC for Cur Block
-	u32 sFlagHack; // Optimize out all Status flag updates if microProgram doesn't use Status flags
+	u32 cycles;
+	u32 count;
+	u32 curPC;
+	u32 startPC;
+	u32 sFlagHack;
 };
 
-//------------------------------------------------------------------
-// Reg Alloc
-//------------------------------------------------------------------
-
-//#define MVURALOG(...) fprintf(stderr, __VA_ARGS__)
 #define MVURALOG(...)
 
 struct microMapXMM
 {
-	int  VFreg;    // VF Reg Number Stored (-1 = Temp; 0 = vf0 and will not be written back; 32 = ACC; 33 = I reg)
-	int  xyzw;     // xyzw to write back (0 = Don't write back anything AND cached vfReg has all vectors valid)
-	int  count;    // Count of when last used
-	bool isNeeded; // Is needed for current instruction
-	bool isZero;   // Register was loaded from VF00 and doesn't need clamping
+	int  VFreg;
+	int  xyzw;
+	int  count;
+	bool isNeeded;
+	bool isZero;
 };
 
 struct microMapGPR
@@ -226,24 +214,19 @@ struct microMapGPR
 class microRegAlloc
 {
 protected:
-	static const int xmmTotal = iREGCNT_XMM - 1; // PQ register is reserved
+	static const int xmmTotal = iREGCNT_XMM - 1;
 	static const int gprTotal = iREGCNT_GPR;
 
 	std::array<microMapXMM, xmmTotal> xmmMap;
 	std::array<microMapGPR, gprTotal> gprMap;
 
-	int         counter; // Current allocation count
-	int         index;   // VU0 or VU1
+	int         counter;
+	int         index;
 
-	// DO NOT REMOVE THIS.
-	// This is here for a reason. MSVC likes to turn global writes into a load+conditional move+store.
-	// That creates a race with the EE thread when we're compiling on the VU thread, even though
-	// regAllocCOP2 is false. By adding another level of indirection, it emits a branch instead.
 	_xmmregs*   pxmmregs;
 
-	bool        regAllocCOP2;    // Local COP2 check
+	bool        regAllocCOP2;
 
-	// Helper functions to get VU regs
 	VURegs& regs() const { return ::vuRegs[index]; }
 	__fi REG_VI& getVI(uint reg) const { return regs().VI[reg]; }
 	__fi VECTOR& getVF(uint reg) const { return regs().VF[reg]; }
@@ -293,7 +276,7 @@ protected:
 		{
 			if (!xmmMap[i].isNeeded && (xmmMap[i].VFreg < 0))
 			{
-				return i; // Reg is not needed and was a temp reg
+				return i;
 			}
 		}
 		int x = findFreeRegRec(0);
@@ -325,7 +308,7 @@ protected:
 		{
 			if (gprMap[i].usable && !gprMap[i].isNeeded && (gprMap[i].VIreg < 0))
 			{
-				return i; // Reg is not needed and was a temp reg
+				return i;
 			}
 		}
 		int x = findFreeGPRRec(0);
@@ -340,7 +323,6 @@ public:
 	{
 		index = _index;
 
-		// mark gpr registers as usable
 		gprMap.fill({0, 0, false, false, false, false});
 		for (int i = 0; i < gprTotal; i++)
 		{
@@ -357,10 +339,8 @@ public:
 		reset(false);
 	}
 
-	// Fully resets the regalloc by clearing all cached data
 	void reset(bool cop2mode)
 	{
-		// we run this at the of cop2, so don't free fprs
 		regAllocCOP2 = false;
 
 		for (int i = 0; i < xmmTotal; i++)
@@ -379,9 +359,6 @@ public:
 				if (!pxmmregs[i].inuse || pxmmregs[i].type != XMMTYPE_VFREG)
 					continue;
 
-				// we shouldn't have any temp registers in here.. except for PQ, which
-				// isn't allocated here yet.
-				// pxAssertRel(fprregs[i].reg >= 0, "Valid full register preserved");
 				if (pxmmregs[i].reg >= 0)
 				{
 					MVURALOG("Preserving VF reg %d in host reg %d across instruction\n", pxmmregs[i].reg, i);
@@ -398,7 +375,6 @@ public:
 				if (!x86regs[i].inuse || x86regs[i].type != X86TYPE_VIREG)
 					continue;
 
-				// pxAssertRel(armregs[i].reg >= 0, "Valid full register preserved");
 				if (x86regs[i].reg >= 0)
 				{
 					MVURALOG("Preserving VI reg %d in host reg %d across instruction\n", x86regs[i].reg, i);
@@ -483,9 +459,6 @@ public:
 		return (i < gprTotal) ? gprMap[i].VIreg : -1;
 	}
 
-	// Flushes all allocated registers (i.e. writes-back to memory all modified registers).
-	// If clearState is 0, then it keeps cached reg data valid
-	// If clearState is 1, then it invalidates all cached reg data after write-back
 	void flushAll(bool clearState = true)
 	{
 		for (int i = 0; i < xmmTotal; i++)
@@ -532,21 +505,17 @@ public:
 		{
 			microMapXMM& clear = xmmMap[i];
 
-			// toss away anything which is not a full cached register
 			if (pxmmregs[i].inuse && pxmmregs[i].type == XMMTYPE_VFREG)
 			{
-				// Should've been done in clearNeeded()
 				if (clear.xyzw != 0 && clear.xyzw != 0xf)
 					writeBackReg(xRegisterSSE::GetInstance(i), false);
 
 				if (clear.VFreg <= 0)
 				{
-					// temps really shouldn't be here..
 					_freeXMMreg(i);
 				}
 			}
 
-			// needed gets cleared in iCore.
 			clear = {-1, 0, 0, false, false};
 		}
 
@@ -560,13 +529,12 @@ public:
 
 	void TDwritebackAll()
 	{
-		// NOTE: We don't clear state here, this happens in an optional branch
 
 		for (int i = 0; i < xmmTotal; i++)
 		{
 			microMapXMM& mapX = xmmMap[xmm(i).Id];
 
-			if ((mapX.VFreg > 0) && mapX.xyzw) // Reg was modified and not Temp or vf0
+			if ((mapX.VFreg > 0) && mapX.xyzw)
 			{
 				if (mapX.VFreg == 33)
 					xMOVSS(ptr32[&getVI(REG_I)], xmm(i));
@@ -645,14 +613,11 @@ public:
 		pxmmregs[rn].needed = xmmMap[rn].isNeeded;
 	}
 
-	// Writes back modified reg to memory.
-	// If all vectors modified, then keeps the VF reg cached in the xmm register.
-	// If reg was not modified, then keeps the VF reg cached in the xmm register.
 	void writeBackReg(const xmm& reg, bool invalidateRegs = true)
 	{
 		microMapXMM& mapX = xmmMap[reg.Id];
 
-		if ((mapX.VFreg > 0) && mapX.xyzw) // Reg was modified and not Temp or vf0
+		if ((mapX.VFreg > 0) && mapX.xyzw)
 		{
 			if (mapX.VFreg == 33)
 				xMOVSS(ptr32[&getVI(REG_I)], reg);
@@ -674,11 +639,11 @@ public:
 					{
 						if (mapI.xyzw && mapI.xyzw < 0xf)
 							DevCon.Error("microVU Error: writeBackReg() [%d]", mapI.VFreg);
-						clearReg(i); // Invalidate any Cached Regs of same vf Reg
+						clearReg(i);
 					}
 				}
 			}
-			if (mapX.xyzw == 0xf) // Make Cached Reg if All Vectors were Modified
+			if (mapX.xyzw == 0xf)
 			{
 				mapX.count    = counter;
 				mapX.xyzw     = 0;
@@ -688,33 +653,28 @@ public:
 			}
 			clearReg(reg);
 		}
-		else if (mapX.xyzw) // Clear reg if modified and is VF0 or temp reg...
+		else if (mapX.xyzw)
 		{
 			clearReg(reg);
 		}
 	}
 
-	// Use this when done using the allocated register, it clears its "Needed" status.
-	// The register that was written to, should be cleared before other registers are cleared.
-	// This is to guarantee proper merging between registers... When a written-to reg is cleared,
-	// it invalidates other cached registers of the same VF reg, and merges partial-vector
-	// writes into them.
 	void clearNeeded(const xmm& reg)
 	{
 
-		if ((reg.Id < 0) || (reg.Id >= xmmTotal)) // Sometimes xmmPQ hits this
+		if ((reg.Id < 0) || (reg.Id >= xmmTotal))
 			return;
 
 		microMapXMM& clear = xmmMap[reg.Id];
 		clear.isNeeded = false;
-		if (clear.xyzw) // Reg was modified
+		if (clear.xyzw)
 		{
 			if (clear.VFreg > 0)
 			{
 				int mergeRegs = 0;
-				if (clear.xyzw < 0xf) // Try to merge partial writes
+				if (clear.xyzw < 0xf)
 					mergeRegs = 1;
-				for (int i = 0; i < xmmTotal; i++) // Invalidate any other read-only regs of same vfReg
+				for (int i = 0; i < xmmTotal; i++)
 				{
 					if (i == reg.Id)
 						continue;
@@ -734,51 +694,41 @@ public:
 							updateCOP2AllocState(i);
 						}
 						else
-							clearReg(i); // Clears when mergeRegs is 0 or 2
+							clearReg(i);
 					}
 				}
-				if (mergeRegs == 2) // Clear Current Reg if Merged
+				if (mergeRegs == 2)
 					clearReg(reg);
-				else if (mergeRegs == 1) // Write Back Partial Writes if couldn't merge
+				else if (mergeRegs == 1)
 					writeBackReg(reg);
 			}
 			else
-				clearReg(reg); // If Reg was temp or vf0, then invalidate itself
+				clearReg(reg);
 		}
 		else if (regAllocCOP2 && clear.VFreg < 0)
 		{
-			// free on the EE side
 			pxAssert(pxmmregs[reg.Id].type == XMMTYPE_VFREG);
 			pxmmregs[reg.Id].inuse = false;
 		}
 	}
 
-	// vfLoadReg  = VF reg to be loaded to the xmm register
-	// vfWriteReg = VF reg that the returned xmm register will be considered as
-	// xyzw       = XYZW vectors that will be modified (and loaded)
-	// cloneWrite = When loading a reg that will be written to, it copies it to its own xmm reg instead of overwriting the cached one...
-	// Notes:
-	// To load a temp reg use the default param values, vfLoadReg = -1 and vfWriteReg = -1.
-	// To load a full reg which won't be modified and you want cached, specify vfLoadReg >= 0 and vfWriteReg = -1
-	// To load a reg which you don't want written back or cached, specify vfLoadReg >= 0 and vfWriteReg = 0
 	const xmm& allocReg(int vfLoadReg = -1, int vfWriteReg = -1, int xyzw = 0, bool cloneWrite = true)
 	{
-		//DevCon.WriteLn("vfLoadReg = %02d, vfWriteReg = %02d, xyzw = %x, clone = %d",vfLoadReg,vfWriteReg,xyzw,(int)cloneWrite);
 		counter++;
-		if (vfLoadReg >= 0) // Search For Cached Regs
+		if (vfLoadReg >= 0)
 		{
 			for (int i = 0; i < xmmTotal; i++)
 			{
 				const xmm& xmmI = xmm::GetInstance(i);
 				microMapXMM& mapI = xmmMap[i];
 				if ((mapI.VFreg == vfLoadReg)
-				 && (!mapI.xyzw                           // Reg Was Not Modified
-				  || (mapI.VFreg && (mapI.xyzw == 0xf)))) // Reg Had All Vectors Modified and != VF0
+				 && (!mapI.xyzw
+				  || (mapI.VFreg && (mapI.xyzw == 0xf))))
 				{
 					int z = i;
-					if (vfWriteReg >= 0) // Reg will be modified
+					if (vfWriteReg >= 0)
 					{
-						if (cloneWrite) // Clone Reg so as not to use the same Cached Reg
+						if (cloneWrite)
 						{
 							z = findFreeReg(vfWriteReg);
 							const xmm& xmmZ = xmm::GetInstance(z);
@@ -793,9 +743,9 @@ public:
 							else if (z != i)
 								xMOVAPS(xmmZ, xmmI);
 
-							mapI.count = counter; // Reg i was used, so update counter
+							mapI.count = counter;
 						}
-						else // Don't clone reg, but shuffle to adjust for SS ops
+						else
 						{
 							if ((vfLoadReg != vfWriteReg) || (xyzw != 0xf))
 								writeBackReg(xmmI);
@@ -823,7 +773,7 @@ public:
 		const xmm& xmmX = xmm::GetInstance(x);
 		writeBackReg(xmmX);
 
-		if (vfWriteReg >= 0) // Reg Will Be Modified (allow partial reg loading)
+		if (vfWriteReg >= 0)
 		{
 			if ((vfLoadReg == 0) && !(xyzw & 1))
 				xPXOR(xmmX, xmmX);
@@ -837,7 +787,7 @@ public:
 			xmmMap[x].VFreg = vfWriteReg;
 			xmmMap[x].xyzw  = xyzw;
 		}
-		else // Reg Will Not Be Modified (always load full reg for caching)
+		else
 		{
 			if (vfLoadReg == 33)
 				loadIreg(xmmX, 0xf);
@@ -937,7 +887,6 @@ public:
 					backup = false;
 				}
 
-				// if it's needed, we just unbind the allocation and preserve it, otherwise clear
 				if (mapI.isNeeded)
 				{
 					MVURALOG("  unbind %d to %d for write\n", i, reg);
@@ -957,7 +906,6 @@ public:
 					clearGPR(i);
 				}
 
-				// shouldn't be any others...
 				for (int j = i + 1; j < gprTotal; j++)
 				{
 					pxAssert(gprMap[j].VIreg != reg);
@@ -970,13 +918,10 @@ public:
 
 	const xRegister32& allocGPR(int viLoadReg = -1, int viWriteReg = -1, bool backup = false, bool zext_if_dirty = false)
 	{
-		// TODO: When load != write, we should check whether load is used later, and if so, copy it.
 
-		//DevCon.WriteLn("viLoadReg = %02d, viWriteReg = %02d, backup = %d",viLoadReg,viWriteReg,(int)backup);
 		const int this_counter = regAllocCOP2 ? (g_x86AllocCounter++) : (counter++);
 		if (viLoadReg == 0 || viWriteReg == 0)
 		{
-			// write zero register as temp and discard later
 			if (viWriteReg == 0)
 			{
 				int x = findFreeGPR(-1);
@@ -993,30 +938,26 @@ public:
 			}
 		}
 
-		if (viLoadReg >= 0) // Search For Cached Regs
+		if (viLoadReg >= 0)
 		{
 			for (int i = 0; i < gprTotal; i++)
 			{
 				microMapGPR& mapI = gprMap[i];
 				if (mapI.VIreg == viLoadReg)
 				{
-					// Do this first, there is a case where when loadReg != writeReg, the findFreeGPR can steal the loadReg
 					gprMap[i].count = this_counter;
 
-					if (viWriteReg >= 0) // Reg will be modified
+					if (viWriteReg >= 0)
 					{
 						if (viLoadReg != viWriteReg)
 						{
-							// kill any allocations of viWriteReg
 							unbindAnyVIAllocations(viWriteReg, backup);
 
-							// allocate a new register for writing to
 							int x = findFreeGPR(viWriteReg);
 							const xRegister32& gprX = xRegister32::GetInstance(x);
 
 							writeBackReg(gprX, true);
 
-							// writeReg not cached, needs backing up
 							if (backup && gprMap[x].VIreg != viWriteReg)
 							{
 								xMOVZX(gprX, ptr16[&getVI(viWriteReg)]);
@@ -1034,7 +975,6 @@ public:
 						}
 						else
 						{
-							// writing to it, no longer zero extended
 							gprMap[i].isZeroExtended = false;
 						}
 
@@ -1065,16 +1005,13 @@ public:
 			}
 		}
 
-		if (viWriteReg >= 0) // Writing a new value, make sure this register isn't cached already
+		if (viWriteReg >= 0)
 			unbindAnyVIAllocations(viWriteReg, backup);
 
 		int x = findFreeGPR(viLoadReg);
 		const xRegister32& gprX = xRegister32::GetInstance(x);
 		writeBackReg(gprX, true);
 
-		// Special case: we need to back up the destination register, but it might not have already
-		// been cached. If so, we need to load the old value from state and back it up. Otherwise,
-		// it's going to get lost when we eventually write this register back.
 		if (backup && viLoadReg >= 0 && viWriteReg > 0 && viLoadReg != viWriteReg)
 		{
 			xMOVZX(gprX, ptr16[&getVI(viWriteReg)]);
@@ -1127,8 +1064,6 @@ public:
 			return;
 		}
 
-		// TODO: Check liveness/usedness before allocating.
-		// TODO: Check whether zero-extend is needed everywhere heae. Loadstores are.
 		const xRegister32& srcreg = allocGPR(vi);
 		if (signext)
 			xMOVSX(xRegister32(reg), xRegister16(srcreg));

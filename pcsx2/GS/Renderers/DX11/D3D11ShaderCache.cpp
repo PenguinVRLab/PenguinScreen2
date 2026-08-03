@@ -150,8 +150,6 @@ bool D3D11ShaderCache::ReadExisting(const std::string& index_filename, const std
 	m_index_file = FileSystem::OpenCFile(index_filename.c_str(), "r+b");
 	if (!m_index_file)
 	{
-		// special case here: when there's a sharing violation (i.e. two instances running),
-		// we don't want to blow away the cache. so just continue without a cache.
 		if (errno == EACCES)
 		{
 			Console.WriteLn("Failed to open shader cache index with EACCES, are you running two instances?");
@@ -207,7 +205,6 @@ bool D3D11ShaderCache::ReadExisting(const std::string& index_filename, const std
 		m_index.emplace(key, data);
 	}
 
-	// ensure we don't write before seeking
 	std::fseek(m_index_file, 0, SEEK_END);
 
 	DevCon.WriteLn("Read %zu entries from '%s'", m_index.size(), index_filename.c_str());
@@ -271,8 +268,8 @@ D3D11ShaderCache::CacheIndexKey D3D11ShaderCache::GetCacheKey(
 }
 
 wil::com_ptr_nothrow<ID3DBlob> D3D11ShaderCache::GetShaderBlob(D3D::ShaderType type,
-	const std::string_view shader_code, const D3D_SHADER_MACRO* macros /* = nullptr */,
-	const char* entry_point /* = "main" */)
+	const std::string_view shader_code, const D3D_SHADER_MACRO* macros ,
+	const char* entry_point )
 {
 	const auto key = GetCacheKey(type, shader_code, macros, entry_point);
 	auto iter = m_index.find(key);
@@ -292,8 +289,8 @@ wil::com_ptr_nothrow<ID3DBlob> D3D11ShaderCache::GetShaderBlob(D3D::ShaderType t
 }
 
 wil::com_ptr_nothrow<ID3D11VertexShader> D3D11ShaderCache::GetVertexShader(ID3D11Device* device,
-	const std::string_view shader_code, const D3D_SHADER_MACRO* macros /* = nullptr */,
-	const char* entry_point /* = "main" */)
+	const std::string_view shader_code, const D3D_SHADER_MACRO* macros ,
+	const char* entry_point )
 {
 	wil::com_ptr_nothrow<ID3DBlob> blob = GetShaderBlob(D3D::ShaderType::Vertex, shader_code, macros, entry_point);
 	if (!blob)
@@ -308,7 +305,7 @@ wil::com_ptr_nothrow<ID3D11VertexShader> D3D11ShaderCache::GetVertexShader(ID3D1
 		return {};
 	}
 
-	const char* shader_name = entry_point; // Ideally we'd feed in a proper name
+	const char* shader_name = entry_point;
 	if (shader_name)
 	{
 		GSDevice11::SetD3DDebugObjectName(shader.get(), shader_name);
@@ -319,8 +316,8 @@ wil::com_ptr_nothrow<ID3D11VertexShader> D3D11ShaderCache::GetVertexShader(ID3D1
 
 bool D3D11ShaderCache::GetVertexShaderAndInputLayout(ID3D11Device* device, ID3D11VertexShader** vs,
 	ID3D11InputLayout** il, const D3D11_INPUT_ELEMENT_DESC* layout, size_t layout_size,
-	const std::string_view shader_code, const D3D_SHADER_MACRO* macros /* = nullptr */,
-	const char* entry_point /* = "main" */)
+	const std::string_view shader_code, const D3D_SHADER_MACRO* macros ,
+	const char* entry_point )
 {
 	wil::com_ptr_nothrow<ID3DBlob> blob = GetShaderBlob(D3D::ShaderType::Vertex, shader_code, macros, entry_point);
 	if (!blob)
@@ -334,7 +331,7 @@ bool D3D11ShaderCache::GetVertexShaderAndInputLayout(ID3D11Device* device, ID3D1
 		return {};
 	}
 
-	const char* shader_name = entry_point; // Ideally we'd feed in a proper name
+	const char* shader_name = entry_point;
 	if (shader_name)
 	{
 		GSDevice11::SetD3DDebugObjectName(actual_vs.get(), shader_name);
@@ -352,8 +349,8 @@ bool D3D11ShaderCache::GetVertexShaderAndInputLayout(ID3D11Device* device, ID3D1
 }
 
 wil::com_ptr_nothrow<ID3D11PixelShader> D3D11ShaderCache::GetPixelShader(ID3D11Device* device,
-	const std::string_view shader_code, const D3D_SHADER_MACRO* macros /* = nullptr */,
-	const char* entry_point /* = "main" */)
+	const std::string_view shader_code, const D3D_SHADER_MACRO* macros ,
+	const char* entry_point )
 {
 	wil::com_ptr_nothrow<ID3DBlob> blob = GetShaderBlob(D3D::ShaderType::Pixel, shader_code, macros, entry_point);
 	if (!blob)
@@ -368,7 +365,7 @@ wil::com_ptr_nothrow<ID3D11PixelShader> D3D11ShaderCache::GetPixelShader(ID3D11D
 		return {};
 	}
 
-	const char* shader_name = entry_point; // Ideally we'd feed in a proper name
+	const char* shader_name = entry_point;
 	if (shader_name)
 	{
 		GSDevice11::SetD3DDebugObjectName(shader.get(), shader_name);
@@ -378,8 +375,8 @@ wil::com_ptr_nothrow<ID3D11PixelShader> D3D11ShaderCache::GetPixelShader(ID3D11D
 }
 
 wil::com_ptr_nothrow<ID3D11ComputeShader> D3D11ShaderCache::GetComputeShader(ID3D11Device* device,
-	const std::string_view shader_code, const D3D_SHADER_MACRO* macros /* = nullptr */,
-	const char* entry_point /* = "main" */)
+	const std::string_view shader_code, const D3D_SHADER_MACRO* macros ,
+	const char* entry_point )
 {
 	wil::com_ptr_nothrow<ID3DBlob> blob = GetShaderBlob(D3D::ShaderType::Compute, shader_code, macros, entry_point);
 	if (!blob)
@@ -394,7 +391,7 @@ wil::com_ptr_nothrow<ID3D11ComputeShader> D3D11ShaderCache::GetComputeShader(ID3
 		return {};
 	}
 
-	const char* shader_name = entry_point; // Ideally we'd feed in a proper name
+	const char* shader_name = entry_point;
 	if (shader_name)
 	{
 		GSDevice11::SetD3DDebugObjectName(shader.get(), shader_name);

@@ -22,7 +22,6 @@ public:
 		Write
 	};
 
-	// Only supports up to 4GB. More than enough.
 	class IStream
 	{
 	public:
@@ -103,7 +102,6 @@ public:
 	void SetMode(Mode mode) { m_mode = mode; }
 	u32 GetVersion() const { return m_version; }
 
-	/// Overload for integral or floating-point types. Writes bytes as-is.
 	template <typename T>
 		requires std::is_integral_v<T> || std::is_floating_point_v<T>
 	void Do(T* value_ptr)
@@ -120,7 +118,6 @@ public:
 		}
 	}
 
-	/// Overload for enum types. Uses the underlying type.
 	template <typename T>
 		requires std::is_enum_v<T>
 	void Do(T* value_ptr)
@@ -143,7 +140,6 @@ public:
 		}
 	}
 
-	/// Overload for POD types, such as structs.
 	template <typename T>
 		requires std::is_standard_layout_v<T> && std::is_trivial_v<T>
 	void DoPOD(T* value_ptr)

@@ -11,8 +11,8 @@ class GSTextureOGL;
 
 namespace GLState
 {
-	extern GLuint vao; // vertex array object
-	extern GLuint fbo; // frame buffer object
+	extern GLuint vao;
+	extern GLuint fbo;
 	extern GSVector2i viewport;
 	extern GSVector4i scissor;
 
@@ -36,20 +36,20 @@ namespace GLState
 	extern GLenum stencil_func;
 	extern GLenum stencil_pass;
 
-	extern GLuint ps_ss; // sampler
+	extern GLuint ps_ss;
 
-	extern GSTextureOGL* rt; // render target
-	extern GSTextureOGL* ds_as_rt; // Depth-Stencil as color
-	extern GSTextureOGL* ds; // Depth-Stencil
+	extern GSTextureOGL* rt;
+	extern GSTextureOGL* ds_as_rt;
+	extern GSTextureOGL* ds;
 
-	extern u32 draw_buffers; // Number of color attachments to framebuffer.
+	extern u32 draw_buffers;
 
-	extern bool rt_written; // Render Target written
-	extern bool ds_as_rt_written; // Depth Stencil as RT written
-	extern bool ds_written; // Depth Stencil written
+	extern bool rt_written;
+	extern bool ds_as_rt_written;
+	extern bool ds_written;
 
-	extern GLuint tex_unit[8]; // shader input texture
+	extern GLuint tex_unit[8];
 
 	extern u32 UpdateDrawBuffers();
 	extern void Clear();
-} // namespace GLState
+}

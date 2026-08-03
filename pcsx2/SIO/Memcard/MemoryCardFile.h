@@ -14,10 +14,10 @@
 
 struct McdSizeInfo
 {
-	u16 SectorSize; // Size of each sector, in bytes.  (only 512 and 1024 are valid)
-	u16 EraseBlockSizeInSectors; // Size of the erase block, in sectors (max is 16)
-	u32 McdSizeInSectors; // Total size of the card, in sectors (no upper limit)
-	u8 Xor; // Checksum of previous data
+	u16 SectorSize;
+	u16 EraseBlockSizeInSectors;
+	u32 McdSizeInSectors;
+	u8 Xor;
 };
 
 struct AvailableMcdInfo

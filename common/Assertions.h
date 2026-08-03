@@ -13,13 +13,6 @@
 #endif
 #endif
 
-// pxAssertRel - assertion check even in Release builds.
-// pxFailRel - aborts program even in Release builds.
-// 
-// pxAssert[Msg] - assertion check only in Debug/Devel builds, noop in Release.
-// pxAssume[Msg] - assertion check in Debug/Devel builds, optimization hint in Release builds.
-// pxFail - aborts program only in Debug/Devel builds, noop in Release.
-
 extern void pxOnAssertFail(const char* file, int line, const char* func, const char* msg);
 
 #define pxAssertRel(cond, msg) do { if (!(cond)) [[unlikely]] { pxOnAssertFail(__FILE__, __LINE__, __pxFUNCTION__, msg); } } while(0)
@@ -42,7 +35,6 @@ extern void pxOnAssertFail(const char* file, int line, const char* func, const c
 #define pxAssert(cond) pxAssertMsg(cond, #cond)
 #define pxAssume(cond) pxAssumeMsg(cond, #cond)
 
-// jNO_DEFAULT -- disables the default case in a switch, which improves switch optimization.
 #define jNO_DEFAULT \
 	default: \
 	{ \

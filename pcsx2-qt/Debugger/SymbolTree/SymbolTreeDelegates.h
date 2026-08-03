@@ -24,9 +24,6 @@ public:
 	void setModelData(QWidget* editor, QAbstractItemModel* model, const QModelIndex& index) const override;
 
 private:
-	// These make it so the values inputted are written back to memory
-	// immediately when the widgets are interacted with rather than when they
-	// are deselected.
 	void onCheckBoxStateChanged(Qt::CheckState state);
 	void onComboBoxIndexChanged(int index);
 

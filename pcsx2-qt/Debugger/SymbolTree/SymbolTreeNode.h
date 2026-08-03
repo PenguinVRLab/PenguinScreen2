@@ -11,7 +11,6 @@
 class DebugInterface;
 class SymbolTreeDisplayOptions;
 
-// A node in a symbol tree model.
 class SymbolTreeNode
 {
 public:
@@ -43,19 +42,15 @@ public:
 	SymbolTreeNode(SymbolTreeNode&& rhs) = delete;
 	SymbolTreeNode& operator=(SymbolTreeNode&& rhs) = delete;
 
-	// Generated from VM state, to be updated regularly.
 	const QVariant& value() const;
 	const QString& display_value() const;
 	std::optional<bool> liveness();
 
-	// Read the value from the VM memory, update liveness information, and
-	// generate a display string. Returns true if the data changed.
 	bool readFromVM(
 		DebugInterface& cpu,
 		const ccc::SymbolDatabase& database,
 		const SymbolTreeDisplayOptions& display_options);
 
-	// Write the value back to the VM memory. Returns true if the data changed.
 	bool writeToVM(
 		QVariant value,
 		DebugInterface& cpu,
@@ -114,8 +109,6 @@ private:
 	bool m_children_fetched = false;
 };
 
-// Settings that control how text in the value column is displayed, including
-// for the editor widgets.
 class SymbolTreeDisplayOptions
 {
 public:

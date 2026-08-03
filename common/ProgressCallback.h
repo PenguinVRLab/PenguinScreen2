@@ -7,11 +7,6 @@
 #include <memory>
 #include <string>
 
-/**
- * Progress callbacks, abstracts a blocking operation and allows it to report progress
- * without having any dependency on the UI.
- */
-
 class ProgressCallback
 {
 public:

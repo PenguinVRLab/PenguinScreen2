@@ -18,7 +18,7 @@ namespace PacketReader::IP::TCP
 
 	private:
 		u8 dataOffsetAndNS_Flag = 0;
-		int headerLength; //Can have varying Header Len
+		int headerLength;
 		u8 flags = 0;
 
 	public:
@@ -37,7 +37,6 @@ namespace PacketReader::IP::TCP
 		std::unique_ptr<Payload> payload;
 
 	public:
-		//Flags
 		bool GetNS() const;
 		void SetNS(bool value);
 
@@ -65,7 +64,6 @@ namespace PacketReader::IP::TCP
 		bool GetFIN() const;
 		void SetFIN(bool value);
 
-		//Takes ownership of payload
 		TCP_Packet(Payload* data);
 		TCP_Packet(const u8* buffer, int bufferSize);
 		TCP_Packet(const TCP_Packet&);
@@ -84,4 +82,4 @@ namespace PacketReader::IP::TCP
 	private:
 		void ReComputeHeaderLen();
 	};
-} // namespace PacketReader::IP::TCP
+}

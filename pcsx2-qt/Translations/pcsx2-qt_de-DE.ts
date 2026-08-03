@@ -1550,11 +1550,6 @@ Ranglisten Position: {1} von {2}</translation>
       <translation>Save-State Auswahl verwenden</translation>
     </message>
     <message>
-      <location filename="../Settings/AdvancedSettingsWidget.ui" line="505"/>
-      <source>PINE Settings</source>
-      <translation>PINE-Einstellungen</translation>
-    </message>
-    <message>
       <location filename="../Settings/AdvancedSettingsWidget.ui" line="527"/>
       <source>Slot:</source>
       <translation>Slot:</translation>

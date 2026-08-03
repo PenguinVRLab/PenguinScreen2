@@ -38,11 +38,9 @@ namespace MIPSAnalyst
 		u32 opcodeAddress;
 		u32 encodedOpcode;
 
-		// shared between branches and conditional moves
 		bool isConditional;
 		bool conditionMet;
 
-		// branches
 		u32 branchTarget;
 		bool isSyscall;
 		bool isBranch;
@@ -51,7 +49,6 @@ namespace MIPSAnalyst
 		bool isBranchToRegister;
 		int branchRegisterNum;
 
-		// data access
 		bool isDataAccess;
 		LoadStoreLRType lrType;
 		int dataSize;

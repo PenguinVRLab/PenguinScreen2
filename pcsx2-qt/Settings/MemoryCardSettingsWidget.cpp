@@ -54,7 +54,7 @@ namespace
 			return text(column).localeAwareCompare(other.text(column)) < 0;
 		}
 	};
-} // namespace
+}
 
 MemoryCardSettingsWidget::MemoryCardSettingsWidget(SettingsWindow* settings_dialog, QWidget* parent)
 	: SettingsWidget(settings_dialog, parent)
@@ -63,8 +63,6 @@ MemoryCardSettingsWidget::MemoryCardSettingsWidget(SettingsWindow* settings_dial
 
 	setupTab(m_ui);
 
-	// this is a bit lame, but resizeEvent() isn't good enough to autosize our columns,
-	// since the group box hasn't been resized at that point.
 	m_ui.cardGroupBox->installEventFilter(this);
 
 	SettingWidgetBinder::BindWidgetToFolderSetting(sif, m_ui.directory, m_ui.browse, m_ui.open, m_ui.reset, "Folders",
@@ -114,7 +112,6 @@ void MemoryCardSettingsWidget::setupAdditionalUi()
 	for (u32 i = 0; i < static_cast<u32>(m_slots.size()); i++)
 		createSlotWidgets(&m_slots[i], i);
 
-	// button to swap Memory Cards
 	QToolButton* swap_button = new QToolButton(m_ui.slotGroupBox);
 	swap_button->setIcon(QIcon::fromTheme("arrow-left-right-line"));
 	swap_button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
@@ -165,14 +162,12 @@ void MemoryCardSettingsWidget::autoSizeUI()
 
 void MemoryCardSettingsWidget::tryInsertCard(u32 slot, const QString& newCard)
 {
-	// handle where the card is dragged in from explorer or something
 	const qsizetype lastSlashPos = std::max(newCard.lastIndexOf('/'), newCard.lastIndexOf('\\'));
 	const std::string newCardStr(
 		(lastSlashPos >= 0) ? newCard.mid(0, lastSlashPos).toStdString() : newCard.toStdString());
 	if (newCardStr.empty())
 		return;
 
-	// make sure it's a card in the directory
 	const std::vector<AvailableMcdInfo> mcds(FileMcd_GetAvailableCards(true));
 	if (std::none_of(
 			mcds.begin(), mcds.end(), [&newCardStr](const AvailableMcdInfo& mcd) { return mcd.name == newCardStr; }))
@@ -473,11 +468,9 @@ void MemoryCardListWidget::mouseMoveEvent(QMouseEvent* event)
 
 void MemoryCardListWidget::refresh(SettingsWindow* dialog)
 {
-	// We don't need to sort while it's being repopulated.
 	setSortingEnabled(false);
 	clear();
 
-	// we can't use the in use flag here anyway, because the config may not be in line with per game settings.
 	const std::vector<AvailableMcdInfo> mcds(FileMcd_GetAvailableCards(true));
 	if (mcds.empty())
 	{
@@ -507,7 +500,6 @@ void MemoryCardListWidget::refresh(SettingsWindow* dialog)
 		item->setText(2, mcd.formatted ? tr("Yes") : tr("No"));
 		item->setText(3, mtime.toString(QLocale::system().dateTimeFormat(QLocale::ShortFormat)));
 
-		// store formatted metadata
 		item->setData(0, Qt::UserRole, mcd.formatted);
 		item->setData(MemoryCardListColumn::LastModified, Qt::UserRole,
 			static_cast<qint64>(mcd.modified_time));
@@ -570,7 +562,6 @@ void MemoryCardSlotWidget::setCard(const std::optional<std::string>& name, bool 
 	else
 	{
 		item->setIcon(QIcon::fromTheme("close-line"));
-		//: Ignore Crowdin's warning for [Missing], the text should be translated.
 		item->setText(tr("%1 [Missing]").arg(QString::fromStdString(name.value())));
 	}
 

@@ -1551,11 +1551,6 @@ Posición en la tabla de clasificación: {1} de {2}</translation>
       <translation>Usar selector de estados guardados</translation>
     </message>
     <message>
-      <location filename="../Settings/AdvancedSettingsWidget.ui" line="505"/>
-      <source>PINE Settings</source>
-      <translation>Ajustes de PINE</translation>
-    </message>
-    <message>
       <location filename="../Settings/AdvancedSettingsWidget.ui" line="527"/>
       <source>Slot:</source>
       <translation>Puerto:</translation>

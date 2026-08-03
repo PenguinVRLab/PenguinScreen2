@@ -74,17 +74,14 @@ namespace EEMemoryMap
 	static const uint SBUS_PS1_Start	= 0x1000F300;
 	static const uint SBUS_PS1_End		= 0x1000F400;
 
-	// MCH area --  Really not sure what this area is.  Information is lacking.
 	static const uint MCH_Start			= 0x1000F400;
 	static const uint MCH_End			= 0x1000F500;
 
-	// Extended master control register area for DMAC.
 	static const uint DMACext_Start		= 0x1000F500;
 	static const uint DMACext_End		= 0x1000F600;
 
 };
 
-// HW defines
 enum EERegisterAddresses
 {
 	RCNT0_COUNT		=	0x10000000,
@@ -121,7 +118,6 @@ enum EERegisterAddresses
 	GIF_P3CNT		=	0x10003090,
 	GIF_P3TAG		=	0x100030A0,
 
-	// Vif Memory Locations
 	VIF0_STAT		= 	0x10003800,
 	VIF0_FBRST		= 	0x10003810,
 	VIF0_ERR		= 	0x10003820,
@@ -174,7 +170,6 @@ enum EERegisterAddresses
 	IPUout_FIFO		=	0x10007000,
 	IPUin_FIFO		=	0x10007010,
 
-//VIF0
 	D0_CHCR			=	0x10008000,
 	D0_MADR			=	0x10008010,
 	D0_QWC			=	0x10008020,
@@ -189,7 +184,6 @@ enum EERegisterAddresses
 	VIF0_ASR0		=	0x10008040,
 	VIF0_ASR1		=	0x10008050,
 
-//VIF1
 	D1_CHCR			=	0x10009000,
 	D1_MADR			=	0x10009010,
 	D1_QWC			=	0x10009020,
@@ -204,7 +198,6 @@ enum EERegisterAddresses
 	VIF1_ASR0		=	0x10009040,
 	VIF1_ASR1		=	0x10009050,
 
-//GS
 	D2_CHCR			=	0x1000A000,
 	D2_MADR			=	0x1000A010,
 	D2_QWC			=	0x1000A020,
@@ -219,7 +212,6 @@ enum EERegisterAddresses
 	GIF_ASR0		=	0x1000A040,
 	GIF_ASR1		=	0x1000A050,
 
-//fromIPU
 	D3_CHCR			=	0x1000B000,
 	D3_MADR			=	0x1000B010,
 	D3_QWC			=	0x1000B020,
@@ -228,7 +220,6 @@ enum EERegisterAddresses
 	fromIPU_MADR	=	0x1000B010,
 	fromIPU_QWC		=	0x1000B020,
 
-//toIPU
 	D4_CHCR			=	0x1000B400,
 	D4_MADR			=	0x1000B410,
 	D4_QWC			=	0x1000B420,
@@ -239,7 +230,6 @@ enum EERegisterAddresses
 	toIPU_QWC		=	0x1000B420,
 	toIPU_TADR		=	0x1000B430,
 
-//SIF0
 	D5_CHCR			=	0x1000C000,
 	D5_MADR			=	0x1000C010,
 	D5_QWC			=	0x1000C020,
@@ -248,7 +238,6 @@ enum EERegisterAddresses
 	SIF0_MADR		=	0x1000C010,
 	SIF0_QWC		=	0x1000C020,
 
-//SIF1
 	D6_CHCR			=	0x1000C400,
 	D6_MADR			=	0x1000C410,
 	D6_QWC			=	0x1000C420,
@@ -259,7 +248,6 @@ enum EERegisterAddresses
 	SIF1_QWC		=	0x1000C420,
 	SIF1_TADR		=	0x1000C430,
 
-//SIF2
 	D7_CHCR			=	0x1000C800,
 	D7_MADR			=	0x1000C810,
 	D7_QWC			=	0x1000C820,
@@ -268,7 +256,6 @@ enum EERegisterAddresses
 	SIF2_MADR		=	0x1000C810,
 	SIF2_QWC		=	0x1000C820,
 
-//fromSPR
 	D8_CHCR			=	0x1000D000,
 	D8_MADR			=	0x1000D010,
 	D8_QWC			=	0x1000D020,
@@ -279,7 +266,6 @@ enum EERegisterAddresses
 	fromSPR_QWC		=	0x1000D020,
 	fromSPR_SADR	=	0x1000D080,
 
-//toSPR
 	D9_CHCR			=	0x1000D400,
 	D9_MADR			=	0x1000D410,
 	D9_QWC			=	0x1000D420,
@@ -299,7 +285,7 @@ enum EERegisterAddresses
 	DMAC_RBSR		=	0x1000E040,
 	DMAC_RBOR		=	0x1000E050,
 	DMAC_STADR		=	0x1000E060,
-	DMAC_FAKESTAT	=	0x1000E100, //Midway, you're idiots (checked this in the MK Deception ELF!) (Refraction)
+	DMAC_FAKESTAT	=	0x1000E100,
 
 	INTC_STAT		=	0x1000F000,
 	INTC_MASK		=	0x1000F010,
@@ -307,16 +293,16 @@ enum EERegisterAddresses
 	SIO_LCR			=	0x1000F100,
 	SIO_LSR			=	0x1000F110,
 	SIO_IER			=	0x1000F120,
-	SIO_ISR			=	0x1000F130,//
+	SIO_ISR			=	0x1000F130,
 	SIO_FCR			=	0x1000F140,
 	SIO_BGR			=	0x1000F150,
 	SIO_TXFIFO		=	0x1000F180,
 	SIO_RXFIFO		=	0x1000F1C0,
 
-	SBUS_F200		=	0x1000F200,	//MSCOM
-	SBUS_F210		=	0x1000F210,	//SMCOM
-	SBUS_F220		=	0x1000F220,	//MSFLG
-	SBUS_F230		=	0x1000F230,	//SMFLG
+	SBUS_F200		=	0x1000F200,
+	SBUS_F210		=	0x1000F210,
+	SBUS_F220		=	0x1000F220,
+	SBUS_F230		=	0x1000F230,
 	SBUS_F240		=	0x1000F240,
 	SBUS_F250		=	0x1000F250,
 	SBUS_F260		=	0x1000F260,

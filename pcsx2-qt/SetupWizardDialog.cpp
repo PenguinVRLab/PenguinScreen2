@@ -14,6 +14,10 @@
 
 #include "common/StringUtil.h"
 
+#include <QtCore/QDir>
+#include <QtCore/QFileSystemWatcher>
+#include <QtCore/QTimer>
+
 SetupWizardDialog::SetupWizardDialog()
 {
 	setupUi();
@@ -40,7 +44,7 @@ bool SetupWizardDialog::canShowNextPage()
 			if (!m_ui.biosList->currentItem())
 			{
 				if (QMessageBox::question(this, tr("Warning"),
-						tr("A BIOS image has not been selected. PCSX2 <strong>will not</strong> be able to run games "
+						tr("A BIOS image has not been selected. PenguinScreen2 <strong>will not</strong> be able to run games "
 						   "without a BIOS image.<br><br>Are you sure you wish to continue without selecting a BIOS "
 						   "image?")) != QMessageBox::Yes)
 				{
@@ -56,7 +60,7 @@ bool SetupWizardDialog::canShowNextPage()
 			{
 				if (QMessageBox::question(this, tr("Warning"),
 						tr("No game directories have been selected. You will have to manually open any game dumps you "
-						   "want to play, PCSX2's list will be empty.\n\nAre you sure you want to continue?")) !=
+						   "want to play, PenguinScreen2's list will be empty.\n\nAre you sure you want to continue?")) !=
 					QMessageBox::Yes)
 				{
 					return false;
@@ -89,9 +93,9 @@ void SetupWizardDialog::nextPage()
 	if (current_page == Page_Complete)
 	{
 		if (m_ui.createDesktopShortcut->isChecked())
-			QtUtils::CreateShortcut(this, "PCSX2", std::string(), {}, std::string(), std::string(), true, false);
+			QtUtils::CreateShortcut(this, "PenguinScreen2", std::string(), {}, std::string(), std::string(), true, false);
 		if (m_ui.addToApplicationMenu->isChecked())
-			QtUtils::CreateShortcut(this, "PCSX2", std::string(), {}, std::string(), std::string(), false, false);
+			QtUtils::CreateShortcut(this, "PenguinScreen2", std::string(), {}, std::string(), std::string(), false, false);
 
 		accept();
 		return;
@@ -149,8 +153,8 @@ void SetupWizardDialog::updatePageButtons()
 void SetupWizardDialog::confirmCancel()
 {
 	if (QMessageBox::question(this, tr("Cancel Setup"),
-			tr("Are you sure you want to cancel PCSX2 setup?\n\nAny changes have been saved, and the wizard will run "
-			   "again next time you start PCSX2.")) != QMessageBox::Yes)
+			tr("Are you sure you want to cancel PenguinScreen2 setup?\n\nAny changes have been saved, and the wizard will run "
+			   "again next time you start PenguinScreen2.")) != QMessageBox::Yes)
 	{
 		return;
 	}
@@ -204,19 +208,15 @@ void SetupWizardDialog::setupLanguagePage()
 	connect(
 		m_ui.language, &QComboBox::currentIndexChanged, this, &SetupWizardDialog::languageChanged);
 
-	SettingWidgetBinder::BindWidgetToBoolSetting(
-		nullptr, m_ui.autoUpdateEnabled, "AutoUpdater", "CheckAtStartup", true);
 }
 
 void SetupWizardDialog::themeChanged()
 {
-	// Main window gets recreated at the end here anyway, so it's fine to just yolo it.
 	QtHost::UpdateApplicationTheme();
 }
 
 void SetupWizardDialog::languageChanged()
 {
-	// Skip the recreation, since we don't have many dynamic UI elements.
 	QtHost::InstallTranslator(this);
 	m_ui.retranslateUi(this);
 }
@@ -227,6 +227,15 @@ void SetupWizardDialog::setupBIOSPage()
 		m_ui.openBiosSearchDirectory, m_ui.resetBiosSearchDirectory, "Folders", "Bios",
 		Path::Combine(EmuFolders::DataRoot, "bios"));
 
+	m_bios_refresh_timer = new QTimer(this);
+	m_bios_refresh_timer->setSingleShot(true);
+	m_bios_refresh_timer->setInterval(750);
+	connect(m_bios_refresh_timer, &QTimer::timeout, this, &SetupWizardDialog::refreshBiosList);
+
+	m_bios_dir_watcher = new QFileSystemWatcher(this);
+	connect(m_bios_dir_watcher, &QFileSystemWatcher::directoryChanged, m_bios_refresh_timer,
+		qOverload<>(&QTimer::start));
+
 	refreshBiosList();
 
 	connect(m_ui.biosSearchDirectory, &QLineEdit::textChanged, this, &SetupWizardDialog::refreshBiosList);
@@ -236,7 +245,26 @@ void SetupWizardDialog::setupBIOSPage()
 
 void SetupWizardDialog::refreshBiosList()
 {
-	BIOSSettingsWidget::populateList(m_ui.biosList, m_ui.biosSearchDirectory->text().toStdString());
+	if (m_refreshing_bios_list)
+		return;
+	m_refreshing_bios_list = true;
+	m_bios_refresh_timer->stop();
+
+	const QString directory = m_ui.biosSearchDirectory->text();
+	BIOSSettingsWidget::populateList(m_ui.biosList, directory.toStdString());
+
+	if (!m_bios_dir_watcher->directories().isEmpty())
+		m_bios_dir_watcher->removePaths(m_bios_dir_watcher->directories());
+	if (QDir(directory).exists())
+		m_bios_dir_watcher->addPath(directory);
+
+	if (m_ui.biosList->topLevelItemCount() == 1 && !m_ui.biosList->currentItem() &&
+		Host::GetBaseStringSettingValue("Filenames", "BIOS").empty())
+	{
+		m_ui.biosList->setCurrentItem(m_ui.biosList->topLevelItem(0));
+	}
+
+	m_refreshing_bios_list = false;
 }
 
 void SetupWizardDialog::biosListItemChanged(const QTreeWidgetItem* current, const QTreeWidgetItem* previous)
@@ -274,10 +302,8 @@ void SetupWizardDialog::onDirectoryListContextMenuRequested(const QPoint& point)
 	const int row = selection[0].row();
 
 	QMenu menu;
-	//: Part of the right-click menu for game directory entries
 	menu.addAction(tr("Remove"), [this]() { onRemoveSearchDirectoryButtonClicked(); });
 	menu.addSeparator();
-	//: Part of the right-click menu for game directory entries
 	menu.addAction(tr("Open Directory..."),
 		[this, row]() { QtUtils::OpenURL(this, QUrl::fromLocalFile(m_ui.searchDirectoryList->item(row, 0)->text())); });
 	menu.exec(m_ui.searchDirectoryList->mapToGlobal(point));
@@ -413,7 +439,6 @@ void SetupWizardDialog::setupControllerPage()
 			[this, port, label = w.mapping_result]() { openAutomaticMappingMenu(port, label); });
 	}
 
-	// Trigger enumeration to populate the device list.
 	connect(g_emu_thread, &EmuThread::onInputDevicesEnumerated, this, &SetupWizardDialog::onInputDevicesEnumerated);
 	connect(g_emu_thread, &EmuThread::onInputDeviceConnected, this, &SetupWizardDialog::onInputDeviceConnected);
 	connect(g_emu_thread, &EmuThread::onInputDeviceDisconnected, this, &SetupWizardDialog::onInputDeviceDisconnected);
@@ -439,16 +464,21 @@ void SetupWizardDialog::setupRetroAchievementsPage()
 	connect(m_ui.raLoginButton, &QPushButton::clicked, this, &SetupWizardDialog::onRetroAchievementsLoginLogoutPressed);
 	connect(m_ui.raViewProfileButton, &QPushButton::clicked, this, &SetupWizardDialog::onRetroAchievementsViewProfilePressed);
 	refreshRetroAchievementsLoginState();
+
+	m_ui.raEnableAchievements->setChecked(false);
+	m_ui.raEnableAchievements->setEnabled(false);
+	m_ui.raHardcoreMode->setEnabled(false);
+	m_ui.raLoginButton->setEnabled(false);
+	m_ui.raViewProfileButton->setEnabled(false);
+	m_ui.raLoginStatus->setText(tr("RetroAchievements is disabled in this build."));
 }
 
 void SetupWizardDialog::setupCompletePage()
 {
 #if defined(_WIN32)
 	const bool can_create_shortcuts = true;
-	m_ui.addToApplicationMenu->setText(tr("Add PCSX2 to the Start Menu"));
+	m_ui.addToApplicationMenu->setText(tr("Add PenguinScreen2 to the Start Menu"));
 #elif defined(__linux__)
-	// Only offer shortcuts for the AppImage since Flatpak creates its own launcher, and
-	// third-party builds (AUR, COPR, etc.) ship their own .desktop file.
 	const bool can_create_shortcuts = QtUtils::IsRunningInAppImage();
 #else
 	const bool can_create_shortcuts = false;
@@ -496,7 +526,6 @@ void SetupWizardDialog::onRetroAchievementsLoginLogoutPressed()
 
 	refreshRetroAchievementsLoginState();
 
-	// Login can enable achievements, keep the checkbox state in sync.
 	if (!m_ui.raEnableAchievements->isChecked() &&
 		Host::GetBaseBoolSettingValue("Achievements", "Enabled", false))
 	{
@@ -528,7 +557,6 @@ void SetupWizardDialog::openAutomaticMappingMenu(u32 port, QLabel* update_label)
 
 	for (const QPair<QString, QString>& dev : m_device_list)
 	{
-		// we set it as data, because the device list could get invalidated while the menu is up
 		QAction* action = menu.addAction(QStringLiteral("%1 (%2)").arg(dev.first).arg(dev.second));
 		action->setData(dev.first);
 		connect(action, &QAction::triggered, this, [this, port, update_label, action]() {

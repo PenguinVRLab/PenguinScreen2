@@ -116,7 +116,6 @@ public:
 		v4s = vcombine_s32(vld1_s32(v.v), vcreate_s32(0));
 	}
 
-	// MSVC has bad codegen for the constexpr version when applied to non-constexpr things (https://godbolt.org/z/h8qbn7), so leave the non-constexpr version default
 	__forceinline explicit GSVector4i(int i)
 	{
 		*this = i;
@@ -141,8 +140,6 @@ public:
 		return v4s;
 	}
 
-	// rect
-
 	__forceinline int width() const
 	{
 		return right - left;
@@ -155,7 +152,7 @@ public:
 
 	__forceinline GSVector4i rsize() const
 	{
-		return sub32(xyxy()); // same as GSVector4i(0, 0, width(), height());
+		return sub32(xyxy());
 	}
 
 	__forceinline unsigned int rarea() const
@@ -215,7 +212,6 @@ public:
 		return v.andnot(mask.xyxy());
 	}
 
-	/// Align the rect using mask values that already have one subtracted (1 << n - 1 aligns to 1 << n)
 	template <Align_Mode mode>
 	GSVector4i ralign_presub(const GSVector2i& a) const
 	{
@@ -225,7 +221,6 @@ public:
 	template <Align_Mode mode>
 	GSVector4i ralign(const GSVector2i& a) const
 	{
-		// a must be 1 << n
 
 		return _ralign_helper<mode>(GSVector4i(a) - GSVector4i(1, 1));
 	}
@@ -233,8 +228,6 @@ public:
 	GSVector4i fit(int arx, int ary) const;
 
 	GSVector4i fit(int preset) const;
-
-	//
 
 	__forceinline u32 rgba32() const
 	{
@@ -426,8 +419,6 @@ public:
 		return blend16<bit3 | bit2 | bit1 | bit0>(v);
 	}
 
-	/// Equivalent to blend with the given mask broadcasted across the vector
-	/// May be faster than blend in some cases
 	template <u32 mask>
 	__forceinline GSVector4i smartblend(const GSVector4i& a) const
 	{
@@ -854,8 +845,6 @@ public:
 
 	__forceinline GSVector4i hadds16(const GSVector4i& v) const
 	{
-		// can't use vpaddq_s16() here, because we need saturation.
-		//return GSVector4i(vreinterpretq_s32_s16(vpaddq_s16(vreinterpretq_s16_s32(v4s), vreinterpretq_s16_s32(v.v4s))));
 		const int16x8_t a = vreinterpretq_s16_s32(v4s);
 		const int16x8_t b = vreinterpretq_s16_s32(v.v4s);
 		return GSVector4i(vreinterpretq_s32_s16(vqaddq_s16(vuzp1q_s16(a, b), vuzp2q_s16(a, b))));
@@ -923,13 +912,12 @@ public:
 
 	__forceinline GSVector4i mul16hs(const GSVector4i& v) const
 	{
-		// from sse2neon
 		int16x4_t a3210 = vget_low_s16(vreinterpretq_s16_s32(v4s));
 		int16x4_t b3210 = vget_low_s16(vreinterpretq_s16_s32(v.v4s));
-		int32x4_t ab3210 = vmull_s16(a3210, b3210); /* 3333222211110000 */
+		int32x4_t ab3210 = vmull_s16(a3210, b3210);
 		int16x4_t a7654 = vget_high_s16(vreinterpretq_s16_s32(v4s));
 		int16x4_t b7654 = vget_high_s16(vreinterpretq_s16_s32(v.v4s));
-		int32x4_t ab7654 = vmull_s16(a7654, b7654); /* 7777666655554444 */
+		int32x4_t ab7654 = vmull_s16(a7654, b7654);
 		uint16x8x2_t r = vuzpq_u16(vreinterpretq_u16_s32(ab3210), vreinterpretq_u16_s32(ab7654));
 		return GSVector4i(vreinterpretq_s32_u16(r.val[1]));
 	}
@@ -951,7 +939,6 @@ public:
 	template <int shift>
 	__forceinline GSVector4i lerp16(const GSVector4i& a, const GSVector4i& f) const
 	{
-		// (a - this) * f << shift + this
 
 		return add16(a.sub16(*this).modulate16<shift>(f));
 	}
@@ -959,7 +946,6 @@ public:
 	template <int shift>
 	__forceinline static GSVector4i lerp16(const GSVector4i& a, const GSVector4i& b, const GSVector4i& c)
 	{
-		// (a - b) * c << shift
 
 		return a.sub16(b).modulate16<shift>(c);
 	}
@@ -967,14 +953,12 @@ public:
 	template <int shift>
 	__forceinline static GSVector4i lerp16(const GSVector4i& a, const GSVector4i& b, const GSVector4i& c, const GSVector4i& d)
 	{
-		// (a - b) * c << shift + d
 
 		return d.add16(a.sub16(b).modulate16<shift>(c));
 	}
 
 	__forceinline GSVector4i lerp16_4(const GSVector4i& a, const GSVector4i& f) const
 	{
-		// (a - this) * f >> 4 + this (a, this: 8-bit, f: 4-bit)
 
 		return add16(a.sub16(*this).mul16l(f).sra16<4>());
 	}
@@ -982,7 +966,6 @@ public:
 	template <int shift>
 	__forceinline GSVector4i modulate16(const GSVector4i& f) const
 	{
-		// a * f << shift
 
 		return sll16<shift + 1>().mul16hs(f);
 	}
@@ -1105,13 +1088,11 @@ public:
 
 	__forceinline bool alltrue() const
 	{
-		// MSB should be set in all 8-bit lanes.
 		return (vminvq_u8(vreinterpretq_u8_s32(v4s)) & 0x80) == 0x80;
 	}
 
 	__forceinline bool allfalse() const
 	{
-		// MSB should be clear in all 8-bit lanes.
 		return (vmaxvq_u8(vreinterpretq_u8_s32(v4s)) & 0x80) != 0x80;
 	}
 
@@ -1991,11 +1972,6 @@ public:
 	#define VECTOR4i_SHUFFLE_4(xs, xn, ys, yn, zs, zn, ws, wn) \
 		__forceinline GSVector4i xs##ys##zs##ws() const { return GSVector4i(__builtin_shufflevector(v4s, v4s, xn, yn, zn, wn)); }
 
-		// __forceinline GSVector4i xs##ys##zs##ws() const {return GSVector4i(_mm_shuffle_epi32(m, _MM_SHUFFLE(wn, zn, yn, xn)));}
-		// __forceinline GSVector4i xs##ys##zs##ws##l() const {return GSVector4i(_mm_shufflelo_epi16(m, _MM_SHUFFLE(wn, zn, yn, xn)));}
-		// __forceinline GSVector4i xs##ys##zs##ws##h() const {return GSVector4i(_mm_shufflehi_epi16(m, _MM_SHUFFLE(wn, zn, yn, xn)));}
-		// __forceinline GSVector4i xs##ys##zs##ws##lh() const {return GSVector4i(_mm_shufflehi_epi16(_mm_shufflelo_epi16(m, _MM_SHUFFLE(wn, zn, yn, xn)), _MM_SHUFFLE(wn, zn, yn, xn)));}
-
 	#define VECTOR4i_SHUFFLE_3(xs, xn, ys, yn, zs, zn) \
 		VECTOR4i_SHUFFLE_4(xs, xn, ys, yn, zs, zn, x, 0) \
 		VECTOR4i_SHUFFLE_4(xs, xn, ys, yn, zs, zn, y, 1) \
@@ -2019,7 +1995,6 @@ public:
 	VECTOR4i_SHUFFLE_1(z, 2)
 	VECTOR4i_SHUFFLE_1(w, 3)
 
-	// TODO: Make generic like above.
 	__forceinline GSVector4i xxzzlh() const { return GSVector4i(vreinterpretq_s32_s16(__builtin_shufflevector(vreinterpretq_s16_s32(v4s), vreinterpretq_s16_s32(v4s), 0, 0, 2, 2, 4, 4, 6, 6))); }
 	__forceinline GSVector4i yywwlh() const { return GSVector4i(vreinterpretq_s32_s16(__builtin_shufflevector(vreinterpretq_s16_s32(v4s), vreinterpretq_s16_s32(v4s), 1, 1, 3, 3, 5, 5, 7, 7))); }
 	__forceinline GSVector4i yxwzlh() const { return GSVector4i(vreinterpretq_s32_s16(__builtin_shufflevector(vreinterpretq_s16_s32(v4s), vreinterpretq_s16_s32(v4s), 1, 0, 3, 2, 5, 4, 7, 6))); }
@@ -2034,7 +2009,6 @@ public:
 
 	// clang-format on
 
-	/// Noop, here so broadcast128 can be used generically over all vectors
 	__forceinline static GSVector4i broadcast128(const GSVector4i& v)
 	{
 		return v;

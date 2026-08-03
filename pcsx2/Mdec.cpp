@@ -26,8 +26,7 @@ struct config_mdec Config;
 
 u32 mdecArr2[0x100000] = {0};
 
-u32 mdecMem[0x100000]; //watherver large size. //Memory only used to get DMA data and not really for anything else.
-	//Sould be optimized(the funcs. that use it) to read IOP RAM direcly.
+u32 mdecMem[0x100000];
 #define PSXM(x) ((uptr)mdecMem + x)
 
 
@@ -168,10 +167,9 @@ void idct(int* block, int k)
 void mdecInit(void)
 {
 
-	Config.Mdec = 0; //XXXXXXXXXXXXXXXXX  0 or 1 // 1 is black and white decoding
+	Config.Mdec = 0;
 
 	mdec.rl = (u16*)PSXM(0);
-	//mdec.rl = (u16*)&psxM[0x100000];
 	mdec.command = 0;
 	mdec.status = 0;
 	round_init();
@@ -195,9 +193,7 @@ void mdecWrite1(u32 data)
 
 	if (data & 0x80000000)
 	{
-		// mdec reset
 		round_init();
-		// mdecInit();
 	}
 }
 
@@ -224,12 +220,9 @@ void psxDma0(u32 adr, u32 bcr, u32 chcr)
 	if (chcr != 0x01000201)
 		return;
 
-	// bcr LSBs are the blocksize in words
-	// bcr MSBs are the number of block
 	const int size = (bcr >> 16) * (bcr & 0xffff);
 	if (size < 0)
 	{
-		// Need to investigate what happen if the transfer is huge
 		Console.Error("psxDma0 DMA transfer overflow !");
 		return;
 	}
@@ -244,13 +237,13 @@ void psxDma0(u32 adr, u32 bcr, u32 chcr)
 
 	if (cmd == 0x40000001)
 	{
-		u8* p = (u8*)PSXM(0); //u8 *p = (u8*)PSXM(adr);
+		u8* p = (u8*)PSXM(0);
 		iqtab_init(iq_y, p);
 		iqtab_init(iq_uv, p + 64);
 	}
 	else if ((cmd & 0xf5ff0000) == 0x30000000)
 	{
-		mdec.rl = (u16*)PSXM(0); //mdec.rl = (u16*)PSXM(adr);
+		mdec.rl = (u16*)PSXM(0);
 	}
 
 	HW_DMA0_CHCR &= ~0x01000000;
@@ -266,18 +259,15 @@ void psxDma1(u32 adr, u32 bcr, u32 chcr)
 
 	if (chcr != 0x01000200)
 		return;
-	// bcr LSBs are the blocksize in words
-	// bcr MSBs are the number of block
 	int size = (bcr >> 16) * (bcr & 0xffff);
 	const int size2 = (bcr >> 16) * (bcr & 0xffff);
 	if (size < 0)
 	{
-		// Need to investigate what happen if the transfer is huge
 		Console.Error("psxDma1 DMA transfer overflow !");
 		return;
 	}
 
-	image = (u16*)mdecArr2; //(u16*)PSXM(0); //image = (u16*)PSXM(adr);
+	image = (u16*)mdecArr2;
 
 	if (mdec.command & 0x08000000)
 	{
@@ -345,11 +335,10 @@ unsigned short* rl2blk(int* blk, unsigned short* mdec_rl)
 	memset(blk, 0, 6 * DCTSIZE2 * 4);
 	iqtab = iq_uv;
 	for (i = 0; i < 6; i++)
-	{ // decode blocks (Cr,Cb,Y1,Y2,Y3,Y4)
+	{
 		if (i > 1)
 			iqtab = iq_y;
 
-		// zigzag transformation
 		rl = *mdec_rl++;
 		q_scale = RUNOF(rl);
 		blk[0] = iqtab[0] * VALOF(rl);
@@ -358,10 +347,10 @@ unsigned short* rl2blk(int* blk, unsigned short* mdec_rl)
 			rl = *mdec_rl++;
 			if (rl == NOP)
 				break;
-			k += RUNOF(rl) + 1; // skip level zero-coefficients
+			k += RUNOF(rl) + 1;
 			if (k > 63)
 				break;
-			blk[zscan[k]] = (VALOF(rl) * iqtab[k] * q_scale) / 8; // / 16;
+			blk[zscan[k]] = (VALOF(rl) * iqtab[k] * q_scale) / 8;
 		}
 
 		idct(blk, k + 1);
@@ -497,12 +486,3 @@ void yuv2rgb24(int* blk, unsigned char* image)
 		}
 }
 
-//todo: psxmode: add mdec savestate support
-//int SaveState::mdecFreeze() {
-//	Freeze(mdec);
-//	Freeze(iq_y);
-//	Freeze(iq_uv);
-//
-//	return 0;
-//
-//}

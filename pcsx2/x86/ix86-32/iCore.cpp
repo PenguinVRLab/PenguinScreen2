@@ -12,14 +12,9 @@
 
 using namespace x86Emitter;
 
-// yay sloppy crap needed until we can remove dependency on this hippopotamic
-// landmass of shared code. (air)
 extern u32 g_psxConstRegs[32];
 
-// X86 caching
 static uint g_x86checknext;
-
-// use special x86 register allocation for ia32
 
 void _initX86regs()
 {
@@ -63,7 +58,6 @@ int _getFreeX86reg(int mode)
 		if ((mode & MODE_COP2) && mVUIsReservedCOP2(i))
 			continue;
 
-		// should have checked inuse in the previous loop.
 		pxAssert(x86regs[i].inuse);
 
 		if (x86regs[i].needed)
@@ -120,7 +114,6 @@ void _flushConstRegs(bool delete_const)
 			minusone_reg_count++;
 	}
 
-	// if we have more than one of zero/minus-one, precompute
 	bool rax_is_zero = false;
 	if (zero_reg_count > 1)
 	{
@@ -162,7 +155,6 @@ void _flushConstRegs(bool delete_const)
 		}
 	}
 
-	// and whatever's left over..
 	for (u32 i = 0; i < 32; i++)
 	{
 		if (!GPR_IS_CONST1(i) || g_cpuFlushedConstReg & (1u << i))
@@ -179,7 +171,6 @@ void _validateRegs()
 {
 #ifdef PCSX2_DEVBUILD
 #define MODE_STRING(x) ((((x) & MODE_READ)) ? (((x)&MODE_WRITE) ? "readwrite" : "read") : "write")
-	// check that no two registers are in write mode in both fprs and gprs
 	for (s8 guestreg = 0; guestreg < 32; guestreg++)
 	{
 		u32 gprreg = 0, gprmode = 0;
@@ -232,9 +223,7 @@ int _allocX86reg(int type, int reg, int mode)
 
 			pxAssert(type != X86TYPE_GPR || !GPR_IS_CONST1(reg) || (GPR_IS_CONST1(reg) && g_cpuFlushedConstReg & (1u << reg)));
 
-			// can't go from write to read
 			pxAssert(!((x86regs[i].mode & (MODE_READ | MODE_WRITE)) == MODE_WRITE && (mode & (MODE_READ | MODE_WRITE)) == MODE_READ));
-			// if (type != X86TYPE_TEMP && !(x86regs[i].mode & MODE_READ) && (mode & MODE_READ))
 
 			if (type == X86TYPE_GPR)
 			{
@@ -250,7 +239,6 @@ int _allocX86reg(int type, int reg, int mode)
 
 					if (hostXMMreg >= 0)
 					{
-						// ensure upper bits get written
 						RALOG("Invalidating host XMM reg %d for guest reg %d due to GPR write transition\n", hostXMMreg, reg);
 						pxAssert(!(xmmregs[hostXMMreg].mode & MODE_WRITE));
 						_freeXMMreg(hostXMMreg);
@@ -272,7 +260,6 @@ int _allocX86reg(int type, int reg, int mode)
 			}
 			else if (type == X86TYPE_VIREG)
 			{
-				// keep VI temporaries separate
 				if (reg < 0)
 					continue;
 			}
@@ -306,17 +293,15 @@ int _allocX86reg(int type, int reg, int mode)
 			{
 				if (reg == 0)
 				{
-					xXOR(xRegister32(new_reg), xRegister32(new_reg)); // 32-bit is smaller and zexts anyway
+					xXOR(xRegister32(new_reg), xRegister32(new_reg));
 				}
 				else
 				{
 					if (hostXMMreg >= 0)
 					{
-						// is in a XMM. we don't need to free the XMM since we're not writing, and it's still valid
 						RALOG("Copying %d from XMM %d to GPR %d on read\n", reg, hostXMMreg, regnum);
-						xMOVD(new_reg, xRegisterSSE(hostXMMreg)); // actually MOVQ
+						xMOVD(new_reg, xRegisterSSE(hostXMMreg));
 
-						// if the XMM was dirty, just get rid of it, we don't want to try to sync the values up...
 						if (xmmregs[hostXMMreg].mode & MODE_WRITE)
 						{
 							RALOG("Freeing dirty XMM %d for GPR %d\n", hostXMMreg, reg);
@@ -327,13 +312,12 @@ int _allocX86reg(int type, int reg, int mode)
 					{
 						xMOV64(new_reg, g_cpuConstRegs[reg].SD[0]);
 						g_cpuFlushedConstReg |= (1u << reg);
-						x86regs[regnum].mode |= MODE_WRITE; // reg is dirty
+						x86regs[regnum].mode |= MODE_WRITE;
 
 						RALOG("Writing constant value %lld from guest reg %d to host reg %d\n", g_cpuConstRegs[reg].SD[0], reg, regnum);
 					}
 					else
 					{
-						// not loaded
 						RALOG("Loading guest reg %d to GPR %d\n", reg, regnum);
 						xMOV(new_reg, ptr64[&cpuRegs.GPR.r[reg].UD[0]]);
 					}
@@ -359,7 +343,7 @@ int _allocX86reg(int type, int reg, int mode)
 					{
 						xMOV(new_reg32, g_psxConstRegs[reg]);
 						g_psxFlushedConstReg |= (1u << reg);
-						x86regs[regnum].mode |= MODE_WRITE; // reg is dirty
+						x86regs[regnum].mode |= MODE_WRITE;
 
 						RALOG("Writing constant value %d from guest PSX reg %d to host reg %d\n", g_psxConstRegs[reg], reg, regnum);
 					}
@@ -394,7 +378,6 @@ int _allocX86reg(int type, int reg, int mode)
 		}
 		if (hostXMMreg >= 0)
 		{
-			// writing, so kill the xmm allocation. gotta ensure the upper bits gets stored first.
 			RALOG("Invalidating %d from XMM %d because of GPR %d write\n", reg, hostXMMreg, regnum);
 			_freeXMMreg(hostXMMreg);
 		}
@@ -408,7 +391,6 @@ int _allocX86reg(int type, int reg, int mode)
 		}
 	}
 
-	// Console.WriteLn("Allocating reg %d", regnum);
 	return regnum;
 }
 
@@ -458,19 +440,16 @@ int _checkX86reg(int type, int reg, int mode)
 	{
 		if (x86regs[i].inuse && x86regs[i].reg == reg && x86regs[i].type == type)
 		{
-			// shouldn't have dirty constants...
 			pxAssert((type != X86TYPE_GPR || !GPR_IS_DIRTY_CONST(reg)) &&
 					 (type != X86TYPE_PSX || !PSX_IS_DIRTY_CONST(reg)));
 
 			if ((type == X86TYPE_GPR || type == X86TYPE_PSX) && !(x86regs[i].mode & MODE_READ) && (mode & MODE_READ))
 				pxFailRel("Somehow ended up with an allocated x86 without mode");
 
-			// ensure constants get deleted once we alloc as write
 			if (mode & MODE_WRITE)
 			{
 				if (type == X86TYPE_GPR)
 				{
-					// go through the alloc path instead, because we might need to invalidate an xmm.
 					return _allocX86reg(X86TYPE_GPR, reg, mode);
 				}
 				else if (type == X86TYPE_PSX)
@@ -566,7 +545,6 @@ void _flushX86regs()
 	{
 		if (x86regs[i].inuse && x86regs[i].mode & MODE_WRITE)
 		{
-			// shouldn't be const, because if we got to write mode, we should've flushed then
 			pxAssert(x86regs[i].type != X86TYPE_GPR || !GPR_IS_DIRTY_CONST(x86regs[i].reg));
 
 			RALOG("Flushing x86 reg %u in _eeFlushAllDirty()\n", i);

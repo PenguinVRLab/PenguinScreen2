@@ -48,13 +48,11 @@ kernel void CASFloat(
 	texture2d<float, access::write> output [[texture(1)]],
 	constant GSMTLCASPSUniform& cb [[buffer(GSMTLBufferIndexUniforms)]])
 {
-	// Do remapping of local xy in workgroup for a more PS-like swizzle pattern.
 	AU2 gxy = ARmp8x8(localID.x) + (workgroupID << 4);
 	const AU4 const0 = cb.const0;
 	const AU4 const1 = cb.const1;
 	const CASTextureF tex{input, AU2(cb.srcOffset)};
 
-	// Filter.
 	float r, g, b;
 
 	CasFilter(tex, r, g, b, gxy, const0, const1, CAS_SHARPEN_ONLY);
@@ -80,13 +78,11 @@ kernel void CASHalf(
 	texture2d<half, access::write> output [[texture(1)]],
 	constant GSMTLCASPSUniform& cb [[buffer(GSMTLBufferIndexUniforms)]])
 {
-	// Do remapping of local xy in workgroup for a more PS-like swizzle pattern.
 	AU2 gxy = ARmp8x8(localID.x) + (workgroupID << 4);
 	const AU4 const0 = cb.const0;
 	const AU4 const1 = cb.const1;
 	const CASTextureH tex{input, AW2(cb.srcOffset)};
 
-	// Filter.
 	half2 r, g, b;
 
 	#pragma unroll

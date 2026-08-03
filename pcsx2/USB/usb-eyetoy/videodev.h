@@ -42,4 +42,4 @@ namespace usb_eyetoy
 	protected:
 		std::string mHostDevice;
 	};
-} // namespace usb_eyetoy
+}

@@ -35,8 +35,6 @@ bool IOCtlSrc::Reopen(Error* error)
 	if (m_device != -1)
 		close(m_device);
 
-	// O_NONBLOCK allows a valid file descriptor to be returned even if the
-	// drive is empty. Probably does other things too.
 	m_device = open(m_filename.c_str(), O_RDONLY | O_NONBLOCK);
 	if (m_device == -1)
 	{
@@ -44,8 +42,6 @@ bool IOCtlSrc::Reopen(Error* error)
 		return false;
 	}
 
-	// DVD detection MUST be first on Linux - The TOC ioctls work for both
-	// CDs and DVDs.
 	if (ReadDVDInfo() || ReadCDInfo())
 		SetSpindleSpeed(false);
 
@@ -54,8 +50,6 @@ bool IOCtlSrc::Reopen(Error* error)
 
 void IOCtlSrc::SetSpindleSpeed(bool restore_defaults) const
 {
-	// TODO: CD seems easy enough (CDROM_SELECT_SPEED ioctl), but I'm not sure
-	// about DVD.
 }
 
 u32 IOCtlSrc::GetSectorCount() const
@@ -134,14 +128,12 @@ bool IOCtlSrc::ReadDVDInfo()
 
 	if (dvdrs.physical.layer[0].nlayers == 0)
 	{
-		// Single layer
 		m_media_type = 0;
 		m_layer_break = 0;
 		m_sectors = end_sector - start_sector + 1;
 	}
 	else if (dvdrs.physical.layer[0].track_path == 0)
 	{
-		// Dual layer, Parallel Track Path
 		dvdrs.physical.layer_num = 1;
 		ret = ioctl(m_device, DVD_READ_STRUCT, &dvdrs);
 		if (ret == -1)
@@ -155,7 +147,6 @@ bool IOCtlSrc::ReadDVDInfo()
 	}
 	else
 	{
-		// Dual layer, Opposite Track Path
 		u32 end_sector_layer0 = dvdrs.physical.layer[0].end_sector_l0;
 		m_media_type = 2;
 		m_layer_break = end_sector_layer0 - start_sector;
@@ -184,7 +175,6 @@ bool IOCtlSrc::ReadCDInfo()
 							 entry.cdte_adr, entry.cdte_ctrl});
 	}
 
-	// TODO: Do I need a fallback if this doesn't work?
 	entry.cdte_track = 0xAA;
 	if (ioctl(m_device, CDROMREADTOCENTRY, &entry) == -1)
 		return false;
@@ -219,7 +209,6 @@ bool IOCtlSrc::DiscReady()
 	if (m_device == -1)
 		return false;
 
-	// CDSL_CURRENT must be used - 0 will cause the drive tray to close.
 	if (ioctl(m_device, CDROM_DRIVE_STATUS, CDSL_CURRENT) == CDS_DISC_OK)
 	{
 		if (!m_sectors)

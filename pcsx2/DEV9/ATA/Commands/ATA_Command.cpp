@@ -92,22 +92,10 @@ void ATA::IDE_ExecCmd(u16 value)
 		case 0xEC:
 			HDD_IdentifyDevice();
 			break;
-			//0xA1 = HDDidentifyPktDevice
 		case 0xEF:
 			HDD_SetFeatures();
 			break;
 
-			//0xF1 = HDDsecSetPassword
-			//0xF2 = HDDsecUnlock
-			//0xF3 = HDDsecErasePrepare;
-			//0xF4 = HDDsecEraseUnit;
-
-			/* This command is Sony-specific and isn't part of the IDE standard */
-			/* The Sony HDD has a modified firmware that supports this command */
-			/* Sending this command to a standard HDD will give an error */
-			/* We roughly emulate it to make programs think the HDD is a Sony one */
-			/* However, we only send null, if anyting checks the returned data */
-			/* it will fail */
 		case 0x8E:
 			HDD_SCE();
 			break;
@@ -133,7 +121,6 @@ bool ATA::PreCmd()
 {
 	if ((regStatus & ATA_STAT_READY) == 0)
 	{
-		//Ignore CMD write except for EXECUTE DEVICE DIAG and INITIALIZE DEVICE PARAMETERS
 		return false;
 	}
 	regStatus |= ATA_STAT_BUSY;
@@ -150,11 +137,6 @@ bool ATA::PreCmd()
 void ATA::IDE_CmdLBA48Transform(bool islba48)
 {
 	lba48 = islba48;
-	//TODO
-	/* handle the 'magic' 0 nsector count conversion here. to avoid
-             * fiddling with the rest of the read logic, we just store the
-             * full sector count in ->nsector
-             */
 	if (!lba48)
 	{
 		if (regNsector == 0)
@@ -176,29 +158,3 @@ void ATA::IDE_CmdLBA48Transform(bool islba48)
 	}
 }
 
-//OTHER FEATURE SETS BELOW (TODO?)
-
-//CFA ERASE SECTORS
-//WRITE MULTIPLE
-//SET MULTIPLE
-
-//CFA WRITE MULTIPLE WITHOUT ERASE
-//GET MEDIA STATUS
-//MEDIA LOCK
-//MEDIA UNLOCK
-//STANDBY IMMEDIAYTE
-//STANBY
-
-//CHECK POWER MODE
-//SLEEP
-
-//MEDIA EJECT
-
-//SECURITY SET PASSWORD
-//SECURITY UNLOCK
-//SECUTIRY ERASE PREPARE
-//SECURITY ERASE UNIT
-//SECURITY FREEZE LOCK
-//SECURITY DIABLE PASSWORD
-//READ NATIVE MAX ADDRESS
-//SET MAX ADDRESS

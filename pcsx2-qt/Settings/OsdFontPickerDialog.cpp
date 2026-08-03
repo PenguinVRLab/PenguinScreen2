@@ -965,7 +965,7 @@ QString OSDFontPickerDialog::resolveSystemFontPath(const QString& family) const
 #elif defined(__linux__)
 	const QString platform_path = resolveSystemFontPathViaFontconfig(family);
 #else
-	const QString platform_path; // well, this should never happen...
+	const QString platform_path;
 #endif
 	if (!platform_path.isEmpty())
 	{

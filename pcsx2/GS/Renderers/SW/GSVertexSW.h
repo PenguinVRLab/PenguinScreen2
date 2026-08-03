@@ -10,15 +10,6 @@ struct GSVertex;
 
 struct alignas(32) GSVertexSW
 {
-	// When drawing sprites:
-	// p: x y _ f
-	// t: s t q z
-	// c: r g b a
-	// Otherwise:
-	// p: x y zl zh
-	// t: s t q f
-	// c: r g b a
-	// cov is placed in x since by the time it's known, xy are no longer needed
 
 	GSVector4 p, _pad, t, c;
 
@@ -185,7 +176,6 @@ struct alignas(32) GSVertexSW
 #if _M_SSE >= 0x500
 
 		{
-			// p.z, p.w, t.z, t.w, c.x, c.y, c.z, c.w
 
 			GSVector8 v0 = GSVector8(v[0].p.zwzw(v[0].t), v[0].c);
 			GSVector8 v1 = GSVector8(v[1].p.zwzw(v[1].t), v[1].c);

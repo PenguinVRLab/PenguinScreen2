@@ -1550,11 +1550,6 @@ Liderlik Tablosu Sıranız: {2} içinden {1}</translation>
       <translation>Durum Kaydı Seçicisi Kullan</translation>
     </message>
     <message>
-      <location filename="../Settings/AdvancedSettingsWidget.ui" line="505"/>
-      <source>PINE Settings</source>
-      <translation>PINE Ayarları</translation>
-    </message>
-    <message>
       <location filename="../Settings/AdvancedSettingsWidget.ui" line="527"/>
       <source>Slot:</source>
       <translation>Yuva:</translation>

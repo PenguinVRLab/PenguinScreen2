@@ -1577,11 +1577,6 @@ Unread messages: {2}</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../Settings/AdvancedSettingsWidget.ui" line="493"/>
-        <source>PINE Settings</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <location filename="../Settings/AdvancedSettingsWidget.ui" line="515"/>
         <source>Slot:</source>
         <translation type="unfinished"></translation>
@@ -10701,16 +10696,6 @@ This action cannot be undone.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../pcsx2/ImGui/FullscreenUI_Settings.cpp" line="6682"/>
-        <source>Enable PINE</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../../pcsx2/ImGui/FullscreenUI_Settings.cpp" line="6683"/>
-        <source>PINE Slot</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <location filename="../../pcsx2/ImGui/FullscreenUI_Settings.cpp" line="6702"/>
         <source>Memory Card Enabled</source>
         <translation type="unfinished"></translation>
@@ -11018,21 +11003,6 @@ This action cannot be undone.</source>
     <message>
         <location filename="../../pcsx2/ImGui/FullscreenUI_Settings.cpp" line="6082"/>
         <source>Forces SW blending and disables several optimizations.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../../pcsx2/ImGui/FullscreenUI_Settings.cpp" line="6083"/>
-        <source>PINE Settings</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../../pcsx2/ImGui/FullscreenUI_Settings.cpp" line="6084"/>
-        <source>Enables the PINE Inter-Process Communication system, allowing external programs to interact with the emulator.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../../pcsx2/ImGui/FullscreenUI_Settings.cpp" line="6085"/>
-        <source>The network port slot used for PINE IPC connections.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -22517,7 +22487,7 @@ Ejecting {2} and replacing it with {3}.</source>
     <name>PermissionsDialogCamera</name>
     <message>
         <location filename="../Translations.cpp" line="61"/>
-        <source>PCSX2 uses your camera to emulate an EyeToy camera plugged into the virtual PS2.</source>
+        <source>PenguinScreen2 uses your camera to emulate an EyeToy camera plugged into the virtual PS2.</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -22525,7 +22495,7 @@ Ejecting {2} and replacing it with {3}.</source>
     <name>PermissionsDialogMicrophone</name>
     <message>
         <location filename="../Translations.cpp" line="60"/>
-        <source>PCSX2 uses your microphone to emulate a USB microphone plugged into the virtual PS2.</source>
+        <source>PenguinScreen2 uses your microphone to emulate a USB microphone plugged into the virtual PS2.</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

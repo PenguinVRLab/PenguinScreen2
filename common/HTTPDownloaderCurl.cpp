@@ -104,7 +104,6 @@ HTTPDownloader::Request* HTTPDownloaderCurl::InternalCreateRequest()
 
 void HTTPDownloaderCurl::InternalPollRequests()
 {
-	// Apparently OpenSSL can fire SIGPIPE...
 	sigset_t old_block_mask = {};
 	sigset_t new_block_mask = {};
 	sigemptyset(&old_block_mask);

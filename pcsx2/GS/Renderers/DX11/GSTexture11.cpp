@@ -67,7 +67,7 @@ bool GSTexture11::Update(const GSVector4i& r, const void* data, int pitch, int l
 
 	const D3D11_BOX box = {Common::AlignDownPow2((u32)r.left, bs), Common::AlignDownPow2((u32)r.top, bs), 0U,
 		Common::AlignUpPow2((u32)r.right, bs), Common::AlignUpPow2((u32)r.bottom, bs), 1U};
-	const UINT subresource = layer; // MipSlice + (ArraySlice * MipLevels).
+	const UINT subresource = layer;
 
 	GSDevice11::GetInstance()->GetD3DContext()->UpdateSubresource(m_texture.get(), subresource, &box, data, pitch, 0);
 	m_needs_mipmaps_generated |= (layer == 0);
@@ -76,7 +76,6 @@ bool GSTexture11::Update(const GSVector4i& r, const void* data, int pitch, int l
 
 bool GSTexture11::Map(GSMap& m, const GSVector4i* r, int layer)
 {
-	// Not supported
 	return false;
 }
 
@@ -248,9 +247,6 @@ void GSDownloadTexture11::CopyFromTexture(
 	if (IsMapped())
 		Unmap();
 
-	// DX11 doesn't support partial depth copy so we need to
-	// either pass a nullptr D3D11_BOX for a full depth copy or use CopyResource instead.
-	// Optimization: Use CopyResource for depth copies, it's faster than CopySubresourceRegion.
 	if (m_format == GSTexture::Format::DepthStencil)
 	{
 		GSDevice11::GetInstance()->GetD3DContext()->CopyResource(
@@ -301,7 +297,6 @@ void GSDownloadTexture11::Flush()
 	if (IsMapped())
 		Unmap();
 
-	// Handled when mapped.
 }
 
 #ifdef PCSX2_DEVBUILD

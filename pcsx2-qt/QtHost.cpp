@@ -19,6 +19,7 @@
 #include "pcsx2/Counters.h"
 #include "pcsx2/DebugTools/Debug.h"
 #include "pcsx2/GS.h"
+#include "pcsx2/ps2/BiosTools.h"
 #include "pcsx2/GS/GS.h"
 #include "pcsx2/GSDumpReplayer.h"
 #include "pcsx2/GameList.h"
@@ -33,6 +34,10 @@
 #include "pcsx2/PerformanceMetrics.h"
 #include "pcsx2/SPU2/spu2.h"
 #include "pcsx2/VMManager.h"
+#ifdef ENABLE_VR
+#include "pcsx2/VR/VRManager.h"
+#include "pcsx2/VR/VRProfileDB.h"
+#endif
 
 #include "common/Assertions.h"
 #include "common/Console.h"
@@ -45,6 +50,7 @@
 #include "common/StringUtil.h"
 #include "common/Timer.h"
 
+#include <QtCore/QDir>
 #include <QtCore/QTimer>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QMessageBox>
@@ -63,9 +69,6 @@ static constexpr const char* RUNTIME_RESOURCES_URL =
 
 EmuThread* g_emu_thread = nullptr;
 
-//////////////////////////////////////////////////////////////////////////
-// Local function declarations
-//////////////////////////////////////////////////////////////////////////
 namespace QtHost
 {
 	static void InitializeEarlyConsole();
@@ -80,11 +83,8 @@ namespace QtHost
 	static void InitializeClipboard();
 	static bool RunSetupWizard();
 	std::optional<bool> DownloadFile(QWidget* parent, const QString& title, std::string url, std::vector<u8>* data);
-} // namespace QtHost
+}
 
-//////////////////////////////////////////////////////////////////////////
-// Local variable declarations
-//////////////////////////////////////////////////////////////////////////
 static QTimer* s_settings_save_timer = nullptr;
 static std::unique_ptr<INISettingsInterface> s_base_settings_interface;
 static std::unique_ptr<INISettingsInterface> s_secrets_settings_interface;
@@ -99,10 +99,6 @@ static bool s_boot_and_debug = false;
 static std::atomic_int s_vm_locked_with_dialog = 0;
 static std::string s_clipboard_cache;
 static std::mutex s_clipboard_cache_mutex;
-
-//////////////////////////////////////////////////////////////////////////
-// CPU Thread
-//////////////////////////////////////////////////////////////////////////
 
 EmuThread::EmuThread(QThread* ui_thread)
 	: QThread()
@@ -156,7 +152,6 @@ void EmuThread::startFullscreenUI(bool fullscreen)
 	if (VMManager::HasValidVM() || MTGS::IsOpen())
 		return;
 
-	// this should just set the flag so it gets automatically started
 	ImGuiManager::InitializeFullscreenUI();
 	m_run_fullscreen_ui.store(true, std::memory_order_release);
 	m_is_rendering_to_main = shouldRenderToMain();
@@ -170,7 +165,6 @@ void EmuThread::startFullscreenUI(bool fullscreen)
 
 	emit onFullscreenUIStateChange(true);
 
-	// poll more frequently so we don't lose events
 	stopBackgroundControllerPollTimer();
 	startBackgroundControllerPollTimer();
 }
@@ -181,8 +175,6 @@ void EmuThread::stopFullscreenUI()
 	{
 		QMetaObject::invokeMethod(this, &EmuThread::stopFullscreenUI, Qt::QueuedConnection);
 
-		// wait until the host display is gone
-		// have to test the bool, because MTGS::IsOpen() goes false as soon as the close request happens.
 		while (m_run_fullscreen_ui.load(std::memory_order_acquire) || (!QtHost::IsVMValid() && MTGS::IsOpen()))
 			QApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 1);
 
@@ -199,7 +191,6 @@ void EmuThread::stopFullscreenUI()
 		m_run_fullscreen_ui.store(false, std::memory_order_release);
 		emit onFullscreenUIStateChange(false);
 
-		// Resume and refresh background when FullscreenUI exits
 		QMetaObject::invokeMethod(g_main_window, "updateGameListBackground", Qt::QueuedConnection);
 	}
 }
@@ -212,7 +203,6 @@ void EmuThread::startVM(std::shared_ptr<VMBootParameters> boot_params)
 		return;
 	}
 
-	// Determine whether to start fullscreen or not.
 	m_is_rendering_to_main = shouldRenderToMain();
 	if (boot_params->fullscreen.has_value())
 		m_is_fullscreen = boot_params->fullscreen.value();
@@ -237,12 +227,10 @@ void EmuThread::startVM(std::shared_ptr<VMBootParameters> boot_params)
 
 		if (!Host::GetBoolSettingValue("UI", "StartPaused", false))
 		{
-			// This will come back and call OnVMResumed().
 			VMManager::SetState(VMState::Running);
 		}
 		else
 		{
-			// When starting paused, redraw the window, so there's at least something there.
 			g_emu_thread->redrawDisplayWindow();
 			Host::OnVMPaused();
 		}
@@ -275,7 +263,7 @@ void EmuThread::setVMPaused(bool paused)
 	VMManager::SetPaused(paused);
 }
 
-void EmuThread::shutdownVM(bool save_state /* = true */)
+void EmuThread::shutdownVM(bool save_state )
 {
 	if (!isOnEmuThread())
 	{
@@ -371,12 +359,10 @@ void EmuThread::saveStateToSlot(qint32 slot)
 
 void EmuThread::run()
 {
-	// Qt-specific initialization.
 	m_event_loop = new QEventLoop();
 	m_started_semaphore.release();
 	connectSignals();
 
-	// Common host initialization (VM setup, etc).
 	if (!VMManager::Internal::CPUThreadInitialize())
 	{
 		VMManager::Internal::CPUThreadShutdown();
@@ -384,11 +370,9 @@ void EmuThread::run()
 		return;
 	}
 
-	// Start background polling because the VM won't do it for us.
 	createBackgroundControllerPollTimer();
 	startBackgroundControllerPollTimer();
 
-	// Main CPU thread loop.
 	while (!m_shutdown_flag.load())
 	{
 		switch (VMManager::GetState())
@@ -420,12 +404,10 @@ void EmuThread::run()
 		}
 	}
 
-	// Teardown in reverse order.
 	stopBackgroundControllerPollTimer();
 	destroyBackgroundControllerPollTimer();
 	VMManager::Internal::CPUThreadShutdown();
 
-	// Move back to the UI thread, since we're no longer running.
 	moveToThread(m_ui_thread);
 	deleteLater();
 }
@@ -504,21 +486,17 @@ void EmuThread::setFullscreen(bool fullscreen, bool allow_render_to_main)
 		return;
 	}
 
-	// HACK: Prevent entering/exiting fullscreen mode when a dialog is shown, so
-	// that we don't destroy the dialog while inside its exec function.
 	if (s_vm_locked_with_dialog > 0)
 		return;
 
 	if (!MTGS::IsOpen() || m_is_fullscreen == fullscreen)
 		return;
 
-	// This will call back to us on the MTGS thread.
 	m_is_fullscreen = fullscreen;
 	m_is_rendering_to_main = allow_render_to_main && shouldRenderToMain();
 	MTGS::UpdateDisplayWindow();
 	MTGS::WaitGS();
 
-	// If we're using exclusive fullscreen, the refresh rate may have changed.
 	VMManager::UpdateTargetSpeed();
 }
 
@@ -533,7 +511,6 @@ void EmuThread::setSurfaceless(bool surfaceless)
 	if (!MTGS::IsOpen() || m_is_surfaceless == surfaceless)
 		return;
 
-	// This will call back to us on the MTGS thread.
 	m_is_surfaceless = surfaceless;
 	MTGS::UpdateDisplayWindow();
 	MTGS::WaitGS();
@@ -558,7 +535,6 @@ void EmuThread::reloadGameSettings()
 		return;
 	}
 
-	// this will skip applying settings when they're not active
 	VMManager::ReloadGameSettings();
 }
 
@@ -796,7 +772,6 @@ void EmuThread::onDisplayWindowResized(u32 width, u32 height, float scale)
 
 void EmuThread::onApplicationStateChanged(Qt::ApplicationState state)
 {
-	// NOTE: This is executed on the emu thread, not UI thread.
 	if (!VMManager::HasValidVM())
 		return;
 
@@ -809,9 +784,6 @@ void EmuThread::onApplicationStateChanged(Qt::ApplicationState state)
 			VMManager::SetPaused(true);
 		}
 
-		// Clear the state of all keyboard binds.
-		// That way, if we had a key held down, and lost focus, the bind won't be stuck enabled because we never
-		// got the key release message, because it happened in another window which "stole" the event.
 		InputManager::ClearBindStateFromSource(InputManager::MakeHostKeyboardKey(0));
 	}
 	else
@@ -833,7 +805,6 @@ void EmuThread::redrawDisplayWindow()
 		return;
 	}
 
-	// If we're running, we're going to re-present anyway.
 	if (!VMManager::HasValidVM() || VMManager::GetState() == VMState::Running)
 		return;
 
@@ -874,8 +845,6 @@ void EmuThread::beginCapture(const QString& path)
 		GSBeginCapture(std::move(path));
 	});
 
-	// Sync GS thread. We want to start adding audio at the same time as video.
-	// TODO: This could be up to 64 frames behind... use the pts to adjust it.
 	MTGS::WaitGS(false, false, false);
 }
 
@@ -895,7 +864,6 @@ void EmuThread::endCapture()
 
 std::optional<WindowInfo> EmuThread::acquireRenderWindow(bool recreate_window)
 {
-	// Check if we're wanting to get exclusive fullscreen. This should be safe to read, since we're going to be calling from the GS thread.
 	m_is_exclusive_fullscreen = m_is_fullscreen && GSWantsExclusiveFullscreen();
 	const bool window_fullscreen = m_is_fullscreen && !m_is_exclusive_fullscreen;
 	const bool render_to_main = !m_is_exclusive_fullscreen && !window_fullscreen && m_is_rendering_to_main;
@@ -953,11 +921,9 @@ void Host::OnVMPaused()
 
 void Host::OnVMResumed()
 {
-	// exit the event loop when we eventually return
 	g_emu_thread->getEventLoop()->quit();
 	g_emu_thread->stopBackgroundControllerPollTimer();
 
-	// if we were surfaceless (view->game list, system->unpause), get our display widget back
 	if (g_emu_thread->isSurfaceless())
 		g_emu_thread->setSurfaceless(false);
 
@@ -1013,7 +979,7 @@ void EmuThread::updatePerformanceMetrics(bool force)
 		QMetaObject::invokeMethod(g_main_window, "setStatusVerboseText", Qt::QueuedConnection, Q_ARG(const QString&, gs_stat));
 	}
 
-	const GSRendererType renderer = GSGetCurrentRenderer(); // Reading from GS thread, therefore racey, but it's just visual.
+	const GSRendererType renderer = GSGetCurrentRenderer();
 	const float upscale = EmuConfig.GS.UpscaleMultiplier;
 	const float speed = std::round(PerformanceMetrics::GetSpeed());
 	const LimiterModeType limiter_mode = VMManager::GetLimiterMode();
@@ -1192,7 +1158,6 @@ void Host::OnAchievementsHardcoreModeChanged(bool enabled)
 bool Host::ShouldPreferHostFileSelector()
 {
 #ifdef __linux__
-	// If running inside a flatpak, we want to use native selectors/portals.
 	return (std::getenv("container") != nullptr);
 #else
 	return false;
@@ -1247,11 +1212,10 @@ void Host::PumpMessagesOnCPUThread()
 	g_emu_thread->getEventLoop()->processEvents(QEventLoop::AllEvents);
 }
 
-void Host::RunOnCPUThread(std::function<void()> function, bool block /* = false */)
+void Host::RunOnCPUThread(std::function<void()> function, bool block )
 {
 	if (block && g_emu_thread->isOnEmuThread())
 	{
-		// probably shouldn't ever happen, but just in case..
 		function();
 		return;
 	}
@@ -1290,22 +1254,15 @@ void Host::RequestVMShutdown(bool allow_confirm, bool allow_save_state, bool def
 	if (!VMManager::HasValidVM())
 		return;
 
-	// This is a bit messy here - we want to shut down immediately (in case it was requested by the game),
-	// but we also need to exit-on-shutdown for batch mode. So, if we're running on the CPU thread, destroy
-	// the VM, then request the main window to exit.
 	if (allow_confirm || !g_emu_thread->isOnEmuThread())
 	{
-		// Run it on the host thread, that way we get the confirm prompt (if enabled).
 		QMetaObject::invokeMethod(g_main_window, "requestShutdown", Qt::QueuedConnection, Q_ARG(bool, allow_confirm),
 			Q_ARG(bool, allow_save_state), Q_ARG(bool, default_save_state));
 	}
 	else
 	{
-		// Change state to stopping -> return -> shut down VM.
 		g_emu_thread->shutdownVM(allow_save_state && default_save_state);
 
-		// This will probably call shutdownVM() again, but by the time it runs, we'll have already shut down
-		// and it'll be a noop.
 		if (Host::InBatchMode())
 			QMetaObject::invokeMethod(g_main_window, "requestExit", Qt::QueuedConnection, Q_ARG(bool, false));
 	}
@@ -1331,6 +1288,22 @@ void Host::OnCaptureStopped()
 	emit g_emu_thread->onCaptureStopped();
 }
 
+static bool DropFolderHasBios(const std::string& dir)
+{
+	FileSystem::FindResultsArray files;
+	if (!FileSystem::FindFiles(dir.c_str(), "*", FILESYSTEM_FIND_FILES | FILESYSTEM_FIND_HIDDEN_FILES, &files))
+		return false;
+
+	u32 version, region;
+	std::string description, zone;
+	for (const FILESYSTEM_FIND_DATA& fd : files)
+	{
+		if (IsBIOS(fd.FileName.c_str(), version, description, region, zone))
+			return true;
+	}
+	return false;
+}
+
 bool QtHost::InitializeConfig()
 {
 	Error error;
@@ -1339,30 +1312,27 @@ bool QtHost::InitializeConfig()
 
 	if (!EmuFolders::SetResourcesDirectory())
 	{
-		QMessageBox::critical(nullptr, QStringLiteral("PCSX2"),
+		QMessageBox::critical(nullptr, QStringLiteral("PenguinScreen2"),
 			QStringLiteral("Resources directory is missing, your installation is incomplete."));
 		return false;
 	}
 
 	if (!EmuFolders::SetDataDirectory(&error))
 	{
-		// no point translating, config isn't loaded
 		QMessageBox::critical(
-			nullptr, QStringLiteral("PCSX2"),
+			nullptr, QStringLiteral("PenguinScreen2"),
 			QStringLiteral("Failed to create data directory at path\n\n%1\n\n"
 						   "The error was: %2\n"
 						   "Please ensure this directory is writable. You can also try portable mode "
-						   "by creating portable.txt in the same directory you installed PCSX2 into.")
+						   "by creating portable.txt in the same directory you installed PenguinScreen2 into.")
 				.arg(QString::fromStdString(EmuFolders::DataRoot))
 				.arg(QString::fromStdString(error.GetDescription())));
 		return false;
 	}
 
-	// Write crash dumps to the data directory, since that'll be accessible for certain.
 	CrashHandler::SetWriteDirectory(EmuFolders::DataRoot);
 
-	// Load main settings ini
-	const std::string path = Path::Combine(EmuFolders::Settings, "PCSX2.ini");
+	const std::string path = Path::Combine(EmuFolders::Settings, "PenguinScreen2.ini");
 	const bool settings_exists = FileSystem::FileExists(path.c_str());
 	Console.WriteLnFmt("Loading config from {}.", path);
 
@@ -1370,9 +1340,8 @@ bool QtHost::InitializeConfig()
 	Host::Internal::SetBaseSettingsLayer(s_base_settings_interface.get());
 	if (!settings_exists || !s_base_settings_interface->Load() || !VMManager::Internal::CheckSettingsVersion())
 	{
-		// If the config file doesn't exist, assume this is a new install and don't prompt to overwrite.
 		if (FileSystem::FileExists(s_base_settings_interface->GetFileName().c_str()) &&
-			QMessageBox::question(nullptr, QStringLiteral("PCSX2"),
+			QMessageBox::question(nullptr, QStringLiteral("PenguinScreen2"),
 				QStringLiteral("Settings failed to load, or are the incorrect version. Clicking Yes will reset all settings to defaults. "
 							   "Do you want to continue?")) != QMessageBox::Yes)
 		{
@@ -1381,28 +1350,53 @@ bool QtHost::InitializeConfig()
 
 		VMManager::SetDefaultSettings(*s_base_settings_interface, true, true, true, true, true);
 
-		// Flag for running the setup wizard if this is our first run. We want to run it next time if they don't finish it.
 		s_base_settings_interface->SetBoolValue("UI", "SetupWizardIncomplete", true);
 
-		// Make sure we can actually save the config, and the user doesn't have some permission issue.
+		const std::string drop_bios =
+			Path::Combine(QDir::homePath().toStdString(), "PS2-BIOS");
+		const std::string drop_games =
+			Path::Combine(QDir::homePath().toStdString(), "PS2-Games");
+		if (DropFolderHasBios(drop_bios))
+		{
+			s_base_settings_interface->SetStringValue("Folders", "Bios", drop_bios.c_str());
+			if (FileSystem::DirectoryExists(drop_games.c_str()))
+				s_base_settings_interface->AddToStringList("GameList", "RecursivePaths", drop_games.c_str());
+			s_base_settings_interface->SetBoolValue("UI", "SetupWizardIncomplete", false);
+			Console.WriteLn("First run: valid BIOS found in '%s' — adopted the drop folders and skipping the setup wizard.",
+				drop_bios.c_str());
+		}
+
 		if (!s_base_settings_interface->Save(&error))
 		{
 			QMessageBox::critical(
-				nullptr, QStringLiteral("PCSX2"),
+				nullptr, QStringLiteral("PenguinScreen2"),
 				QStringLiteral(
 					"Failed to save configuration to\n\n%1\n\nThe error was: %2\n\nPlease ensure this directory is writable. You "
-					"can also try portable mode by creating portable.txt in the same directory you installed PCSX2 into.")
+					"can also try portable mode by creating portable.txt in the same directory you installed PenguinScreen2 into.")
 					.arg(QString::fromStdString(s_base_settings_interface->GetFileName()))
 					.arg(QString::fromStdString(error.GetDescription())));
 			return false;
 		}
 
-		// Don't save if we're running the setup wizard. We want to run it next time if they don't finish it.
 		if (!s_run_setup_wizard)
 			SaveSettings();
 	}
 
-	// Layer secrets ini on top
+	{
+		const std::string drop_bios =
+			Path::Combine(QDir::homePath().toStdString(), "PS2-BIOS");
+		std::string cur_bios = s_base_settings_interface->GetStringValue("Folders", "Bios", "bios");
+		if (!Path::IsAbsolute(cur_bios))
+			cur_bios = Path::Combine(EmuFolders::DataRoot, cur_bios);
+		if (cur_bios != drop_bios && !DropFolderHasBios(cur_bios) && DropFolderHasBios(drop_bios))
+		{
+			Console.WriteLn("BIOS folder '%s' has no valid BIOS but '%s' does — adopting the drop folder.",
+				cur_bios.c_str(), drop_bios.c_str());
+			s_base_settings_interface->SetStringValue("Folders", "Bios", drop_bios.c_str());
+			s_base_settings_interface->Save();
+		}
+	}
+
 	const std::string secrets_path = Path::Combine(EmuFolders::Settings, "secrets.ini");
 	const bool secrets_settings_exists = FileSystem::FileExists(secrets_path.c_str());
 	Console.WriteLnFmt("Loading secrets from {}.", secrets_path);
@@ -1414,21 +1408,18 @@ bool QtHost::InitializeConfig()
 		if (!s_base_settings_interface->Save(&error))
 		{
 			QMessageBox::critical(
-				nullptr, QStringLiteral("PCSX2"),
+				nullptr, QStringLiteral("PenguinScreen2"),
 				QStringLiteral(
 					"Failed to save secrets to\n\n%1\n\nThe error was: %2\n\nPlease ensure this directory is writable. You "
-					"can also try portable mode by creating portable.txt in the same directory you installed PCSX2 into.")
+					"can also try portable mode by creating portable.txt in the same directory you installed PenguinScreen2 into.")
 					.arg(QString::fromStdString(s_secrets_settings_interface->GetFileName()))
 					.arg(QString::fromStdString(error.GetDescription())));
 			return false;
 		}
 	}
 
-	// Setup wizard was incomplete last time?
 	s_run_setup_wizard =
 		s_run_setup_wizard || s_base_settings_interface->GetBoolValue("UI", "SetupWizardIncomplete", false);
-
-	// TODO: -nogui console block?
 
 	VMManager::Internal::LoadStartupSettings();
 	InstallTranslator(nullptr);
@@ -1519,9 +1510,8 @@ bool QtHost::ShouldShowAdvancedSettings()
 	return Host::GetBaseBoolSettingValue("UI", "ShowAdvancedSettings", false);
 }
 
-void QtHost::RunOnUIThread(const std::function<void()>& func, bool block /*= false*/)
+void QtHost::RunOnUIThread(const std::function<void()>& func, bool block )
 {
-	// main window always exists, so it's fine to attach it to that.
 	QMetaObject::invokeMethod(g_main_window, "runOnUIThread", block ? Qt::BlockingQueuedConnection : Qt::QueuedConnection,
 		Q_ARG(const std::function<void()>&, func));
 }
@@ -1543,7 +1533,7 @@ bool Host::RequestResetSettings(bool folders, bool core, bool controllers, bool 
 
 QString QtHost::GetAppNameAndVersion()
 {
-	return QString("PCSX2 %1").arg(BuildVersion::GitRev);
+	return QString("PenguinScreen2 %1").arg(BuildVersion::GitRev);
 }
 
 QString QtHost::GetAppConfigSuffix()
@@ -1577,7 +1567,6 @@ bool QtHost::SaveGameSettings(SettingsInterface* sif, bool delete_if_empty)
 	INISettingsInterface* ini = static_cast<INISettingsInterface*>(sif);
 	Error error;
 
-	// if there's no keys, just toss the whole thing out
 	if (delete_if_empty && ini->IsEmpty())
 	{
 		INFO_LOG("Removing empty gamesettings ini {}", Path::GetFileName(ini->GetFileName()));
@@ -1594,7 +1583,6 @@ bool QtHost::SaveGameSettings(SettingsInterface* sif, bool delete_if_empty)
 		return true;
 	}
 
-	// clean unused sections, stops the file being bloated
 	sif->RemoveEmptySections();
 
 	if (!sif->Save(&error))
@@ -1655,7 +1643,6 @@ std::optional<bool> QtHost::DownloadFile(QWidget* parent, const QString& title, 
 		},
 		&progress);
 
-	// Block until completion.
 	while (http->HasAnyRequests())
 	{
 		QApplication::processEvents(QEventLoop::AllEvents, HTTP_POLL_INTERVAL);
@@ -1671,7 +1658,6 @@ bool QtHost::DownloadFile(QWidget* parent, const QString& title, std::string url
 	if (!DownloadFile(parent, title, std::move(url), &data).value_or(false) || data.empty())
 		return false;
 
-	// Directory may not exist. Create it.
 	const std::string directory(Path::GetDirectory(path));
 	if ((!directory.empty() && !FileSystem::DirectoryExists(directory.c_str()) &&
 			!FileSystem::CreateDirectoryPath(directory.c_str(), true)) ||
@@ -1777,7 +1763,6 @@ void Host::OnInputDeviceDisconnected(const InputBindingKey key, const std::strin
 		Host::RunOnCPUThread([message = QString::fromStdString(message)]() {
 			VMManager::SetPaused(true);
 
-			// has to be done after pause, otherwise pause message takes precedence
 			emit g_emu_thread->statusMessage(message);
 		});
 		Host::AddIconOSDMessage(fmt::format("controller_connected_{}", identifier), ICON_FA_GAMEPAD, std::move(message),
@@ -1862,7 +1847,7 @@ namespace
 		std::shared_ptr<SharedData> m_data;
 		int m_last_progress_percent = -1;
 	};
-} // namespace
+}
 
 QtHostProgressCallback::QtHostProgressCallback()
 	: BaseProgressCallback()
@@ -1953,7 +1938,6 @@ void QtHostProgressCallback::Redraw(bool force)
 	if (percent == m_last_progress_percent && !force)
 		return;
 
-	// If this is the emu uthread, we need to process the un-fullscreen message.
 	if (g_emu_thread->isOnEmuThread())
 		Host::PumpMessagesOnCPUThread();
 
@@ -2004,7 +1988,6 @@ void QtHostProgressCallback::ModalInformation(const char* message)
 
 void QtHostProgressCallback::SetCancelled()
 {
-	// not done here
 }
 
 bool QtHostProgressCallback::IsCancelled() const
@@ -2053,35 +2036,24 @@ std::unique_ptr<ProgressCallback> Host::CreateHostProgressCallback()
 	return std::make_unique<QtHostProgressCallback>();
 }
 
-//////////////////////////////////////////////////////////////////////////
-// Hotkeys
-//////////////////////////////////////////////////////////////////////////
-
 BEGIN_HOTKEY_LIST(g_host_hotkeys)
 END_HOTKEY_LIST()
 
 
-//////////////////////////////////////////////////////////////////////////
-// Interface Stuff
-//////////////////////////////////////////////////////////////////////////
-
 static void SignalHandler(int signal)
 {
-	// First try the normal (graceful) shutdown/exit.
 	static bool graceful_shutdown_attempted = false;
 	if (!graceful_shutdown_attempted && g_main_window)
 	{
 		std::fprintf(stderr, "Received CTRL+C, attempting graceful shutdown. Press CTRL+C again to force.\n");
 		graceful_shutdown_attempted = true;
 
-		// This could be a bit risky invoking from a signal handler... hopefully it's okay.
 		QMetaObject::invokeMethod(g_main_window, "requestExit", Qt::QueuedConnection, Q_ARG(bool, false));
 		return;
 	}
 
 	std::signal(signal, SIG_DFL);
 
-	// MacOS is missing std::quick_exit() despite it being C++11...
 #ifndef __APPLE__
 	std::quick_exit(1);
 #else
@@ -2110,7 +2082,6 @@ void QtHost::HookSignals()
 #if defined(_WIN32)
 	SetConsoleCtrlHandler(ConsoleCtrlHandler, FALSE);
 #elif defined(__linux__)
-	// Ignore SIGCHLD by default on Linux, since we kick off aplay asynchronously.
 	struct sigaction sa_chld = {};
 	sigemptyset(&sa_chld.sa_mask);
 	sa_chld.sa_flags = SA_SIGINFO | SA_RESTART | SA_NOCLDSTOP | SA_NOCLDWAIT;
@@ -2140,7 +2111,7 @@ void QtHost::PrintCommandLineHelp(const std::string_view progname)
 	std::fprintf(stderr, "  -version: Displays version information and exits.\n");
 	std::fprintf(stderr, "  -batch: Enables batch mode (exits after shutting down).\n");
 	std::fprintf(stderr, "  -nogui: Hides main window while running (implies batch mode).\n");
-	std::fprintf(stderr, "  -portable: Force enable portable mode to store data in local PCSX2 path instead of the default configuration path. Overrides '-datapath'.\n");
+	std::fprintf(stderr, "  -portable: Force enable portable mode to store data in local PenguinScreen2 path instead of the default configuration path. Overrides '-datapath'.\n");
 	std::fprintf(stderr, "  -datapath <path>: Specify the directory to be used for all application data.\n");
 	std::fprintf(stderr, "  -elf <file>: Overrides the boot ELF with the specified filename.\n");
 	std::fprintf(stderr, "  -gameargs <string>: passes the specified quoted space-delimited string of launch arguments.\n");
@@ -2153,7 +2124,7 @@ void QtHost::PrintCommandLineHelp(const std::string_view progname)
 	std::fprintf(stderr, "  -statefile <filename>: Loads state from the specified filename.\n");
 	std::fprintf(stderr, "  -fullscreen: Enters fullscreen mode immediately after starting.\n");
 	std::fprintf(stderr, "  -nofullscreen: Prevents fullscreen mode from triggering if enabled.\n");
-	std::fprintf(stderr, "  -bigpicture: Forces PCSX2 to use the Big Picture mode (useful for controller-only and couch play).\n");
+	std::fprintf(stderr, "  -bigpicture: Forces PenguinScreen2 to use the Big Picture mode (useful for controller-only and couch play).\n");
 	std::fprintf(stderr, "  -earlyconsolelog: Forces logging of early console messages to console.\n");
 	std::fprintf(stderr, "  -testconfig: Initializes configuration and checks version, then exits.\n");
 	std::fprintf(stderr, "  -setupwizard: Forces initial setup wizard to run.\n");
@@ -2162,6 +2133,9 @@ void QtHost::PrintCommandLineHelp(const std::string_view progname)
 	std::fprintf(stderr, "  -unlimited: Enters unlimited (fast forward) mode after starting.\n");
 #ifdef ENABLE_RAINTEGRATION
 	std::fprintf(stderr, "  -raintegration: Use RAIntegration instead of built-in achievement support.\n");
+#endif
+#ifdef ENABLE_VR
+	std::fprintf(stderr, "  -vr-info: Prints OpenXR runtime/headset information and exits.\n");
 #endif
 	std::fprintf(stderr, "  --: Signals that no more arguments will follow and the remaining\n"
 						 "    parameters make up the filename. Use when the filename contains\n"
@@ -2183,7 +2157,6 @@ bool QtHost::ParseCommandLineOptions(const QStringList& args, std::shared_ptr<VM
 
 	if (args.empty())
 	{
-		// Nothing to do here.
 		return true;
 	}
 
@@ -2204,6 +2177,14 @@ bool QtHost::ParseCommandLineOptions(const QStringList& args, std::shared_ptr<VM
 				PrintCommandLineVersion();
 				return false;
 			}
+#ifdef ENABLE_VR
+			else if (CHECK_ARG(QStringLiteral("-vr-info")))
+			{
+				PrintCommandLineVersion();
+				std::fprintf(stderr, "%s", VR::GetRuntimeInfoReport().c_str());
+				return false;
+			}
+#endif
 			else if (CHECK_ARG(QStringLiteral("-batch")))
 			{
 				s_batch_mode = true;
@@ -2351,8 +2332,6 @@ bool QtHost::ParseCommandLineOptions(const QStringList& args, std::shared_ptr<VM
 		AutoBoot(autoboot)->filename += it->toStdString();
 	}
 
-	// check autoboot parameters, if we set something like fullscreen without a bios
-	// or disc, we don't want to actually start.
 	if (autoboot && !autoboot->source_type.has_value() && autoboot->filename.empty() && autoboot->elf_override.empty())
 	{
 		Console.Warning("Skipping autoboot due to no boot parameters.");
@@ -2365,8 +2344,6 @@ bool QtHost::ParseCommandLineOptions(const QStringList& args, std::shared_ptr<VM
 		autoboot->start_turbo.reset();
 	}
 
-	// if we don't have autoboot, we definitely don't want batch mode (because that'll skip
-	// scanning the game list).
 	if (s_batch_mode && !s_start_big_picture_mode && !autoboot)
 	{
 		QMessageBox::critical(nullptr, QStringLiteral("Error"),
@@ -2380,11 +2357,8 @@ bool QtHost::ParseCommandLineOptions(const QStringList& args, std::shared_ptr<VM
 
 #ifndef _WIN32
 
-// See note in EarlyHardwareChecks.cpp as to why we don't do this on Windows.
 static bool PerformEarlyHardwareChecks()
 {
-	// NOTE: No point translating this message, because the configuration isn't loaded yet, so we
-	// won't know which language to use, and loading the configuration uses float instructions.
 	const char* error;
 	if (VMManager::PerformEarlyHardwareChecks(&error))
 		return true;
@@ -2399,13 +2373,6 @@ void QtHost::RegisterTypes()
 {
 	qRegisterMetaType<std::optional<bool>>();
 	qRegisterMetaType<std::optional<WindowInfo>>("std::optional<WindowInfo>()");
-	// Bit of fun with metatype names
-	// On Windows, the real type name here is "std::function<void __cdecl(void)>"
-	// Normally, the fact that we `Q_DECLARE_METATYPE(std::function<void()>);` in QtHost.h would make it also register under "std::function<void()>"
-	// The metatype is a pointer to `QMetaTypeInterfaceWrapper<std::function<void()>>::metaType`, which contains a pointer to the function that would register the alternate name
-	// But to anyone who can't see QtHost.h, that pointer should be null, opening us up to ODR violations
-	// Turns out some of our automoc files also instantiate that metaType (with the null pointer), so if we try to rely on it, everything will break if we get unlucky with link order
-	// Instead, manually register under the desired name:
 	qRegisterMetaType<std::function<void()>>("std::function<void()>");
 	qRegisterMetaType<std::shared_ptr<VMBootParameters>>();
 	qRegisterMetaType<GSRendererType>();
@@ -2441,7 +2408,6 @@ bool QtHost::RunSetupWizard()
 	if (dialog.exec() == QDialog::Rejected)
 		return false;
 
-	// Remove the flag.
 	Host::SetBaseBoolSettingValue("UI", "SetupWizardIncomplete", false);
 	Host::CommitBaseSettingChanges();
 	return true;
@@ -2461,7 +2427,7 @@ public:
 			if (url.isLocalFile())
 				return g_main_window->startFile(url.toLocalFile());
 			else
-				return false; // No URL schemas currently supported
+				return false;
 		}
 		return QApplication::event(event);
 	}
@@ -2471,14 +2437,13 @@ int main(int argc, char* argv[])
 {
 	CrashHandler::Install();
 
-// Exceptions are disabled, so we can't try/catch this.
-// Timestamps in some locales showed up wrong on Windows.
-// Qt already applies the user locale on Unix-like systems.
 #ifdef _WIN32
 	std::locale::global(std::locale(""));
 #endif
 
 	QGuiApplication::setHighDpiScaleFactorRoundingPolicy(Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
+
+	QGuiApplication::setDesktopFileName(QStringLiteral("org.penguinvr.penguinscreen2"));
 	QtHost::RegisterTypes();
 
 	PCSX2MainApplication app(argc, argv);
@@ -2494,29 +2459,41 @@ int main(int argc, char* argv[])
 	if (!QtHost::ParseCommandLineOptions(app.arguments(), autoboot))
 		return EXIT_FAILURE;
 
-	// Bail out if we can't find any config.
 	if (!QtHost::InitializeConfig())
 		return EXIT_FAILURE;
 
-	// Are we just setting up the configuration?
 	if (s_test_config_and_exit)
 		return EXIT_SUCCESS;
 
-	// Remove any previous-version remanants.
+#ifdef ENABLE_VR
+	{
+		const auto& issues = VR::ProfileDB::ValidateAtLaunch();
+		if (!issues.empty())
+		{
+			QString msg = QStringLiteral("%1 invalid VR profile file(s) found at launch:\n\n").arg(issues.size());
+			for (const auto& issue : issues)
+			{
+				msg += QStringLiteral("%1\n    %2\n\n")
+						   .arg(QString::fromStdString(issue.file), QString::fromStdString(issue.message));
+			}
+			msg += QStringLiteral("These files are SKIPPED for this session. Where a shipped profile "
+								  "exists for the same game, it is used instead. Fix or remove the "
+								  "listed files — this check runs at every launch.");
+			QMessageBox::critical(nullptr, QStringLiteral("Invalid VR profiles"), msg);
+		}
+	}
+#endif
+
 	if (s_cleanup_after_update)
 		AutoUpdaterDialog::cleanupAfterUpdate();
 
-	// Set theme before creating any windows.
 	QtHost::UpdateApplicationTheme();
 
-	// Start logging early.
 	LogWindow::updateSettings();
 
-	// Start up the CPU thread.
 	QtHost::HookSignals();
 	EmuThread::start();
 
-	// Optionally run setup wizard.
 	int result;
 	if (s_run_setup_wizard && !QtHost::RunSetupWizard())
 	{
@@ -2524,17 +2501,14 @@ int main(int argc, char* argv[])
 		goto shutdown_and_exit;
 	}
 
-	// Create all window objects, the emuthread might still be starting up at this point.
 	g_main_window = new MainWindow();
 	g_main_window->initialize();
 
-	// When running in batch mode, ensure game list is loaded, but don't scan for any new files.
 	if (!s_batch_mode)
 		g_main_window->refreshGameList(false, false);
 	else
 		GameList::Refresh(false, true);
 
-	// Don't bother showing the window in no-gui mode.
 	if (!s_nogui_mode)
 	{
 		g_main_window->show();
@@ -2542,8 +2516,6 @@ int main(int argc, char* argv[])
 		g_main_window->activateWindow();
 	}
 
-	// Initialize big picture mode if requested by command line or settings.
-	// As CLI arguments are baked-in, they're tracked separately from settings which can be changed during runtime.
 	if (s_start_big_picture_mode || Host::GetBaseBoolSettingValue("UI", "StartBigPictureMode", false))
 		g_emu_thread->startFullscreenUI(s_start_fullscreen || Host::GetBaseBoolSettingValue("UI", "StartFullscreen", false));
 
@@ -2553,17 +2525,14 @@ int main(int argc, char* argv[])
 		g_main_window->openDebugger();
 	}
 
-	// Skip the update check if we're booting a game directly.
 	if (autoboot)
 		g_emu_thread->startVM(std::move(autoboot));
 	else if (!s_nogui_mode)
 		g_main_window->startupUpdateCheck();
 
-	// This doesn't return until we exit.
 	result = app.exec();
 
 shutdown_and_exit:
-	// Shutting down.
 	EmuThread::stop();
 	if (g_main_window)
 	{
@@ -2571,7 +2540,6 @@ shutdown_and_exit:
 		delete g_main_window;
 	}
 
-	// Ensure config is written. Prevents destruction order issues.
 	if (s_base_settings_interface->IsDirty())
 		s_base_settings_interface->Save();
 

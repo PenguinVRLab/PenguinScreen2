@@ -14,7 +14,6 @@
 #include <unordered_map>
 #include <vector>
 
-// This class provides an abstraction for D3D12 descriptor heaps.
 struct D3D12DescriptorHandle final
 {
 	enum : u32
@@ -140,7 +139,6 @@ public:
 	bool LookupSingle(D3D12DescriptorHandle* gpu_handle, const D3D12DescriptorHandle& cpu_handle);
 	bool LookupGroup(D3D12DescriptorHandle* gpu_handle, const D3D12DescriptorHandle* cpu_handles);
 
-	// Clears cache but doesn't reset allocator.
 	void InvalidateCache();
 
 	void Reset();
@@ -248,7 +246,5 @@ bool D3D12GroupedSamplerAllocator<NumSamplers>::LookupGroup(
 template <u32 NumSamplers>
 bool D3D12GroupedSamplerAllocator<NumSamplers>::ShouldReset() const
 {
-	// We only reset the sampler heap if more than half of the descriptors are used.
-	// This saves descriptor copying when there isn't a large number of sampler configs per frame.
 	return m_groups.size() >= (D3D12_MAX_SHADER_VISIBLE_SAMPLER_HEAP_SIZE / 2);
 }

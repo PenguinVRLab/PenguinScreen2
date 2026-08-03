@@ -35,14 +35,12 @@ public:
 	virtual void close() = 0;
 
 	virtual int lseek(s32 offset, s32 whence) { return -IOP_EIO; }
-	virtual int read(void* buf, u32 count) { return -IOP_EIO; } /* Flawfinder: ignore */
+	virtual int read(void* buf, u32 count) { return -IOP_EIO; }
 	virtual int write(void* buf, u32 count) { return -IOP_EIO; }
 };
 
 class IOManDir
 {
-	// Don't think about it until we know the loaded ioman version.
-	// The dirent structure changed between versions.
 public:
 	static int open(IOManDir** dir, const std::string& full_path)
 	{
@@ -51,10 +49,10 @@ public:
 
 	virtual void close() = 0;
 
-	virtual int read(void* buf, bool iomanX = false) { return -IOP_EIO; } /* Flawfinder: ignore */
+	virtual int read(void* buf, bool iomanX = false) { return -IOP_EIO; }
 };
 
-typedef int (*irxHLE)(); // return 1 if handled, otherwise 0
+typedef int (*irxHLE)();
 typedef void (*irxDEBUG)();
 
 namespace R3000A
@@ -74,7 +72,7 @@ namespace R3000A
 		bool is_host(const std::string_view path);
 		std::string host_path(const std::string_view path, bool allow_open_host_root);
 	}
-} // namespace R3000A
+}
 
 extern void Hle_SetHostRoot(const char* bootFilename);
 extern void Hle_ClearHostRoot();

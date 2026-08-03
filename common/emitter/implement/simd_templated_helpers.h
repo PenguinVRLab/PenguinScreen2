@@ -3,13 +3,6 @@
 
 #pragma once
 
-//////////////////////////////////////////////////////////////////////////////////////////
-// MMX / SSE Helper Functions!
-
-// ------------------------------------------------------------------------
-// For implementing SSE-only logic operations that have xmmreg,xmmreg/rm forms only,
-// like ANDPS/ANDPD
-//
 template <u8 Prefix, u16 Opcode>
 class SimdImpl_DestRegSSE
 {
@@ -22,5 +15,5 @@ public:
 		xOpWrite0F(Prefix, Opcode, to, from);
 	}
 
-	SimdImpl_DestRegSSE() {} //GCWho?
+	SimdImpl_DestRegSSE() {}
 };

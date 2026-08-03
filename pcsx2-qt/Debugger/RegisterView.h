@@ -51,19 +51,16 @@ private:
 
 	void fetchNewValue(u64 currentValue, bool segment, std::function<void(u64)> callback);
 
-	// Used for the height offset the tab bar creates
-	// because we share a widget
 	QPoint m_renderStart;
 
-	s32 m_rowStart = 0; // Index, 0 -> VF00, 1 -> VF01 etc
-	s32 m_rowEnd; // Index, what register is the last one drawn
-	s32 m_rowHeight; // The height of each register row
-	// Used for mouse clicks
-	s32 m_fieldStartX[4]; // Where the register segments start
-	s32 m_fieldWidth; // How wide the register segments are
+	s32 m_rowStart = 0;
+	s32 m_rowEnd;
+	s32 m_rowHeight;
+	s32 m_fieldStartX[4];
+	s32 m_fieldWidth;
 
-	s32 m_selectedRow = 0; // Index
-	s32 m_selected128Field = 0; // Values are from 0 to 3
+	s32 m_selectedRow = 0;
+	s32 m_selected128Field = 0;
 
 	bool m_showVU0FFloat = false;
 	bool m_showFPRFloat = false;

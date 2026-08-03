@@ -11,41 +11,28 @@
 
 #include <limits>
 
-// --------------------------------------------------------------------------------------
-//  Semaphore Implementations
-// --------------------------------------------------------------------------------------
-
 bool Threading::WorkSema::CheckForWork()
 {
 	s32 value = m_state.load(std::memory_order_relaxed);
 	pxAssert(!IsDead(value));
 
-	// we want to switch to the running state, but preserve the waiting empty bit for RUNNING_N -> RUNNING_0
-	// otherwise, we clear the waiting flag (since we're notifying the waiter that we're empty below)
 	while (!m_state.compare_exchange_weak(value,
 		IsReadyForSleep(value) ? STATE_RUNNING_0 : (value & STATE_FLAG_WAITING_EMPTY),
 		std::memory_order_acq_rel, std::memory_order_relaxed))
 	{
 	}
 
-	// if we're not empty, we have work to do
 	if (!IsReadyForSleep(value))
 		return true;
 
-	// this means we're empty, so notify any waiters
 	if (value & STATE_FLAG_WAITING_EMPTY)
 		m_empty_sema.Post();
 
-	// no work to do
 	return false;
 }
 
 void Threading::WorkSema::WaitForWork()
 {
-	// State change:
-	// SLEEPING, SPINNING: This is the worker thread and it's clearly not asleep or spinning, so these states should be impossible
-	// RUNNING_0: Change state to SLEEPING, wake up thread if WAITING_EMPTY
-	// RUNNING_N: Change state to RUNNING_0 (and preserve WAITING_EMPTY flag)
 	s32 value = m_state.load(std::memory_order_relaxed);
 	pxAssert(!IsDead(value));
 	while (!m_state.compare_exchange_weak(value, NextStateWaitForWork(value), std::memory_order_acq_rel, std::memory_order_relaxed))
@@ -55,7 +42,6 @@ void Threading::WorkSema::WaitForWork()
 		if (value & STATE_FLAG_WAITING_EMPTY)
 			m_empty_sema.Post();
 		m_sema.Wait();
-		// Acknowledge any additional work added between wake up request and getting here
 		m_state.fetch_and(STATE_FLAG_WAITING_EMPTY, std::memory_order_acquire);
 	}
 }
@@ -87,7 +73,6 @@ void Threading::WorkSema::WaitForWorkWithSpin()
 		waited += ShortSpin();
 		value = m_state.load(std::memory_order_relaxed);
 	}
-	// Clear back to STATE_RUNNING_0 (but preserve waiting empty flag)
 	m_state.fetch_and(STATE_FLAG_WAITING_EMPTY, std::memory_order_acquire);
 }
 
@@ -97,8 +82,7 @@ bool Threading::WorkSema::WaitForEmpty()
 	while (true)
 	{
 		if (value < 0)
-			return !IsDead(value); // STATE_SLEEPING or STATE_SPINNING, queue is empty!
-		// Note: We technically only need memory_order_acquire on *failure* (because that's when we could leave without sleeping), but libstdc++ still asserts on failure < success
+			return !IsDead(value);
 		if (m_state.compare_exchange_weak(value, value | STATE_FLAG_WAITING_EMPTY, std::memory_order_acquire))
 			break;
 	}
@@ -114,7 +98,7 @@ bool Threading::WorkSema::WaitForEmptyWithSpin()
 	while (true)
 	{
 		if (value < 0)
-			return !IsDead(value); // STATE_SLEEPING or STATE_SPINNING, queue is empty!
+			return !IsDead(value);
 		if (waited > SPIN_TIME_NS && m_state.compare_exchange_weak(value, value | STATE_FLAG_WAITING_EMPTY, std::memory_order_acquire))
 			break;
 		waited += ShortSpin();
@@ -137,7 +121,7 @@ void Threading::WorkSema::Reset()
 	m_state = STATE_RUNNING_0;
 }
 
-#if !defined(__APPLE__) // macOS implementations are in DarwinThreads
+#if !defined(__APPLE__)
 
 Threading::KernelSemaphore::KernelSemaphore()
 {

@@ -141,9 +141,6 @@ void SymbolImporter::Reset()
 		if (!source.success())
 			return;
 
-		// Create some built-in data type symbols so that users still have some
-		// types to use even if there isn't a symbol table loaded. Maybe in the
-		// future we could add PS2-specific types like DMA tags here too.
 		for (const DefaultBuiltInType& default_type : DEFAULT_BUILT_IN_TYPES)
 		{
 			ccc::Result<ccc::DataType*> symbol = database.data_types.create_symbol(default_type.name, *source, nullptr);
@@ -198,7 +195,6 @@ void SymbolImporter::AnalyseElf(
 	if (!VMManager::HasValidVM())
 		return;
 
-	// Search for a .sym file to load symbols from.
 	std::string nocash_path;
 	CDVD_SourceType source_type = CDVDsys_GetSourceType();
 	if (source_type == CDVD_SourceType::Iso)
@@ -257,8 +253,6 @@ void SymbolImporter::AnalyseElf(
 
 		if (params.wait_until_elf_is_loaded && params.options.FunctionScanMode == DebugFunctionScanMode::SCAN_MEMORY)
 		{
-			// Wait for the entry point to start compiling on the CPU thread so
-			// we know the functions we want to scan are loaded in memory.
 			std::unique_lock lock(m_elf_loaded_in_memory_mutex);
 			m_elf_loaded_in_memory_condition_variable.wait(lock,
 				[this]() { return m_elf_loaded_in_memory; });
@@ -278,9 +272,6 @@ void SymbolImporter::AnalyseElf(
 			if (m_interrupt_import_thread)
 				return;
 
-			// The function scanner has to be run on the main database so that
-			// functions created before the importer was run are still
-			// considered. Otherwise, duplicate functions will be created.
 			ScanForFunctions(database, symbol_file, params.options);
 		});
 	});
@@ -292,7 +283,6 @@ void SymbolImporter::ShutdownWorkerThread()
 	{
 		m_interrupt_import_thread = true;
 
-		// Make sure the import thread is woken up so we can shut it down.
 		{
 			std::lock_guard lock(m_elf_loaded_in_memory_mutex);
 			m_elf_loaded_in_memory = true;
@@ -527,7 +517,6 @@ ccc::Result<bool> SymbolImporter::ImportNocashSymbols(
 
 		if (value[0] == '.')
 		{
-			// data directives
 			char* s = strchr(value, ':');
 			if (s != NULL)
 			{
@@ -568,7 +557,7 @@ ccc::Result<bool> SymbolImporter::ImportNocashSymbols(
 			}
 		}
 		else
-		{ // labels
+		{
 			u32 size = 1;
 			char* seperator = strchr(value, ',');
 			if (seperator != NULL)

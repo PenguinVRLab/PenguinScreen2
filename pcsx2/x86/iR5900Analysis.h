@@ -14,15 +14,12 @@ namespace R5900
 		AnalysisPass();
 		virtual ~AnalysisPass();
 
-		/// Runs the actual pass.
 		virtual void Run(u32 start, u32 end, EEINST* inst_cache);
 
 	protected:
-		/// Takes a functor of bool(pc, EEINST*), returning false if iteration should stop.
 		template <class F>
 		void ForEachInstruction(u32 start, u32 end, EEINST* inst_cache, const F& func);
 
-		/// Dumps the block to the console, calling the functor void(pc, EEINST*, std::string&) for each instruction.
 		template <class F>
 		void DumpAnnotatedBlock(u32 start, u32 end, EEINST* inst_cache, const F& func);
 	};
@@ -59,6 +56,6 @@ namespace R5900
 
 		void Run(u32 start, u32 end, EEINST* inst_cache) override;
 	};
-} // namespace R5900
+}
 
 void recBackpropBSC(u32 code, EEINST* prev, EEINST* pinst);

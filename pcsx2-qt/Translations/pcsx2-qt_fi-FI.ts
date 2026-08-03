@@ -1550,11 +1550,6 @@ Tulostaulusija: {1} / {2}</translation>
       <translation>Käytä tilatallennusvalitsinta</translation>
     </message>
     <message>
-      <location filename="../Settings/AdvancedSettingsWidget.ui" line="505"/>
-      <source>PINE Settings</source>
-      <translation>PINE-asetukset</translation>
-    </message>
-    <message>
       <location filename="../Settings/AdvancedSettingsWidget.ui" line="527"/>
       <source>Slot:</source>
       <translation>Paikka:</translation>

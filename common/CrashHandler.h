@@ -14,7 +14,6 @@ namespace CrashHandler
 	void WriteDumpForCaller();
 
 #ifndef _WIN32
-	// Allow crash handler to be invoked from a signal.
 	void CrashSignalHandler(int signal, siginfo_t* siginfo, void* ctx);
 #endif
-} // namespace CrashHandler
+}

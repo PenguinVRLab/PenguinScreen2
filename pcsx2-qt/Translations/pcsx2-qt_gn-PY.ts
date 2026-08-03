@@ -1547,11 +1547,6 @@ Leaderboard Position: {1} of {2}</source>
       <translation>Eiporu Ñongatu Rape Jeporavo</translation>
     </message>
     <message>
-      <location filename="../Settings/AdvancedSettingsWidget.ui" line="505"/>
-      <source>PINE Settings</source>
-      <translation>PINE Ñemboheko</translation>
-    </message>
-    <message>
       <location filename="../Settings/AdvancedSettingsWidget.ui" line="527"/>
       <source>Slot:</source>
       <translation>Renda:</translation>

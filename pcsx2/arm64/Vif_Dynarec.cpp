@@ -50,29 +50,24 @@ static void mVUmergeRegs(const vixl::aarch64::VRegister& dest, const vixl::aarch
 			}
 			if (xyzw == 14 && canModifySrc)
 			{
-				// xyz - we can get rid of the mov if we swap the RA around
 				armAsm->Mov(src.V4S(), 3, dest.V4S(), 3);
 				armAsm->Mov(dest.V16B(), src.V16B());
 				return;
 			}
 
-			// reverse
 			xyzw = ((xyzw & 1) << 3) | ((xyzw & 2) << 1) | ((xyzw & 4) >> 1) | ((xyzw & 8) >> 3);
 
 			if ((xyzw & 3) == 3)
 			{
-				// xy
 				armAsm->Mov(dest.V2D(), 0, src.V2D(), 0);
 				xyzw &= ~3;
 			}
 			else if ((xyzw & 12) == 12)
 			{
-				// zw
 				armAsm->Mov(dest.V2D(), 1, src.V2D(), 1);
 				xyzw &= ~12;
 			}
 
-			// xyzw
 			for (u32 i = 0; i < 4; i++)
 			{
 				if (xyzw & (1u << i))
@@ -86,79 +81,79 @@ static void maskedVecWrite(const a64::VRegister& reg, const a64::MemOperand& add
 {
 	switch (xyzw)
 	{
-		case 5: // YW
+		case 5:
 			armGetMemOperandInRegister(RSCRATCHADDR, addr, 4);
-			armAsm->St1(reg.V4S(), 1, a64::MemOperand(RSCRATCHADDR)); // Y
+			armAsm->St1(reg.V4S(), 1, a64::MemOperand(RSCRATCHADDR));
 			armGetMemOperandInRegister(RSCRATCHADDR, addr, 12);
-			armAsm->St1(reg.V4S(), 3, a64::MemOperand(RSCRATCHADDR)); // W
+			armAsm->St1(reg.V4S(), 3, a64::MemOperand(RSCRATCHADDR));
 			break;
 
-		case 9: // XW
+		case 9:
 			armGetMemOperandInRegister(RSCRATCHADDR, addr, 12);
-			armAsm->Str(reg.S(), addr); // X
-			armAsm->St1(reg.V4S(), 3, a64::MemOperand(RSCRATCHADDR)); // W
+			armAsm->Str(reg.S(), addr);
+			armAsm->St1(reg.V4S(), 3, a64::MemOperand(RSCRATCHADDR));
 			break;
 
-		case 10: //XZ
+		case 10:
 			armGetMemOperandInRegister(RSCRATCHADDR, addr, 8);
-			armAsm->Str(reg.S(), addr); // X
-			armAsm->St1(reg.V4S(), 2, a64::MemOperand(RSCRATCHADDR)); // Z
+			armAsm->Str(reg.S(), addr);
+			armAsm->St1(reg.V4S(), 2, a64::MemOperand(RSCRATCHADDR));
 			break;
 
-		case 3: // ZW
+		case 3:
 			armGetMemOperandInRegister(RSCRATCHADDR, addr, 8);
 			armAsm->St1(reg.V2D(), 1, a64::MemOperand(RSCRATCHADDR));
 			break;
 
-		case 11: //XZW
+		case 11:
 			armGetMemOperandInRegister(RSCRATCHADDR, addr, 8);
-			armAsm->Str(reg.S(), addr); // X
-			armAsm->St1(reg.V2D(), 1, a64::MemOperand(RSCRATCHADDR)); // ZW
+			armAsm->Str(reg.S(), addr);
+			armAsm->St1(reg.V2D(), 1, a64::MemOperand(RSCRATCHADDR));
 			break;
 
-		case 13: // XYW
+		case 13:
 			armGetMemOperandInRegister(RSCRATCHADDR, addr, 12);
 			armAsm->Str(reg.D(), addr);
 			armAsm->St1(reg.V4S(), 3, a64::MemOperand(RSCRATCHADDR));
 			break;
 
-		case 6: // YZ
+		case 6:
 			armGetMemOperandInRegister(RSCRATCHADDR, addr, 4);
 			armAsm->St1(reg.V4S(), 1, a64::MemOperand(RSCRATCHADDR, 4, a64::PostIndex));
 			armAsm->St1(reg.V4S(), 2, a64::MemOperand(RSCRATCHADDR));
 			break;
 
-		case 7: // YZW
+		case 7:
 			armGetMemOperandInRegister(RSCRATCHADDR, addr, 4);
 			armAsm->St1(reg.V4S(), 1, a64::MemOperand(RSCRATCHADDR, 4, a64::PostIndex));
 			armAsm->St1(reg.V2D(), 1, a64::MemOperand(RSCRATCHADDR));
 			break;
 
-		case 12: // XY
+		case 12:
 			armAsm->Str(reg.D(), addr);
 			break;
 
-		case 14: // XYZ
+		case 14:
 			armGetMemOperandInRegister(RSCRATCHADDR, addr, 8);
 			armAsm->Str(reg.D(), addr);
-			armAsm->St1(reg.V4S(), 2, a64::MemOperand(RSCRATCHADDR)); // Z
+			armAsm->St1(reg.V4S(), 2, a64::MemOperand(RSCRATCHADDR));
 			break;
 
 		case 4:
 			armGetMemOperandInRegister(RSCRATCHADDR, addr, 4);
 			armAsm->St1(reg.V4S(), 1, a64::MemOperand(RSCRATCHADDR));
-			break; // Y
+			break;
 		case 2:
 			armGetMemOperandInRegister(RSCRATCHADDR, addr, 8);
 			armAsm->St1(reg.V4S(), 2, a64::MemOperand(RSCRATCHADDR));
-			break; // Z
+			break;
 		case 1:
 			armGetMemOperandInRegister(RSCRATCHADDR, addr, 12);
 			armAsm->St1(reg.V4S(), 3, a64::MemOperand(RSCRATCHADDR));
-			break; // W
+			break;
 		case 8:
 			armAsm->Str(reg.S(), addr);
-			break; // X
+			break;
 
 		case 0:
 			Console.Error("maskedVecWrite case 0!");
@@ -166,7 +161,7 @@ static void maskedVecWrite(const a64::VRegister& reg, const a64::MemOperand& add
 
 		default:
 			armAsm->Str(reg.Q(), addr);
-			break; // XYZW
+			break;
 	}
 }
 
@@ -189,7 +184,7 @@ VifUnpackNEON_Dynarec::VifUnpackNEON_Dynarec(const nVifStruct& vif_, const nVifB
 	: v(vif_)
 	, vB(vifBlock_)
 {
-	const int wl = vB.wl ? vB.wl : 256; //0 is taken as 256 (KH2)
+	const int wl = vB.wl ? vB.wl : 256;
 	isFill = (vB.cl < wl);
 	usn = (vB.upkType >> 5) & 1;
 	doMask = (vB.upkType >> 4) & 1;
@@ -208,10 +203,9 @@ __fi void VifUnpackNEON_Dynarec::SetMasks(int cS) const
 	const int idx = v.idx;
 	const vifStruct& vif = MTVU_VifX;
 
-	//This could have ended up copying the row when there was no row to write.1810080
-	u32 m0 = vB.mask; //The actual mask example 0x03020100
-	u32 m3 = ((m0 & 0xaaaaaaaa) >> 1) & ~m0; //all the upper bits, so our example 0x01010000 & 0xFCFDFEFF = 0x00010000 just the cols (shifted right for maskmerge)
-	u32 m2 = (m0 & 0x55555555) & (~m0 >> 1); // 0x1000100 & 0xFE7EFF7F = 0x00000100 Just the row
+	u32 m0 = vB.mask;
+	u32 m3 = ((m0 & 0xaaaaaaaa) >> 1) & ~m0;
+	u32 m2 = (m0 & 0x55555555) & (~m0 >> 1);
 
 	if ((doMask && m2) || doMode)
 	{
@@ -231,7 +225,6 @@ __fi void VifUnpackNEON_Dynarec::SetMasks(int cS) const
 		if ((cS >= 1) && (m3 & 0x000000ff))
 			armAsm->Dup(xmmCol0.V4S(), xmmCol0.V4S(), 0);
 	}
-	//if (doMask||doMode) loadRowCol((nVifStruct&)v);
 }
 
 void VifUnpackNEON_Dynarec::doMaskWrite(const vixl::aarch64::VRegister& regX) const
@@ -239,21 +232,21 @@ void VifUnpackNEON_Dynarec::doMaskWrite(const vixl::aarch64::VRegister& regX) co
 	pxAssertMsg(regX.GetCode() <= 1, "Reg Overflow! XMM2 thru XMM6 are reserved for masking.");
 
 	const int cc = std::min(vCL, 3);
-	u32 m0 = (vB.mask >> (cc * 8)) & 0xff; //The actual mask example 0xE4 (protect, col, row, clear)
-	u32 m3 = ((m0 & 0xaa) >> 1) & ~m0; //all the upper bits (cols shifted right) cancelling out any write protects 0x10
-	u32 m2 = (m0 & 0x55) & (~m0 >> 1); // all the lower bits (rows)cancelling out any write protects 0x04
-	u32 m4 = (m0 & ~((m3 << 1) | m2)) & 0x55; //  = 0xC0 & 0x55 = 0x40 (for merge mask)
+	u32 m0 = (vB.mask >> (cc * 8)) & 0xff;
+	u32 m3 = ((m0 & 0xaa) >> 1) & ~m0;
+	u32 m2 = (m0 & 0x55) & (~m0 >> 1);
+	u32 m4 = (m0 & ~((m3 << 1) | m2)) & 0x55;
 
 	makeMergeMask(m2);
 	makeMergeMask(m3);
 	makeMergeMask(m4);
 
-	if (doMask && m2) // Merge MaskRow
+	if (doMask && m2)
 	{
 		mVUmergeRegs(regX, xmmRow, m2);
 	}
 
-	if (doMask && m3) // Merge MaskCol
+	if (doMask && m3)
 	{
 		mVUmergeRegs(regX, armQRegister(xmmCol0.GetCode() + cc), m3);
 	}
@@ -367,8 +360,6 @@ void VifUnpackNEON_Dynarec::ModUnpack(int upknum, bool PostOp)
 		case 3:
 		case 7:
 		case 11:
-			// TODO: Needs hardware testing.
-			// Dynasty Warriors 5: Empire  - Player 2 chose a character menu.
 			Console.Warning("Vpu/Vif: Invalid Unpack %d", upknum);
 			break;
 	}
@@ -384,18 +375,16 @@ void VifUnpackNEON_Dynarec::ProcessMasks()
 
 	const int cc = std::min(vCL, 3);
 	const u32 full_mask = (vB.mask >> (cc * 8)) & 0xff;
-	const u32 rowcol_mask = ((full_mask >> 1) | full_mask) & 0x55; // Rows or Cols being written instead of data, or protected.
+	const u32 rowcol_mask = ((full_mask >> 1) | full_mask) & 0x55;
 
-	// Every channel is write protected for this cycle, no need to process anything.
 	skipProcessing = full_mask == 0xff;
 
-	// All channels are masked, no reason to process anything here.
 	inputMasked = rowcol_mask == 0x55;
 }
 
 void VifUnpackNEON_Dynarec::CompileRoutine()
 {
-	const int wl = vB.wl ? vB.wl : 256; //0 is taken as 256 (KH2)
+	const int wl = vB.wl ? vB.wl : 256;
 	const int upkNum = vB.upkType & 0xf;
 	const u8& vift = nVifT[upkNum];
 	const int cycleSize = isFill ? vB.cl : wl;
@@ -403,18 +392,16 @@ void VifUnpackNEON_Dynarec::CompileRoutine()
 	const int skipSize = blockSize - cycleSize;
 
 	uint vNum = vB.num ? vB.num : 256;
-	doMode = (upkNum == 0xf) ? 0 : doMode; // V4_5 has no mode feature.
+	doMode = (upkNum == 0xf) ? 0 : doMode;
 	UnpkNoOfIterations = 0;
 	VIF_LOG("Compiling new block, unpack number %x, mode %x, masking %x, vNum %x", upkNum, doMode, doMask, vNum);
 
 	pxAssume(vCL == 0);
 
-	// Value passed determines # of col regs we need to load
 	SetMasks(isFill ? blockSize : cycleSize);
 
 	while (vNum)
 	{
-		// Determine if reads/processing can be skipped.
 		ProcessMasks();
 
 		if (vCL < cycleSize)
@@ -436,7 +423,6 @@ void VifUnpackNEON_Dynarec::CompileRoutine()
 			xUnpack(upkNum);
 			xMovDest();
 
-			// dstIndirect += 16;
 			dstIndirect = armOffsetMemOperand(dstIndirect, 16);
 
 			vNum--;
@@ -445,7 +431,6 @@ void VifUnpackNEON_Dynarec::CompileRoutine()
 		}
 		else
 		{
-			// dstIndirect += (16 * skipSize);
 			dstIndirect = armOffsetMemOperand(dstIndirect, 16 * skipSize);
 			vCL = 0;
 		}
@@ -459,12 +444,12 @@ void VifUnpackNEON_Dynarec::CompileRoutine()
 
 static u16 dVifComputeLength(uint cl, uint wl, u8 num, bool isFill)
 {
-	uint length = (num > 0) ? (num * 16) : 4096; // 0 = 256
+	uint length = (num > 0) ? (num * 16) : 4096;
 
 	if (!isFill)
 	{
 		uint skipSize = (cl - wl) * 16;
-		uint blocks = (num + (wl - 1)) / wl; //Need to round up num's to calculate skip size correctly.
+		uint blocks = (num + (wl - 1)) / wl;
 		length += (blocks - 1) * skipSize;
 	}
 
@@ -475,7 +460,6 @@ _vifT __fi nVifBlock* dVifCompile(nVifBlock& block, bool isFill)
 {
 	nVifStruct& v = nVif[idx];
 
-	// Check size before the compilation
 	if (v.recWritePtr >= v.recEndPtr)
 	{
 		DevCon.WriteLn("nVif Recompiler Cache Reset! [0x%016" PRIXPTR " > 0x%016" PRIXPTR "]",
@@ -483,7 +467,6 @@ _vifT __fi nVifBlock* dVifCompile(nVifBlock& block, bool isFill)
 		dVifReset(idx);
 	}
 
-	// Compile the block now
 	armSetAsmPtr(v.recWritePtr, v.recEndPtr - v.recWritePtr, nullptr);
 
 	block.startPtr = (uptr)armStartBlock();
@@ -492,7 +475,7 @@ _vifT __fi nVifBlock* dVifCompile(nVifBlock& block, bool isFill)
 
 	VifUnpackNEON_Dynarec(v, block).CompileRoutine();
 
-	Perf::vif.RegisterPC(v.recWritePtr, armGetCurrentCodePointer() - v.recWritePtr, block.upkType /* FIXME ideally a key*/);
+	Perf::vif.RegisterPC(v.recWritePtr, armGetCurrentCodePointer() - v.recWritePtr, block.upkType );
 	v.recWritePtr = armEndBlock();
 
 	return &block;
@@ -509,40 +492,25 @@ _vifT __fi void dVifUnpack(const u8* data, bool isFill)
 
 	nVifBlock block;
 
-	// Performance note: initial code was using u8/u16 field of the struct
-	// directly. However reading back the data (as u32) in HashBucket.find
-	// leads to various memory stalls. So it is way faster to manually build the data
-	// in u32 (aka x86 register).
-	//
-	// Warning the order of data in hash_key/key0/key1 depends on the nVifBlock struct
 	u32 hash_key = (u32)(upkType & 0xFF) << 8 | (vifRegs.num & 0xFF);
 
 	u32 key1 = ((u32)vifRegs.cycle.wl << 24) | ((u32)vifRegs.cycle.cl << 16) | ((u32)(vif.start_aligned & 0xFF) << 8) | ((u32)vifRegs.mode & 0xFF);
 	if ((upkType & 0xf) != 9)
 		key1 &= 0xFFFF01FF;
 
-	// Zero out the mask parameter if it's unused -- games leave random junk
-	// values here which cause false recblock cache misses.
 	u32 key0 = doMask ? vifRegs.mask : 0;
 
 	block.hash_key = hash_key;
 	block.key0 = key0;
 	block.key1 = key1;
 
-	//DevCon.WriteLn("nVif%d: Recompiled Block!", idx);
-	//DevCon.WriteLn(L"[num=% 3d][upkType=0x%02x][scl=%d][cl=%d][wl=%d][mode=%d][m=%d][mask=%s]",
-	//	block.num, block.upkType, block.scl, block.cl, block.wl, block.mode,
-	//	doMask >> 4, doMask ? wxsFormat( L"0x%08x", block.mask ).c_str() : L"ignored"
-	//);
-
-	// Seach in cache before trying to compile the block
 	nVifBlock* b = v.vifBlocks.find(block);
 	if (!b) [[unlikely]]
 	{
 		b = dVifCompile<idx>(block, isFill);
 	}
 
-	{ // Execute the block
+	{
 		const VURegs& VU = vuRegs[idx];
 		const uint vuMemLimit = idx ? 0x4000 : 0x1000;
 
@@ -552,10 +520,8 @@ _vifT __fi void dVifUnpack(const u8* data, bool isFill)
 		if ((startmem + b->length) <= endmem) [[likely]]
 		{
 #if 1
-			// No wrapping, you can run the fast dynarec
 			((nVifrecCall)b->startPtr)((uptr)startmem, (uptr)data);
 #else
-			// comparison mode
 			static u8 tmpbuf[512 * 1024];
 			((nVifrecCall)b->startPtr)((uptr)tmpbuf, (uptr)data);
 
@@ -566,7 +532,6 @@ _vifT __fi void dVifUnpack(const u8* data, bool isFill)
 			{
 				if (*((u32*)tmpbuf + i) != *((u32*)startmem + i))
 				{
-					// fprintf(stderr, "%08X %08X @ %u\n", *((u32*)tmpbuf + i), *((u32*)startmem + i), i);
 					pauseCCC(*((u32*)tmpbuf + i), *((u32*)startmem + i), i);
 					((nVifrecCall)b->startPtr)((uptr)tmpbuf, (uptr)data);
 					break;

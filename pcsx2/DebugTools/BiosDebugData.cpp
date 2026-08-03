@@ -45,7 +45,6 @@ std::vector<std::unique_ptr<BiosThread>> getIOPThreads()
 		u16 tag = iopMemRead16(item + 0x8);
 		if (tag != 0x7f01)
 		{
-			// something went wrong
 			return {};
 		}
 
@@ -83,7 +82,6 @@ std::vector<IopMod> getIOPModules()
 	{
 		if (maddr >= Ps2MemSize::ExposedIopRam)
 		{
-			// outside of memory
 			return {};
 		}
 

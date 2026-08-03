@@ -18,10 +18,6 @@ static DWORD ConvertToWinApi(const PageProtectionMode& mode)
 {
 	DWORD winmode = PAGE_NOACCESS;
 
-	// Windows has some really bizarre memory protection enumeration that uses bitwise
-	// numbering (like flags) but is in fact not a flag value.  *Someone* from the early
-	// microsoft days wasn't a very good coder, me thinks.  --air
-
 	if (mode.CanExecute())
 	{
 		winmode = mode.CanWrite() ? PAGE_EXECUTE_READWRITE : PAGE_EXECUTE_READ;
@@ -38,7 +34,7 @@ void HostSys::MemProtect(void* baseaddr, size_t size, const PageProtectionMode& 
 {
 	pxAssert((size & (__pagesize - 1)) == 0);
 
-	DWORD OldProtect; // enjoy my uselessness, yo!
+	DWORD OldProtect;
 	if (!VirtualProtect(baseaddr, size, ConvertToWinApi(mode), &OldProtect))
 		pxFail("VirtualProtect() failed");
 }
@@ -110,7 +106,6 @@ SharedMemoryMappingArea::~SharedMemoryMappingArea()
 {
 	pxAssertRel(m_num_mappings == 0, "No mappings left");
 
-	// hopefully this will be okay, and we don't need to coalesce all the placeholders...
 	if (!VirtualFreeEx(GetCurrentProcess(), m_base_ptr, 0, MEM_RELEASE))
 		pxFailRel("Failed to release shared memory area");
 }
@@ -120,19 +115,15 @@ SharedMemoryMappingArea::PlaceholderMap::iterator SharedMemoryMappingArea::FindP
 	if (m_placeholder_ranges.empty())
 		return m_placeholder_ranges.end();
 
-	// this will give us an iterator equal or after page
 	auto it = m_placeholder_ranges.lower_bound(offset);
 	if (it == m_placeholder_ranges.end())
 	{
-		// check the last page
 		it = (++m_placeholder_ranges.rbegin()).base();
 	}
 
-	// it's the one we found?
 	if (offset >= it->first && offset < it->second)
 		return it;
 
-	// otherwise try the one before
 	if (it == m_placeholder_ranges.begin())
 		return m_placeholder_ranges.end();
 
@@ -162,19 +153,16 @@ u8* SharedMemoryMappingArea::Map(void* file_handle, size_t file_offset, void* ma
 	pxAssert(Common::IsAlignedPow2(map_offset, __pagesize));
 	pxAssert(Common::IsAlignedPow2(map_size, __pagesize));
 
-	// should be a placeholder. unless there's some other mapping we didn't free.
 	PlaceholderMap::iterator phit = FindPlaceholder(map_offset);
 	pxAssertMsg(phit != m_placeholder_ranges.end(), "Page we're mapping is a placeholder");
 	pxAssertMsg(map_offset >= phit->first && map_offset < phit->second, "Page is in returned placeholder range");
 	pxAssertMsg((map_offset + map_size) <= phit->second, "Page range is in returned placeholder range");
 
-	// do we need to split to the left? (i.e. is there a placeholder before this range)
 	const size_t old_ph_end = phit->second;
 	if (map_offset != phit->first)
 	{
 		phit->second = map_offset;
 
-		// split it (i.e. left..start and start..end are now separated)
 		if (!VirtualFreeEx(GetCurrentProcess(), OffsetPointer(phit->first),
 				(map_offset - phit->first), MEM_RELEASE | MEM_PRESERVE_PLACEHOLDER))
 		{
@@ -183,14 +171,11 @@ u8* SharedMemoryMappingArea::Map(void* file_handle, size_t file_offset, void* ma
 	}
 	else
 	{
-		// start of the placeholder is getting used, we'll split it right below if there's anything left over
 		m_placeholder_ranges.erase(phit);
 	}
 
-	// do we need to split to the right? (i.e. is there a placeholder after this range)
 	if ((map_offset + map_size) != old_ph_end)
 	{
-		// split out end..ph_end
 		m_placeholder_ranges.emplace(map_offset + map_size, old_ph_end);
 
 		if (!VirtualFreeEx(GetCurrentProcess(), OffsetPointer(map_offset), map_size,
@@ -200,7 +185,6 @@ u8* SharedMemoryMappingArea::Map(void* file_handle, size_t file_offset, void* ma
 		}
 	}
 
-	// actually do the mapping, replacing the placeholder on the range
 	if (file_handle)
 	{
 		if (!MapViewOfFile3(static_cast<HANDLE>(file_handle), GetCurrentProcess(),
@@ -239,7 +223,6 @@ bool SharedMemoryMappingArea::Unmap(void* map_base, size_t map_size, bool is_fil
 	pxAssert(Common::IsAlignedPow2(map_offset, __pagesize));
 	pxAssert(Common::IsAlignedPow2(map_size, __pagesize));
 
-	// unmap the specified range
 	if (is_file)
 	{
 		if (!UnmapViewOfFile2(GetCurrentProcess(), map_base, MEM_PRESERVE_PLACEHOLDER))
@@ -250,7 +233,6 @@ bool SharedMemoryMappingArea::Unmap(void* map_base, size_t map_size, bool is_fil
 	}
 	else
 	{
-		// For some reason Windows wants you to alloc with RESERVE | COMMIT but free with just RELEASE
 		if (!VirtualFreeEx(GetCurrentProcess(), map_base, map_size, MEM_RELEASE | MEM_PRESERVE_PLACEHOLDER))
 		{
 			Console.Error("(SharedMemoryMappingArea) VirtualFreeEx() failed: %u", GetLastError());
@@ -258,15 +240,12 @@ bool SharedMemoryMappingArea::Unmap(void* map_base, size_t map_size, bool is_fil
 		}
 	}
 
-	// can we coalesce to the left?
 	PlaceholderMap::iterator left_it = (map_offset > 0) ? FindPlaceholder(map_offset - 1) : m_placeholder_ranges.end();
 	if (left_it != m_placeholder_ranges.end())
 	{
-		// the left placeholder should end at our start
 		pxAssert(map_offset == left_it->second);
 		left_it->second = map_offset + map_size;
 
-		// combine placeholders before and the range we're unmapping, i.e. to the left
 		if (!VirtualFreeEx(GetCurrentProcess(), OffsetPointer(left_it->first),
 				left_it->second - left_it->first, MEM_RELEASE | MEM_COALESCE_PLACEHOLDERS))
 		{
@@ -275,20 +254,16 @@ bool SharedMemoryMappingArea::Unmap(void* map_base, size_t map_size, bool is_fil
 	}
 	else
 	{
-		// this is a new placeholder
 		left_it = m_placeholder_ranges.emplace(map_offset, map_offset + map_size).first;
 	}
 
-	// can we coalesce to the right?
 	PlaceholderMap::iterator right_it = ((map_offset + map_size) < m_size) ? FindPlaceholder(map_offset + map_size) : m_placeholder_ranges.end();
 	if (right_it != m_placeholder_ranges.end())
 	{
-		// should start at our end
 		pxAssert(right_it->first == (map_offset + map_size));
 		left_it->second = right_it->second;
 		m_placeholder_ranges.erase(right_it);
 
-		// combine our placeholder and the next, i.e. to the right
 		if (!VirtualFreeEx(GetCurrentProcess(), OffsetPointer(left_it->first),
 				left_it->second - left_it->first, MEM_RELEASE | MEM_COALESCE_PLACEHOLDERS))
 		{
@@ -307,18 +282,15 @@ namespace PageFaultHandler
 	static std::recursive_mutex s_exception_handler_mutex;
 	static bool s_in_exception_handler = false;
 	static bool s_installed = false;
-} // namespace PageFaultHandler
+}
 
 LONG PageFaultHandler::ExceptionHandler(PEXCEPTION_POINTERS exi)
 {
-	// Executing the handler concurrently from multiple threads wouldn't go down well.
 	std::unique_lock lock(s_exception_handler_mutex);
 
-	// Prevent recursive exception filtering.
 	if (s_in_exception_handler)
 		return EXCEPTION_CONTINUE_SEARCH;
 
-	// Only interested in page faults.
 	if (exi->ExceptionRecord->ExceptionCode != EXCEPTION_ACCESS_VIOLATION)
 		return EXCEPTION_CONTINUE_SEARCH;
 

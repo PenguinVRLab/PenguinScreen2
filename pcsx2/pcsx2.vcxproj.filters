@@ -797,9 +797,6 @@
     <ClCompile Include="CDVD\Linux\DriveUtility.cpp">
       <Filter>System\Ps2\Iop\CDVD\Linux</Filter>
     </ClCompile>
-    <ClCompile Include="PINE.cpp">
-      <Filter>System</Filter>
-    </ClCompile>
     <ClCompile Include="FW.cpp">
       <Filter>System\Ps2\Iop\FW</Filter>
     </ClCompile>
@@ -1732,9 +1729,6 @@
     </ClInclude>
     <ClInclude Include="CDVD\CDVDdiscReader.h">
       <Filter>System\Ps2\Iop\CDVD</Filter>
-    </ClInclude>
-    <ClInclude Include="PINE.h">
-      <Filter>System\Include</Filter>
     </ClInclude>
     <ClInclude Include="FW.h">
       <Filter>System\Ps2\Iop\FW</Filter>

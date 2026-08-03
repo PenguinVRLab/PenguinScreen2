@@ -20,4 +20,4 @@ namespace usb_lightgun
 		std::span<const InputBindingInfo> Bindings(u32 subtype) const override;
 		std::span<const SettingInfo> Settings(u32 subtype) const override;
 	};
-} // namespace usb_lightgun
+}

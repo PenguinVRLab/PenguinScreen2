@@ -8,15 +8,15 @@
 #pragma pack(push, 1)
 struct WAV_HEADER
 {
-	u32 chunk_id; // RIFF
+	u32 chunk_id;
 	u32 chunk_size;
-	u32 format; // WAVE
+	u32 format;
 
 	struct FormatChunk
 	{
-		u32 chunk_id; // "fmt "
+		u32 chunk_id;
 		u32 chunk_size;
-		u16 audio_format; // pcm = 1
+		u16 audio_format;
 		u16 num_channels;
 		u32 sample_rate;
 		u32 byte_rate;
@@ -26,7 +26,7 @@ struct WAV_HEADER
 
 	struct DataChunkHeader
 	{
-		u32 chunk_id; // "data "
+		u32 chunk_id;
 		u32 chunk_size;
 	} data_chunk_header;
 };
@@ -97,10 +97,10 @@ bool WAVWriter::WriteHeader()
 	const u32 data_size = sizeof(SampleType) * m_num_channels * m_num_frames;
 
 	WAV_HEADER header = {};
-	header.chunk_id = 0x46464952; // 0x52494646
+	header.chunk_id = 0x46464952;
 	header.chunk_size = sizeof(WAV_HEADER) - 8 + data_size;
-	header.format = 0x45564157; // 0x57415645
-	header.fmt_chunk.chunk_id = 0x20746d66; // 0x666d7420
+	header.format = 0x45564157;
+	header.fmt_chunk.chunk_id = 0x20746d66;
 	header.fmt_chunk.chunk_size = sizeof(header.fmt_chunk) - 8;
 	header.fmt_chunk.audio_format = 1;
 	header.fmt_chunk.num_channels = static_cast<u16>(m_num_channels);
@@ -108,7 +108,7 @@ bool WAVWriter::WriteHeader()
 	header.fmt_chunk.byte_rate = m_sample_rate * m_num_channels * sizeof(SampleType);
 	header.fmt_chunk.block_align = static_cast<u16>(m_num_channels * sizeof(SampleType));
 	header.fmt_chunk.bits_per_sample = 16;
-	header.data_chunk_header.chunk_id = 0x61746164; // 0x64617461
+	header.data_chunk_header.chunk_id = 0x61746164;
 	header.data_chunk_header.chunk_size = data_size;
 
 	return (std::fwrite(&header, sizeof(header), 1, m_file) == 1);

@@ -41,8 +41,8 @@ namespace GameList
 
 
 		PLAYED_TIME_SERIAL_LENGTH = 32,
-		PLAYED_TIME_LAST_TIME_LENGTH = 20, // uint64
-		PLAYED_TIME_TOTAL_TIME_LENGTH = 20, // uint64
+		PLAYED_TIME_LAST_TIME_LENGTH = 20,
+		PLAYED_TIME_TOTAL_TIME_LENGTH = 20,
 		PLAYED_TIME_LINE_LENGTH = PLAYED_TIME_SERIAL_LENGTH + 1 + PLAYED_TIME_LAST_TIME_LENGTH + 1 + PLAYED_TIME_TOTAL_TIME_LENGTH,
 	};
 
@@ -87,7 +87,7 @@ namespace GameList
 	static std::string GetCustomPropertiesFile();
 
 	static std::string EncodeIniKey(const std::string_view& input);
-} // namespace GameList
+}
 
 static std::vector<GameList::Entry> s_entries;
 static std::recursive_mutex s_mutex;
@@ -155,36 +155,36 @@ const char* GameList::RegionToString(Region region, bool translate)
 const char* GameList::RegionToFlagFilename(Region region)
 {
 	static constexpr std::array<const char*, static_cast<int>(Region::Count)> flag_names = {
-		"br",  // NTSC-B
-		"cn",  // NTSC-C
-		"hk",  // NTSC-HK
-		"jp",  // NTSC-J
-		"kr",  // NTSC-K
-		"tw",  // NTSC-T
-		"us",  // NTSC-U
-		"Other",  // Other
-		"au",  // PAL-A
-		"za",  // PAL-AF
-		"at",  // PAL-AU
-		"be",  // PAL-BE
-		"eu",  // PAL-E
-		"fr",  // PAL-F
-		"fi",  // PAL-FI
-		"de",  // PAL-G
-		"gr",  // PAL-GR
-		"it",  // PAL-I
-		"in",  // PAL-IN
-		"eu",  // PAL-M
-		"nl",  // PAL-NL
-		"no",  // PAL-NO
-		"pt",  // PAL-P
-		"pl",  // PAL-PL
-		"ru",  // PAL-R
-		"es",  // PAL-S
-		"scn",  // PAL-SC
-		"se",  // PAL-SW
-		"ch",  // PAL-SWI
-		"gb",  // PAL-UK
+		"br",
+		"cn",
+		"hk",
+		"jp",
+		"kr",
+		"tw",
+		"us",
+		"Other",
+		"au",
+		"za",
+		"at",
+		"be",
+		"eu",
+		"fr",
+		"fi",
+		"de",
+		"gr",
+		"it",
+		"in",
+		"eu",
+		"nl",
+		"no",
+		"pt",
+		"pl",
+		"ru",
+		"es",
+		"scn",
+		"se",
+		"ch",
+		"gb",
 	};
 
 	return flag_names.at(static_cast<int>(region));
@@ -257,7 +257,6 @@ bool GameList::GetIsoSerialAndCRC(const std::string& path, s32* disc_type, std::
 {
 	Error error;
 
-	// This isn't great, we really want to make it all thread-local...
 	CDVD = &CDVDapi_Iso;
 	if (!CDVD->open(path, &error))
 	{
@@ -265,7 +264,6 @@ bool GameList::GetIsoSerialAndCRC(const std::string& path, s32* disc_type, std::
 		return false;
 	}
 
-	// TODO: we could include the version in the game list?
 	*disc_type = DoCDVDdetectDiskType();
 	cdvdGetDiscInfo(serial, nullptr, nullptr, crc, nullptr);
 	DoCDVDclose();
@@ -297,7 +295,6 @@ bool GameList::GetElfListEntry(const std::string& path, GameList::Entry* entry)
 		u32 disc_crc;
 		if (GetIsoSerialAndCRC(disc_path, &disc_type, &entry->serial, &disc_crc))
 		{
-			// use serial/region/compat info from the db
 			if (const GameDatabaseSchema::GameEntry* db_entry = GameDatabase::findGame(entry->serial))
 			{
 				entry->compatibility_rating = db_entry->compat;
@@ -312,8 +309,6 @@ bool GameList::GetElfListEntry(const std::string& path, GameList::Entry* entry)
 GameList::Region GameList::ParseDatabaseRegion(const std::string_view db_region)
 {
 	// clang-format off
-						////// NTSC //////
-						//////////////////
 	if (db_region.starts_with("NTSC-B"))
 		return Region::NTSC_B;
 	else if (db_region.starts_with("NTSC-C"))
@@ -328,8 +323,6 @@ GameList::Region GameList::ParseDatabaseRegion(const std::string_view db_region)
 		return Region::NTSC_T;
 	else if (db_region.starts_with("NTSC-U"))
 		return Region::NTSC_U;
-						////// PAL //////
-						//////////////////
 	else if (db_region.starts_with("PAL-AF"))
 		return Region::PAL_AF;
 	else if (db_region.starts_with("PAL-AU"))
@@ -405,7 +398,6 @@ bool GameList::GetIsoListEntry(const std::string& path, GameList::Entry* entry)
 		case CDVD_TYPE_ILLEGAL:
 		default:
 		{
-			// Create empty invalid entry, so we don't repeatedly scan it every time.
 			entry->type = EntryType::Invalid;
 			entry->path = path;
 			entry->total_size = 0;
@@ -586,7 +578,6 @@ bool GameList::OpenCacheForWriting()
 	s_cache_write_stream = FileSystem::OpenCFile(cache_filename.c_str(), "r+b");
 	if (s_cache_write_stream)
 	{
-		// check the header
 		u32 signature, version;
 		if (ReadU32(s_cache_write_stream, &signature) && signature == GAME_LIST_CACHE_SIGNATURE &&
 			ReadU32(s_cache_write_stream, &version) && version == GAME_LIST_CACHE_VERSION &&
@@ -605,7 +596,6 @@ bool GameList::OpenCacheForWriting()
 		return false;
 
 
-	// new cache file, write header
 	if (!WriteU32(s_cache_write_stream, GAME_LIST_CACHE_SIGNATURE) || !WriteU32(s_cache_write_stream, GAME_LIST_CACHE_VERSION))
 	{
 		Console.Error("Failed to write game list cache header");
@@ -633,7 +623,6 @@ bool GameList::WriteEntryToCache(const Entry* entry)
 	result &= WriteU32(s_cache_write_stream, entry->crc);
 	result &= WriteU8(s_cache_write_stream, static_cast<u8>(entry->compatibility_rating));
 
-	// flush after each entry, that way we don't end up with a corrupted file if we crash scanning.
 	if (result)
 		result = (std::fflush(s_cache_write_stream) == 0);
 
@@ -737,7 +726,6 @@ bool GameList::AddFileFromCache(const std::string& path, std::time_t timestamp, 
 	if (!GetGameListEntryFromCache(path, &entry) || entry.last_modified_time != timestamp)
 		return false;
 
-	// Skip over invalid entries.
 	if (entry.type == EntryType::Invalid)
 		return true;
 
@@ -755,7 +743,6 @@ bool GameList::AddFileFromCache(const std::string& path, std::time_t timestamp, 
 bool GameList::ScanFile(std::string path, std::time_t timestamp, std::unique_lock<std::recursive_mutex>& lock,
 	const PlayedTimeMap& played_time_map, const INISettingsInterface& custom_attributes_ini)
 {
-	// don't block UI while scanning
 	lock.unlock();
 
 	DevCon.WriteLn("Scanning '%s'...", path.c_str());
@@ -774,7 +761,6 @@ bool GameList::ScanFile(std::string path, std::time_t timestamp, std::unique_loc
 
 	if (entry.type == EntryType::Invalid)
 	{
-		// don't add invalid entries to list
 		lock.lock();
 		return true;
 	}
@@ -803,7 +789,6 @@ bool GameList::ScanFile(std::string path, std::time_t timestamp, std::unique_loc
 
 	lock.lock();
 
-	// remove if present
 	auto it = std::find_if(
 		s_entries.begin(), s_entries.end(), [&entry](const Entry& existing_entry) { return (existing_entry.path == entry.path); });
 	if (it != s_entries.end())
@@ -862,7 +847,7 @@ u32 GameList::GetEntryCount()
 	return static_cast<u32>(s_entries.size());
 }
 
-void GameList::Refresh(bool invalidate_cache, bool only_cache, ProgressCallback* progress /* = nullptr */)
+void GameList::Refresh(bool invalidate_cache, bool only_cache, ProgressCallback* progress )
 {
 	if (!progress)
 		progress = ProgressCallback::NullProgressCallback;
@@ -881,7 +866,6 @@ void GameList::Refresh(bool invalidate_cache, bool only_cache, ProgressCallback*
 	else
 		LoadCache();
 
-	// don't delete the old entries, since the frontend might still access them
 	std::vector<Entry> old_entries;
 	{
 		std::unique_lock lock(s_mutex);
@@ -900,7 +884,6 @@ void GameList::Refresh(bool invalidate_cache, bool only_cache, ProgressCallback*
 		progress->SetProgressRange(static_cast<u32>(dirs.size() + recursive_dirs.size()));
 		progress->SetProgressValue(0);
 
-		// we manually count it here, because otherwise pop state updates it itself
 		int directory_counter = 0;
 		for (const std::string& dir : dirs)
 		{
@@ -920,7 +903,6 @@ void GameList::Refresh(bool invalidate_cache, bool only_cache, ProgressCallback*
 		}
 	}
 
-	// don't need unused cache entries
 	CloseCacheFileStream();
 	s_cache_map.clear();
 }
@@ -938,17 +920,14 @@ bool GameList::RescanPath(const std::string& path)
 	custom_attributes_ini.Load();
 
 	{
-		// cancel if excluded
 		const std::vector<std::string> excluded_paths(Host::GetBaseStringListSetting("GameList", "ExcludedPaths"));
 		if (IsPathExcluded(excluded_paths, path))
 			return false;
 	}
 
-	// re-scan!
 	if (!ScanFile(path, sd.ModificationTime, lock, played_time, custom_attributes_ini))
 		return true;
 
-	// update cache.. this is far from ideal, but since everything's variable length, all we can do.
 	RewriteCacheFile();
 	return true;
 }
@@ -962,7 +941,6 @@ bool GameList::GetSerialAndCRCForFilename(const char* filename, std::string* ser
 		return true;
 	}
 
-	// Just scan it.. hopefully it'll come back okay.
 	GameList::Entry temp_entry;
 	if (GameList::PopulateEntryFromPath(filename, &temp_entry))
 	{
@@ -982,7 +960,7 @@ std::string GameList::GetPlayedTimeFile()
 bool GameList::ParsePlayedTimeLine(char* line, std::string& serial, PlayedTimeEntry& entry)
 {
 	size_t len = std::strlen(line);
-	if (len != (PLAYED_TIME_LINE_LENGTH + 1)) // \n
+	if (len != (PLAYED_TIME_LINE_LENGTH + 1))
 	{
 		Console.Warning("(ParsePlayedTimeLine) Malformed line: '%s'", line);
 		return false;
@@ -1018,11 +996,9 @@ GameList::PlayedTimeMap GameList::LoadPlayedTimeMap(const std::string& path)
 {
 	PlayedTimeMap ret;
 
-	// Use write mode here, even though we're not writing, so we can lock the file from other updates.
 	auto fp = FileSystem::OpenManagedCFile(path.c_str(), "r+b");
 
 #ifdef _WIN32
-	// On Windows, the file is implicitly locked.
 	while (!fp && GetLastError() == ERROR_SHARING_VIOLATION)
 	{
 		Sleep(10);
@@ -1065,7 +1041,6 @@ GameList::PlayedTimeEntry GameList::UpdatePlayedTimeFile(
 	auto fp = FileSystem::OpenManagedCFile(path.c_str(), "r+b");
 
 #ifdef _WIN32
-	// On Windows, the file is implicitly locked.
 	while (!fp && GetLastError() == ERROR_SHARING_VIOLATION)
 	{
 		Sleep(10);
@@ -1073,7 +1048,6 @@ GameList::PlayedTimeEntry GameList::UpdatePlayedTimeFile(
 	}
 #endif
 
-	// Doesn't exist? Create it.
 	if (!fp && errno == ENOENT)
 		fp = FileSystem::OpenManagedCFile(path.c_str(), "w+b");
 
@@ -1102,7 +1076,6 @@ GameList::PlayedTimeEntry GameList::UpdatePlayedTimeFile(
 		if (line_serial != serial)
 			continue;
 
-		// found it!
 		line_entry.last_played_time = (last_time != 0) ? last_time : 0;
 		line_entry.total_played_time = (last_time != 0) ? (line_entry.total_played_time + add_time) : 0;
 
@@ -1118,7 +1091,6 @@ GameList::PlayedTimeEntry GameList::UpdatePlayedTimeFile(
 
 	if (last_time != 0)
 	{
-		// new entry.
 		std::string new_line(MakePlayedTimeLine(serial, new_entry));
 		if (FileSystem::FSeek64(fp.get(), 0, SEEK_END) != 0 || std::fwrite(new_line.data(), new_line.length(), 1, fp.get()) != 1)
 		{
@@ -1261,13 +1233,10 @@ std::string GameList::GetCoverImagePathForEntry(const Entry* entry)
 {
 	static const char* extensions[] = {".jpg", ".jpeg", ".png", ".webp"};
 
-	// TODO(Stenzek): Port to filesystem...
-
 	std::string cover_path;
 	for (const char* extension : extensions)
 	{
 
-		// Prioritize file title since users can change these (e.g. for modded games)
 		const std::string_view file_title(Path::GetFileTitle(entry->path));
 		if (!file_title.empty() && entry->title != file_title)
 		{
@@ -1279,7 +1248,6 @@ std::string GameList::GetCoverImagePathForEntry(const Entry* entry)
 				return cover_path;
 		}
 
-		// Lookup by serial (most specific)
 		if (!entry->serial.empty())
 		{
 			const std::string cover_filename(entry->serial + extension);
@@ -1288,7 +1256,6 @@ std::string GameList::GetCoverImagePathForEntry(const Entry* entry)
 				return cover_path;
 		}
 
-		// Last resort, check the game title
 		if (!entry->title.empty())
 		{
 			std::string cover_filename = fmt::format("{}{}", entry->title, extension);
@@ -1298,7 +1265,6 @@ std::string GameList::GetCoverImagePathForEntry(const Entry* entry)
 			if (FileSystem::FileExists(cover_path.c_str()))
 				return cover_path;
 		}
-		// EN title too
 		if (!entry->title_en.empty())
 		{
 			std::string cover_filename = fmt::format("{}{}", entry->title_en, extension);
@@ -1407,7 +1373,6 @@ bool GameList::DownloadCovers(const std::vector<std::string>& url_templates, boo
 		if (progress->IsCancelled())
 			break;
 
-		// make sure it didn't get done already
 		{
 			std::unique_lock lock(s_mutex);
 			const GameList::Entry* entry = GetEntryForPath(entry_path.c_str());
@@ -1420,7 +1385,6 @@ bool GameList::DownloadCovers(const std::vector<std::string>& url_templates, boo
 			progress->SetStatusText(fmt::format(TRANSLATE_FS("GameList", "Downloading cover for {0} [{1}]..."), entry->title, entry->serial).c_str());
 		}
 
-		// we could actually do a few in parallel here...
 		std::string filename = Path::URLDecode(url);
 		downloader->CreateRequest(
 			std::move(url), [use_serial, &save_callback, entry_path = std::move(entry_path), filename = std::move(filename)](
@@ -1433,12 +1397,9 @@ bool GameList::DownloadCovers(const std::vector<std::string>& url_templates, boo
 				if (!entry || !GetCoverImagePathForEntry(entry).empty())
 					return;
 
-				// prefer the content type from the response for the extension
-				// otherwise, if it's missing, and the request didn't have an extension.. fall back to jpegs.
 				std::string template_filename;
 				std::string content_type_extension(HTTPDownloader::GetExtensionForContentType(content_type));
 
-				// don't treat the domain name as an extension..
 				const std::string::size_type last_slash = filename.find('/');
 				const std::string::size_type last_dot = filename.find('.');
 				if (!content_type_extension.empty())
@@ -1493,7 +1454,6 @@ void GameList::SaveCustomTitleForPath(const std::string& path, const std::string
 
 	if (names.Save())
 	{
-		// Let the cache update by rescanning
 		RescanPath(path);
 	}
 }
@@ -1514,7 +1474,6 @@ void GameList::SaveCustomRegionForPath(const std::string& path, int custom_regio
 
 	if (names.Save())
 	{
-		// Let the cache update by rescanning
 		RescanPath(path);
 	}
 }

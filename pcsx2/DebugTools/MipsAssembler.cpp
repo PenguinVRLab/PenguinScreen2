@@ -8,8 +8,6 @@
 #include <cctype>
 #include <string_view>
 
-// just an empty class, so that it's not necessary to remove all the calls manually
-// will make it easier to update if there are changes later on
 class Logger
 {
 public:
@@ -17,12 +15,10 @@ public:
 
 	static void printError(ErrorType type, const wchar_t* text, ...)
 	{
-		//
 	}
 
 	static void queueError(ErrorType type, const wchar_t* text, ...)
 	{
-		//
 	}
 
 };
@@ -254,7 +250,7 @@ bool MipsGetRegister(const char* source, int& RetLen, MipsRegisterInfo& Result, 
 		{
 			std::strncpy(Result.name, source, strlen(reg.name));
 			Result.num = reg.num;
-			RetLen = static_cast<int>(strlen(reg.name)); // grrr... should be unsigned!!
+			RetLen = static_cast<int>(strlen(reg.name));
 			return true;
 		}
 	}
@@ -267,7 +263,7 @@ int MipsGetRegister(const char* source, int& RetLen, const std::array<tMipsRegis
 	for (const auto& reg : RegisterList) {
 		if(strEquals(reg.name, source) && isValidRegisterTrail(source, strlen(reg.name)))
 		{
-			RetLen = static_cast<int>(strlen(reg.name)); // grrr... should be unsigned!!
+			RetLen = static_cast<int>(strlen(reg.name));
 			return reg.num;
 		}
 	}
@@ -281,7 +277,7 @@ bool MipsCheckImmediate(const char* Source, DebugInterface* cpu, int& dest, int&
 	int BufferPos = 0;
 	int l;
 
-	if (MipsGetRegister(Source,l, MipsRegisters) != -1)	// error
+	if (MipsGetRegister(Source,l, MipsRegisters) != -1)
 	{
 		return false;
 	}
@@ -312,9 +308,9 @@ bool MipsCheckImmediate(const char* Source, DebugInterface* cpu, int& dest, int&
 		}
 
 
-		if (*Source == '(')	// could be part of the opcode
+		if (*Source == '(')
 		{
-			if (MipsGetRegister(Source+1,l, MipsRegisters) != -1)	// end
+			if (MipsGetRegister(Source+1,l, MipsRegisters) != -1)
 			{
 				Buffer[BufferPos] = 0;
 				break;
@@ -402,7 +398,7 @@ bool CMipsInstruction::parseOpcode(const tMipsOpcode& SourceOpcode, const char* 
 
 		switch (*SourceEncoding)
 		{
-		case 'S':	// vfpu size
+		case 'S':
 			switch (*Line)
 			{
 			case 's':
@@ -429,7 +425,6 @@ bool CMipsInstruction::parseOpcode(const tMipsOpcode& SourceOpcode, const char* 
 		}
 	}
 
-	// there's something else, bad
 	return (*Line == 0);
 }
 
@@ -460,17 +455,17 @@ bool CMipsInstruction::LoadEncoding(const tMipsOpcode& SourceOpcode, const char*
 
 			switch (*SourceEncoding)
 			{
-			case 'T':	// float reg
+			case 'T':
 				if (!MipsGetRegister(Line,RetLen,registers.frt, MipsFloatRegisters)) return false;
 				Line += RetLen;
 				SourceEncoding++;
 				break;
-			case 'D':	// float reg
+			case 'D':
 				if (!MipsGetRegister(Line,RetLen,registers.frd, MipsFloatRegisters)) return false;
 				Line += RetLen;
 				SourceEncoding++;
 				break;
-			case 'S':	// float reg
+			case 'S':
 				if (!MipsGetRegister(Line,RetLen,registers.frs, MipsFloatRegisters)) return false;
 				Line += RetLen;
 				SourceEncoding++;
@@ -490,7 +485,7 @@ bool CMipsInstruction::LoadEncoding(const tMipsOpcode& SourceOpcode, const char*
 				Line += RetLen;
 				SourceEncoding++;
 				break;
-			case 'V':	// ps2 vector registers
+			case 'V':
 				switch (*(SourceEncoding+1))
 				{
 				case 's':
@@ -528,38 +523,38 @@ bool CMipsInstruction::LoadEncoding(const tMipsOpcode& SourceOpcode, const char*
 				}
 				SourceEncoding += 2;
 				break;
-			case 'a':	// 5 bit immediate
+			case 'a':
 				if (!MipsCheckImmediate(Line,cpu,immediate.originalValue,RetLen)) return false;
 				immediateType = MIPS_IMMEDIATE5;
 				Line += RetLen;
 				SourceEncoding++;
 				break;
-			case 'i':	// 16 bit immediate
+			case 'i':
 				if (!MipsCheckImmediate(Line,cpu,immediate.originalValue,RetLen)) return false;
 				immediateType = MIPS_IMMEDIATE16;
 				Line += RetLen;
 				SourceEncoding++;
 				break;
-			case 'b':	// 20 bit immediate
+			case 'b':
 				if (!MipsCheckImmediate(Line,cpu,immediate.originalValue,RetLen)) return false;
 				immediateType = MIPS_IMMEDIATE20;
 				Line += RetLen;
 				SourceEncoding++;
 				break;
-			case 'I':	// 32 bit immediate
+			case 'I':
 				if (!MipsCheckImmediate(Line,cpu,immediate.originalValue,RetLen)) return false;
 				immediateType = MIPS_IMMEDIATE26;
 				Line += RetLen;
 				SourceEncoding++;
 				break;
-			case 'r':	// forced register
+			case 'r':
 				if (MipsGetRegister(Line,RetLen, MipsRegisters) != *(SourceEncoding+1)) return false;
 				Line += RetLen;
 				SourceEncoding += 2;
 				break;
-			case '/':	// forced letter
+			case '/':
 				SourceEncoding++;	// fallthrough
-			default:	// everything else
+			default:
 				if (*SourceEncoding++ != *Line++) return false;
 				break;
 			}
@@ -567,9 +562,8 @@ bool CMipsInstruction::LoadEncoding(const tMipsOpcode& SourceOpcode, const char*
 	}
 
 	while (*Line == ' ' || *Line == '\t') Line++;
-	if (*Line != 0)	return false;	// there's something else, bad
+	if (*Line != 0)	return false;
 
-	// opcode is ok - now set all flags
 	Opcode = SourceOpcode;
 	immediate.value = immediate.originalValue;
 
@@ -579,7 +573,6 @@ bool CMipsInstruction::LoadEncoding(const tMipsOpcode& SourceOpcode, const char*
 
 void CMipsInstruction::setOmittedRegisters()
 {
-	// copy over omitted registers
 	if (Opcode.flags & MO_RSD)
 		registers.grd = registers.grs;
 
@@ -618,12 +611,11 @@ bool CMipsInstruction::Validate()
 		return false;
 	}
 
-	// check immediates
 	if (immediateType != MIPS_NOIMMEDIATE)
 	{
 		immediate.originalValue = immediate.value;
 
-		if (Opcode.flags & MO_IMMALIGNED)	// immediate must be aligned
+		if (Opcode.flags & MO_IMMALIGNED)
 		{
 			if (immediate.value % 4)
 			{
@@ -632,10 +624,10 @@ bool CMipsInstruction::Validate()
 			}
 		}
 
-		if (Opcode.flags & MO_IPCA)	// absolute value >> 2)
+		if (Opcode.flags & MO_IPCA)
 		{
 			immediate.value = (immediate.value >> 2) & 0x3FFFFFF;
-		} else if (Opcode.flags & MO_IPCR)	// relative 16 bit value
+		} else if (Opcode.flags & MO_IPCR)
 		{
 			const int num = (immediate.value-RamPos-4) >> 2;
 
@@ -667,17 +659,17 @@ void CMipsInstruction::encodeNormal()
 {
 	encoding = Opcode.destencoding;
 
-	if (registers.grs.num != -1) encoding |= MIPS_RS(registers.grs.num);	// source reg
-	if (registers.grt.num != -1) encoding |= MIPS_RT(registers.grt.num);	// target reg
-	if (registers.grd.num != -1) encoding |= MIPS_RD(registers.grd.num);	// dest reg
+	if (registers.grs.num != -1) encoding |= MIPS_RS(registers.grs.num);
+	if (registers.grt.num != -1) encoding |= MIPS_RT(registers.grt.num);
+	if (registers.grd.num != -1) encoding |= MIPS_RD(registers.grd.num);
 
-	if (registers.frt.num != -1) encoding |= MIPS_FT(registers.frt.num);	// float target reg
-	if (registers.frs.num != -1) encoding |= MIPS_FS(registers.frs.num);	// float source reg
-	if (registers.frd.num != -1) encoding |= MIPS_FD(registers.frd.num);	// float dest reg
+	if (registers.frt.num != -1) encoding |= MIPS_FT(registers.frt.num);
+	if (registers.frs.num != -1) encoding |= MIPS_FS(registers.frs.num);
+	if (registers.frd.num != -1) encoding |= MIPS_FD(registers.frd.num);
 
-	if (registers.ps2vrt.num != -1) encoding |= (registers.ps2vrt.num << 16);	// ps2 vector target reg
-	if (registers.ps2vrs.num != -1) encoding |= (registers.ps2vrs.num << 11);	// ps2 vector source reg
-	if (registers.ps2vrd.num != -1) encoding |= (registers.ps2vrd.num << 6);	// ps2 vector dest reg
+	if (registers.ps2vrt.num != -1) encoding |= (registers.ps2vrt.num << 16);
+	if (registers.ps2vrs.num != -1) encoding |= (registers.ps2vrs.num << 11);
+	if (registers.ps2vrd.num != -1) encoding |= (registers.ps2vrd.num << 6);
 
 	switch (immediateType)
 	{

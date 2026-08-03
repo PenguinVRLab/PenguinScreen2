@@ -20,42 +20,13 @@ bool has_link = true;
 volatile bool fireIntR = false;
 std::mutex frame_counter_mutex;
 std::mutex reset_mutex;
-/*
-#define	SMAP_BASE			0xb0000000
-#define	SMAP_REG8(Offset)		(*(u8 volatile*)(SMAP_BASE+(Offset)))
-#define	SMAP_REG16(Offset)	(*(u16 volatile*)(SMAP_BASE+(Offset)))
-#define	SMAP_REG32(Offset)	(*(u32 volatile*)(SMAP_BASE+(Offset)))
 
-u32 EMAC3REG_READ(u32 u32Offset)
-{
-        u32	hi=SMAP_REG16(u32Offset);
-        u32	lo=SMAP_REG16(u32Offset+2);
-        return	(hi<<16)|lo;
-}
-
-
-void EMAC3REG_WRITE(u32 u32Offset,u32 u32V)
-{
-        SMAP_REG16(u32Offset)=((u32V>>16)&0xFFFF);
-        SMAP_REG16(u32Offset+2)=(u32V&0xFFFF);
-}
-#define	SMAP_EMAC3_BASE	0x2000
-#define	SMAP_EMAC3_STA_CTRL		(SMAP_EMAC3_BASE+0x5C)
-void test()
-{
-	printf ("EMAC3R 0x%08X raw read 0x%08X\n",EMAC3REG_READ(SMAP_EMAC3_STA_CTRL),SMAP_REG32(SMAP_EMAC3_STA_CTRL));
-}*/
-
-//this can return a false positive, but its not problem since it may say it cant recv while it can (no harm done, just delay on packets)
 bool rx_fifo_can_rx()
 {
-	//check if RX is on & stuff like that here
 
-	//Check if there is space on RXBD
 	if (dev9Ru8(SMAP_R_RXFIFO_FRAME_CNT) == 64)
 		return false;
 
-	//Check if there is space on fifo
 	const int rd_ptr = dev9Ru32(SMAP_R_RXFIFO_RD_PTR);
 	int space = sizeof(dev9.rxfifo) -
 				((dev9.rxfifo_wr_ptr - rd_ptr) & 16383);
@@ -67,7 +38,6 @@ bool rx_fifo_can_rx()
 	if (space < 1514)
 		return false;
 
-	//we can recv a packet !
 	return true;
 }
 
@@ -91,25 +61,19 @@ void rx_process(NetPacket* pk)
 		dev9.rxfifo_wr_ptr &= 16383;
 	}
 
-	//increase RXBD
 	std::unique_lock<std::mutex> reset_lock(reset_mutex);
 	dev9.rxbdi++;
 	dev9.rxbdi &= (SMAP_BD_SIZE / 8) - 1;
 
-	//Fill the BD with info !
 	pbd->length = pk->size;
 	pbd->pointer = 0x4000 + pstart;
 	pbd->ctrl_stat &= ~SMAP_BD_RX_EMPTY;
 
-	//increase frame count
 	std::unique_lock<std::mutex> counter_lock(frame_counter_mutex);
 	dev9Ru8(SMAP_R_RXFIFO_FRAME_CNT)++;
 	counter_lock.unlock();
 	reset_lock.unlock();
-	//spams// emu_printf("Got packet, %d bytes (%d fifo)\n", pk->size,bytes);
 	fireIntR = true;
-	//_DEV9irq(SMAP_INTR_RXEND,0);//now ? or when the fifo is full ? i guess now atm
-	//note that this _is_ wrong since the IOP interrupt system is not thread safe.. but nothing i can do about that
 }
 
 u32 wswap(u32 d)
@@ -120,10 +84,6 @@ u32 wswap(u32 d)
 void tx_process()
 {
 	NetPacket pk;
-	// We will loop though TX_BD, sending any that are ready
-	// stopping once we reach one that isn't ready
-	// SMAP_R_TXFIFO_FRAME_CNT is decremented, but otherwise isn't used
-	// This seems to match HW behaviour
 	u32 cnt = 0;
 	while (true)
 	{
@@ -135,7 +95,6 @@ void tx_process()
 		}
 		if (pbd->length & 3)
 		{
-			//spams// emu_printf("WARN : pbd->length not aligned %u\n",pbd->length);
 		}
 
 		if (pbd->length > 1514)
@@ -154,9 +113,6 @@ void tx_process()
 				Console.Error("DEV9: SMAP: ERROR: odd , !pbd->pointer>0x1000 | 0x%X %u", pbd->pointer, pbd->length);
 			}
 
-			// SMAP drivers send a very specfic frame during init, then check SPD_R_INTR_STAT for SMAP_INTR_RXEND | SMAP_INTR_TXEND | SMAP_INTR_TXDNV.
-			// SMAP_INTR_TXEND is set normally, SMAP_INTR_RXEND is supposed to be set here, but we currently don't emulate that.
-			// SMAP_INTR_TXDNV is set somewhere, unsure where, we only set it in failure (instead of SMAP_INTR_TXEND), but is included in the hack here.
 			if (pbd->length == 0x5EA && pbd->pointer == 0x1000)
 			{
 				u32* ptr = (u32*)&dev9.txfifo[base];
@@ -177,41 +133,6 @@ void tx_process()
 				}
 			}
 
-			//increase fifo pointer(s)
-			//uh does that even exist on real h/w ?
-			/*
-			if(dev9.txfifo_rd_ptr+pbd->length >= 16383)
-			{
-				//warp around !
-				//first part
-				u32 was=16384-dev9.txfifo_rd_ptr;
-				memcpy(pk.buffer,dev9.txfifo+dev9.txfifo_rd_ptr,was);
-				//warp
-				dev9.txfifo_rd_ptr+=pbd->length;
-				dev9.txfifo_rd_ptr&=16383;
-				if (pbd->length!=was+dev9.txfifo_rd_ptr)
-				{
-					emu_printf("ERROR ON TX FIFO HANDLING, %x\n", dev9.txfifo_rd_ptr);
-				}
-				//second part
-				memcpy(pk.buffer+was,dev9.txfifo,pbd->length-was);
-			}
-			else
-			{	//no warp or 'perfect' warp (reads end, resets to start
-				memcpy(pk.buffer,dev9.txfifo+dev9.txfifo_rd_ptr,pbd->length);
-				dev9.txfifo_rd_ptr+=pbd->length;
-				if (dev9.txfifo_rd_ptr==16384)
-					dev9.txfifo_rd_ptr=0;
-			}
-
-
-
-			if (dev9.txfifo_rd_ptr&(~16383))
-			{
-				emu_printf("ERROR ON TX FIFO HANDLING, %x\n", dev9.txfifo_rd_ptr);
-			}
-			*/
-
 			if (base + pbd->length > 16384)
 			{
 				u32 was = 16384 - base;
@@ -229,19 +150,16 @@ void tx_process()
 
 		pbd->ctrl_stat &= ~SMAP_BD_TX_READY;
 
-		//increase TXBD
 		dev9.txbdi++;
 		dev9.txbdi &= (SMAP_BD_SIZE / 8) - 1;
 
-		//decrease frame count -- this is not thread safe
 		dev9Ru8(SMAP_R_TXFIFO_FRAME_CNT)--;
 		cnt++;
 	}
 
-	// if we actualy send something set TXEND
 	if (cnt != 0)
 	{
-		_DEV9irq(SMAP_INTR_TXEND, 100); //now ? or when the fifo is empty ? i guess now atm
+		_DEV9irq(SMAP_INTR_TXEND, 100);
 	}
 	else
 	{
@@ -257,13 +175,10 @@ void emac3_write(u32 addr)
 	switch (addr)
 	{
 		case SMAP_R_EMAC3_MODE0_L:
-			//DevCon.WriteLn("DEV9: SMAP: SMAP_R_EMAC3_MODE0 write %x", value);
 			value = (value & (~SMAP_E3_SOFT_RESET)) | SMAP_E3_TXMAC_IDLE | SMAP_E3_RXMAC_IDLE;
 			dev9Ru16(SMAP_R_EMAC3_STA_CTRL_H) |= SMAP_E3_PHY_OP_COMP;
 			break;
 		case SMAP_R_EMAC3_TxMODE0_L:
-			//DevCon.WriteLn("DEV9: SMAP: SMAP_R_EMAC3_TxMODE0_L write %x", value);
-			//Process TX  here ?
 			if (!(value & SMAP_E3_TX_GNP_0))
 				Console.Error("DEV9: SMAP_R_EMAC3_TxMODE0_L: SMAP_E3_TX_GNP_0 not set");
 
@@ -273,10 +188,8 @@ void emac3_write(u32 addr)
 				Console.Error("DEV9: SMAP_R_EMAC3_TxMODE0_L: extra bits set !");
 			break;
 		case SMAP_R_EMAC3_TxMODE1_L:
-			//DevCon.WriteLn("DEV9: SMAP_R_EMAC3_TxMODE1_L 32bit write %x", value);
 			break;
 		case SMAP_R_EMAC3_STA_CTRL_L:
-			//DevCon.WriteLn("DEV9: SMAP: SMAP_R_EMAC3_STA_CTRL write %x", value);
 			{
 				if (value & (SMAP_E3_PHY_READ))
 				{
@@ -294,7 +207,6 @@ void emac3_write(u32 addr)
 								val |= SMAP_PHY_STS_LINK | SMAP_PHY_STS_100M | SMAP_PHY_STS_FDX | SMAP_PHY_STS_ANCP;
 							break;
 					}
-					//DevCon.WriteLn("DEV9: phy_read %d: %x", reg, val);
 					value = (value & 0xFFFF) | (val << 16);
 				}
 				if (value & (SMAP_E3_PHY_WRITE))
@@ -311,7 +223,6 @@ void emac3_write(u32 addr)
 						val &= ~SMAP_PHY_BMCR_RST;
 						val |= 0x1;
 					}
-					//DevCon.WriteLn("DEV9: phy_write %d: %x", reg, val);
 					dev9.phyregs[reg] = val;
 				}
 			}
@@ -354,70 +265,12 @@ u16 smap_read16(u32 addr)
 		if (dev9.bd_swap)
 			return (rv << 8) | (rv >> 8);
 		return rv;
-		/*
-		switch (addr & 0x7)
-		{
-		case 0: // ctrl_stat
-			hard = dev9Ru16(addr);
-			//DevCon.WriteLn("DEV9: TX_CTRL_STAT[%d]: read %x", (addr - SMAP_BD_TX_BASE) / 8, hard);
-			if(dev9.bd_swap)
-				return (hard<<8)|(hard>>8);
-			return hard;
-		case 2: // unknown
-			hard = dev9Ru16(addr);
-			//DevCon.WriteLn("DEV9: TX_UNKNOWN[%d]: read %x", (addr - SMAP_BD_TX_BASE) / 8, hard);
-			if(dev9.bd_swap)
-				return (hard<<8)|(hard>>8);
-			return hard;
-		case 4: // length
-			hard = dev9Ru16(addr);
-			DevCon.WriteLn("DEV9: TX_LENGTH[%d]: read %x", (addr - SMAP_BD_TX_BASE) / 8, hard);
-			if(dev9.bd_swap)
-				return (hard<<8)|(hard>>8);
-			return hard;
-		case 6: // pointer
-			hard = dev9Ru16(addr);
-			DevCon.WriteLn("DEV9: TX_POINTER[%d]: read %x", (addr - SMAP_BD_TX_BASE) / 8, hard);
-			if(dev9.bd_swap)
-				return (hard<<8)|(hard>>8);
-			return hard;
-		}
-		*/
 	}
 	else if (addr >= SMAP_BD_RX_BASE && addr < (SMAP_BD_RX_BASE + SMAP_BD_SIZE))
 	{
 		if (dev9.bd_swap)
 			return (rv << 8) | (rv >> 8);
 		return rv;
-		/*
-		switch (addr & 0x7)
-		{
-		case 0: // ctrl_stat
-			hard = dev9Ru16(addr);
-			//DevCon.WriteLn("DEV9: RX_CTRL_STAT[%d]: read %x", (addr - SMAP_BD_RX_BASE) / 8, hard);
-			if(dev9.bd_swap)
-				return (hard<<8)|(hard>>8);
-			return hard;
-		case 2: // unknown
-			hard = dev9Ru16(addr);
-			//DevCon.WriteLn("DEV9: RX_UNKNOWN[%d]: read %x", (addr - SMAP_BD_RX_BASE) / 8, hard);
-			if(dev9.bd_swap)
-				return (hard<<8)|(hard>>8);
-			return hard;
-		case 4: // length
-			hard = dev9Ru16(addr);
-			DevCon.WriteLn("DEV9: RX_LENGTH[%d]: read %x", (addr - SMAP_BD_RX_BASE) / 8, hard);
-			if(dev9.bd_swap)
-				return (hard<<8)|(hard>>8);
-			return hard;
-		case 6: // pointer
-			hard = dev9Ru16(addr);
-			DevCon.WriteLn("DEV9: RX_POINTER[%d]: read %x", (addr - SMAP_BD_RX_BASE) / 8, hard);
-			if(dev9.bd_swap)
-				return (hard<<8)|(hard>>8);
-			return hard;
-		}
-		*/
 	}
 #if (0)
 	switch (addr)
@@ -527,7 +380,6 @@ u32 smap_read32(u32 addr)
 
 			dev9Ru32(SMAP_R_RXFIFO_RD_PTR) = ((rd_ptr + 4) & 16383);
 
-			//DevCon.WriteLn("DEV9: SMAP_R_RXFIFO_DATA 32bit read %x", rv);
 			return rv;
 		}
 		default:
@@ -543,14 +395,12 @@ void smap_write8(u32 addr, u8 value)
 	switch (addr)
 	{
 		case SMAP_R_TXFIFO_FRAME_INC:
-			//DevCon.WriteLn("DEV9: SMAP_R_TXFIFO_FRAME_INC 8bit write %x", value);
 			{
 				dev9Ru8(SMAP_R_TXFIFO_FRAME_CNT)++;
 			}
 			return;
 
 		case SMAP_R_RXFIFO_FRAME_DEC:
-			//DevCon.WriteLn("DEV9: SMAP_R_RXFIFO_FRAME_DEC 8bit write %x", value);
 			counter_lock.lock();
 			dev9Ru8(addr) = value;
 			{
@@ -560,12 +410,11 @@ void smap_write8(u32 addr, u8 value)
 			return;
 
 		case SMAP_R_TXFIFO_CTRL:
-			//DevCon.WriteLn("DEV9: SMAP_R_TXFIFO_CTRL 8bit write %x", value);
 			if (value & SMAP_TXFIFO_RESET)
 			{
 				dev9.txbdi = 0;
 				dev9.txfifo_rd_ptr = 0;
-				dev9Ru8(SMAP_R_TXFIFO_FRAME_CNT) = 0; //this actualy needs to be atomic (lock mov ...)
+				dev9Ru8(SMAP_R_TXFIFO_FRAME_CNT) = 0;
 				dev9Ru32(SMAP_R_TXFIFO_WR_PTR) = 0;
 				dev9Ru32(SMAP_R_TXFIFO_SIZE) = 16384;
 			}
@@ -574,7 +423,6 @@ void smap_write8(u32 addr, u8 value)
 			return;
 
 		case SMAP_R_RXFIFO_CTRL:
-			//DevCon.WriteLn("DEV9: SMAP_R_RXFIFO_CTRL 8bit write %x", value);
 			if (value & SMAP_RXFIFO_RESET)
 			{
 				std::scoped_lock lock(reset_lock, counter_lock);
@@ -614,68 +462,19 @@ void smap_write16(u32 addr, u16 value)
 		if (dev9.bd_swap)
 			value = (value >> 8) | (value << 8);
 		dev9Ru16(addr) = value;
-		/*
-		switch (addr & 0x7)
-		{
-		case 0: // ctrl_stat
-			DevCon.WriteLn("DEV9: TX_CTRL_STAT[%d]: write %x", (addr - SMAP_BD_TX_BASE) / 8, value);
-			//hacky
-			dev9Ru16(addr) = value;
-			return;
-		case 2: // unknown
-			//DevCon.WriteLn("DEV9: TX_UNKNOWN[%d]: write %x", (addr - SMAP_BD_TX_BASE) / 8, value);
-			dev9Ru16(addr) = value;
-			return;
-		case 4: // length
-			DevCon.WriteLn("DEV9: TX_LENGTH[%d]: write %x", (addr - SMAP_BD_TX_BASE) / 8, value);
-			dev9Ru16(addr) = value;
-			return;
-		case 6: // pointer
-			DevCon.WriteLn("DEV9: TX_POINTER[%d]: write %x", (addr - SMAP_BD_TX_BASE) / 8, value);
-			dev9Ru16(addr) = value;
-			return;
-		}
-		*/
 		return;
 	}
 	else if (addr >= SMAP_BD_RX_BASE && addr < (SMAP_BD_RX_BASE + SMAP_BD_SIZE))
 	{
-		//int rx_index=(addr - SMAP_BD_RX_BASE)>>3;
 		if (dev9.bd_swap)
 			value = (value >> 8) | (value << 8);
 		dev9Ru16(addr) = value;
-		/*
-		switch (addr & 0x7)
-		{
-		case 0: // ctrl_stat
-			DevCon.WriteLn("DEV9: RX_CTRL_STAT[%d]: write %x", rx_index, value);
-			dev9Ru16(addr) = value;
-			if(value&0x8000)
-			{
-				DevCon.WriteLn("DEV9:  * * PACKET READ COMPLETE:   rd_ptr=%d, wr_ptr=%d", dev9Ru32(SMAP_R_RXFIFO_RD_PTR), dev9.rxfifo_wr_ptr);
-			}
-			return;
-		case 2: // unknown
-			//DevCon.WriteLn("DEV9: RX_UNKNOWN[%d]: write %x", rx_index, value);
-			dev9Ru16(addr) = value;
-			return;
-		case 4: // length
-			DevCon.WriteLn("DEV9: RX_LENGTH[%d]: write %x", rx_index, value);
-			dev9Ru16(addr) = value;
-			return;
-		case 6: // pointer
-			DevCon.WriteLn("DEV9: RX_POINTER[%d]: write %x", rx_index, value);
-			dev9Ru16(addr) = value;
-			return;
-		}
-		*/
 		return;
 	}
 
 	switch (addr)
 	{
 		case SMAP_R_INTR_CLR:
-			//DevCon.WriteLn("DEV9: SMAP: SMAP_R_INTR_CLR 16bit write %x", value);
 			dev9.irqcause &= ~value;
 			return;
 
@@ -685,11 +484,10 @@ void smap_write16(u32 addr, u16 value)
 			return;
 #define EMAC3_L_WRITE(name)                                   \
 	case name:                                                \
-		/* DevCon.WriteLn("DEV9: SMAP: " #name " 16 bit write %x", value);*/ \
+ \
 		dev9Ru16(addr) = value;                               \
 		return;
 	// clang-format off
-	//handle L writes
 	EMAC3_L_WRITE(SMAP_R_EMAC3_MODE0_L)
 	EMAC3_L_WRITE(SMAP_R_EMAC3_MODE1_L)
 	EMAC3_L_WRITE(SMAP_R_EMAC3_TxMODE0_L)
@@ -722,12 +520,11 @@ void smap_write16(u32 addr, u16 value)
 
 #define EMAC3_H_WRITE(name)                                   \
 	case name:                                                \
-		/* DevCon.WriteLn("DEV9: SMAP: " #name " 16 bit write %x", value);*/ \
+ \
 		dev9Ru16(addr) = value;                               \
 		emac3_write(addr - 2);                                \
 		return;
 	// clang-format off
-	//handle H writes
 	EMAC3_H_WRITE(SMAP_R_EMAC3_MODE0_H)
 	EMAC3_H_WRITE(SMAP_R_EMAC3_MODE1_H)
 	EMAC3_H_WRITE(SMAP_R_EMAC3_TxMODE0_H)
@@ -757,34 +554,6 @@ void smap_write16(u32 addr, u16 value)
 	EMAC3_H_WRITE(SMAP_R_EMAC3_TX_OCTETS + 2)
 	EMAC3_H_WRITE(SMAP_R_EMAC3_RX_OCTETS + 2)
 	// clang-format on
-			/*
-	case SMAP_R_EMAC3_MODE0_L:
-		DevCon.WriteLn("DEV9: SMAP: SMAP_R_EMAC3_MODE0 write %x", value);
-		dev9Ru16(addr) = value;
-		return;
-	case SMAP_R_EMAC3_TxMODE0_L:
-		DevCon.WriteLn("DEV9: SMAP: SMAP_R_EMAC3_TxMODE0_L 16bit write %x", value);
-		dev9Ru16(addr) = value;
-		return;
-	case SMAP_R_EMAC3_TxMODE1_L:
-		emu_printf("SMAP: SMAP_R_EMAC3_TxMODE1_L 16bit write %x\n", value);
-		dev9Ru16(addr) = value;
-		return;
-
-	case SMAP_R_EMAC3_TxMODE0_H:
-		emu_printf("SMAP: SMAP_R_EMAC3_TxMODE0_H 16bit write %x\n", value);
-		dev9Ru16(addr) = value;
-		return;
-
-	case SMAP_R_EMAC3_TxMODE1_H:
-		emu_printf("SMAP: SMAP_R_EMAC3_TxMODE1_H 16bit write %x\n", value);
-		dev9Ru16(addr) = value;
-		return;
-	case SMAP_R_EMAC3_STA_CTRL_H:
-		DevCon.WriteLn("DEV9: SMAP: SMAP_R_EMAC3_STA_CTRL_H 16bit write %x", value);
-		dev9Ru16(addr) = value;
-		return;
-		*/
 
 		default:
 			DevCon.WriteLn("DEV9: SMAP : Unknown 16 bit write @ %X,v=%X", addr, value);
@@ -804,7 +573,6 @@ void smap_write32(u32 addr, u32 value)
 	switch (addr)
 	{
 		case SMAP_R_TXFIFO_DATA:
-			//DevCon.WriteLn("DEV9: SMAP_R_TXFIFO_DATA 32bit write %x", value);
 			*((u32*)(dev9.txfifo + dev9Ru32(SMAP_R_TXFIFO_WR_PTR))) = value;
 			dev9Ru32(SMAP_R_TXFIFO_WR_PTR) = (dev9Ru32(SMAP_R_TXFIFO_WR_PTR) + 4) & 16383;
 			return;
@@ -846,7 +614,6 @@ void smap_writeDMA8Mem(u32* pMem, int size)
 		while (size > 0)
 		{
 			int value = *pMem;
-			//	value=(value<<24)|(value>>24)|((value>>8)&0xFF00)|((value<<8)&0xFF0000);
 			pMem++;
 
 			*((u32*)(dev9.txfifo + dev9Ru32(SMAP_R_TXFIFO_WR_PTR))) = value;
@@ -864,8 +631,6 @@ void smap_async(u32 cycles)
 	if (fireIntR)
 	{
 		fireIntR = false;
-		//Is this used to signal each individual packet, or just when there are packets in the RX fifo?
-		//I think it just signals when there are packets in the RX fifo
-		_DEV9irq(SMAP_INTR_RXEND, 0); //Make the call to _DEV9irq in a thread safe way
+		_DEV9irq(SMAP_INTR_RXEND, 0);
 	}
 }

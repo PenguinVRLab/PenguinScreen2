@@ -32,7 +32,7 @@ public:
 		ComputeShaderResource,
 		CopySrc,
 		CopyDst,
-		CASShaderUAV, // No Clear UAV Sync
+		CASShaderUAV,
 		PixelShaderUAV,
 		Count
 	};
@@ -79,7 +79,6 @@ public:
 	void TransitionSubresourceToState(const D3D12CommandList& cmdlist, u32 level, ResourceState before_state,
 		ResourceState after_state) const;
 
-	// Call when the texture is bound to the pipeline, or read from in a copy.
 	__fi void SetUseFenceCounter(u64 val) { m_use_fence_counter = val; }
 
 private:
@@ -121,12 +120,8 @@ private:
 	DXGI_FORMAT m_dxgi_format = DXGI_FORMAT_UNKNOWN;
 	ResourceState m_resource_state = ResourceState::Undefined;
 
-	// With legacy barriers, an aliased resource is used as the feedback shader resource.
-	// With enhanced barriers, the layout is always COMMON, but can use the main resource for feedback.
 	bool m_simultaneous_tex;
 
-	// Contains the fence counter when the texture was last used.
-	// When this matches the current fence counter, the texture was used this command buffer.
 	u64 m_use_fence_counter = 0;
 
 	int m_map_level = std::numeric_limits<int>::max();

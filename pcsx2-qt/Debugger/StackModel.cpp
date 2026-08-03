@@ -78,22 +78,16 @@ QVariant StackModel::headerData(int section, Qt::Orientation orientation, int ro
 		switch (section)
 		{
 			case StackColumns::ENTRY:
-				//: Warning: short space limit. Abbreviate if needed.
 				return tr("ENTRY");
 			case StackColumns::ENTRY_LABEL:
-				//: Warning: short space limit. Abbreviate if needed.
 				return tr("LABEL");
 			case StackColumns::PC:
-				//: Warning: short space limit. Abbreviate if needed. PC = Program Counter (location where the CPU is executing).
 				return tr("PC");
 			case StackColumns::PC_OPCODE:
-				//: Warning: short space limit. Abbreviate if needed.
 				return tr("INSTRUCTION");
 			case StackColumns::SP:
-				//: Warning: short space limit. Abbreviate if needed.
 				return tr("STACK POINTER");
 			case StackColumns::SIZE:
-				//: Warning: short space limit. Abbreviate if needed.
 				return tr("SIZE");
 			default:
 				return QVariant();
@@ -104,8 +98,6 @@ QVariant StackModel::headerData(int section, Qt::Orientation orientation, int ro
 
 void StackModel::refreshData()
 {
-	// Hopefully in the near future we can get a stack frame for
-	// each thread
 	beginResetModel();
 	for (const auto& thread : m_cpu.GetThreadList())
 	{

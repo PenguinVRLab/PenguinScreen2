@@ -261,10 +261,8 @@ void StateWrapper::VectorMemoryStream::Expand(u32 new_size)
 	if (m_buf.size() >= new_size)
 		return;
 
-	// don't grow more than 4K at a time
 	const u32 grow_size = std::min((m_buf.size() > 4096u) ? 4096u : static_cast<u32>(m_buf.size()), static_cast<u32>(m_buf.size() - new_size));
 	m_buf.reserve(m_buf.size() + grow_size);
 
-	// should take care of growth, right?
 	m_buf.resize(new_size);
 }

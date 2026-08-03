@@ -79,7 +79,7 @@ public:
 
 	__forceinline GSVector8i(__m128i m0, __m128i m1)
 	{
-#if 0 // _MSC_VER >= 1700
+#if 0
 
 		this->m = _mm256_permute2x128_si256(_mm256_castsi128_si256(m0), _mm256_castsi128_si256(m1), 0);
 
@@ -107,7 +107,7 @@ public:
 
 	__forceinline void operator=(int i)
 	{
-		m = _mm256_broadcastd_epi32(_mm_cvtsi32_si128(i)); // m = _mm256_set1_epi32(i);
+		m = _mm256_broadcastd_epi32(_mm_cvtsi32_si128(i));
 	}
 
 	__forceinline void operator=(__m128i m)
@@ -124,8 +124,6 @@ public:
 	{
 		return m;
 	}
-
-	//
 
 	__forceinline GSVector8i sat_i8(const GSVector8i& a, const GSVector8i& b) const
 	{
@@ -274,8 +272,6 @@ public:
 		return GSVector8i(_mm256_or_si256(_mm256_andnot_si256(mask, m), _mm256_and_si256(mask, a)));
 	}
 
-	/// Equivalent to blend with the given mask broadcasted across the vector
-	/// May be faster than blend in some cases
 	template <u32 mask>
 	__forceinline GSVector8i smartblend(const GSVector8i& a) const
 	{
@@ -429,8 +425,6 @@ public:
 		return GSVector8i(_mm256_unpackhi_epi64(m, _mm256_setzero_si256()));
 	}
 
-	// cross lane! from 128-bit to full 256-bit range
-
 	static __forceinline GSVector8i i8to16(const GSVector4i& v)
 	{
 		return GSVector8i(_mm256_cvtepi8_epi16(v.m));
@@ -490,8 +484,6 @@ public:
 	{
 		return GSVector8i(_mm256_cvtepu32_epi64(v.m));
 	}
-
-	//
 
 	static __forceinline GSVector8i i8to16(const void* p)
 	{
@@ -553,8 +545,6 @@ public:
 		return GSVector8i(_mm256_cvtepu32_epi64(_mm_load_si128((__m128i*)p)));
 	}
 
-	//
-
 	template <int i>
 	__forceinline GSVector8i srl() const
 	{
@@ -571,7 +561,6 @@ public:
 	__forceinline GSVector8i sll() const
 	{
 		return GSVector8i(_mm256_slli_si256(m, i));
-		//return GSVector8i(_mm256_slli_si128(m, i));
 	}
 
 	template <int i>
@@ -765,7 +754,6 @@ public:
 	template <int shift>
 	__forceinline GSVector8i lerp16(const GSVector8i& a, const GSVector8i& f) const
 	{
-		// (a - this) * f << shift + this
 
 		return add16(a.sub16(*this).modulate16<shift>(f));
 	}
@@ -773,7 +761,6 @@ public:
 	template <int shift>
 	__forceinline static GSVector8i lerp16(const GSVector8i& a, const GSVector8i& b, const GSVector8i& c)
 	{
-		// (a - b) * c << shift
 
 		return a.sub16(b).modulate16<shift>(c);
 	}
@@ -781,14 +768,12 @@ public:
 	template <int shift>
 	__forceinline static GSVector8i lerp16(const GSVector8i& a, const GSVector8i& b, const GSVector8i& c, const GSVector8i& d)
 	{
-		// (a - b) * c << shift + d
 
 		return d.add16(a.sub16(b).modulate16<shift>(c));
 	}
 
 	__forceinline GSVector8i lerp16_4(const GSVector8i& a, const GSVector8i& f) const
 	{
-		// (a - this) * f >> 4 + this (a, this: 8-bit, f: 4-bit)
 
 		return add16(a.sub16(*this).mul16l(f).sra16<4>());
 	}
@@ -796,7 +781,6 @@ public:
 	template <int shift>
 	__forceinline GSVector8i modulate16(const GSVector8i& f) const
 	{
-		// a * f << shift
 
 		return sll16<shift + 1>().mul16hs(f);
 	}
@@ -888,8 +872,6 @@ public:
 		return _mm256_testz_si256(m, m) != 0;
 	}
 
-	// TODO: extract/insert
-
 	template <int i>
 	__forceinline int extract8() const
 	{
@@ -941,8 +923,6 @@ public:
 
 		return GSVector8i(_mm256_inserti128_si256(this->m, m, i));
 	}
-
-	// TODO: gather
 
 	template <class T>
 	__forceinline GSVector8i gather32_32(const T* ptr) const
@@ -1019,8 +999,6 @@ public:
 		dst[0] = gather32_32<>(ptr);
 	}
 
-	//
-
 	__forceinline static GSVector8i loadnt(const void* p)
 	{
 		return GSVector8i(_mm256_stream_load_si256((__m256i*)p));
@@ -1035,10 +1013,6 @@ public:
 	{
 		return GSVector8i(_mm256_inserti128_si256(_mm256_setzero_si256(), _mm_load_si128((__m128i*)p), 1));
 
-		/* TODO: this may be faster
-		__m256i m = _mm256_castsi128_si256(_mm_load_si128((__m128i*)p));
-		return GSVector8i(_mm256_permute2x128_si256(m, m, 0x08));
-		*/
 	}
 
 	__forceinline static GSVector8i loadh(const void* p, const GSVector8i& v)
@@ -1050,11 +1024,6 @@ public:
 	{
 		return loadh(ph, loadl(pl));
 
-		/* TODO: this may be faster
-		__m256 m0 = _mm256_castsi128_si256(_mm_load_si128((__m128*)pl));
-		__m256 m1 = _mm256_castsi128_si256(_mm_load_si128((__m128*)ph));
-		return GSVector8i(_mm256_permute2x128_si256(m0, m1, 0x20));
-		*/
 	}
 
 	__forceinline static GSVector8i load(const void* pll, const void* plh, const void* phl, const void* phh)
@@ -1064,7 +1033,6 @@ public:
 
 		return cast(l).ac(cast(h));
 
-		// return GSVector8i(l).insert<1>(h);
 	}
 
 	template <bool aligned>
@@ -1150,8 +1118,6 @@ public:
 		memcpy(d, s, size);
 	}
 
-	// TODO: swizzling
-
 	__forceinline static void mix4(GSVector8i& a, GSVector8i& b)
 	{
 		GSVector8i mask(_mm256_set1_epi32(0x0f0f0f0f));
@@ -1205,7 +1171,7 @@ public:
 		GSVector8i c = a;
 		GSVector8i d = b;
 
-		a = c.insert<1>(d.extract<0>()); // Should become a single vinserti128, faster on Zen+
+		a = c.insert<1>(d.extract<0>());
 		b = c.bd(d);
 	}
 
@@ -1423,11 +1389,6 @@ public:
 
 	// clang-format off
 
-	// x = v[31:0] / v[159:128]
-	// y = v[63:32] / v[191:160]
-	// z = v[95:64] / v[223:192]
-	// w = v[127:96] / v[255:224]
-
 	#define VECTOR8i_SHUFFLE_4(xs, xn, ys, yn, zs, zn, ws, wn) \
 		__forceinline GSVector8i xs##ys##zs##ws() const { return GSVector8i(_mm256_shuffle_epi32(m, _MM_SHUFFLE(wn, zn, yn, xn))); } \
 		__forceinline GSVector8i xs##ys##zs##ws##l() const { return GSVector8i(_mm256_shufflelo_epi16(m, _MM_SHUFFLE(wn, zn, yn, xn))); } \
@@ -1457,12 +1418,6 @@ public:
 	VECTOR8i_SHUFFLE_1(z, 2)
 	VECTOR8i_SHUFFLE_1(w, 3)
 
-	// a = v0[127:0]
-	// b = v0[255:128]
-	// c = v1[127:0]
-	// d = v1[255:128]
-	// _ = 0
-
 	#define VECTOR8i_PERMUTE128_2(as, an, bs, bn) \
 		__forceinline GSVector8i as##bs() const { return GSVector8i(_mm256_permute2x128_si256(m, m, an | (bn << 4))); } \
 		__forceinline GSVector8i as##bs(const GSVector8i& v) const { return GSVector8i(_mm256_permute2x128_si256(m, v.m, an | (bn << 4))); } \
@@ -1479,11 +1434,6 @@ public:
 	VECTOR8i_PERMUTE128_1(c, 2)
 	VECTOR8i_PERMUTE128_1(d, 3)
 	VECTOR8i_PERMUTE128_1(_, 8)
-
-	// a = v[63:0]
-	// b = v[127:64]
-	// c = v[191:128]
-	// d = v[255:192]
 
 	#define VECTOR8i_PERMUTE64_4(as, an, bs, bn, cs, cn, ds, dn) \
 		__forceinline GSVector8i as##bs##cs##ds() const { return GSVector8i(_mm256_permute4x64_epi64(m, _MM_SHUFFLE(dn, cn, bn, an))); } \
@@ -1560,12 +1510,8 @@ public:
 
 	__forceinline static GSVector8i broadcast128(const GSVector4i& v)
 	{
-		// this one only has m128 source op, it will be saved to a temp on stack if the compiler is not smart enough and use the address of v directly (<= vs2012u3rc2)
 
-		return GSVector8i(_mm256_broadcastsi128_si256(v)); // fastest
-		// return GSVector8i(v); // almost as fast as broadcast
-		// return cast(v).insert<1>(v); // slow
-		// return cast(v).aa(); // slowest
+		return GSVector8i(_mm256_broadcastsi128_si256(v));
 	}
 
 	__forceinline static GSVector8i broadcast8(const void* p)

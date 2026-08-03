@@ -40,7 +40,6 @@ static void parseDisasm(SymbolGuardian& guardian, const char* disasm, char* opco
 			disasm++;
 	}
 
-	// copy opcode
 	while (*disasm != 0 && *disasm != '\t')
 	{
 		*opcode++ = *disasm++;
@@ -58,7 +57,6 @@ static void parseDisasm(SymbolGuardian& guardian, const char* disasm, char* opco
 	const char* jumpRegister = strstr(disasm,"->");
 	while (*disasm != 0)
 	{
-		// parse symbol
 		if (disasm == jumpAddress)
 		{
 			u32 branchTarget;
@@ -98,15 +96,12 @@ std::map<u32,DisassemblyEntry*>::iterator findDisassemblyEntry(std::map<u32,Disa
 	if (entries.empty())
 		return entries.end();
 
-	// find first elem that's >= address
 	auto it = entries.lower_bound(address);
 	if (it != entries.end())
 	{
-		// it may be an exact match
 		if (isInInterval(it->second->getLineAddress(0),it->second->getTotalSize(),address))
 			return it;
 
-		// otherwise it may point to the next
 		if (it != entries.begin())
 		{
 			it--;
@@ -115,14 +110,12 @@ std::map<u32,DisassemblyEntry*>::iterator findDisassemblyEntry(std::map<u32,Disa
 		}
 	}
 
-	// check last entry manually
 	auto rit = entries.rbegin();
 	if (isInInterval(rit->second->getLineAddress(0),rit->second->getTotalSize(),address))
 	{
 		return (++rit).base();
 	}
 
-	// no match otherwise
 	return entries.end();
 }
 
@@ -331,7 +324,7 @@ u32 DisassemblyManager::getNthNextAddress(u32 address, int n)
 			it = findDisassemblyEntry(entries,address,false);
 		}
 
-		if ((address + 0x400) < address) // Check for unsigned overflow, we are analysing too high!
+		if ((address + 0x400) < address)
 			break;
 
 		analyze(address);
@@ -426,7 +419,6 @@ void DisassemblyFunction::getBranchLines(u32 start, u32 size, std::vector<Branch
 		u32 first = line.first;
 		u32 second = line.second;
 
-		// skip branches that are entirely before or entirely after the window
 		if ((first < start && second < start) ||
 			(first > end && second > end))
 			continue;
@@ -498,7 +490,6 @@ void DisassemblyFunction::generateBranchLines()
 
 		if (lane == -1)
 		{
-			// error
 			continue;
 		}
 
@@ -522,7 +513,6 @@ void DisassemblyFunction::load()
 {
 	generateBranchLines();
 
-	// gather all branch targets
 	std::set<u32> branchTargets;
 	for (size_t i = 0; i < lines.size(); i++)
 	{
@@ -561,7 +551,6 @@ void DisassemblyFunction::load()
 			continue;
 		}
 
-		// force align
 		if (funcPos % 4)
 		{
 			u32 nextPos = (funcPos+3) & ~3;
@@ -576,36 +565,15 @@ void DisassemblyFunction::load()
 		}
 
 		MIPSAnalyst::MipsOpcodeInfo opInfo = MIPSAnalyst::GetOpcodeInfo(cpu,funcPos);
-		//u32 opAddress = funcPos;
 		funcPos += 4;
 
-		// skip branches and their delay slots
 		if (opInfo.isBranch)
 		{
-			if (funcPos < funcEnd) funcPos += 4; // only include delay slots within the function bounds
+			if (funcPos < funcEnd) funcPos += 4;
 			continue;
 		}
 
-/*
-	The QT debugger doesn't follow the same logic as the disassembler
-	It _should_ follow the path of the disassembler, but instead it is naively reading the
-	disassembler output for every single instruction.
-	This causes issues disassembling:
-		0x1000 lui $t0, 0x1234
-		0x1004 ori $t0, $t0, 0x5678
-		0x1008 nop
-	Into:
-		0x1000 li $t0, 0x12345678
-		0x1004 li $t0, 0x12346789
-		0x1008 nop
-	Where it should be:
-		0x1000 li $t0, 0x12345678
-		0x1008 nop
-
-	As a quick remedy, I'm disabling the macro generation.
-*/
 #if 0
-		// lui
 		if (MIPS_GET_OP(opInfo.encodedOpcode) == 0x0F && funcPos < funcEnd && funcPos != nextData.address.value)
 		{
 			u32 next = cpu->read32(funcPos);
@@ -617,60 +585,57 @@ void DisassemblyFunction::load()
 			int nextRs = MIPS_GET_RS(next);
 			int nextRt = MIPS_GET_RT(next);
 
-			// both rs and rt of the second op have to match rt of the first,
-			// otherwise there may be hidden consequences if the macro is displayed.
-			// also, don't create a macro if something branches into the middle of it
 			if (nextRs == rt && nextRt == rt && branchTargets.find(funcPos) == branchTargets.end())
 			{
 				DisassemblyMacro* macro = NULL;
 				switch (MIPS_GET_OP(next))
 				{
-				case 0x09:	// addiu
+				case 0x09:
 					macro = new DisassemblyMacro(cpu,opAddress);
 					macro->setMacroLi(immediate,rt);
 					funcPos += 4;
 					break;
-				case 0x0D:	// ori
+				case 0x0D:
 					macro = new DisassemblyMacro(cpu,opAddress);
 					macro->setMacroLi(immediateOr,rt);
 					funcPos += 4;
 					break;
-				case 0x20:	// lb
+				case 0x20:
 					macro = new DisassemblyMacro(cpu,opAddress);
 					macro->setMacroMemory("lb",immediate,rt,1);
 					funcPos += 4;
 					break;
-				case 0x21:	// lh
+				case 0x21:
 					macro = new DisassemblyMacro(cpu,opAddress);
 					macro->setMacroMemory("lh",immediate,rt,2);
 					funcPos += 4;
 					break;
-				case 0x23:	// lw
+				case 0x23:
 					macro = new DisassemblyMacro(cpu,opAddress);
 					macro->setMacroMemory("lw",immediate,rt,4);
 					funcPos += 4;
 					break;
-				case 0x24:	// lbu
+				case 0x24:
 					macro = new DisassemblyMacro(cpu,opAddress);
 					macro->setMacroMemory("lbu",immediate,rt,1);
 					funcPos += 4;
 					break;
-				case 0x25:	// lhu
+				case 0x25:
 					macro = new DisassemblyMacro(cpu,opAddress);
 					macro->setMacroMemory("lhu",immediate,rt,2);
 					funcPos += 4;
 					break;
-				case 0x28:	// sb
+				case 0x28:
 					macro = new DisassemblyMacro(cpu,opAddress);
 					macro->setMacroMemory("sb",immediate,rt,1);
 					funcPos += 4;
 					break;
-				case 0x29:	// sh
+				case 0x29:
 					macro = new DisassemblyMacro(cpu,opAddress);
 					macro->setMacroMemory("sh",immediate,rt,2);
 					funcPos += 4;
 					break;
-				case 0x2B:	// sw
+				case 0x2B:
 					macro = new DisassemblyMacro(cpu,opAddress);
 					macro->setMacroMemory("sw",immediate,rt,4);
 					funcPos += 4;
@@ -694,7 +659,6 @@ void DisassemblyFunction::load()
 			}
 		}
 #endif
-		// just a normal opcode
 	}
 
 	if (opcodeSequenceStart != funcPos)
@@ -1016,7 +980,6 @@ void DisassemblyData::createLines()
 				}
 				break;
 			default:
-				// Avoid a call to strlen with random data
 				buffer[0] = 0;
 				break;
 			}

@@ -59,8 +59,6 @@ const vixl::aarch64::VRegister& armQRegister(int n)
 }
 
 
-//#define INCLUDE_DISASSEMBLER
-
 #ifdef INCLUDE_DISASSEMBLER
 #include "vixl/aarch64/disasm-aarch64.h"
 #endif
@@ -86,7 +84,6 @@ void armSetAsmPtr(void* ptr, size_t capacity, ArmConstantPool* pool)
 	armConstantPool = pool;
 }
 
-// Align to 16 bytes, apparently ARM likes that.
 void armAlignAsmPtr()
 {
 	static constexpr uintptr_t ALIGNMENT = 16;
@@ -201,7 +198,6 @@ void armEmitCbnz(const vixl::aarch64::Register& reg, const void* ptr)
 {
 	const s64 jump_distance =
 		static_cast<s64>(reinterpret_cast<intptr_t>(ptr) - reinterpret_cast<intptr_t>(armGetCurrentCodePointer()));
-	//pxAssert(Common::IsAligned(jump_distance, 4));
 	if (a64::Instruction::IsValidImmPCOffset(a64::CompareBranchType, jump_distance >> 2))
 	{
 		a64::SingleEmissionCheckScope guard(armAsm);
@@ -224,7 +220,6 @@ void armEmitCondBranch(a64::Condition cond, const void* ptr)
 {
 	const s64 jump_distance =
 		static_cast<s64>(reinterpret_cast<intptr_t>(ptr) - reinterpret_cast<intptr_t>(armGetCurrentCodePointer()));
-	//pxAssert(Common::IsAligned(jump_distance, 4));
 
 	if (a64::Instruction::IsValidImmPCOffset(a64::CondBranchType, jump_distance >> 2))
 	{
@@ -246,7 +241,6 @@ void armEmitCondBranch(a64::Condition cond, const void* ptr)
 
 void armMoveAddressToReg(const vixl::aarch64::Register& reg, const void* addr)
 {
-	// psxAsm->Mov(reg, static_cast<u64>(reinterpret_cast<uintptr_t>(addr)));
 	pxAssert(reg.IsX());
 
 	const void* current_code_ptr_page = reinterpret_cast<const void*>(
@@ -291,7 +285,6 @@ void armStorePtr(const vixl::aarch64::CPURegister& reg, const void* addr)
 
 void armBeginStackFrame(bool save_fpr)
 {
-	// save x19 through x28, x29 could also be used
 	armAsm->Sub(a64::sp, a64::sp, save_fpr ? 192 : 144);
 	armAsm->Stp(a64::x19, a64::x20, a64::MemOperand(a64::sp, 32));
 	armAsm->Stp(a64::x21, a64::x22, a64::MemOperand(a64::sp, 48));
@@ -328,7 +321,6 @@ void armEndStackFrame(bool save_fpr)
 
 bool armIsCalleeSavedRegister(int reg)
 {
-	// same on both linux and windows
 	return (reg >= 19);
 }
 
@@ -338,7 +330,7 @@ vixl::aarch64::MemOperand armOffsetMemOperand(const vixl::aarch64::MemOperand& o
 	return vixl::aarch64::MemOperand(op.GetBaseRegister(), op.GetOffset() + offset, op.GetAddrMode());
 }
 
-void armGetMemOperandInRegister(const vixl::aarch64::Register& addr_reg, const vixl::aarch64::MemOperand& op, s64 extra_offset /*= 0*/)
+void armGetMemOperandInRegister(const vixl::aarch64::Register& addr_reg, const vixl::aarch64::MemOperand& op, s64 extra_offset )
 {
 	pxAssert(addr_reg.IsX());
 	pxAssert(op.GetBaseRegister().IsValid() && op.GetAddrMode() == vixl::aarch64::Offset && op.GetShift() == vixl::aarch64::NO_SHIFT);
@@ -358,7 +350,6 @@ void armEmitVTBL(const vixl::aarch64::VRegister& dst, const vixl::aarch64::VRegi
 	pxAssert(src1.GetCode() != RQSCRATCH.GetCode() && src2.GetCode() != RQSCRATCH2.GetCode());
 	pxAssert(tbl.GetCode() != RQSCRATCH.GetCode() && tbl.GetCode() != RQSCRATCH2.GetCode());
 
-	// must be consecutive
 	if (src2.GetCode() == (src1.GetCode() + 1))
 	{
 		armAsm->Tbl(dst.V16B(), src1.V16B(), src2.V16B(), tbl.V16B());
@@ -402,10 +393,8 @@ u8* ArmConstantPool::GetJumpTrampoline(const void* target)
 	if (it != m_jump_targets.end())
 		return m_base_ptr + it->second;
 
-	// align to 16 bytes?
 	const u32 offset = Common::AlignUpPow2(m_used, 16);
 
-	// 4 movs plus a jump
 	if ((m_capacity - offset) < 20)
 	{
 		Console.Error("Ran out of space in constant pool");

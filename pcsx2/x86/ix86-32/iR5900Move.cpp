@@ -10,10 +10,6 @@ using namespace x86Emitter;
 namespace R5900::Dynarec::OpcodeImpl
 {
 
-/*********************************************************
-* Shift arithmetic with constant shift                   *
-* Format:  OP rd, rt, sa                                 *
-*********************************************************/
 #ifndef MOVE_RECOMPILE
 
 namespace Interp = R5900::Interpreter::OpcodeImpl;
@@ -34,18 +30,11 @@ REC_FUNC_DEL(MOVN, _Rd_);
 
 #else
 
-/*********************************************************
-* Load higher 16 bits of the first word in GPR with imm  *
-* Format:  OP rt, immediate                              *
-*********************************************************/
-
-//// LUI
 void recLUI()
 {
 	if (!_Rt_)
 		return;
 
-	// need to flush the upper 64 bits for xmm
 	GPR_DEL_CONST(_Rt_);
 	_deleteGPRtoX86reg(_Rt_, DELETE_REG_FREE_NO_WRITEBACK);
 	_deleteGPRtoXMMreg(_Rt_, DELETE_REG_FLUSH_AND_FREE);
@@ -64,13 +53,11 @@ void recLUI()
 	EE::Profiler.EmitOp(eeOpcode::LUI);
 }
 
-////////////////////////////////////////////////////
 static void recMFHILO(bool hi, bool upper)
 {
 	if (!_Rd_)
 		return;
 
-	// kill any constants on rd, lower 64 bits get written regardless of upper
 	_eeOnWriteReg(_Rd_, 0);
 
 	const int reg = hi ? XMMGPR_HI : XMMGPR_LO;
@@ -96,7 +83,6 @@ static void recMFHILO(bool hi, bool upper)
 	}
 	else
 	{
-		// try rename {hi,lo} -> rd
 		const int gprreg = upper ? -1 : _checkX86reg(X86TYPE_GPR, reg, MODE_READ);
 		if (gprreg >= 0 && _eeTryRenameReg(_Rd_, reg, gprreg, -1, 0) >= 0)
 			return;
@@ -157,7 +143,7 @@ static void recMTHILO(bool hi, bool upper)
 		{
 			const int gprhilo = upper ? -1 : _allocIfUsedGPRtoX86(reg, MODE_WRITE);
 			if (gprhilo >= 0)
-				xMOVD(xRegister64(gprhilo), xRegisterSSE(xmms)); // actually movq
+				xMOVD(xRegister64(gprhilo), xRegisterSSE(xmms));
 			else
 				xMOVQ(ptr64[hi ? &cpuRegs.HI.UD[static_cast<u8>(upper)] : &cpuRegs.LO.UD[static_cast<u8>(upper)]], xRegisterSSE(xmms));
 		}
@@ -174,7 +160,6 @@ static void recMTHILO(bool hi, bool upper)
 			}
 			else if (GPR_IS_CONST1(_Rs_))
 			{
-				// force it into a register, since we need to load the constant anyway
 				gprs = _allocX86reg(X86TYPE_GPR, _Rs_, MODE_READ);
 				xPINSR.Q(xRegisterSSE(xmmhilo), xRegister64(gprs), static_cast<u8>(upper));
 			}
@@ -185,7 +170,6 @@ static void recMTHILO(bool hi, bool upper)
 		}
 		else
 		{
-			// try rename rs -> {hi,lo}
 			if (gprs >= 0 && !upper && _eeTryRenameReg(reg, _Rs_, gprs, -1, 0) >= 0)
 				return;
 
@@ -196,7 +180,6 @@ static void recMTHILO(bool hi, bool upper)
 			}
 			else
 			{
-				// force into a register, since we need to load it to write anyway
 				gprs = _allocX86reg(X86TYPE_GPR, _Rs_, MODE_READ);
 				xMOV(ptr64[hi ? &cpuRegs.HI.UD[static_cast<u8>(upper)] : &cpuRegs.LO.UD[static_cast<u8>(upper)]], xRegister64(gprs));
 			}
@@ -253,8 +236,6 @@ void recMTLO1()
 	EE::Profiler.EmitOp(eeOpcode::MTLO1);
 }
 
-//// MOVZ
-// if (rt == 0) then rd <- rs
 static void recMOVZtemp_const()
 {
 	g_cpuConstRegs[_Rd_].UD[0] = g_cpuConstRegs[_Rs_].UD[0];
@@ -262,7 +243,6 @@ static void recMOVZtemp_const()
 
 static void recMOVZtemp_consts(int info)
 {
-	// we need the constant anyway, so just force it into a register
 	const int regs = (info & PROCESS_EE_S) ? EEREC_S : _allocX86reg(X86TYPE_GPR, _Rs_, MODE_READ);
 	if (info & PROCESS_EE_T)
 		xTEST(xRegister64(EEREC_T), xRegister64(EEREC_T));
@@ -293,7 +273,6 @@ static void recMOVZtemp_(int info)
 		xCMOVE(xRegister64(EEREC_D), ptr64[&cpuRegs.GPR.r[_Rs_].UD[0]]);
 }
 
-// Specify READD here, because we might not write to it, and want to preserve the value.
 static EERECOMPILE_CODERC0(MOVZtemp, XMMINFO_READS | XMMINFO_READT | XMMINFO_READD | XMMINFO_WRITED | XMMINFO_NORENAME);
 
 void recMOVZ()
@@ -307,7 +286,6 @@ void recMOVZ()
 	recMOVZtemp();
 }
 
-//// MOVN
 static void recMOVNtemp_const()
 {
 	g_cpuConstRegs[_Rd_].UD[0] = g_cpuConstRegs[_Rs_].UD[0];
@@ -315,7 +293,6 @@ static void recMOVNtemp_const()
 
 static void recMOVNtemp_consts(int info)
 {
-	// we need the constant anyway, so just force it into a register
 	const int regs = (info & PROCESS_EE_S) ? EEREC_S : _allocX86reg(X86TYPE_GPR, _Rs_, MODE_READ);
 	if (info & PROCESS_EE_T)
 		xTEST(xRegister64(EEREC_T), xRegister64(EEREC_T));
@@ -361,4 +338,4 @@ void recMOVN()
 
 #endif
 
-} // namespace R5900::Dynarec::OpcodeImpl
+}

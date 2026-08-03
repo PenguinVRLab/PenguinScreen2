@@ -26,7 +26,6 @@ std::thread rx_thread;
 std::mutex rx_mutex;
 
 volatile bool RxRunning = false;
-//rx thread
 void NetRxThread()
 {
 	NetPacket tmp;
@@ -35,7 +34,6 @@ void NetRxThread()
 		while (rx_fifo_can_rx() && nif->recv(&tmp))
 		{
 			std::lock_guard rx_lock(rx_mutex);
-			//Check if we can still rx
 			if (rx_fifo_can_rx())
 				rx_process(&tmp);
 			else
@@ -51,7 +49,6 @@ void tx_put(NetPacket* pkt)
 {
 	if (nif != nullptr)
 		nif->send(pkt);
-	//pkt must be copied if its not processed by here, since it can be allocated on the callers stack
 }
 
 void ad_reset()
@@ -121,12 +118,10 @@ void InitNet()
 
 void ReconfigureLiveNet(const Pcsx2Config& old_config)
 {
-	//Eth
 	if (EmuConfig.DEV9.EthEnable)
 	{
 		if (old_config.DEV9.EthEnable)
 		{
-			//Reload Net if adapter changed
 			if (EmuConfig.DEV9.EthDevice != old_config.DEV9.EthDevice ||
 				EmuConfig.DEV9.EthApi != old_config.DEV9.EthApi)
 			{
@@ -169,7 +164,6 @@ const MAC_Address NetAdapter::internalMAC{{{0x76, 0x6D, 0xF4, 0x63, 0x30, 0x31}}
 
 NetAdapter::NetAdapter()
 {
-	//Ensure eeprom matches our default
 	SetMACAddress(nullptr);
 }
 
@@ -185,10 +179,8 @@ bool NetAdapter::send(NetPacket* pkt)
 	return InternalServerSend(pkt);
 }
 
-//RxRunning must be set false before this
 NetAdapter::~NetAdapter()
 {
-	//unblock InternalServerRX thread
 	if (internalRxThreadRunning.load())
 	{
 		internalRxThreadRunning.store(false);
@@ -277,7 +269,6 @@ void NetAdapter::SetMACAddress(MAC_Address* mac)
 
 	*(MAC_Address*)&dev9.eeprom[0] = ps2MAC;
 
-	//The checksum seems to be all the values of the mac added up in 16bit chunks
 	dev9.eeprom[3] = (dev9.eeprom[0] + dev9.eeprom[1] + dev9.eeprom[2]) & 0xffff;
 }
 
@@ -285,13 +276,11 @@ bool NetAdapter::VerifyPkt(NetPacket* pkt, int read_size)
 {
 	if ((*(MAC_Address*)&pkt->buffer[0] != ps2MAC) && (*(MAC_Address*)&pkt->buffer[0] != broadcastMAC))
 	{
-		//ignore strange packets
 		return false;
 	}
 
 	if (*(MAC_Address*)&pkt->buffer[6] == ps2MAC)
 	{
-		//avoid pcap looping packets
 		return false;
 	}
 	pkt->size = read_size;
@@ -389,7 +378,6 @@ bool NetAdapter::InternalServerSend(NetPacket* pkt)
 
 			if (udppkt.destinationPort == 67)
 			{
-				//Send DHCP
 				if (dhcpOn)
 					return dhcpServer.Send(&udppkt);
 			}
@@ -406,7 +394,6 @@ bool NetAdapter::InternalServerSend(NetPacket* pkt)
 
 				if (udppkt.destinationPort == 53)
 				{
-					//Send DNS
 					return dnsServer.Send(&udppkt);
 				}
 			}
@@ -418,7 +405,6 @@ bool NetAdapter::InternalServerSend(NetPacket* pkt)
 
 void NetAdapter::InternalSignalReceived()
 {
-	//Signal internal server thread to read
 	if (internalRxThreadRunning.load())
 	{
 		{

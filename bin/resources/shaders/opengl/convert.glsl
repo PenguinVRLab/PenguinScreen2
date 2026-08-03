@@ -18,7 +18,7 @@ void vs_main()
 	PSin_p = vec4(POSITION, 0.5f, 1.0f);
 	PSin_t = TEXCOORD0;
 	PSin_c = COLOR;
-	gl_Position = vec4(POSITION, 0.5f, 1.0f); // NOTE I don't know if it is possible to merge POSITION_OUT and gl_Position
+	gl_Position = vec4(POSITION, 0.5f, 1.0f);
 }
 
 #endif
@@ -175,7 +175,6 @@ void ps_downsample_copy()
 #ifdef ps_convert_rgb5a1_16bits
 void ps_convert_rgb5a1_16bits()
 {
-	// Need to be careful with precision here, it can break games like Spider-Man 3 and Dogs Life
 	OUTPUT = rgb5a1_to_uint(sample_c());
 }
 #endif
@@ -183,7 +182,6 @@ void ps_convert_rgb5a1_16bits()
 #ifdef ps_convert_depth32_32bits
 void ps_convert_depth32_32bits()
 {
-	// Convert a GL_FLOAT32 depth texture into a 32 bits UINT texture
 	OUTPUT = depth_to_uint(sample_c());
 }
 #endif
@@ -191,7 +189,6 @@ void ps_convert_depth32_32bits()
 #ifdef ps_convert_depth32_rgba8
 void ps_convert_depth32_rgba8()
 {
-	// Convert a GL_FLOAT32 depth texture into a RGBA color texture
 	OUTPUT = depth32_to_rgba8(sample_c());
 }
 #endif
@@ -199,7 +196,6 @@ void ps_convert_depth32_rgba8()
 #ifdef ps_convert_depth16_rgb5a1
 void ps_convert_depth16_rgb5a1()
 {
-	// Convert a GL_FLOAT32 (only 16 lsb) depth into a RGB5A1 color texture
 	OUTPUT = depth16_to_rgb5a1(sample_c());
 }
 #endif
@@ -207,7 +203,6 @@ void ps_convert_depth16_rgb5a1()
 #ifdef ps_convert_depth32_depth24
 void ps_convert_depth32_depth24()
 {
-	// Truncates depth value to 24bits
 	OUTPUT = depth32_to_depth24(sample_c());
 }
 #endif
@@ -227,7 +222,6 @@ void ps_convert_depth32_depth24()
 #ifdef ps_convert_rgba8_depth32
 void ps_convert_rgba8_depth32()
 {
-	// Convert an RGBA texture into a float depth texture
 #if HAS_BILN
 	SAMPLE_RGBA_DEPTH_BILN(rgba8_to_depth32);
 #else
@@ -239,8 +233,6 @@ void ps_convert_rgba8_depth32()
 #ifdef ps_convert_rgba8_depth24
 void ps_convert_rgba8_depth24()
 {
-	// Same as above but without the alpha channel (24 bits Z)
-	// Convert an RGBA texture into a float depth texture
 #if HAS_BILN
 	SAMPLE_RGBA_DEPTH_BILN(rgba8_to_depth24);
 #else
@@ -252,8 +244,6 @@ void ps_convert_rgba8_depth24()
 #ifdef ps_convert_rgba8_depth16
 void ps_convert_rgba8_depth16()
 {
-	// Same as above but without the A/B channels (16 bits Z)
-	// Convert an RGBA texture into a float depth texture
 #if HAS_BILN
 	SAMPLE_RGBA_DEPTH_BILN(rgba8_to_depth16);
 #else
@@ -265,7 +255,6 @@ void ps_convert_rgba8_depth16()
 #ifdef ps_convert_rgb5a1_depth16
 void ps_convert_rgb5a1_depth16()
 {
-	// Convert an RGB5A1 (saved as RGBA8) color to a 16 bit Z
 #if HAS_BILN
 	SAMPLE_RGBA_DEPTH_BILN(rgb5a1_to_depth16);
 #else
@@ -282,30 +271,19 @@ uniform float ScaleFactor;
 
 void ps_convert_rgb5a1_8i()
 {
-	// Convert a RGB5A1 texture into a 8 bits packed texture
-	// Input column: 16x2 RGB5A1 pixels
-	// 0: 16 RGBA
-	// 1: 16 RGBA
-	// Output column: 16x4 Index pixels
-	// 0: 16 R5G2
-	// 1: 16 R5G2
-	// 2: 16 G2B5A1
-	// 3: 16 G2B5A1
 
 	uvec2 pos = uvec2(gl_FragCoord.xy);
 
-	// Collapse separate R G B A areas into their base pixel
 	uvec2 column = (pos & ~uvec2(0u, 3u)) / uvec2(1u, 2u);
 	uvec2 subcolumn = (pos & uvec2(0u, 1u));
 	column.x -= (column.x / 128u) * 64u;
 	column.y += (column.y / 32u) * 32u;
 
-	// Deal with swizzling differences
-	if ((PSM & 0x8u) != 0u) // PSMCT16S
+	if ((PSM & 0x8u) != 0u)
 	{
 		if ((pos.x & 32u) != 0u)
 		{
-			column.y += 32u; // 4 columns high times 4 to get bottom 4 blocks
+			column.y += 32u;
 			column.x &= ~32u;
 		}
 
@@ -320,13 +298,13 @@ void ps_convert_rgb5a1_8i()
 			column.y ^= 8u;
 		}
 
-		if ((PSM & 0x30u) != 0u) // PSMZ16S - Untested but hopefully ok if anything uses it.
+		if ((PSM & 0x30u) != 0u)
 		{
 			column.x ^= 32u;
 			column.y ^= 16u;
 		}
 	}
-	else // PSMCT16
+	else
 	{
 		if ((pos.y & 32u) != 0u)
 		{
@@ -337,7 +315,7 @@ void ps_convert_rgb5a1_8i()
 		if ((pos.x & 96u) != 0u)
 		{
 			uint multi = (pos.x & 96u) / 32u;
-			column.y += 16u * multi; // 4 columns high times 4 to get bottom 4 blocks
+			column.y += 16u * multi;
 			column.x -= (pos.x & 96u);
 		}
 
@@ -347,7 +325,7 @@ void ps_convert_rgb5a1_8i()
 			column.y ^= 8u;
 		}
 
-		if ((PSM & 0x30u) != 0u) // PSMZ16 - Untested but hopefully ok if anything uses it.
+		if ((PSM & 0x30u) != 0u)
 		{
 			column.x ^= 32u;
 			column.y ^= 32u;
@@ -355,17 +333,15 @@ void ps_convert_rgb5a1_8i()
 	}
 	uvec2 coord = column | subcolumn;
 
-	// Compensate for potentially differing page pitch.
 	uvec2 block_xy = coord / uvec2(64u, 64u);
 	uint block_num = (block_xy.y * (DBW / 128u)) + block_xy.x;
 	uvec2 block_offset = uvec2((block_num % (SBW / 64u)) * 64u, (block_num / (SBW / 64u)) * 64u);
 	coord = (coord % uvec2(64u, 64u)) + block_offset;
 
-	// Apply offset to cols 1 and 2
 	uint is_col23 = pos.y & 4u;
 	uint is_col13 = pos.y & 2u;
 	uint is_col12 = is_col23 ^ (is_col13 << 1);
-	coord.x ^= is_col12; // If cols 1 or 2, flip bit 3 of x
+	coord.x ^= is_col12;
 
 	if (floor(ScaleFactor) != ScaleFactor)
 		coord = uvec2(vec2(coord) * ScaleFactor);
@@ -401,33 +377,21 @@ uniform float ScaleFactor;
 
 void ps_convert_rgba_8i()
 {
-	// Convert a RGBA texture into a 8 bits packed texture
-	// Input column: 8x2 RGBA pixels
-	// 0: 8 RGBA
-	// 1: 8 RGBA
-	// Output column: 16x4 Index pixels
-	// 0: 8 R | 8 B
-	// 1: 8 R | 8 B
-	// 2: 8 G | 8 A
-	// 3: 8 G | 8 A
 	uvec2 pos = uvec2(gl_FragCoord.xy);
 
-	// Collapse separate R G B A areas into their base pixel
 	uvec2 block = (pos & ~uvec2(15u, 3u)) >> 1;
 	uvec2 subblock = pos & uvec2(7u, 1u);
 	uvec2 coord = block | subblock;
 
-	// Compensate for potentially differing page pitch.
 	uvec2 block_xy = coord / uvec2(64u, 32u);
 	uint block_num = (block_xy.y * (DBW / 128u)) + block_xy.x;
 	uvec2 block_offset = uvec2((block_num % (SBW / 64u)) * 64u, (block_num / (SBW / 64u)) * 32u);
 	coord = (coord % uvec2(64u, 32u)) + block_offset;
 
-	// Apply offset to cols 1 and 2
 	uint is_col23 = pos.y & 4u;
 	uint is_col13 = pos.y & 2u;
 	uint is_col12 = is_col23 ^ (is_col13 << 1);
-	coord.x ^= is_col12; // If cols 1 or 2, flip bit 3 of x
+	coord.x ^= is_col12;
 
 	if (floor(ScaleFactor) != ScaleFactor)
 		coord = uvec2(vec2(coord) * ScaleFactor);
@@ -449,42 +413,34 @@ void ps_filter_transparency()
 }
 #endif
 
-// Used for DATE (stencil)
-// DATM == 1
 #ifdef ps_datm1
 void ps_datm1()
 {
-	if(sample_c().a < (127.5f / 255.0f)) // >= 0x80 pass
+	if(sample_c().a < (127.5f / 255.0f))
 		discard;
 }
 #endif
 
-// Used for DATE (stencil)
-// DATM == 0
 #ifdef ps_datm0
 void ps_datm0()
 {
-	if((127.5f / 255.0f) < sample_c().a) // < 0x80 pass (== 0x80 should not pass)
+	if((127.5f / 255.0f) < sample_c().a)
 		discard;
 }
 #endif
 
-// Used for DATE (stencil)
-// DATM == 1
 #ifdef ps_datm1_rta_correction
 void ps_datm1_rta_correction()
 {
-	if(sample_c().a < (254.5f / 255.0f)) // >= 0x80 pass
+	if(sample_c().a < (254.5f / 255.0f))
 		discard;
 }
 #endif
 
-// Used for DATE (stencil)
-// DATM == 0
 #ifdef ps_datm0_rta_correction
 void ps_datm0_rta_correction()
 {
-	if((254.5f / 255.0f) < sample_c().a) // < 0x80 pass (== 0x80 should not pass)
+	if((254.5f / 255.0f) < sample_c().a)
 		discard;
 }
 #endif
@@ -527,7 +483,6 @@ uniform float scale;
 
 void ps_convert_clut_4()
 {
-	// CLUT4 is easy, just two rows of 8x8.
 	uint index = uint(gl_FragCoord.x) + offset.z;
 	uvec2 pos = uvec2(index % 8u, index / 8u);
 
@@ -544,8 +499,6 @@ void ps_convert_clut_8()
 {
 	uint index = min(uint(gl_FragCoord.x) + offset.z, 255u);
 
-	// CLUT is arranged into 8 groups of 16x2, with the top-right and bottom-left quadrants swapped.
-	// This can probably be done better..
 	uint subgroup = (index / 8u) % 4u;
 	uvec2 pos;
 	pos.x = (index % 8u) + ((subgroup >= 2u) ? 8u : 0u);
@@ -564,7 +517,7 @@ void ps_yuv()
 	vec4 i = sample_c();
 	vec4 o = vec4(0.0f);
 
-	mat3 rgb2yuv; // Value from GS manual
+	mat3 rgb2yuv;
 	rgb2yuv[0] = vec3(0.587, -0.311, -0.419);
 	rgb2yuv[1] = vec3(0.114, 0.500, -0.081);
 	rgb2yuv[2] = vec3(0.299, -0.169, 0.500);
@@ -618,19 +571,19 @@ void main()
 	o_col0 = vec4(0x7FFFFFFF);
 
 	#ifdef ps_primid_image_init_0
-		if((127.5f / 255.0f) < sample_c().a) // < 0x80 pass (== 0x80 should not pass)
+		if((127.5f / 255.0f) < sample_c().a)
 			o_col0 = vec4(-1);
 	#endif
 	#ifdef ps_primid_image_init_1
-		if(sample_c().a < (127.5f / 255.0f)) // >= 0x80 pass
+		if(sample_c().a < (127.5f / 255.0f))
 			o_col0 = vec4(-1);
 	#endif
 	#ifdef ps_primid_image_init_2
-		if((254.5f / 255.0f) < sample_c().a) // < 0x80 pass (== 0x80 should not pass)
+		if((254.5f / 255.0f) < sample_c().a)
 			o_col0 = vec4(-1);
 	#endif
 	#ifdef ps_primid_image_init_3
-		if(sample_c().a < (254.5f / 255.0f)) // >= 0x80 pass
+		if(sample_c().a < (254.5f / 255.0f))
 			o_col0 = vec4(-1);
 	#endif
 }

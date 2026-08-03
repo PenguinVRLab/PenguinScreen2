@@ -17,12 +17,9 @@
 #include "CDVD/Ps1CD.h"
 #include "CDVD/CDVD.h"
 
-#include "IopDma.h" // for iopIntcIrq
+#include "IopDma.h"
 
 using namespace R5900;
-
-// Shift the middle 8 bits (bits 4-12) into the lower 8 bits.
-// This helps the compiler optimize the switch statement into a lookup table. :)
 
 #define HELPSWITCH(m) (((m)>>4) & 0xff)
 #define mcase(src) case HELPSWITCH(src)
@@ -37,13 +34,8 @@ void _hwWrite32( u32 mem, u32 value )
 {
 	pxAssume( (mem & 0x03) == 0 );
 
-	// Notes:
-	// All unknown registers on the EE are "reserved" as discarded writes and indeterminate
-	// reads.  Bus error is only generated for registers outside the first 16k of mapped
-	// register space (which is handled by the VTLB mapping, so no need for checks here).
 #if PSX_EXTRALOGS
 	if ((mem & 0x1000ff00) == 0x1000f300) DevCon.Warning("32bit Write to SIF Register %x value %x", mem, value);
-	//if ((mem & 0x1000ff00) == 0x1000f200) DevCon.Warning("Write to SIF Register %x value %x", mem, value);
 #endif
 
 	switch (page)
@@ -60,11 +52,6 @@ void _hwWrite32( u32 mem, u32 value )
 		case 0x06:
 		case 0x07:
 		{
-			// [Ps2Confirm] Direct FIFO read/write behavior.  We need to create a test that writes
-			// data to one of the FIFOs and determine the result.  I'm not quite sure offhand a good
-			// way to do that --air
-			// Current assumption is that 32-bit and 64-bit writes likely do 128-bit zero-filled
-			// writes (upper 96 bits are 0, lower 32 bits are effective).
 
 			u128 zerofill = u128::From32(0);
 			zerofill._u32[(mem >> 2) & 0x03] = value;
@@ -89,12 +76,10 @@ void _hwWrite32( u32 mem, u32 value )
 			{
 				case (GIF_CTRL):
 				{
-					// Not exactly sure what RST needs to do
 					gifRegs.ctrl.write(value & 9);
 					if (gifRegs.ctrl.RST) {
 						GUNIT_LOG("GIF CTRL - Reset");
-						gifUnit.Reset(true); // Should it reset gsSIGNAL?
-						//gifUnit.ResetRegs();
+						gifUnit.Reset(true);
 					}
 					gifRegs.stat.PSE = gifRegs.ctrl.PSE;
 					return;
@@ -103,7 +88,6 @@ void _hwWrite32( u32 mem, u32 value )
 				case (GIF_MODE):
 				{
 					gifRegs.mode.write(value);
-					//Need to kickstart the GIF if the M3R mask comes off
 					if (gifRegs.stat.M3R == 1 && gifRegs.mode.M3R == 0 && (gifch.chcr.STR || gif_fifo.fifoSize))
 					{
 						DevCon.Warning("GIF Mode cancelling P3 Disable");
@@ -134,7 +118,6 @@ void _hwWrite32( u32 mem, u32 value )
 			{
 				mcase(INTC_STAT):
 					psHu32(INTC_STAT) &= ~value;
-					//cpuTestINTCInts();
 				return;
 
 				mcase(INTC_MASK):
@@ -145,9 +128,6 @@ void _hwWrite32( u32 mem, u32 value )
 				mcase(SIO_TXFIFO):
 				{
 					u8* woot = (u8*)&value;
-					// [Ps2Confirm] What happens when we write 32 bit values to SIO_TXFIFO?
-					// If it works like the IOP, then all 32 bits are written to the FIFO in
-					// order.  PCSX2 up to this point simply ignored non-8bit writes to this port.
 					_hwWrite8<0x0f>(SIO_TXFIFO, woot[0]);
 					_hwWrite8<0x0f>(SIO_TXFIFO, woot[1]);
 					_hwWrite8<0x0f>(SIO_TXFIFO, woot[2]);
@@ -156,8 +136,6 @@ void _hwWrite32( u32 mem, u32 value )
 				return;
 
 				mcase(SBUS_F200):
-					// Performs a standard psHu32 assignment (which is the default action anyway).
-					//psHu32(mem) = value;
 				break;
 
 				mcase(SBUS_F220):
@@ -176,7 +154,6 @@ void _hwWrite32( u32 mem, u32 value )
 					if (value & (1 << 19))
 					{
 						u64 cycle = psxRegs.cycle;
-						//pgifInit();
 						psxReset();
 						PSXCLK =  33868800;
 						SPU2::Reset(true);
@@ -198,47 +175,22 @@ void _hwWrite32( u32 mem, u32 value )
 					psHu32(mem) = value;
 				return;
 
-				// TODO: psx handling is done in the default case. Keep the code until we decide if we decide which interface to use (sif2/Pgif dma)
 #if 0
 				mcase(SBUS_F300) :
 					psxHu32(0x1f801814) = value;
-				/*
-				if (sif2.fifo.size == 0) psxHu32(0x1f801814) |= 0x4000000;
-				switch ((psxHu32(HW_PS1_GPU_STATUS) >> 29) & 0x3)
-					{
-					case 0x0:
-						//DevCon.Warning("Set DMA Mode OFF");
-						psxHu32(HW_PS1_GPU_STATUS) &= ~0x2000000;
-						break;
-					case 0x1:
-						//DevCon.Warning("Set DMA Mode FIFO");
-						psxHu32(HW_PS1_GPU_STATUS) |= 0x2000000;
-						break;
-					case 0x2:
-						//DevCon.Warning("Set DMA Mode CPU->GPU");
-						psxHu32(HW_PS1_GPU_STATUS) = (psxHu32(HW_PS1_GPU_STATUS) & ~0x2000000) | ((psxHu32(HW_PS1_GPU_STATUS) & 0x10000000) >> 3);
-						break;
-					case 0x3:
-						//DevCon.Warning("Set DMA Mode GPUREAD->CPU");
-						psxHu32(HW_PS1_GPU_STATUS) = (psxHu32(HW_PS1_GPU_STATUS) & ~0x2000000) | ((psxHu32(HW_PS1_GPU_STATUS) & 0x8000000) >> 2);
-						break;
-					}*/
-					//psHu32(mem) = 0;
 				return;
 				mcase(SBUS_F380) :
 					psHu32(mem) = value;
 				return;
 #endif
 
-				mcase(MCH_RICM)://MCH_RICM: x:4|SA:12|x:5|SDEV:1|SOP:4|SBC:1|SDEV:5
-					if ((((value >> 16) & 0xFFF) == 0x21) && (((value >> 6) & 0xF) == 1) && (((psHu32(0xf440) >> 7) & 1) == 0))//INIT & SRP=0
-						rdram_sdevid = 0;	// if SIO repeater is cleared, reset sdevid
-					psHu32(mem) = value & ~0x80000000;	//kill the busy bit
+				mcase(MCH_RICM):
+					if ((((value >> 16) & 0xFFF) == 0x21) && (((value >> 6) & 0xF) == 1) && (((psHu32(0xf440) >> 7) & 1) == 0))
+						rdram_sdevid = 0;
+					psHu32(mem) = value & ~0x80000000;
 				return;
 
 				mcase(MCH_DRD):
-					// Performs a standard psHu32 assignment (which is the default action anyway).
-					//psHu32(mem) = value;
 				break;
 
 				mcase(DMAC_ENABLEW):
@@ -246,18 +198,10 @@ void _hwWrite32( u32 mem, u32 value )
 				break;
 
 				default:
-					// TODO: psx add the real address in a sbus mcase
 					if (((mem & 0x1FFFFFFF) >= EEMemoryMap::SBUS_PS1_Start) && ((mem & 0x1FFFFFFF) < EEMemoryMap::SBUS_PS1_End)) {
-						// Tharr be console spam here! Need to figure out how to print what mode
-						//pgifConLog(L"Pgif DMA: set mode");.
 						PGIFw((mem & 0x1FFFFFFF), value);
 						return;
 					}
-
-				//mcase(SIO_ISR):
-				//mcase(0x1000f410):
-				// Mystery Regs!  No one knows!?
-				// (unhandled so fall through to default)
 
 			}
 		}
@@ -274,10 +218,6 @@ void hwWrite32( u32 mem, u32 value )
 	_hwWrite32<page>( mem, value );
 }
 
-// --------------------------------------------------------------------------------------
-//  hwWrite8 / hwWrite16 / hwWrite64 / hwWrite128
-// --------------------------------------------------------------------------------------
-
 template< uint page >
 void _hwWrite8(u32 mem, u8 value)
 {
@@ -288,7 +228,6 @@ void _hwWrite8(u32 mem, u8 value)
 	{
 		static bool last_char_was_cr = false;
 		
-		// skip the \n in \r\n
 		if(last_char_was_cr && (value == '\n'))
 		{
 			last_char_was_cr = false;
@@ -308,7 +247,6 @@ void _hwWrite8(u32 mem, u8 value)
 			ee_sio_tx_fifo.push_back(value);
 		}
 
-		// Check if the only thing in the buffer
 		if (ee_sio_tx_fifo.size() == 1024 || should_flush_cause_newline)
 		{
 			std::string output_string(ee_sio_tx_fifo.begin(), ee_sio_tx_fifo.end());
@@ -379,10 +317,6 @@ void _hwWrite64( u32 mem, u64 value )
 {
 	pxAssume( (mem & 0x07) == 0 );
 
-	// * Only the IPU has true 64 bit registers.
-	// * FIFOs have 128 bit registers that are probably zero-fill.
-	// * All other registers likely disregard the upper 32-bits and simply act as normal
-	//   32-bit writes.
 #if PSX_EXTRALOGS
 	if ((mem & 0x1000ff00) == 0x1000f300) DevCon.Warning("64bit Write to SIF Register %x wibble", mem);
 #endif
@@ -404,8 +338,6 @@ void _hwWrite64( u32 mem, u64 value )
 		return;
 
 		default:
-			// disregard everything except the lower 32 bits.
-			// ... and skip the 64 bit writeback since the 32-bit one will suffice.
 			hwWrite32<page>( mem, value );
 		return;
 	}
@@ -425,9 +357,6 @@ void TAKES_R128 _hwWrite128(u32 mem, r128 srcval)
 {
 	pxAssume( (mem & 0x0f) == 0 );
 
-	// FIFOs are the only "legal" 128 bit registers.  Handle them first.
-	// all other registers fall back on the 64-bit handler (and from there
-	// most of them fall back to the 32-bit handler).
 #if PSX_EXTRALOGS
 	if ((mem & 0x1000ff00) == 0x1000f300) DevCon.Warning("128bit Write to SIF Register %x wibble", mem);
 #endif
@@ -463,17 +392,12 @@ void TAKES_R128 _hwWrite128(u32 mem, r128 srcval)
 			}
 			else
 			{
-				// [Ps2Confirm] Most likely writes to IPUout will be silently discarded.  A test
-				// to confirm such would be easy -- just dump some data to FIFO_IPUout and see
-				// if the program causes BUSERR or something on the PS2.
 
-				//WriteFIFO_IPUout(srcval);
 			}
 
 		return;
 
 		case 0x0F:
-			// todo: psx mode: this is new
 			if (((mem & 0x1FFFFFFF) >= EEMemoryMap::SBUS_PS1_Start) && ((mem & 0x1FFFFFFF) < EEMemoryMap::SBUS_PS1_End)) {
 				alignas(16) const u128 usrcval = r128_to_u128(srcval);
 				PGIFwQword((mem & 0x1FFFFFFF), (void*)&usrcval);
@@ -483,10 +407,8 @@ void TAKES_R128 _hwWrite128(u32 mem, r128 srcval)
 		default: break;
 	}
 
-	// All upper bits of all non-FIFO 128-bit HW writes are almost certainly disregarded. --air
 	hwWrite64<page>(mem, r128_to_u64(srcval));
 
-	//CopyQWC(&psHu128(mem), srcval);
 }
 
 template< uint page >

@@ -77,6 +77,6 @@ namespace WaveDump
 		const s16 frame[] = {left, right};
 		m_CoreWav[coreidx][src]->WriteFrames(frame, 1);
 	}
-} // namespace WaveDump
+}
 
-#endif // PCSX2_DEVBUILD
+#endif

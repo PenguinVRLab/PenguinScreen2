@@ -15,7 +15,6 @@
 
 static ProcessorFeatures::VectorISA getCurrentISA()
 {
-	// For debugging
 	if (const char* over = getenv("OVERRIDE_VECTOR_ISA"))
 	{
 		if (strcasecmp(over, "avx512f") == 0)
@@ -71,7 +70,7 @@ static ProcessorFeatures getProcessorFeatures()
 		fprintf(stderr, "Processor BMI2 override: %s\n", features.hasBMI2 ? "Supported" : "Unsupported");
 	}
 	features.hasSlowGather = false;
-	if (const char* over = getenv("OVERRIDE_SLOW_GATHER")) // Easy override for comparing on vs off
+	if (const char* over = getenv("OVERRIDE_SLOW_GATHER"))
 	{
 		features.hasSlowGather = over[0] == 'Y' || over[0] == 'y' || over[0] == '1';
 		fprintf(stderr, "Processor gather override: %s\n", features.hasSlowGather ? "Slow" : "Fast");
@@ -80,14 +79,10 @@ static ProcessorFeatures getProcessorFeatures()
 	{
 		if (cpuinfo_get_cores_count() > 0 && cpuinfo_get_core(0)->vendor == cpuinfo_vendor_intel)
 		{
-			// Slow on Haswell
 			features.hasSlowGather = (cpuinfo_get_uarchs_count() == 0 || cpuinfo_get_uarch(0)->uarch == cpuinfo_uarch_haswell);
 		}
 		else
 		{
-			// Currently no Zen CPUs with fast VPGATHERDD
-			// Check https://uops.info/table.html as new CPUs come out for one that doesn't split it into like 40 µops
-			// Doing it manually is about 28 µops (8x xmm -> gpr, 6x extr, 8x load, 6x insr)
 			features.hasSlowGather = true;
 		}
 	}
@@ -96,8 +91,6 @@ static ProcessorFeatures getProcessorFeatures()
 }
 
 const ProcessorFeatures g_cpu = getProcessorFeatures();
-
-// Keep init order by defining these here
 
 #include "GSXXH.h"
 

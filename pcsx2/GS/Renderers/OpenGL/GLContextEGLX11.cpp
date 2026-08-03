@@ -45,8 +45,6 @@ EGLDisplay GLContextEGLX11::GetPlatformDisplay(Error* error)
 
 EGLSurface GLContextEGLX11::CreatePlatformSurface(EGLConfig config, void* win, Error* error)
 {
-	// This is hideous.. the EXT version requires a pointer to the window, whereas the base
-	// version requires the window itself, casted to void*...
 	EGLSurface surface = TryCreatePlatformSurface(config, &win, error);
 	if (surface == EGL_NO_SURFACE)
 		surface = CreateFallbackSurface(config, win, error);

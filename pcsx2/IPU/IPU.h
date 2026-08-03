@@ -13,9 +13,6 @@
 #define IPU_INT_TO( cycles )  if (!(cpuRegs.interrupt & (1<<4))) CPU_INT( DMAC_TO_IPU, cycles )
 #define IPU_INT_FROM( cycles )  CPU_INT( DMAC_FROM_IPU, cycles )
 #define IPU_INT_PROCESS( cycles ) if (!(cpuRegs.interrupt & (1 << IPU_PROCESS))) CPU_INT( IPU_PROCESS, cycles )
-//
-// Bitfield Structures
-//
 
 union tIPU_CMD
 {
@@ -34,29 +31,27 @@ union tIPU_CMD
 
 union tIPU_CTRL {
 	struct {
-		u32 IFC : 4;	// Input FIFO counter
-		u32 OFC : 4;	// Output FIFO counter
-		u32 CBP : 6;	// Coded block pattern
-		u32 ECD : 1;	// Error code pattern
-		u32 SCD : 1;	// Start code detected
-		u32 IDP : 2;	// Intra DC precision
+		u32 IFC : 4;
+		u32 OFC : 4;
+		u32 CBP : 6;
+		u32 ECD : 1;
+		u32 SCD : 1;
+		u32 IDP : 2;
 		u32 resv0 : 2;
-		u32 AS : 1;		// Alternate scan
-		u32 IVF : 1;	// Intra VLC format
-		u32 QST : 1;	// Q scale step
-		u32 MP1 : 1;	// MPEG1 bit stream
-		u32 PCT : 3;	// Picture Type
+		u32 AS : 1;
+		u32 IVF : 1;
+		u32 QST : 1;
+		u32 MP1 : 1;
+		u32 PCT : 3;
 		u32 resv1 : 3;
-		u32 RST : 1;	// Reset
-		u32 BUSY : 1;	// Busy
+		u32 RST : 1;
+		u32 BUSY : 1;
 	};
 	u32 _u32;
 
 	tIPU_CTRL() = default;
 	tIPU_CTRL( u32 val ) { _u32 = val; }
 
-    // CTRL = the first 16 bits of ctrl [0x8000ffff], + value for the next 16 bits,
-    // minus the reserved bits. (18-19; 27-29) [0x47f30000]
 	void write(u32 value) { _u32 = (value & 0x47f30000) | (_u32 & 0x8000ffff); }
 
 	bool test(u32 flags) const { return !!(_u32 & flags); }
@@ -68,9 +63,9 @@ union tIPU_CTRL {
 struct alignas(16) tIPU_BP {
 	alignas(16) u128 internal_qwc[2];
 
-	u32 BP;		// Bit stream point (0 to 128*2)
-	u32 IFC;	// Input FIFO counter (8QWC) (0 to 8)
-	u32 FP;		// internal FIFO (2QWC) fill status (0 to 2)
+	u32 BP;
+	u32 IFC;
+	u32 FP;
 
 	__fi void Align()
 	{
@@ -91,17 +86,12 @@ struct alignas(16) tIPU_BP {
 
 			if (FP == 2)
 			{
-				// when BP is over 128 it means we're reading data from the second quadword.  Shift that one
-				// to the front and load the new quadword into the second QWC (its a manualized ringbuffer!)
 
 				CopyQWC(&internal_qwc[0], &internal_qwc[1]);
 				FP = 1;
 			}
 			else
 			{
-				// if FP == 1 then the buffer has been completely drained.
-				// if FP == 0 then an already-drained buffer is being advanced, and we need to drop a
-				// quadword from the IPU FIFO.
 
 				if (ipu_fifo.in.read(&internal_qwc[0]))
 					FP = 1;
@@ -117,10 +107,6 @@ struct alignas(16) tIPU_BP {
 		{
 			if (ipu_fifo.in.read(&internal_qwc[FP]) == 0)
 			{
-				// Here we *try* to fill the entire internal QWC buffer; however that may not necessarily
-				// be possible -- so if the fill fails we'll only return 0 if we don't have enough
-				// remaining bits in the FIFO to fill the request.
-				// Used to do ((FP!=0) && (BP + bits) <= 128) if we get here there's defo not enough data now though
 				IPUCoreStatus.WaitingOnIPUTo = true;
 				return false;
 			}

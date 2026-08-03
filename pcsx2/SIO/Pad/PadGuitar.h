@@ -10,17 +10,17 @@ class PadGuitar final : public PadBase
 public:
 	enum Inputs
 	{
-		STRUM_UP, // Strum bar
-		STRUM_DOWN, // Strum bar down
-		SELECT, // Select button
-		START, // Start button
-		GREEN, // Green fret
-		RED, // Red fret
-		YELLOW, // Yellow fret
-		BLUE, // Blue fret
-		ORANGE, // Orange fret
-		WHAMMY, // Whammy bar axis
-		TILT, // Tilt sensor
+		STRUM_UP,
+		STRUM_DOWN,
+		SELECT,
+		START,
+		GREEN,
+		RED,
+		YELLOW,
+		BLUE,
+		ORANGE,
+		WHAMMY,
+		TILT,
 		LENGTH,
 	};
 
@@ -28,22 +28,21 @@ private:
 	u32 buttons = 0xffffffffu;
 	u8 whammy = Pad::ANALOG_NEUTRAL_POSITION;
 	bool commandStage = false;
-	float whammyAxisScale = 1.0f; // Guitars only have 1 axis on the whammy bar.
+	float whammyAxisScale = 1.0f;
 	float whammyDeadzone = 0.0f;
-	float buttonDeadzone = 0.0f; // Button deadzone is still a good idea, in case a host analog stick is bound to a guitar button
+	float buttonDeadzone = 0.0f;
 
-	// Since we reordered the buttons for better UI, we need to remap them here.
 	static constexpr std::array<u8, Inputs::LENGTH> bitmaskMapping = {{
-		12, // STRUM_UP
-		14, // STRUM_DOWN
-		8, // SELECT
-		11, // START
-		1, // GREEN
-		5, // RED
-		4, // YELLOW
-		6, // BLUE
-		7, // ORANGE
-		0 // TILT
+		12,
+		14,
+		8,
+		11,
+		1,
+		5,
+		4,
+		6,
+		7,
+		0
 	}};
 
 	void ConfigLog();

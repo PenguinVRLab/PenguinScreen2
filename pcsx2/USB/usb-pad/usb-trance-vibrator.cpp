@@ -21,48 +21,48 @@ namespace usb_pad
 		"ASCII Vib"};
 
 	static uint8_t dev_descriptor[] = {
-		0x12,       // bLength
-		0x01,       // bDescriptorType (Device)
-		0x00, 0x01, // bcdUSB 1.00
-		0x00,       // bDeviceClass (Use class information in the Interface Descriptors)
-		0x00,       // bDeviceSubClass
-		0x00,       // bDeviceProtocol
-		0x08,       // bMaxPacketSize0 8
-		0x49, 0x0B, // idVendor 0x0B49
-		0x4F, 0x06, // idProduct 0x064F
-		0x00, 0x01, // bcdDevice 2.00
-		0x01,       // iManufacturer (String Index)
-		0x02,       // iProduct (String Index)
-		0x00,       // iSerialNumber (String Index)
-		0x01,       // bNumConfigurations 1
+		0x12,
+		0x01,
+		0x00, 0x01,
+		0x00,
+		0x00,
+		0x00,
+		0x08,
+		0x49, 0x0B,
+		0x4F, 0x06,
+		0x00, 0x01,
+		0x01,
+		0x02,
+		0x00,
+		0x01,
 	};
 
 	static const uint8_t config_descriptor[] = {
-		0x09,       // bLength
-		0x02,       // bDescriptorType (Configuration)
-		0x22, 0x00, // wTotalLength 34
-		0x01,       // bNumInterfaces 1
-		0x01,       // bConfigurationValue
-		0x00,       // iConfiguration (String Index)
-		0x80,       // bmAttributes
-		0x31,       // bMaxPower 98mA
+		0x09,
+		0x02,
+		0x22, 0x00,
+		0x01,
+		0x01,
+		0x00,
+		0x80,
+		0x31,
 
-		0x09,       // bLength
-		0x04,       // bDescriptorType (Interface)
-		0x00,       // bInterfaceNumber 0
-		0x00,       // bAlternateSetting
-		0x01,       // bNumEndpoints 1
-		0x00,       // bInterfaceClass
-		0x00,       // bInterfaceSubClass
-		0x00,       // bInterfaceProtocol
-		0x00,       // iInterface (String Index)
+		0x09,
+		0x04,
+		0x00,
+		0x00,
+		0x01,
+		0x00,
+		0x00,
+		0x00,
+		0x00,
 
-		0x07,       // bLength
-		0x05,       // bDescriptorType (Endpoint)
-		0x81,       // bEndpointAddress (IN/D2H)
-		0x03,       // bmAttributes (Interrupt)
-		0x08, 0x00, // wMaxPacketSize 8
-		0x0A,       // bInterval 10 (unit depends on device speed)
+		0x07,
+		0x05,
+		0x81,
+		0x03,
+		0x08, 0x00,
+		0x0A,
 	};
 
 	TranceVibratorState::TranceVibratorState(u32 port_)
@@ -85,8 +85,6 @@ namespace usb_pad
 			case SET_IDLE:
 				break;
 			case VendorDeviceOutRequest:
-				// Vibration = wValue
-				// LED1 = wIndex&1, LED2 = wIndex&2, LED3 = wIndex&4
 				InputManager::SetUSBVibrationIntensity(s->port, value & 0xff, 0);
 				break;
 			default:
@@ -193,4 +191,4 @@ namespace usb_pad
 	{
 		return {};
 	}
-} // namespace usb_pad
+}

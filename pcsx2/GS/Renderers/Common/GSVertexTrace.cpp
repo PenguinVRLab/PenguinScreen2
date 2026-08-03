@@ -27,16 +27,12 @@ void GSVertexTrace::Update(const void* vertex, const u16* index, int v_count, in
 
 	m_fmm[color][fst][tme][iip][primclass](*this, vertex, index, i_count);
 
-	// Potential float overflow detected. Better uses the slower division instead
-	// Note: If Q is too big, 1/Q will end up as 0. 1e30 is a random number
-	// that feel big enough.
 	if (!fst && !m_accurate_stq && m_min.t.z > 1e30)
 	{
 		Console.Warning("Vertex Trace: float overflow detected ! min %e max %e", m_min.t.z, m_max.t.z);
 		m_accurate_stq = true;
 	}
 
-	// AA1: Set alpha min max to coverage 128 when there is no alpha blending.
 	if (!m_state->PRIM->ABE && m_state->PRIM->AA1 && (m_primclass == GS_LINE_CLASS || m_primclass == GS_TRIANGLE_CLASS))
 	{
 		m_min.c.a = 128;
@@ -47,7 +43,6 @@ void GSVertexTrace::Update(const void* vertex, const u16* index, int v_count, in
 
 	m_alpha.valid = false;
 
-	// I'm not sure of the cost. In doubt let's do it only when depth is enabled
 	if (m_state->m_context->TEST.ZTE == 1 && m_state->m_context->TEST.ZTST > ZTST_ALWAYS)
 	{
 		CorrectDepthTrace(vertex, v_count);
@@ -60,7 +55,7 @@ void GSVertexTrace::Update(const void* vertex, const u16* index, int v_count, in
 		m_filter.mmag = TEX1.IsMagLinear();
 		m_filter.mmin = TEX1.IsMinLinear();
 
-		if (TEX1.MXL == 0) // MXL == 0 => MMIN ignored, tested it on ps2
+		if (TEX1.MXL == 0)
 		{
 			m_filter.linear = m_filter.mmag;
 		}
@@ -68,9 +63,8 @@ void GSVertexTrace::Update(const void* vertex, const u16* index, int v_count, in
 		{
 			const float K = static_cast<float>(TEX1.K) / 16;
 
-			if (TEX1.LCM == 0 && m_state->PRIM->FST == 0) // FST == 1 => Q is not interpolated
+			if (TEX1.LCM == 0 && m_state->PRIM->FST == 0)
 			{
-				// LOD = log2(1/|Q|) * (1 << L) + K
 
 				GSVector4::storel(&m_lod, m_max.t.uph(m_min.t).log2(3).neg() * static_cast<float>(1 << TEX1.L) + K);
 
@@ -108,7 +102,6 @@ void GSVertexTrace::Update(const void* vertex, const u16* index, int v_count, in
 				break;
 
 			case BiFiltering::Forced_But_Sprite:
-				// Special case to reduce the number of glitch when upscaling is enabled
 				m_filter.opt_linear = (m_primclass == GS_SPRITE_CLASS) ? m_filter.linear : 1;
 				break;
 
@@ -129,15 +122,6 @@ void GSVertexTrace::CorrectDepthTrace(const void* vertex, int count)
 	if (m_eq.z == 0)
 		return;
 
-	// FindMinMax isn't accurate for the depth value. Lsb bit is always 0.
-	// The code below will check that depth value is really constant
-	// and will update m_min/m_max/m_eq accordingly
-	//
-	// Really impact Xenosaga3
-	//
-	// Hopefully function is barely called so AVX/SSE will be useless here
-
-
 	const GSVertex* RESTRICT v = (GSVertex*)vertex;
 
 	const int sprite_step = (m_primclass == GS_SPRITE_CLASS) ? 1 : 0;
@@ -146,7 +130,6 @@ void GSVertexTrace::CorrectDepthTrace(const void* vertex, int count)
 
 	if (z & 1)
 	{
-		// Check that first bit is always 1
 		for (int i = sprite_step; i < count; i += (sprite_step + 1))
 		{
 			z &= v[i].XYZ.Z;
@@ -154,7 +137,6 @@ void GSVertexTrace::CorrectDepthTrace(const void* vertex, int count)
 	}
 	else
 	{
-		// Check that first bit is always 0
 		for (int i = sprite_step; i < count; i += (sprite_step + 1))
 		{
 			z |= v[i].XYZ.Z;

@@ -25,34 +25,34 @@ void ATA::HDD_Smart()
 
 	switch (regFeature)
 	{
-		case 0xD9: //SMART_DISABLE
+		case 0xD9:
 			SMART_EnableOps(false);
 			return;
-		case 0xD8: //SMART_ENABLE
+		case 0xD8:
 			SMART_EnableOps(true);
 			return;
-		case 0xD2: //SMART_ATTR_AUTOSAVE
+		case 0xD2:
 			SMART_SetAutoSaveAttribute();
 			return;
-		case 0xD3: //SMART_ATTR_SAVE
+		case 0xD3:
 			SMART_SaveAttribute();
 			return;
-		case 0xDA: //SMART_STATUS (is fault in disk?)
+		case 0xDA:
 			SMART_ReturnStatus();
 			return;
-		case 0xD1: //SMART_READ_THRESH
+		case 0xD1:
 			Console.Error("DEV9: ATA: SMART_READ_THRESH Not Implemented");
 			CmdNoDataAbort();
 			return;
-		case 0xD0: //SMART_READ_DATA
+		case 0xD0:
 			Console.Error("DEV9: ATA: SMART_READ_DATA Not Implemented");
 			CmdNoDataAbort();
 			return;
-		case 0xD5: //SMART_READ_LOG
+		case 0xD5:
 			Console.Error("DEV9: ATA: SMART_READ_LOG Not Implemented");
 			CmdNoDataAbort();
 			return;
-		case 0xD4: //SMART_EXECUTE_OFFLINE
+		case 0xD4:
 			SMART_ExecuteOfflineImmediate();
 			return;
 		default:
@@ -84,7 +84,6 @@ void ATA::SMART_SetAutoSaveAttribute()
 void ATA::SMART_SaveAttribute()
 {
 	PreCmd();
-	// Stub
 	PostCmdNoData();
 }
 
@@ -94,23 +93,19 @@ void ATA::SMART_ExecuteOfflineImmediate()
 	[[maybe_unused]] int n = 0;
 	switch (regSector)
 	{
-		case 0: /* off-line routine */
-		case 1: /* short self test */
-		case 2: /* extended self test */
+		case 0:
+		case 1:
+		case 2:
 			smartSelfTestCount++;
 			if (smartSelfTestCount > 21)
 				smartSelfTestCount = 1;
 
 			n = 2 + (smartSelfTestCount - 1) * 24;
-			//s->smart_selftest_data[n] = s->sector;
-			//s->smart_selftest_data[n + 1] = 0x00; /* OK and finished */
-			//s->smart_selftest_data[n + 2] = 0x34; /* hour count lsb */
-			//s->smart_selftest_data[n + 3] = 0x12; /* hour count msb */
 			break;
-		case 127: /* abort off-line routine */
+		case 127:
 			break;
-		case 129: /* short self test, which holds BSY until complete */
-		case 130: /* extended self test, which holds BSY until complete */
+		case 129:
+		case 130:
 			smartSelfTestCount++;
 			if (smartSelfTestCount > 21)
 			{

@@ -18,13 +18,6 @@ namespace x86Emitter
 		G2Type_SAR
 	};
 
-	// --------------------------------------------------------------------------------------
-	//  xImpl_Group2
-	// --------------------------------------------------------------------------------------
-	// Group 2 (shift) instructions have no Sib/ModRM forms.
-	// Optimization Note: For Imm forms, we ignore the instruction if the shift count is zero.
-	// This is a safe optimization since any zero-value shift does not affect any flags.
-	//
 	struct xImpl_Group2
 	{
 		G2Type InstType;
@@ -35,7 +28,6 @@ namespace x86Emitter
 		void operator()(const xIndirect64orLess& to, u8 imm) const;
 
 #if 0
-	// ------------------------------------------------------------------------
 	template< typename T > __noinline void operator()( const xDirectOrIndirect<T>& to, u8 imm ) const
 	{
 		_DoI_helpermess( *this, to, imm );
@@ -48,4 +40,4 @@ namespace x86Emitter
 #endif
 	};
 
-} // End namespace x86Emitter
+}

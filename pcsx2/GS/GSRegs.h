@@ -16,10 +16,6 @@
 #define GS_MAX_BLOCKS (VM_SIZE / GS_BLOCK_SIZE)
 #define GS_MAX_COLUMNS (VM_SIZE / GS_COLUMN_SIZE)
 
-//if defined, will send much info in reply to the API title info queri from PCSX2
-//default should be undefined
-//#define GSTITLEINFO_API_FORCE_VERBOSE
-
 #include "GSVector.h"
 
 #pragma pack(push, 1)
@@ -140,20 +136,20 @@ enum GIF_FLG
 
 enum GS_PSM
 {
-	PSMCT32  =  0, // 0000-0000
-	PSMCT24  =  1, // 0000-0001
-	PSMCT16  =  2, // 0000-0010
-	PSMCT16S = 10, // 0000-1010
-	PSGPU24  = 18, // 0001-0010
-	PSMT8    = 19, // 0001-0011
-	PSMT4    = 20, // 0001-0100
-	PSMT8H   = 27, // 0001-1011
-	PSMT4HL  = 36, // 0010-0100
-	PSMT4HH  = 44, // 0010-1100
-	PSMZ32   = 48, // 0011-0000
-	PSMZ24   = 49, // 0011-0001
-	PSMZ16   = 50, // 0011-0010
-	PSMZ16S  = 58, // 0011-1010
+	PSMCT32  =  0,
+	PSMCT24  =  1,
+	PSMCT16  =  2,
+	PSMCT16S = 10,
+	PSGPU24  = 18,
+	PSMT8    = 19,
+	PSMT4    = 20,
+	PSMT8H   = 27,
+	PSMT4HL  = 36,
+	PSMT4HH  = 44,
+	PSMZ32   = 48,
+	PSMZ24   = 49,
+	PSMZ16   = 50,
+	PSMZ16S  = 58,
 };
 
 enum GS_TFX
@@ -318,7 +314,7 @@ REG64_(GSReg, CSR)
 	u32 wID     : 8;
 REG_END
 
-REG64_(GSReg, DISPFB) // (-1/2)
+REG64_(GSReg, DISPFB)
 	u32 FBP   :  9;
 	u32 FBW   :  6;
 	u32 PSM   :  5;
@@ -330,7 +326,7 @@ REG_END2
 	u32 Block() const { return FBP << 5; }
 REG_END2
 
-REG64_(GSReg, DISPLAY) // (-1/2)
+REG64_(GSReg, DISPLAY)
 	u32 DX    : 12;
 	u32 DY    : 11;
 	u32 MAGH  :  4;
@@ -424,7 +420,7 @@ REG64_(GSReg, SMODE1)
 	u32 XPCK   :  1;
 	u32 PCK2   :  2;
 	u32 SPML   :  4;
-	u32 GCONT  :  1; // YCrCb
+	u32 GCONT  :  1;
 	u32 PHS    :  1;
 	u32 PVS    :  1;
 	u32 PEHS   :  1;
@@ -437,22 +433,6 @@ REG64_(GSReg, SMODE1)
 	u32 _PAD1  : 27;
 REG_END
 
-/*
-
-// pal
-
-CLKSEL=1 CMOD=3 EX=0 GCONT=0 LC=32 NVCK=1 PCK2=0 PEHS=0 PEVS=0 PHS=0 PRST=1 PVS=0 RC=4 SINT=0 SLCK=0 SLCK2=1 SPML=4 T1248=1 VCKSEL=1 VHP=0 XPCK=0
-
-// ntsc
-
-CLKSEL=1 CMOD=2 EX=0 GCONT=0 LC=32 NVCK=1 PCK2=0 PEHS=0 PEVS=0 PHS=0 PRST=1 PVS=0 RC=4 SINT=0 SLCK=0 SLCK2=1 SPML=4 T1248=1 VCKSEL=1 VHP=0 XPCK=0
-
-// ntsc progressive (SoTC)
-
-CLKSEL=1 CMOD=0 EX=0 GCONT=0 LC=32 NVCK=1 PCK2=0 PEHS=0 PEVS=0 PHS=0 PRST=1 PVS=0 RC=4 SINT=0 SLCK=0 SLCK2=1 SPML=2 T1248=1 VCKSEL=1 VHP=1 XPCK=0
-
-*/
-
 REG64_(GSReg, SMODE2)
 	u32 INT   :  1;
 	u32 FFMD  :  1;
@@ -463,26 +443,23 @@ REG_END
 
 REG64_(GSReg, SRFSH)
 	u32 _DUMMY;
-	// TODO
 REG_END
 
 REG64_(GSReg, SYNCH1)
 	u32 _DUMMY;
-	// TODO
 REG_END
 
 REG64_(GSReg, SYNCH2)
 	u32 _DUMMY;
-	// TODO
 REG_END
 
 REG64_(GSReg, SYNCV)
-	u32 VFP  : 10; // Vertical Front Porchinterval (?s)
-	u32 VFPE : 10; // Vertical Front Porchinterval End (?s)
-	u32 VBP  : 12; // Vertical Back Porchinterval (?s)
-	u32 VBPE : 10; // Vertical Back Porchinterval End (?s)
-	u32 VDP  : 11; // Vertical Differential Phase
-	u32 VS   : 11; // Vertical Synchronization Timing
+	u32 VFP  : 10;
+	u32 VFPE : 10;
+	u32 VBP  : 12;
+	u32 VBPE : 10;
+	u32 VDP  : 11;
+	u32 VS   : 11;
 REG_END
 
 REG64_SET(GSReg)
@@ -501,9 +478,6 @@ REG64_SET(GSReg)
 	GSRegSMODE2   SMODE2;
 REG_SET_END
 
-//
-// GIFTag
-
 REG128(GIFTag)
 	u32 NLOOP : 15;
 	u32 EOP   :  1;
@@ -511,12 +485,10 @@ REG128(GIFTag)
 	u32 _PAD2 : 14;
 	u32 PRE   :  1;
 	u32 PRIM  : 11;
-	u32 FLG   :  2; // enum GIF_FLG
+	u32 FLG   :  2;
 	u32 NREG  :  4;
 	u64 REGS;
 REG_END
-
-// GIFReg
 
 REG64_(GIFReg, ALPHA)
 	u32 A     :  2;
@@ -527,12 +499,10 @@ REG64_(GIFReg, ALPHA)
 	u8 FIX;
 	u8 _PAD2[3];
 REG_END2
-	// opaque => output will be Cs/As/zero
 	__forceinline bool IsOpaque() const { return ((A == B || (C == 2 && FIX == 0)) && D == 0) || (A == 0 && B == D && C == 2 && FIX == 0x80); }
 	__forceinline bool IsOpaque(int amin, int amax) const { return ((A == B || amax == 0) && D == 0) || (A == 0 && B == D && amin == 0x80 && amax == 0x80); }
 	__forceinline bool IsCd() const { return (A == B) && (D == 1); }
 
-	// output will be Cd, Cs is discarded
 	__forceinline bool IsCdOutput() const { return (C == 2 && D != 1 && FIX == 0x00); }
 	__forceinline bool IsCdInBlend() const { return (A == 1 || B == 1 || D == 1); }
 	__forceinline bool IsUsingCs() const { return (A == 0 || B == 0 || D == 0); }
@@ -782,7 +752,7 @@ REG64_(GIFReg, TEST)
 	u32 _PAD1 : 13;
 	u32 _PAD2 : 32;
 REG_END2
-	__forceinline u32 GetAFAIL(u32 fpsm) const { return (AFAIL == AFAIL_RGB_ONLY && (fpsm & 0xF) != 0) ? static_cast<u32>(AFAIL_FB_ONLY) : AFAIL; } // FB Only when not 32bit Framebuffer
+	__forceinline u32 GetAFAIL(u32 fpsm) const { return (AFAIL == AFAIL_RGB_ONLY && (fpsm & 0xF) != 0) ? static_cast<u32>(AFAIL_FB_ONLY) : AFAIL; }
 REG_END2
 
 REG64_(GIFReg, TEX0)
@@ -815,7 +785,6 @@ union
 REG_END2
 	__forceinline bool IsRepeating() const
 	{
-		// This is actually "does the texture span more than one page".
 		if (TBW < 2)
 		{
 			if (PSM == PSMT8)
@@ -824,7 +793,6 @@ REG_END2
 				return TW > 7 || TH > 7;
 		}
 
-		// The recast of TBW seems useless but it avoid tons of warning from GCC...
 		return ((u32)TBW << 6u) < (1u << TW);
 	}
 
@@ -848,7 +816,7 @@ REG64_(GIFReg, TEX1)
 	u32 _PAD2 :  9;
 	u32 L     :  2;
 	u32 _PAD3 : 11;
-	s32  K    : 12; // 1:7:4
+	s32  K    : 12;
 	u32 _PAD4 : 20;
 REG_END2
 	bool IsMinLinear() const { return (MMIN == 1) || (MMIN & 4); }
@@ -915,21 +883,15 @@ REG64_(GIFReg, TRXREG)
 	u32 _PAD2 : 20;
 REG_END
 
-// GSState::GIFPackedRegHandlerUV and GSState::GIFRegHandlerUV will make sure that the _PAD1/2 bits are set to zero
-
 REG64_(GIFReg, UV)
 	u16 U;
-	// u32 _PAD1 : 2;
 	u16 V;
-	// u32 _PAD2 : 2;
 	u32 _PAD3;
 REG_END
 
-// GSState::GIFRegHandlerXYOFFSET will make sure that the _PAD1/2 bits are set to zero
-
 REG64_(GIFReg, XYOFFSET)
-	u32 OFX; // : 16; u32 _PAD1 : 16;
-	u32 OFY; // : 16; u32 _PAD2 : 16;
+	u32 OFX;
+	u32 OFY;
 REG_END
 
 REG64_(GIFReg, XYZ)
@@ -948,8 +910,6 @@ REG_END
 REG64_(GIFReg, ZBUF)
 	u32 ZBP   :  9;
 	u32 _PAD1 : 15;
-	// u32 PSM   :  4;
-	// u32 _PAD2 :  4;
 	u32 PSM   :  6;
 	u32 _PAD2 :  2;
 	u32 ZMSK  :  1;
@@ -1000,8 +960,6 @@ REG64_SET(GIFReg)
 	GIFRegXYZF       XYZF;
 	GIFRegZBUF       ZBUF;
 REG_SET_END
-
-// GIFPacked
 
 REG128_(GIFPacked, PRIM)
 	u32 PRIM  : 11;
@@ -1077,7 +1035,7 @@ REG_END
 
 REG128_(GIFPacked, A_D)
 	u64 DATA;
-	u8 ADDR : 8; // enum GIF_A_D_REG
+	u8 ADDR : 8;
 	u8 _PAD1[3 + 4];
 REG_END
 
@@ -1122,8 +1080,6 @@ struct alignas(32) GIFPath
 	{
 		const GIFTag* RESTRICT src = (const GIFTag*)mem;
 
-		// the compiler has a hard time not reloading every time a field of src is accessed
-
 		u32 a = src->U32[0];
 		u32 b = src->U32[1];
 
@@ -1135,9 +1091,9 @@ struct alignas(32) GIFPath
 		if (nloop == 0)
 			return;
 
-		GSVector4i v = GSVector4i::loadl(&src->REGS); // REGS not stored to tag.REGS, only into this->regs, restored before saving the state though
+		GSVector4i v = GSVector4i::loadl(&src->REGS);
 
-		nreg = (b & 0xf0000000) ? (b >> 28) : 16; // src->NREG
+		nreg = (b & 0xf0000000) ? (b >> 28) : 16;
 		regs = v.upl8(v >> 4) & GSVector4i::x0f(nreg);
 		reg = 0;
 
@@ -1158,13 +1114,10 @@ struct alignas(32) GIFPath
 					case 2:
 						break;
 					case 3:
-						// many games, TODO: formats mixed with NOPs (xeno2: 040f010f02, 04010f020f, mgs3: 04010f0f02, 0401020f0f, 04010f020f)
 						if (regs.U32[0] == 0x00040102)
 							type = TYPE_STQRGBAXYZF2;
-						// GoW (has other crazy formats, like ...030503050103)
 						if (regs.U32[0] == 0x00050102)
 							type = TYPE_STQRGBAXYZ2;
-						// TODO: common types with UV instead
 						break;
 					case 4:
 						break;
@@ -1177,7 +1130,6 @@ struct alignas(32) GIFPath
 					case 8:
 						break;
 					case 9:
-						// ffx
 						if (regs.U32[0] == 0x02040102 && regs.U32[1] == 0x01020401 && regs.U32[2] == 0x00000004)
 						{
 							type = TYPE_STQRGBAXYZF2;
@@ -1190,7 +1142,6 @@ struct alignas(32) GIFPath
 					case 11:
 						break;
 					case 12:
-						// dq8 (not many, mostly 040102)
 						if (regs.U32[0] == 0x02040102 && regs.U32[1] == 0x01020401 && regs.U32[2] == 0x04010204)
 						{
 							type = TYPE_STQRGBAXYZF2;

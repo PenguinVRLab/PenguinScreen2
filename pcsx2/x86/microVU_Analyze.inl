@@ -3,15 +3,6 @@
 
 #pragma once
 
-//------------------------------------------------------------------
-// Micro VU - Pass 1 Functions
-//------------------------------------------------------------------
-
-//------------------------------------------------------------------
-// Helper Functions
-//------------------------------------------------------------------
-
-// Read a VF reg
 __ri void analyzeReg1(mV, int xReg, microVFreg& vfRead) {
 	if (xReg) {
 		if (_X) { mVUstall = std::max(mVUstall, mVUregs.VF[xReg].x); vfRead.reg = xReg; vfRead.x = 1; }
@@ -21,7 +12,6 @@ __ri void analyzeReg1(mV, int xReg, microVFreg& vfRead) {
 	}
 }
 
-// Write to a VF reg
 __ri void analyzeReg2(mV, int xReg, microVFreg& vfWrite, bool isLowOp)
 {
 	if (xReg)
@@ -34,7 +24,6 @@ __ri void analyzeReg2(mV, int xReg, microVFreg& vfWrite, bool isLowOp)
 	}
 }
 
-// Read a VF reg (BC opcodes)
 __ri void analyzeReg3(mV, int xReg, microVFreg& vfRead)
 {
 	if (xReg)
@@ -66,7 +55,6 @@ __ri void analyzeReg3(mV, int xReg, microVFreg& vfRead)
 	}
 }
 
-// For Clip Opcode
 __ri void analyzeReg4(mV, int xReg, microVFreg& vfRead)
 {
 	if (xReg)
@@ -77,7 +65,6 @@ __ri void analyzeReg4(mV, int xReg, microVFreg& vfRead)
 	}
 }
 
-// Read VF reg (FsF/FtF)
 __ri void analyzeReg5(mV, int xReg, int fxf, microVFreg& vfRead)
 {
 	if (xReg)
@@ -92,7 +79,6 @@ __ri void analyzeReg5(mV, int xReg, int fxf, microVFreg& vfRead)
 	}
 }
 
-// Flips xyzw stalls to yzwx (MR32 Opcode)
 __ri void analyzeReg6(mV, int xReg, microVFreg& vfRead)
 {
 	if (xReg)
@@ -104,7 +90,6 @@ __ri void analyzeReg6(mV, int xReg, microVFreg& vfRead)
 	}
 }
 
-// Reading a VI reg
 __ri void analyzeVIreg1(mV, int xReg, microVIreg& viRead)
 {
 	if (xReg)
@@ -115,7 +100,6 @@ __ri void analyzeVIreg1(mV, int xReg, microVIreg& viRead)
 	}
 }
 
-// Writing to a VI reg
 __ri void analyzeVIreg2(mV, int xReg, microVIreg& viWrite, int aCycles)
 {
 	if (xReg)
@@ -159,10 +143,6 @@ __ri void analyzeVIreg2(mV, int xReg, microVIreg& viWrite, int aCycles)
 		} \
 	}
 
-//------------------------------------------------------------------
-// FMAC1 - Normal FMAC Opcodes
-//------------------------------------------------------------------
-
 __fi void mVUanalyzeFMAC1(mV, int Fd, int Fs, int Ft)
 {
 	sFLAG.doFlag = 1;
@@ -171,19 +151,11 @@ __fi void mVUanalyzeFMAC1(mV, int Fd, int Fs, int Ft)
 	analyzeReg2(mVU, Fd, mVUup.VF_write, 0);
 }
 
-//------------------------------------------------------------------
-// FMAC2 - ABS/FTOI/ITOF Opcodes
-//------------------------------------------------------------------
-
 __fi void mVUanalyzeFMAC2(mV, int Fs, int Ft)
 {
 	analyzeReg1(mVU, Fs, mVUup.VF_read[0]);
 	analyzeReg2(mVU, Ft, mVUup.VF_write, 0);
 }
-
-//------------------------------------------------------------------
-// FMAC3 - BC(xyzw) FMAC Opcodes
-//------------------------------------------------------------------
 
 __fi void mVUanalyzeFMAC3(mV, int Fd, int Fs, int Ft)
 {
@@ -193,20 +165,12 @@ __fi void mVUanalyzeFMAC3(mV, int Fd, int Fs, int Ft)
 	analyzeReg2(mVU, Fd, mVUup.VF_write, 0);
 }
 
-//------------------------------------------------------------------
-// FMAC4 - Clip FMAC Opcode
-//------------------------------------------------------------------
-
 __fi void mVUanalyzeFMAC4(mV, int Fs, int Ft)
 {
 	cFLAG.doFlag = 1;
 	analyzeReg1(mVU, Fs, mVUup.VF_read[0]);
 	analyzeReg4(mVU, Ft, mVUup.VF_read[1]);
 }
-
-//------------------------------------------------------------------
-// IALU - IALU Opcodes
-//------------------------------------------------------------------
 
 __fi void mVUanalyzeIALU1(mV, int Id, int Is, int It)
 {
@@ -234,10 +198,6 @@ __fi void mVUanalyzeIADDI(mV, int Is, int It, s16 imm)
 	}
 }
 
-//------------------------------------------------------------------
-// MR32 - MR32 Opcode
-//------------------------------------------------------------------
-
 __fi void mVUanalyzeMR32(mV, int Fs, int Ft)
 {
 	if (!Ft)
@@ -248,20 +208,12 @@ __fi void mVUanalyzeMR32(mV, int Fs, int Ft)
 	analyzeReg2(mVU, Ft, mVUlow.VF_write, 1);
 }
 
-//------------------------------------------------------------------
-// FDIV - DIV/SQRT/RSQRT Opcodes
-//------------------------------------------------------------------
-
 __fi void mVUanalyzeFDIV(mV, int Fs, int Fsf, int Ft, int Ftf, u8 xCycles)
 {
 	analyzeReg5(mVU, Fs, Fsf, mVUlow.VF_read[0]);
 	analyzeReg5(mVU, Ft, Ftf, mVUlow.VF_read[1]);
 	analyzeQreg(xCycles);
 }
-
-//------------------------------------------------------------------
-// EFU - EFU Opcodes
-//------------------------------------------------------------------
 
 __fi void mVUanalyzeEFU1(mV, int Fs, int Fsf, u8 xCycles)
 {
@@ -275,20 +227,12 @@ __fi void mVUanalyzeEFU2(mV, int Fs, u8 xCycles)
 	analyzePreg(xCycles);
 }
 
-//------------------------------------------------------------------
-// MFP - MFP Opcode
-//------------------------------------------------------------------
-
 __fi void mVUanalyzeMFP(mV, int Ft)
 {
 	if (!Ft)
 		mVUlow.isNOP = 1;
 	analyzeReg2(mVU, Ft, mVUlow.VF_write, 1);
 }
-
-//------------------------------------------------------------------
-// MOVE - MOVE Opcode
-//------------------------------------------------------------------
 
 __fi void mVUanalyzeMOVE(mV, int Fs, int Ft)
 {
@@ -297,10 +241,6 @@ __fi void mVUanalyzeMOVE(mV, int Fs, int Ft)
 	analyzeReg1(mVU, Fs, mVUlow.VF_read[0]);
 	analyzeReg2(mVU, Ft, mVUlow.VF_write, 1);
 }
-
-//------------------------------------------------------------------
-// LQx - LQ/LQD/LQI Opcodes
-//------------------------------------------------------------------
 
 __fi void mVUanalyzeLQ(mV, int Ft, int Is, bool writeIs)
 {
@@ -323,10 +263,6 @@ __fi void mVUanalyzeLQ(mV, int Ft, int Is, bool writeIs)
 	}
 }
 
-//------------------------------------------------------------------
-// SQx - SQ/SQD/SQI Opcodes
-//------------------------------------------------------------------
-
 __fi void mVUanalyzeSQ(mV, int Fs, int It, bool writeIt)
 {
 	mVUlow.isMemWrite = true;
@@ -337,10 +273,6 @@ __fi void mVUanalyzeSQ(mV, int Fs, int It, bool writeIt)
 		analyzeVIreg2(mVU, It, mVUlow.VI_write, 1);
 	}
 }
-
-//------------------------------------------------------------------
-// R*** - R Reg Opcodes
-//------------------------------------------------------------------
 
 __fi void mVUanalyzeR1(mV, int Fs, int Fsf)
 {
@@ -361,16 +293,11 @@ __fi void mVUanalyzeR2(mV, int Ft, bool canBeNOP)
 	analyzeRreg();
 }
 
-//------------------------------------------------------------------
-// Sflag - Status Flag Opcodes
-//------------------------------------------------------------------
 __ri void flagSet(mV, bool setMacFlag)
 {
 	int curPC = iPC;
 	int calcOPS = 0;
 
-	//Check which ops need to do the flag settings, also check for runs of ops as they can do multiple calculations to get the sticky status flags (VP2)
-	//Make sure we get the last 4 calculations (Bloody Roar 3, possibly others)
 	for (int i = mVUcount, j = 0; i > 0; i--, j++)
 	{
 		j += mVUstall;
@@ -402,12 +329,11 @@ __ri void mVUanalyzeSflag(mV, int It)
 	}
 	else
 	{
-		//mVUsFlagHack = 0; // Don't Optimize Out Status Flags for this block
 		mVUinfo.swapOps = 1;
 		flagSet(mVU, 0);
 		if (mVUcount < 4)
 		{
-			if (!(mVUpBlock->pState.needExactMatch & 1)) // The only time this should happen is on the first program block
+			if (!(mVUpBlock->pState.needExactMatch & 1))
 				DevCon.WriteLn(Color_Green, "microVU%d: pState's sFlag Info was expected to be set [%04x]", getIndex, xPC);
 		}
 	}
@@ -418,10 +344,6 @@ __ri void mVUanalyzeFSSET(mV)
 	mVUlow.isFSSET = 1;
 	mVUlow.readFlags = true;
 }
-
-//------------------------------------------------------------------
-// Mflag - Mac Flag Opcodes
-//------------------------------------------------------------------
 
 __ri void mVUanalyzeMflag(mV, int Is, int It)
 {
@@ -438,15 +360,11 @@ __ri void mVUanalyzeMflag(mV, int Is, int It)
 		flagSet(mVU, 1);
 		if (mVUcount < 4)
 		{
-			if (!(mVUpBlock->pState.needExactMatch & 2)) // The only time this should happen is on the first program block
+			if (!(mVUpBlock->pState.needExactMatch & 2))
 				DevCon.WriteLn(Color_Green, "microVU%d: pState's mFlag Info was expected to be set [%04x]", getIndex, xPC);
 		}
 	}
 }
-
-//------------------------------------------------------------------
-// Cflag - Clip Flag Opcodes
-//------------------------------------------------------------------
 
 __fi void mVUanalyzeCflag(mV, int It)
 {
@@ -454,15 +372,11 @@ __fi void mVUanalyzeCflag(mV, int It)
 	mVUlow.readFlags = true;
 	if (mVUcount < 4)
 	{
-		if (!(mVUpBlock->pState.needExactMatch & 4)) // The only time this should happen is on the first program block
+		if (!(mVUpBlock->pState.needExactMatch & 4))
 			DevCon.WriteLn(Color_Green, "microVU%d: pState's cFlag Info was expected to be set [%04x]", getIndex, xPC);
 	}
 	analyzeVIreg2(mVU, It, mVUlow.VI_write, 1);
 }
-
-//------------------------------------------------------------------
-// XGkick
-//------------------------------------------------------------------
 
 __fi void mVUanalyzeXGkick(mV, int Fs, int xCycles)
 {
@@ -472,30 +386,16 @@ __fi void mVUanalyzeXGkick(mV, int Fs, int xCycles)
 	analyzeVIreg1(mVU, Fs, mVUlow.VI_read[0]);
 	if (!CHECK_XGKICKHACK)
 	{
-		analyzeXGkick1(); // Stall will cause mVUincCycles() to trigger pending xgkick
+		analyzeXGkick1();
 		analyzeXGkick2(xCycles);
 	}
-	// Note: Technically XGKICK should stall on the next instruction,
-	// this code stalls on the same instruction. The only case where this
-	// will be a problem with, is if you have very-specifically placed
-	// FMxxx or FSxxx opcodes checking flags near this instruction AND
-	// the XGKICK instruction stalls. No-game should be effected by
-	// this minor difference.
 }
 
-//------------------------------------------------------------------
-// Branches - Branch Opcodes
-//------------------------------------------------------------------
-
-// If the VI reg is modified directly before the branch, then the VI
-// value read by the branch is the value the VI reg had at the start
-// of the instruction 4 instructions ago (assuming no stalls).
-// See: https://forums.pcsx2.net/Thread-blog-PS2-VU-Vector-Unit-Documentation-Part-1
 static void analyzeBranchVI(mV, int xReg, bool& infoVar)
 {
 	if (!xReg)
 		return;
-	if (mVUstall) // I assume a stall on branch means the vi reg is not modified directly b4 the branch...
+	if (mVUstall)
 	{
 		DevCon.Warning("microVU%d: %d cycle stall on branch instruction [%04x]", getIndex, mVUstall, xPC);
 		return;
@@ -531,7 +431,7 @@ static void analyzeBranchVI(mV, int xReg, bool& infoVar)
 			}
 			if (warn)
 				DevCon.Warning("microVU%d: Branch VI-Delay with small block (%d) [%04x]", getIndex, i, xPC);
-			break; // if (warn), we don't have enough information to always guarantee the correct result.
+			break;
 		}
 		if ((mVUlow.VI_write.reg == xReg) && mVUlow.VI_write.used)
 		{
@@ -539,7 +439,7 @@ static void analyzeBranchVI(mV, int xReg, bool& infoVar)
 			{
 				if (i)
 					DevCon.Warning("microVU%d: Branch VI-Delay with Read Flags Set (%d) [%04x]", getIndex, i, xPC);
-				break; // Not sure if on the above "if (i)" case, if we need to "continue" or if we should "break"
+				break;
 			}
 			j = i;
 		}
@@ -569,18 +469,16 @@ static void analyzeBranchVI(mV, int xReg, bool& infoVar)
 	}
 }
 
-// Branch in Branch Delay-Slots
 __ri int mVUbranchCheck(mV)
 {
 	if (!mVUcount && !isEvilBlock)
 		return 0;
 
-	// This means we have jumped from an evil branch situation, so this is another branch in delay slot
 	if (isEvilBlock)
 	{
 		mVUlow.evilBranch = true;
 		mVUregs.blockType = 2;
-		mVUregs.needExactMatch |= 7; // This might not be necessary, but w/e...
+		mVUregs.needExactMatch |= 7;
 		mVUregs.flagInfo = 0;
 
 		if (mVUlow.branch == 2 || mVUlow.branch == 10)
@@ -607,9 +505,9 @@ __ri int mVUbranchCheck(mV)
 			incPC(2);
 			mVUlow.evilBranch = true;
 
-			mVUregs.blockType = 2; // Second branch doesn't need linking, so can let it run its evil block course (MGS2 for testing)
+			mVUregs.blockType = 2;
 
-			mVUregs.needExactMatch |= 7; // This might not be necessary, but w/e...
+			mVUregs.needExactMatch |= 7;
 			mVUregs.flagInfo = 0;
 			DevCon.Warning("microVU%d: %s in %s delay slot! [%04x]  - If game broken report to PCSX2 Team", mVU.index,
 				branchSTR[mVUlow.branch & 0xf], branchSTR[branchType & 0xf], xPC);

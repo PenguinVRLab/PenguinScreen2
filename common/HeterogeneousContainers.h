@@ -46,7 +46,7 @@ namespace detail
 		bool operator()(const std::string_view& lhs, const std::string& rhs) const { return lhs < rhs; }
 		bool operator()(const char* lhs, const std::string& rhs) const { return lhs < rhs; }
 	};
-} // namespace detail
+}
 
 template <typename ValueType>
 using UnorderedStringMap =

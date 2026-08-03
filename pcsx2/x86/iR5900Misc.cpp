@@ -10,18 +10,8 @@ using namespace x86Emitter;
 namespace R5900 {
 namespace Dynarec {
 
-// R5900 branch helper!
-// Recompiles code for a branch test and/or skip, complete with delay slot
-// handling.  Note, for "likely" branches use iDoBranchImm_Likely instead, which
-// handles delay slots differently.
-// Parameters:
-//   jmpSkip - This parameter is the result of the appropriate J32 instruction
-//   (usually JZ32 or JNZ32).
 void recDoBranchImm(u32 branchTo, u32* jmpSkip, bool isLikely, bool swappedDelaySlot)
 {
-	// First up is the Branch Taken Path : Save the recompiler's state, compile the
-	// DelaySlot, and issue a BranchTest insertion.  The state is reloaded below for
-	// the "did not branch" path (maintains consts, register allocations, and other optimizations).
 
 	if (!swappedDelaySlot)
 	{
@@ -31,41 +21,22 @@ void recDoBranchImm(u32 branchTo, u32* jmpSkip, bool isLikely, bool swappedDelay
 
 	SetBranchImm(branchTo);
 
-	// Jump target when the branch is *not* taken, skips the branchtest code
-	// insertion above.
 	x86SetJ32(jmpSkip);
 
-	// if it's a likely branch then we'll need to skip the delay slot here, since
-	// MIPS cancels the delay slot instruction when branches aren't taken.
 	if (!swappedDelaySlot)
 	{
 		LoadBranchState();
 		if (!isLikely)
 		{
-			pc -= 4; // instruction rewinder for delay slot, if non-likely.
+			pc -= 4;
 			recompileNextInstruction(true, false);
 		}
 	}
 
-	SetBranchImm(pc); // start a new recompiled block.
+	SetBranchImm(pc);
 }
 
 namespace OpcodeImpl {
-
-////////////////////////////////////////////////////
-//static void recCACHE() {
-//	xMOV(ptr32[&cpuRegs.code], cpuRegs.code );
-//	xMOV(ptr32[&cpuRegs.pc], pc );
-//	iFlushCall(FLUSH_EVERYTHING);
-//	xFastCall((void*)(uptr)CACHE );
-//	//branch = 2;
-//
-//	xCMP(ptr32[(u32*)((int)&cpuRegs.pc)], pc);
-//	j8Ptr[0] = JE8(0);
-//	xRET();
-//	x86SetJ8(j8Ptr[0]);
-//}
-
 
 void recPREF()
 {
@@ -80,10 +51,8 @@ void recMFSA()
 	if (!_Rd_)
 		return;
 
-	// zero-extended
 	if (const int mmreg = _checkXMMreg(XMMTYPE_GPRREG, _Rd_, MODE_WRITE); mmreg >= 0)
 	{
-		// have to zero out bits 63:32
 		const int temp = _allocTempXMMreg(XMMT_INT);
 		xMOVSSZX(xRegisterSSE(temp), ptr32[&cpuRegs.sa]);
 		xBLEND.PD(xRegisterSSE(mmreg), xRegisterSSE(temp), 1);
@@ -101,7 +70,6 @@ void recMFSA()
 	}
 }
 
-// SA is 4-bit and contains the amount of bytes to shift
 void recMTSA()
 {
 	if (GPR_IS_CONST1(_Rs_))
@@ -160,50 +128,33 @@ void recMTSAH()
 	}
 }
 
-////////////////////////////////////////////////////
 void recNULL()
 {
 	Console.Error("EE: Unimplemented op %x", cpuRegs.code);
 }
 
-////////////////////////////////////////////////////
 void recUnknown()
 {
-	// TODO : Unknown ops should throw an exception.
 	Console.Error("EE: Unrecognized op %x", cpuRegs.code);
 }
 
 void recMMI_Unknown()
 {
-	// TODO : Unknown ops should throw an exception.
 	Console.Error("EE: Unrecognized MMI op %x", cpuRegs.code);
 }
 
 void recCOP0_Unknown()
 {
-	// TODO : Unknown ops should throw an exception.
 	Console.Error("EE: Unrecognized COP0 op %x", cpuRegs.code);
 }
 
 void recCOP1_Unknown()
 {
-	// TODO : Unknown ops should throw an exception.
 	Console.Error("EE: Unrecognized FPU/COP1 op %x", cpuRegs.code);
 }
 
-/**********************************************************
-*    UNHANDLED YET OPCODES
-*
-**********************************************************/
-
-// Suikoden 3 uses it a lot
-void recCACHE() //Interpreter only!
+void recCACHE()
 {
-	//xMOV(ptr32[&cpuRegs.code], (u32)cpuRegs.code );
-	//xMOV(ptr32[&cpuRegs.pc], (u32)pc );
-	//iFlushCall(FLUSH_EVERYTHING);
-	//xFastCall((void*)(uptr)R5900::Interpreter::OpcodeImpl::CACHE );
-	//branch = 2;
 }
 
 void recTGE()
@@ -266,6 +217,6 @@ void recTNEI()
 	recBranchCall(R5900::Interpreter::OpcodeImpl::TNEI);
 }
 
-} // namespace OpcodeImpl
-} // namespace Dynarec
-} // namespace R5900
+}
+}
+}

@@ -28,18 +28,16 @@ enum class PS_ATST : uint32_t
 	NOTEQUAL = 4
 };
 
-// Identical to the usual GS enum except for RGB_ONLY_DSB and RGB_ONLY_SW_Z
 enum class PS_AFAIL : uint32_t
 {
-	KEEP = 0,          ///< Hardware discard
-	FB_ONLY = 1,       ///< FB only with software Z discard
-	ZB_ONLY = 2,       ///< ZB only with software RGBA discard
-	RGB_ONLY = 3,      ///< RGB only with hardware Z discard and software A discard
-	RGB_ONLY_DSB = 4,  ///< RGB only with dual source blend
-	RGB_ONLY_SW_Z = 5, ///< RGB only with software Z discard
+	KEEP = 0,
+	FB_ONLY = 1,
+	ZB_ONLY = 2,
+	RGB_ONLY = 3,
+	RGB_ONLY_DSB = 4,
+	RGB_ONLY_SW_Z = 5,
 };
 
-// Identical to GS_ZTST
 enum class ZTST : uint32_t
 {
 	NEVER   = 0,
@@ -50,10 +48,10 @@ enum class ZTST : uint32_t
 
 enum class PS_AA1 : uint32_t
 {
-	NONE          = 0, ///< No AA1
-	LINE          = 1, ///< AA1 lines
-	TRIANGLE      = 2, ///< AA1 triangles
-	TRIANGLE_SW_Z = 3, ///< AA1 triangles with software Z discard
+	NONE          = 0,
+	LINE          = 1,
+	TRIANGLE      = 2,
+	TRIANGLE_SW_Z = 3,
 };
 
 enum class PS_ROV_DEPTH : uint32_t
@@ -63,4 +61,4 @@ enum class PS_ROV_DEPTH : uint32_t
 	READ_ONLY = 2,
 };
 
-} // namespace GSShader
+}

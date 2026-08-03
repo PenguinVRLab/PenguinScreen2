@@ -14,7 +14,6 @@ std::unique_ptr<ccc::ast::Node> stringToType(std::string_view string, const ccc:
 
 	size_t i = string.size();
 
-	// Parse array subscripts and pointer characters.
 	std::vector<s32> components;
 	for (; i > 0; i--)
 	{
@@ -47,7 +46,6 @@ std::unique_ptr<ccc::ast::Node> stringToType(std::string_view string, const ccc:
 		i = j;
 	}
 
-	// Lookup the type.
 	std::string type_name_string(string.data(), string.data() + i);
 	if (type_name_string.empty())
 	{
@@ -65,7 +63,6 @@ std::unique_ptr<ccc::ast::Node> stringToType(std::string_view string, const ccc:
 
 	std::unique_ptr<ccc::ast::Node> result;
 
-	// Create the AST.
 	std::unique_ptr<ccc::ast::TypeName> type_name = std::make_unique<ccc::ast::TypeName>();
 	type_name->size_bytes = data_type->type()->size_bytes;
 	type_name->data_type_handle = data_type->handle();
@@ -103,8 +100,6 @@ QString typeToString(const ccc::ast::Node* type, const ccc::SymbolDatabase& data
 {
 	QString suffix;
 
-	// Traverse through arrays, pointers and references, and build a string
-	// to be appended to the end of the type name.
 	bool done_finding_arrays_pointers = false;
 	while (!done_finding_arrays_pointers)
 	{
@@ -132,7 +127,6 @@ QString typeToString(const ccc::ast::Node* type, const ccc::SymbolDatabase& data
 		}
 	}
 
-	// Determine the actual type name, or at the very least the node type.
 	QString name;
 	switch (type->descriptor)
 	{

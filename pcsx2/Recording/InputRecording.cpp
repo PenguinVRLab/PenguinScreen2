@@ -7,8 +7,6 @@
 
 bool SaveStateBase::InputRecordingFreeze()
 {
-	// NOTE - BE CAREFUL
-	// CHANGING THIS WILL BREAK BACKWARDS COMPATIBILITY ON SAVESTATES
 	if (!FreezeTag("InputRecording"))
 		return false;
 
@@ -66,7 +64,6 @@ bool InputRecording::create(const std::string& fileName, const bool fromSaveStat
 		m_type = Type::POWER_ON;
 		m_initial_load_complete = false;
 		m_is_active = true;
-		// TODO - should this be an explicit [full] boot instead of a reset?
 		VMManager::Reset();
 	}
 
@@ -87,7 +84,6 @@ bool InputRecording::play(const std::string& filename)
 		return false;
 	}
 
-	// Either load the savestate, or restart the game
 	if (m_file.fromSaveState())
 	{
 		std::string savestatePath = fmt::format("{}_SaveState.p2s", m_file.getFilename());
@@ -116,7 +112,6 @@ bool InputRecording::play(const std::string& filename)
 		m_type = Type::POWER_ON;
 		m_initial_load_complete = false;
 		m_is_active = true;
-		// TODO - should this be an explicit [full] boot instead of a reset?
 		VMManager::Reset();
 	}
 	m_controls.setReplayMode();
@@ -156,7 +151,6 @@ void InputRecording::stop()
 	}
 	else
 	{
-		// Don't stop immediately, close the file after the current frame completes
 		m_recordingQueue.push([&]() {
 			closeActiveFile();
 		});
@@ -165,10 +159,8 @@ void InputRecording::stop()
 
 void InputRecording::handleControllerDataUpdate()
 {
-	// TODO - multi-tap support with new file format, for now just controller 0 and 1
 	for (int i = 0; i < 2; i++)
 	{
-		// Fetch the current frame's data
 		PadData frameData(i, 0);
 		if (m_is_active)
 		{
@@ -185,14 +177,12 @@ void InputRecording::handleControllerDataUpdate()
 				}
 			}
 		}
-		// Log the data we have gathered, useful for debugging our use-case
 		frameData.LogPadData();
 	}
 }
 
 void InputRecording::saveControllerData(const PadData& data, const int port, const int slot)
 {
-	// Save the frame's data to the file
 	if (!m_file.writePadData(m_frame_counter, data))
 	{
 		InputRec::consoleLog(fmt::format("Failed to write input data at [{}:{}:{}]", m_frame_counter, port, slot));
@@ -200,11 +190,9 @@ void InputRecording::saveControllerData(const PadData& data, const int port, con
 }
 std::optional<PadData> InputRecording::updateControllerData(const int port, const int slot)
 {
-	// Get the PadData from the file
 	const auto frameData = m_file.readPadData(m_frame_counter, port, slot);
 	if (frameData)
 	{
-		// Update the g_key_status appropriately
 		frameData->OverrideActualController();
 	}
 	else
@@ -241,11 +229,9 @@ void InputRecording::incFrameCounter()
 	if (m_controls.isReplaying())
 	{
 		InformGSThread();
-		// If we've reached the end of the recording while replaying, pause
 		if (m_frame_counter == m_file.getTotalFrames())
 		{
 			VMManager::SetPaused(true);
-			// Can also stop watching for re-records, they've watched to the end of the recording
 			m_watching_for_rerecords = false;
 		}
 	}
@@ -253,8 +239,6 @@ void InputRecording::incFrameCounter()
 	{
 		m_frame_counter_stateless++;
 		m_file.setTotalFrames(m_frame_counter);
-		// If we've been in record mode and moved to the next frame, we've overrote something
-		// if this was following a save-state loading, this is considered a re-record, a.k.a an undo
 		if (m_watching_for_rerecords)
 		{
 			m_file.incrementUndoCount();
@@ -281,7 +265,6 @@ bool InputRecording::isActive() const
 
 void InputRecording::handleExceededFrameCounter()
 {
-	// if we go past the end, switch to recording mode so nothing is lost
 	if (m_frame_counter >= m_file.getTotalFrames() && m_controls.isReplaying())
 	{
 		m_controls.setRecordMode(false);
@@ -299,13 +282,6 @@ void InputRecording::handleReset()
 
 void InputRecording::handleLoadingSavestate()
 {
-	// We need to keep track of the starting internal frame of the recording
-	// - For a power-on recording this should already be done - it starts at 0
-	// - For save state recordings, this is stored inside the initial save-state
-	//
-	// Why?
-	// - When you re-record you load another save-state which has it's own frame counter
-	//   stored within, we use this to adjust the frame we are replaying/recording to
 	if (isTypeSavestate() && !m_initial_load_complete)
 	{
 		setStartingFrame(g_FrameCount);

@@ -11,17 +11,15 @@
 
 using namespace R5900;
 
-// This is called by the COP2 as per the CTC instruction
 void vu0ResetRegs()
 {
-	VU0.VI[REG_VPU_STAT].UL &= ~0xff; // stop vu0
-	VU0.VI[REG_FBRST].UL &= ~0xff; // stop vu0
+	VU0.VI[REG_VPU_STAT].UL &= ~0xff;
+	VU0.VI[REG_FBRST].UL &= ~0xff;
 	vif0Regs.stat.VEW = false;
 }
 
 static __fi u32 vu0DenormalizeMicroStatus(u32 nstatus)
 {
-	// from mVUallocSFLAGd()
 	return ((nstatus >> 3) & 0x18u) | ((nstatus >> 11) & 0x1800u) | ((nstatus >> 14) & 0x3cf0000u);
 }
 
@@ -44,7 +42,6 @@ void vu0ExecMicro(u32 addr) {
 		vu0Finish();
 	}
 
-	// Need to copy the clip flag back to the interpreter in case COP2 has edited it
 	const u32 CLIP = VU0.VI[REG_CLIP_FLAG].UL;
 	const u32 MAC = VU0.VI[REG_MAC_FLAG].UL;
 	const u32 STATUS = VU0.VI[REG_STATUS_FLAG].UL;
@@ -52,9 +49,6 @@ void vu0ExecMicro(u32 addr) {
 	VU0.macflag = MAC;
 	VU0.statusflag = STATUS;
 
-	// Copy flags to micro instances, since they may be out of sync if COP2 has run.
-	// We do this at program start time, because COP2 can't execute until the program has completed,
-	// but long-running program may be interrupted so we can't do it at dispatch time.
 	vu0SetMicroFlags(VU0.micro_clipflags, CLIP);
 	vu0SetMicroFlags(VU0.micro_macflags, MAC);
 	vu0SetMicroFlags(VU0.micro_statusflags, vu0DenormalizeMicroStatus(STATUS));

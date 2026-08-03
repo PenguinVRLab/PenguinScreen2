@@ -1551,11 +1551,6 @@ Leaderboard Position: {1} of {2}</source>
       <translation>Χρησιμοποιήστε Επιλογέα Αποθήκευσης Κατάστασης</translation>
     </message>
     <message>
-      <location filename="../Settings/AdvancedSettingsWidget.ui" line="505"/>
-      <source>PINE Settings</source>
-      <translation>Ρυθμίσεις Π.Λ.Π.</translation>
-    </message>
-    <message>
       <location filename="../Settings/AdvancedSettingsWidget.ui" line="527"/>
       <source>Slot:</source>
       <translation>Θέση:</translation>

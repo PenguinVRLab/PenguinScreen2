@@ -17,20 +17,18 @@
 
 struct GSPixelOffset
 {
-	// 16 bit offsets (m_vm16[...])
 
-	GSVector2i row[2048]; // f yn | z yn
-	GSVector2i col[2048]; // f xn | z xn
+	GSVector2i row[2048];
+	GSVector2i col[2048];
 	u32 hash;
 	u32 fbp, zbp, fpsm, zpsm, bw;
 };
 
 struct GSPixelOffset4
 {
-	// 16 bit offsets (m_vm16[...])
 
-	GSVector2i row[2048]; // f yn | z yn (n = 0 1 2 ...)
-	GSVector2i col[512]; // f xn | z xn (n = 0 4 8 ...)
+	GSVector2i row[2048];
+	GSVector2i col[512];
 	u32 hash;
 	u32 fbp, zbp, fpsm, zpsm, bw;
 };
@@ -40,27 +38,23 @@ class GSOffset;
 class GSSwizzleInfo
 {
 	friend class GSOffset;
-	/// Table for storing swizzling of blocks within a page
 	const GSBlockSwizzleTable* m_blockSwizzle;
-	/// Table for storing swizzling of pixels within a page in the y dimension
 	const int* m_pixelSwizzleCol;
-	/// Array of tables for storing swizzling of pixels in the x dimension
 	const GSPixelRowOffsetTable* const* m_pixelSwizzleRow;
-	GSVector2i m_pageMask;  ///< Mask for getting the offset of a pixel that's within a page (may also be used as page dimensions - 1)
-	GSVector2i m_blockMask; ///< Mask for getting the offset of a pixel that's within a block (may also be used as block dimensions - 1)
-	int m_pixelRowMask;     ///< Mask for getting the offset in m_pixelSwizzleRow for a given y value
-	u8 m_pageShiftX;  ///< Amount to rshift x value by to get page offset
-	u8 m_pageShiftY;  ///< Amount to rshift y value by to get page offset
-	u8 m_blockShiftX; ///< Amount to rshift x value by to get offset in block
-	u8 m_blockShiftY; ///< Amount to rshift y value by to get offset in block
-	u32 m_blockAddressXor; ///< Value to xor with the final block address (used for Z swizzles)
-	u32 m_pixelAddressXor; ///< Value to xor with the final pixel address
+	GSVector2i m_pageMask;
+	GSVector2i m_blockMask;
+	int m_pixelRowMask;
+	u8 m_pageShiftX;
+	u8 m_pageShiftY;
+	u8 m_blockShiftX;
+	u8 m_blockShiftY;
+	u32 m_blockAddressXor;
+	u32 m_pixelAddressXor;
 	static constexpr u8 ilog2(u32 i) { return i < 2 ? 0 : 1 + ilog2(i >> 1); }
 
 public:
 	GSSwizzleInfo() = default;
 
-	/// @param blockSize Size of block in pixels
 	template <int PageWidth, int PageHeight, int BlocksWide, int BlocksHigh, int PixelRowMask>
 	constexpr GSSwizzleInfo(GSSwizzleTableList<PageHeight, PageWidth, BlocksHigh, BlocksWide, PixelRowMask> list, u32 blockXor)
 		: m_blockSwizzle(&list.block)
@@ -78,22 +72,19 @@ public:
 		static_assert(1 << ilog2(PageHeight) == PageHeight, "PageHeight must be a power of 2");
 	}
 
-	/// Returns the amount to shift to convert a width to pages.
 	u8 pageShiftX() const { return m_pageShiftX; }
 	u8 pageShiftY() const { return m_pageShiftY; }
 
-	/// Get the block number of the given pixel
 	u32 bn(int x, int y, u32 bp, u32 bw) const;
 
-	/// Get the address of the given pixel
 	u32 pa(int x, int y, u32 bp, u32 bw) const;
 };
 
 class GSOffset : GSSwizzleInfo
 {
-	int m_bp;   ///< Offset's base pointer (same measurement as GS)
-	int m_bwPg; ///< Offset's buffer width in pages (not equal to bw in GS for 8 and 4-bit textures)
-	int m_psm;  ///< Offset's pixel storage mode (just for storage, not used by any of the GSOffset algorithms)
+	int m_bp;
+	int m_bwPg;
+	int m_psm;
 public:
 	GSOffset() = default;
 	constexpr GSOffset(const GSSwizzleInfo& swz, u32 bp, u32 bw, u32 psm)
@@ -103,7 +94,6 @@ public:
 		, m_psm(psm)
 	{
 	}
-	/// Help the optimizer by using this method instead of GSLocalMemory::GetOffset when the PSM is known
 	constexpr static GSOffset fromKnownPSM(u32 bp, u32 bw, GS_PSM psm);
 
 	u32 bp()  const { return m_bp; }
@@ -112,19 +102,18 @@ public:
 	int blockShiftX() const { return m_blockShiftX; }
 	int blockShiftY() const { return m_blockShiftY; }
 
-	/// Helper class for efficiently getting the numbers of multiple blocks in a scanning pattern (increment x then y)
 	class BNHelper
 	{
-		const GSBlockSwizzleTable* m_blockSwizzle; ///< Block swizzle table from GSOffset
-		int m_baseBP;    ///< bp for start of current row (to return to the origin x when advancing y)
-		int m_bp;        ///< bp for current position
-		int m_baseBlkX;  ///< x of origin in blocks (to return to the origin x when advancing y)
-		int m_blkX;      ///< x of current position in blocks
-		int m_blkY;      ///< y of current position in blocks
-		int m_pageMaskX; ///< mask for x value of block coordinate to get position within page (to detect page crossing)
-		int m_pageMaskY; ///< mask for y value of block coordinate to get position within page (to detect page crossing)
-		int m_addY;      ///< Amount to add to bp to advance one page in y direction
-		u32 m_xor;       ///< XOR mask for final address
+		const GSBlockSwizzleTable* m_blockSwizzle;
+		int m_baseBP;
+		int m_bp;
+		int m_baseBlkX;
+		int m_blkX;
+		int m_blkY;
+		int m_pageMaskX;
+		int m_pageMaskY;
+		int m_addY;
+		u32 m_xor;
 	public:
 		BNHelper(const GSOffset& off, int x, int y)
 		{
@@ -140,12 +129,9 @@ public:
 			m_xor = off.m_blockAddressXor;
 		}
 
-		/// Get the current x position as an offset in blocks
 		int blkX() const { return m_blkX; }
-		/// Get the current y position as an offset in blocks
 		int blkY() const { return m_blkY; }
 
-		/// Advance one block in the x direction
 		void nextBlockX()
 		{
 			m_blkX++;
@@ -153,7 +139,6 @@ public:
 				m_bp += 32;
 		}
 
-		/// Advance one block in the y direction and reset x to the origin
 		void nextBlockY()
 		{
 			m_blkY++;
@@ -164,32 +149,27 @@ public:
 			m_bp = m_baseBP;
 		}
 
-		/// Get the current block number without wrapping at MAX_BLOCKS
 		u32 valueNoWrap() const
 		{
 			return (m_bp + m_blockSwizzle->lookup(m_blkX, m_blkY)) ^ m_xor;
 		}
 
-		/// Get the current block number
 		u32 value() const
 		{
 			return valueNoWrap() % GS_MAX_BLOCKS;
 		}
 	};
 
-	/// Get the block number of the given pixel
 	u32 bn(int x, int y) const
 	{
 		return BNHelper(*this, x, y).value();
 	}
 
-	/// Get the block number of the given pixel, without wrapping to MAX_BLOCKS
 	u32 bnNoWrap(int x, int y) const
 	{
 		return BNHelper(*this, x, y).valueNoWrap();
 	}
 
-	/// Get a helper class for efficiently calculating multiple block numbers
 	BNHelper bnMulti(int x, int y) const
 	{
 		return BNHelper(*this, x, y);
@@ -203,7 +183,6 @@ public:
 	bool isBlockAligned(const GSVector4i& r) const { return isAligned(r, m_blockMask); }
 	bool isPageAligned(const GSVector4i& r) const { return isAligned(r, m_pageMask); }
 
-	/// Loop over all the blocks in the given rect, calling `fn` on each
 	template <typename Fn>
 	void loopBlocks(const GSVector4i& rect, Fn&& fn) const
 	{
@@ -216,21 +195,17 @@ public:
 				fn(bn.value());
 	}
 
-	/// Calculate the pixel address at the given y position with x of 0 minus the final xor
 	int pixelAddressZeroXRaw(int y) const
 	{
-		int base = m_bp << (m_pageShiftX + m_pageShiftY - 5);   // Offset from base pointer
-		base += ((y & ~m_pageMask.y) * m_bwPg) << m_pageShiftX; // Offset from pages in y direction
-		// TODO: Old GSOffset masked here but is that useful?  Probably should mask at end or not at all...
-		base &= (GS_MAX_PAGES << (m_pageShiftX + m_pageShiftY)) - 1; // Mask
-		base += m_pixelSwizzleCol[y & m_pageMask.y]; // Add offset from y within page
+		int base = m_bp << (m_pageShiftX + m_pageShiftY - 5);
+		base += ((y & ~m_pageMask.y) * m_bwPg) << m_pageShiftX;
+		base &= (GS_MAX_PAGES << (m_pageShiftX + m_pageShiftY)) - 1;
+		base += m_pixelSwizzleCol[y & m_pageMask.y];
 		return base;
 	}
 
-	/// Helper class for efficiently getting the addresses of multiple pixels in a line (along the x axis)
 	class PAHelper
 	{
-		/// Pixel swizzle array
 		const int* m_pixelSwizzleRow;
 		int m_base;
 		u32 m_xor;
@@ -244,27 +219,22 @@ public:
 			m_xor = off.m_pixelAddressXor;
 		}
 
-		/// Get pixel reference for the given x offset from the one used to create the PAHelper
 		u32 value(int x) const
 		{
 			return (m_base + m_pixelSwizzleRow[x]) ^ m_xor;
 		}
 	};
 
-	/// Get the address of the given pixel
 	u32 pa(int x, int y) const
 	{
 		return PAHelper(*this, 0, y).value(x);
 	}
 
-	/// Get a helper class for efficiently calculating multiple pixel addresses in a line (along the x axis)
 	PAHelper paMulti(int x, int y) const
 	{
 		return PAHelper(*this, x, y);
 	}
 
-	/// Loop over the pixels in the given rectangle
-	/// Fn should be void(*)(VM*, Src*)
 	template <typename VM, typename Src, typename Fn>
 	void loopPixels(const GSVector4i& r, VM* RESTRICT vm, Src* RESTRICT px, int pitch, Fn&& fn) const
 	{
@@ -280,23 +250,19 @@ public:
 		}
 	}
 
-	/// Helper class for looping over the pages in a rect
-	/// Create with GSOffset::pageLooperForRect
 	class PageLooper
 	{
-		int firstRowPgXStart, firstRowPgXEnd; ///< Offset of start/end pages of the first line from x=0 page (only line for textures that don't cross page boundaries)
-		int   midRowPgXStart,   midRowPgXEnd; ///< Offset of start/end pages of inner lines (which always are always the height of the full page) from y=0 page
-		int  lastRowPgXStart,  lastRowPgXEnd; ///< Offset of start/end pages of the last line from x=0 page
-		int bp;   ///< Page offset of y=top x=0
-		int yInc; ///< Amount to add to bp when increasing y by one page
-		int yCnt; ///< Number of pages the rect covers in the y direction
-		bool slowPath; ///< True if the texture is big enough to wrap around GS memory and overlap itself
+		int firstRowPgXStart, firstRowPgXEnd;
+		int   midRowPgXStart,   midRowPgXEnd;
+		int  lastRowPgXStart,  lastRowPgXEnd;
+		int bp;
+		int yInc;
+		int yCnt;
+		bool slowPath;
 
 		friend class GSOffset;
 
 	public:
-		/// Loop over pages, fn can return `false` to break the loop
-		/// Fn: bool(*)(u32)
 		template <typename Fn>
 		void loopPagesWithBreak(Fn&& fn) const
 		{
@@ -327,7 +293,6 @@ public:
 
 					if (y < yCnt - 2)
 					{
-						// Next iteration is not last (y + 1 < yCnt - 1).
 						startOff = midRowPgXStart;
 						endOff   = midRowPgXEnd;
 					}
@@ -354,7 +319,6 @@ public:
 
 					if (y < yCnt - 2)
 					{
-						// Next iteration is not last (y + 1 < yCnt - 1).
 						startOff = midRowPgXStart;
 						endOff   = midRowPgXEnd;
 					}
@@ -367,8 +331,6 @@ public:
 			}
 		}
 
-		/// Loop over pages, calling `fn` on each one with no option to break
-		/// Fn: void(*)(u32)
 		template <typename Fn>
 		void loopPages(Fn&& fn) const
 		{
@@ -376,18 +338,14 @@ public:
 		}
 	};
 
-	/// Get an object for looping over the pages in the given rect
 	PageLooper pageLooperForRect(const GSVector4i& rect) const;
 
-	/// Loop over all the pages in the given rect, calling `fn` on each
 	template <typename Fn>
 	void loopPages(const GSVector4i& rect, Fn&& fn) const
 	{
 		pageLooperForRect(rect).loopPages(std::forward<Fn>(fn));
 	}
 
-	/// Use compile-time dimensions from `swz` as a performance optimization
-	/// Also asserts if your assumption was wrong
 	constexpr GSOffset assertSizesMatch(const GSSwizzleInfo& swz) const
 	{
 		GSOffset o = *this;
@@ -498,11 +456,7 @@ protected:
 			| ((c & 0x001f) << 3);
 	}
 
-	// TODO
-
 	friend class GSClut;
-
-	//
 
 	std::unordered_map<u32, GSPixelOffset*> m_pomap;
 	std::unordered_map<u32, GSPixelOffset4*> m_po4map;
@@ -531,8 +485,6 @@ public:
 	static u32 GetUnwrappedEndBlockAddress(u32 bp, u32 bw, u32 psm, GSVector4i rect);
 	static GSVector4i GetRectForPageOffset(u32 base_bp, u32 offset_bp, u32 bw, u32 psm);
 
-	// address
-
 	static u32 BlockNumber32(int x, int y, u32 bp, u32 bw)
 	{
 		return swizzle32.bn(x, y, bp, bw);
@@ -550,14 +502,12 @@ public:
 
 	static u32 BlockNumber8(int x, int y, u32 bp, u32 bw)
 	{
-		// ASSERT((bw & 1) == 0); // allowed for mipmap levels
 
 		return swizzle8.bn(x, y, bp, bw);
 	}
 
 	static u32 BlockNumber4(int x, int y, u32 bp, u32 bw)
 	{
-		// ASSERT((bw & 1) == 0); // allowed for mipmap levels
 
 		return swizzle4.bn(x, y, bp, bw);
 	}
@@ -639,14 +589,12 @@ public:
 
 	static __forceinline u32 PixelAddress8(int x, int y, u32 bp, u32 bw)
 	{
-		// ASSERT((bw & 1) == 0); // allowed for mipmap levels
 
 		return swizzle8.pa(x, y, bp, bw);
 	}
 
 	static __forceinline u32 PixelAddress4(int x, int y, u32 bp, u32 bw)
 	{
-		// ASSERT((bw & 1) == 0); // allowed for mipmap levels
 
 		return swizzle4.pa(x, y, bp, bw);
 	}
@@ -665,8 +613,6 @@ public:
 	{
 		return swizzle16SZ.pa(x, y, bp, bw);
 	}
-
-	// pixel R/W
 
 	__forceinline u32 ReadPixel32(u32 addr) const
 	{
@@ -1118,8 +1064,6 @@ public:
 	}
 
 	void ReadTexture(const GSOffset& off, const GSVector4i& r, u8* dst, int dstpitch, const GIFRegTEXA& TEXA);
-
-	//
 
 	void SaveBMP(const std::string& fn, u32 bp, u32 bw, u32 psm, int w, int h, int x = 0, int y = 0);
 };

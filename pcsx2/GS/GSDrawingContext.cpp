@@ -8,10 +8,8 @@
 
 static int findmax(int tl, int br, int limit, int wm, int minuv, int maxuv)
 {
-	// return max possible texcoord.
 	int uv = br;
 
-	// Confirmed on hardware if the size exceeds 1024, it basically gets masked so you end up with a 1x1 pixel (Except Region Clamp).
 	if (limit > 1024)
 		limit = 0;
 
@@ -23,7 +21,7 @@ static int findmax(int tl, int br, int limit, int wm, int minuv, int maxuv)
 	else if (wm == CLAMP_REPEAT)
 	{
 		if (tl < 0)
-			uv = limit; // wrap around
+			uv = limit;
 		else if (uv > limit)
 			uv = limit;
 	}
@@ -36,12 +34,11 @@ static int findmax(int tl, int br, int limit, int wm, int minuv, int maxuv)
 	}
 	else if (wm == CLAMP_REGION_REPEAT)
 	{
-		// REGION_REPEAT adhears to the original texture size, even if offset outside the texture (with MAXUV).
 		minuv &= limit;
 		if (tl < 0)
-			uv = minuv | maxuv; // wrap around, just use (any & mask) | fix.
+			uv = minuv | maxuv;
 		else
-			uv = std::min(uv, minuv) | maxuv; // (any & mask) cannot be larger than mask, select br if that is smaller (not br & mask because there might be a larger value between tl and br when &'ed with the mask).
+			uv = std::min(uv, minuv) | maxuv;
 	}
 
 	return uv;
@@ -85,25 +82,19 @@ void GSDrawingContext::Reset()
 
 void GSDrawingContext::UpdateScissor()
 {
-	// Scissor registers are inclusive of the upper bounds.
 	const GSVector4i rscissor = GSVector4i(static_cast<int>(SCISSOR.SCAX0), static_cast<int>(SCISSOR.SCAY0),
 		static_cast<int>(SCISSOR.SCAX1), static_cast<int>(SCISSOR.SCAY1));
 	scissor.in = rscissor + GSVector4i::cxpr(0, 0, 1, 1);
 
-	// Fixed-point scissor min/max, used for rejecting primitives which are entirely outside.
-	// Add half a pixel around the edges for upscaling and lines/points.
 	scissor.cull = rscissor.sll32<4>() + GSVector4i(-8, -8, 8, 8);
 
-	// Offset applied to vertices for culling.
 	scissor.xyof = GSVector4i::loadl(&XYOFFSET.U64).xyxy();
 }
 
 GIFRegTEX0 GSDrawingContext::GetSizeFixedTEX0(const GSVector4& st, bool linear, bool mipmap) const
 {
 	if (mipmap)
-		return TEX0; // no mipmaping allowed
-
-	// find the optimal value for TW/TH by analyzing vertex trace and clamping values, extending only for region modes where uv may be outside
+		return TEX0;
 
 	int tw = TEX0.TW;
 	int th = TEX0.TH;
@@ -128,7 +119,7 @@ GIFRegTEX0 GSDrawingContext::GetSizeFixedTEX0(const GSVector4& st, bool linear, 
 	uv.x = findmax(uv.x, uv.z, (1 << tw) - 1, wms, minu, maxu);
 	uv.y = findmax(uv.y, uv.w, (1 << th) - 1, wmt, minv, maxv);
 
-	if (tw + th >= 19) // smaller sizes aren't worth, they just create multiple entries in the textue cache and the saved memory is less
+	if (tw + th >= 19)
 	{
 		tw = reduce(uv.x, tw);
 		th = reduce(uv.y, th);
@@ -164,12 +155,9 @@ GIFRegTEX0 GSDrawingContext::GetSizeFixedTEX0(const GSVector4& st, bool linear, 
 
 void GSDrawingContext::Dump(const std::string& filename)
 {
-	// Append on purpose so env + context are merged into a single file
 	FILE* fp = fopen(filename.c_str(), "at");
 	if (!fp)
 		return;
-
-	// Warning: The indentation must be consistent with GSDrawingEnvironment::Dump().
 
 	fprintf(fp,
 		"XYOFFSET:\n"

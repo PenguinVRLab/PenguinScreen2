@@ -240,13 +240,10 @@ struct ConvertToDepthRes
 	texture2d<half> texture [[texture(GSMTLTextureIndexNonHW)]];
 	half4 sample(float2 coord)
 	{
-		// RGBA bilinear on a depth texture is a bad idea, and should never be used
-		// Might as well let the compiler optimize a bit by telling it exactly what sampler we'll be using here
 		constexpr sampler s(coord::normalized, filter::nearest, address::clamp_to_edge);
 		return texture.sample(s, coord);
 	}
 
-	/// Manual bilinear sampling where we do the bilinear *after* rgba → depth conversion
 	template <float (&convert)(half4)>
 	float sample_biln(float2 coord)
 	{
@@ -285,7 +282,6 @@ static float depth32_to_depth24(float d)
 
 fragment DepthOrColorOut ps_convert_depth32_depth24(ConvertShaderData data [[stage_in]], ConvertPSDepthOrColorRes res)
 {
-	// Truncates depth value to 24bits
 	return depth32_to_depth24(res.sample(data.t));
 }
 
@@ -312,29 +308,18 @@ fragment DepthOrColorOut ps_convert_rgb5a1_depth16(ConvertShaderData data [[stag
 fragment float4 ps_convert_rgb5a1_8i(ConvertShaderData data [[stage_in]], DirectReadTextureIn<float> res,
 	constant GSMTLIndexedConvertPSUniform& uniform [[buffer(GSMTLBufferIndexUniforms)]])
 {
-	// Convert a RGB5A1 texture into a 8 bits packed texture
-	// Input column: 16x2 RGB5A1 pixels
-	// 0: 16 RGBA
-	// 1: 16 RGBA
-	// Output column: 16x4 Index pixels
-	// 0: 16 R5G2
-	// 1: 16 R5G2
-	// 2: 16 G2B5A1
-	// 3: 16 G2B5A1
 	uint2 pos = uint2(data.p.xy);
 
-	// Collapse separate R G B A areas into their base pixel
 	uint2 column = (pos & ~uint2(0u, 3u)) / uint2(1,2);
 	uint2 subcolumn = (pos & uint2(0u, 1u));
 	column.x -= (column.x / 128) * 64;
 	column.y += (column.y / 32) * 32;
 
-	// Deal with swizzling differences
-	if ((uniform.psm & 0x8) != 0) // PSMCT16S
+	if ((uniform.psm & 0x8) != 0)
 	{
 		if ((pos.x & 32) != 0)
 		{
-			column.y += 32; // 4 columns high times 4 to get bottom 4 blocks
+			column.y += 32;
 			column.x &= ~32;
 		}
 		
@@ -349,13 +334,13 @@ fragment float4 ps_convert_rgb5a1_8i(ConvertShaderData data [[stage_in]], Direct
 			column.y ^= 8;
 		}
 		
-		if ((uniform.psm & 0x30) != 0) // PSMZ16S - Untested but hopefully ok if anything uses it.
+		if ((uniform.psm & 0x30) != 0)
 		{
 			column.x ^= 32;
 			column.y ^= 16;
 		}
 	}
-	else // PSMCT16
+	else
 	{
 		if ((pos.y & 32) != 0)
 		{
@@ -366,7 +351,7 @@ fragment float4 ps_convert_rgb5a1_8i(ConvertShaderData data [[stage_in]], Direct
 		if ((pos.x & 96) != 0)
 		{
 			uint multi = (pos.x & 96) / 32;
-			column.y += 16 * multi; // 4 columns high times 4 to get bottom 4 blocks
+			column.y += 16 * multi;
 			column.x -= (pos.x & 96);
 		}
 		
@@ -376,7 +361,7 @@ fragment float4 ps_convert_rgb5a1_8i(ConvertShaderData data [[stage_in]], Direct
 			column.y ^= 8;
 		}
 		
-		if ((uniform.psm & 0x30) != 0) // PSMZ16 - Untested but hopefully ok if anything uses it.
+		if ((uniform.psm & 0x30) != 0)
 		{
 			column.x ^= 32;
 			column.y ^= 32;
@@ -385,17 +370,15 @@ fragment float4 ps_convert_rgb5a1_8i(ConvertShaderData data [[stage_in]], Direct
 	
 	uint2 coord = column | subcolumn;
 
-	// Compensate for potentially differing page pitch.
 	uint2 block_xy = coord / uint2(64, 64);
 	uint block_num = (block_xy.y * (uniform.dbw / 128)) + block_xy.x;
 	uint2 block_offset = uint2((block_num % (uniform.sbw / 64)) * 64, (block_num / (uniform.sbw / 64)) * 64);
 	coord = (coord % uint2(64, 64)) + block_offset;
 
-	// Apply offset to cols 1 and 2
 	uint is_col23 = pos.y & 4;
 	uint is_col13 = pos.y & 2;
 	uint is_col12 = is_col23 ^ (is_col13 << 1);
-	coord.x ^= is_col12; // If cols 1 or 2, flip bit 3 of x
+	coord.x ^= is_col12;
 
 	if (any(floor(uniform.scale) != uniform.scale))
 		coord = uint2(float2(coord) * uniform.scale);
@@ -427,33 +410,21 @@ fragment float4 ps_convert_rgb5a1_8i(ConvertShaderData data [[stage_in]], Direct
 fragment float4 ps_convert_rgba_8i(ConvertShaderData data [[stage_in]], DirectReadTextureIn<float> res,
 	constant GSMTLIndexedConvertPSUniform& uniform [[buffer(GSMTLBufferIndexUniforms)]])
 {
-	// Convert a RGBA texture into a 8 bits packed texture
-	// Input column: 8x2 RGBA pixels
-	// 0: 8 RGBA
-	// 1: 8 RGBA
-	// Output column: 16x4 Index pixels
-	// 0: 8 R | 8 B
-	// 1: 8 R | 8 B
-	// 2: 8 G | 8 A
-	// 3: 8 G | 8 A
 	uint2 pos = uint2(data.p.xy);
 
-	// Collapse separate R G B A areas into their base pixel
 	uint2 block = (pos & ~uint2(15, 3)) >> 1;
 	uint2 subblock = pos & uint2(7, 1);
 	uint2 coord = block | subblock;
 
-	// Compensate for potentially differing page pitch.
 	uint2 block_xy = coord / uint2(64, 32);
 	uint block_num = (block_xy.y * (uniform.dbw / 128)) + block_xy.x;
 	uint2 block_offset = uint2((block_num % (uniform.sbw / 64)) * 64, (block_num / (uniform.sbw / 64)) * 32);
 	coord = (coord % uint2(64, 32)) + block_offset;
 
-	// Apply offset to cols 1 and 2
 	uint is_col23 = pos.y & 4;
 	uint is_col13 = pos.y & 2;
 	uint is_col12 = is_col23 ^ (is_col13 << 1);
-	coord.x ^= is_col12; // If cols 1 or 2, flip bit 3 of x
+	coord.x ^= is_col12;
 
 	if (any(floor(uniform.scale) != uniform.scale))
 		coord = uint2(float2(coord) * uniform.scale);
@@ -470,7 +441,6 @@ fragment float4 ps_convert_clut_4(ConvertShaderData data [[stage_in]],
 	texture2d<float> texture [[texture(GSMTLTextureIndexNonHW)]],
 	constant GSMTLCLUTConvertPSUniform& uniform [[buffer(GSMTLBufferIndexUniforms)]])
 {
-	// CLUT4 is easy, just two rows of 8x8.
 	uint index = uint(data.p.x) + uniform.doffset;
 	uint2 pos = uint2(index % 8, index / 8);
 
@@ -484,8 +454,6 @@ fragment float4 ps_convert_clut_8(ConvertShaderData data [[stage_in]],
 {
 	uint index = min(uint(data.p.x) + uniform.doffset, 255u);
 
-	// CLUT is arranged into 8 groups of 16x2, with the top-right and bottom-left quadrants swapped.
-	// This can probably be done better..
 	uint subgroup = (index / 8) % 4;
 	uint2 pos;
 	pos.x = (index % 8) + ((subgroup >= 2) ? 8 :0u);
@@ -501,7 +469,6 @@ fragment float4 ps_yuv(ConvertShaderData data [[stage_in]], ConvertPSRes res,
 	float4 i = res.sample(data.t);
 	float4 o = float4(0);
 
-	// Value from GS manual
 	const float3x3 rgb2yuv =
 	{
 		{0.587, -0.311, -0.419},
@@ -546,7 +513,6 @@ fragment float4 ps_shadeboost(float4 p [[position]], DirectReadTextureIn<float> 
 	const float con = cb.y;
 	const float sat = cb.z;
 	const float gam = cb.w;
-	// Increase or decrease these values to adjust r, g and b color channels separately
 	const float AvgLumR = 0.5;
 	const float AvgLumG = 0.5;
 	const float AvgLumB = 0.5;

@@ -13,17 +13,12 @@
 #include "common/AlignedMalloc.h"
 #include "common/StringUtil.h"
 
-// Looking across a range of GPUs, the optimal copy alignment for Vulkan drivers seems
-// to be between 1 (AMD/NV) and 64 (Intel). So, we'll go with 64 here.
 static constexpr u32 TEXTURE_UPLOAD_ALIGNMENT = 64;
 
-// The pitch alignment must be less or equal to the upload alignment.
-// We need 32 here for AVX2, so 64 is also fine.
 static constexpr u32 TEXTURE_UPLOAD_PITCH_ALIGNMENT = 64;
 
 GSTextureOGL::GSTextureOGL(Usage usage, int width, int height, int levels, Format format)
 {
-	// OpenGL didn't like dimensions of size 0
 	m_size.x = std::max(1, width);
 	m_size.y = std::max(1, height);
 	m_usage = usage;
@@ -31,10 +26,8 @@ GSTextureOGL::GSTextureOGL(Usage usage, int width, int height, int levels, Forma
 	m_texture_id = 0;
 	m_mipmap_levels = 1;
 
-	// Bunch of constant parameter
 	switch (m_format)
 	{
-		// 1 Channel integer
 		case Format::PrimID:
 			m_gl_format = GL_R32F;
 			m_int_format = GL_RED;
@@ -54,7 +47,6 @@ GSTextureOGL::GSTextureOGL(Usage usage, int width, int height, int levels, Forma
 			m_int_shift = 1;
 			break;
 
-		// 1 Channel normalized
 		case Format::UNorm8:
 			m_gl_format = GL_R8;
 			m_int_format = GL_RED;
@@ -62,7 +54,6 @@ GSTextureOGL::GSTextureOGL(Usage usage, int width, int height, int levels, Forma
 			m_int_shift = 0;
 			break;
 		
-		// 1 channel float
 		case Format::DepthColor:
 			m_gl_format = GL_R32F;
 			m_int_format = GL_RED;
@@ -70,7 +61,6 @@ GSTextureOGL::GSTextureOGL(Usage usage, int width, int height, int levels, Forma
 			m_int_shift = 2;
 			break;
 
-		// 4 channel normalized
 		case Format::Color:
 		case Format::ColorHQ:
 		case Format::ColorHDR:
@@ -80,7 +70,6 @@ GSTextureOGL::GSTextureOGL(Usage usage, int width, int height, int levels, Forma
 			m_int_shift = 2;
 			break;
 
-		// 4 channel float
 		case Format::ColorClip:
 			m_gl_format = GL_RGBA16;
 			m_int_format = GL_RGBA;
@@ -88,7 +77,6 @@ GSTextureOGL::GSTextureOGL(Usage usage, int width, int height, int levels, Forma
 			m_int_shift = 3;
 			break;
 
-		// Depth buffer
 		case Format::DepthStencil:
 		{
 			if (!g_gs_device->Features().framebuffer_fetch)
@@ -96,7 +84,7 @@ GSTextureOGL::GSTextureOGL(Usage usage, int width, int height, int levels, Forma
 				m_gl_format = GL_DEPTH32F_STENCIL8;
 				m_int_format = GL_DEPTH_STENCIL;
 				m_int_type = GL_FLOAT_32_UNSIGNED_INT_24_8_REV;
-				m_int_shift = 3; // 4 bytes for depth + 4 bytes for stencil by texels
+				m_int_shift = 3;
 			}
 			else
 			{
@@ -143,16 +131,12 @@ GSTextureOGL::GSTextureOGL(Usage usage, int width, int height, int levels, Forma
 			pxAssert(0);
 	}
 
-	// Only 32 bits input texture will be supported for mipmap
 	if (IsTexture())
 		m_mipmap_levels = levels;
 
-	// Create a gl object (texture isn't allocated here)
 	glCreateTextures(GL_TEXTURE_2D, 1, &m_texture_id);
 	if (m_format == Format::UNorm8)
 	{
-		// Emulate DX behavior, beside it avoid special code in shader to differentiate
-		// palette texture from a GL_RGBA target or a GL_R texture.
 		glTextureParameteri(m_texture_id, GL_TEXTURE_SWIZZLE_A, GL_RED);
 	}
 
@@ -161,10 +145,8 @@ GSTextureOGL::GSTextureOGL(Usage usage, int width, int height, int levels, Forma
 
 GSTextureOGL::~GSTextureOGL()
 {
-	// Textures aren't cleared from attachments on deletion.
 	GSDeviceOGL::GetInstance()->OMUnbindTexture(this);
 
-	// But they are unbound.
 	for (GLuint& tex : GLState::tex_unit)
 	{
 		if (m_texture_id == tex)
@@ -186,11 +168,6 @@ bool GSTextureOGL::Update(const GSVector4i& r, const void* data, int pitch, int 
 	if (layer >= m_mipmap_levels)
 		return true;
 
-	// Default upload path for the texture is the Map/Unmap
-	// This path is mostly used for palette. But also for texture that could
-	// overflow the pbo buffer
-	// Data upload is rather small typically 64B or 1024B. So don't bother with PBO
-	// and directly send the data to the GL synchronously
 	GSDeviceOGL::GetInstance()->CommitClear(this, true);
 
 	const u32 preferred_pitch = Common::AlignUpPow2(r.width() << m_int_shift, TEXTURE_UPLOAD_PITCH_ALIGNMENT);
@@ -198,8 +175,6 @@ bool GSTextureOGL::Update(const GSVector4i& r, const void* data, int pitch, int 
 
 #if 0
 	if (r.height() == 1) {
-		// Palette data. Transfer is small either 64B or 1024B.
-		// Sometimes it is faster, sometimes slower.
 		glTextureSubImage2D(m_texture_id, GL_TEX_LEVEL_0, r.x, r.y, r.width(), r.height(), m_int_format, m_int_type, data);
 		return true;
 	}
@@ -208,8 +183,6 @@ bool GSTextureOGL::Update(const GSVector4i& r, const void* data, int pitch, int 
 	GL_PUSH("Upload Texture %d", m_texture_id);
 	g_perfmon.Put(GSPerfMon::TextureUploads, 1);
 
-	// Don't use PBOs for huge texture uploads, let the driver sort it out.
-	// Otherwise we'll just be syncing, or worse, crashing because the PBO routine above isn't great.
 	GLStreamBuffer* const sb = GSDeviceOGL::GetInstance()->GetTextureUploadBuffer();
 	if (IsCompressedFormat())
 	{
@@ -223,7 +196,7 @@ bool GSTextureOGL::Update(const GSVector4i& r, const void* data, int pitch, int 
 	{
 		glPixelStorei(GL_UNPACK_ROW_LENGTH, pitch >> m_int_shift);
 		glTextureSubImage2D(m_texture_id, layer, r.x, r.y, r.width(), r.height(), m_int_format, m_int_type, data);
-		glPixelStorei(GL_UNPACK_ROW_LENGTH, 0); // Restore default behavior
+		glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
 	}
 	else
 	{
@@ -256,7 +229,6 @@ bool GSTextureOGL::Map(GSMap& m, const GSVector4i* _r, int layer)
 	GSDeviceOGL::GetInstance()->CommitClear(this, true);
 
 	GSVector4i r = _r ? *_r : GSVector4i(0, 0, m_size.x, m_size.y);
-	// Will need some investigation
 	pxAssert(r.width() != 0);
 	pxAssert(r.height() != 0);
 
@@ -270,13 +242,12 @@ bool GSTextureOGL::Map(GSMap& m, const GSVector4i* _r, int layer)
 		if (!sb || upload_size > sb->GetChunkSize())
 			return false;
 
-		GL_PUSH_("Upload Texture %d", m_texture_id); // POP is in Unmap
+		GL_PUSH_("Upload Texture %d", m_texture_id);
 		g_perfmon.Put(GSPerfMon::TextureUploads, 1);
 
 		const auto map = sb->Map(TEXTURE_UPLOAD_ALIGNMENT, upload_size);
 		m.bits = static_cast<u8*>(map.pointer);
 
-		// Save the area for the unmap
 		m_r_x = r.x;
 		m_r_y = r.y;
 		m_r_w = r.width();
@@ -314,7 +285,7 @@ void GSTextureOGL::Unmap()
 
 		m_needs_mipmaps_generated = true;
 
-		GL_POP(); // PUSH is in Map
+		GL_POP();
 	}
 }
 
@@ -405,7 +376,6 @@ std::unique_ptr<GSDownloadTextureOGL> GSDownloadTextureOGL::Create(u32 width, u3
 		return ret;
 	}
 
-	// Fallback to glReadPixels() + CPU buffer.
 	u8* cpu_buffer = static_cast<u8*>(_aligned_malloc(buffer_size, VECTOR_ALIGNMENT));
 	if (!cpu_buffer)
 		return {};
@@ -442,7 +412,6 @@ void GSDownloadTextureOGL::CopyFromTexture(
 
 	if (!m_cpu_buffer)
 	{
-		// Read to PBO.
 		glBindBuffer(GL_PIXEL_PACK_BUFFER, m_buffer_id);
 	}
 
@@ -452,14 +421,12 @@ void GSDownloadTextureOGL::CopyFromTexture(
 
 	if (m_cpu_buffer)
 	{
-		// If using CPU buffers, we never need to flush.
 		m_needs_flush = false;
 	}
 	else
 	{
 		glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
 
-		// Create a sync object so we know when the GPU is done copying.
 		if (m_sync)
 			glDeleteSync(m_sync);
 
@@ -472,18 +439,15 @@ void GSDownloadTextureOGL::CopyFromTexture(
 
 bool GSDownloadTextureOGL::Map(const GSVector4i& read_rc)
 {
-	// Either always mapped, or CPU buffer.
 	return true;
 }
 
 void GSDownloadTextureOGL::Unmap()
 {
-	// Either always mapped, or CPU buffer.
 }
 
 void GSDownloadTextureOGL::Flush()
 {
-	// If we're using CPU buffers, we did the readback synchronously...
 	if (!m_needs_flush || !m_sync)
 		return;
 

@@ -20,9 +20,6 @@ bool SaveStateBase::vuJITFreeze()
 
 	Console.Warning("recompiler state is stubbed in arm64!");
 
-	// HACK!!
-
-	// size of microRegInfo structure
 	std::array<u8,96> empty_data{};
 	Freeze(empty_data);
 	Freeze(empty_data);

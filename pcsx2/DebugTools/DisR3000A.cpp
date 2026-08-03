@@ -8,7 +8,6 @@ namespace R3000A
 {
 	static char ostr[1024];
 
-// Names of registers
 	const char * const disRNameGPR[] = {
 		"r0", "at", "v0", "v1", "a0", "a1","a2", "a3",
 		"t0", "t1", "t2", "t3", "t4", "t5","t6", "t7",
@@ -22,16 +21,13 @@ namespace R3000A
 		"Config"    , "LLAddr"    , "WatchLo" , "WatchHi" , "XContext", "*RES*"     , "*RES*"     , "*RES*"     ,
 		"*RES*"     , "*RES* "    , "PErr"    , "CacheErr", "TagLo"   , "TagHi"     , "ErrorEPC"  , "*RES*"     };
 
-// Type definition of our functions
-
 typedef char* (*TdisR3000AF)(u32 code, u32 pc);
 
-// These macros are used to assemble the disassembler functions
 #define MakeDisFg(fn, b) char* fn(u32 code, u32 pc) { b; return ostr; }
 #define MakeDisF(fn, b) \
 	static char* fn(u32 code, u32 pc) { \
 		std::snprintf(ostr, sizeof(ostr), "%8.8x %8.8x:", pc, code); \
-		b; /*ostr[(strlen(ostr) - 1)] = 0;*/ return ostr; \
+		b; return ostr; \
 	}
 
 
@@ -43,12 +39,12 @@ typedef char* (*TdisR3000AF)(u32 code, u32 pc);
 #undef _Im_
 #undef _InstrucTarget_
 
-#define _Funct_  ((code      ) & 0x3F) // The funct part of the instruction register
-#define _Rd_     ((code >> 11) & 0x1F) // The rd part of the instruction register
-#define _Rt_     ((code >> 16) & 0x1F) // The rt part of the instruction register
-#define _Rs_     ((code >> 21) & 0x1F) // The rs part of the instruction register
-#define _Sa_     ((code >>  6) & 0x1F) // The sa part of the instruction register
-#define _Im_     ( code & 0xFFFF)      // The immediate part of the instruction register
+#define _Funct_  ((code      ) & 0x3F)
+#define _Rd_     ((code >> 11) & 0x1F)
+#define _Rt_     ((code >> 16) & 0x1F)
+#define _Rs_     ((code >> 21) & 0x1F)
+#define _Sa_     ((code >>  6) & 0x1F)
+#define _Im_     ( code & 0xFFFF)
 
 #define _InstrucTarget_  ((pc & 0xf0000000) + ((code & 0x03ffffff) * 4))
 #define _Branch_  (pc + 4 + ((short)_Im_ * 4))
@@ -66,10 +62,6 @@ typedef char* (*TdisR3000AF)(u32 code, u32 pc);
 #define dOffset()	std::snprintf(ostr + std::strlen(ostr), std::size(ostr) - std::strlen(ostr), " %8.8x,", _Branch_)
 #define dCode()		std::snprintf(ostr + std::strlen(ostr), std::size(ostr) - std::strlen(ostr), " %8.8x,", (code >> 6) & 0xffffff)
 
-/*********************************************************
-* Arithmetic with immediate operand                      *
-* Format:  OP rt, rs, immediate                          *
-*********************************************************/
 MakeDisF(disADDI,		dName("ADDI");  dGPR(_Rt_); dGPR(_Rs_); dImm();)
 MakeDisF(disADDIU,		dName("ADDIU"); dGPR(_Rt_); dGPR(_Rs_); dImm();)
 MakeDisF(disANDI,		dName("ANDI");  dGPR(_Rt_); dGPR(_Rs_); dImm();)
@@ -78,10 +70,6 @@ MakeDisF(disSLTI,		dName("SLTI");  dGPR(_Rt_); dGPR(_Rs_); dImm();)
 MakeDisF(disSLTIU,		dName("SLTIU"); dGPR(_Rt_); dGPR(_Rs_); dImm();)
 MakeDisF(disXORI,		dName("XORI");  dGPR(_Rt_); dGPR(_Rs_); dImm();)
 
-/*********************************************************
-* Register arithmetic                                    *
-* Format:  OP rd, rs, rt                                 *
-*********************************************************/
 MakeDisF(disADD,		dName("ADD");  dGPR(_Rd_); dGPR(_Rs_); dGPR(_Rt_);)
 MakeDisF(disADDU,		dName("ADDU"); dGPR(_Rd_); dGPR(_Rs_); dGPR(_Rt_);)
 MakeDisF(disAND,		dName("AND");  dGPR(_Rd_); dGPR(_Rs_); dGPR(_Rt_);)
@@ -93,19 +81,11 @@ MakeDisF(disSUB,		dName("SUB");  dGPR(_Rd_); dGPR(_Rs_); dGPR(_Rt_);)
 MakeDisF(disSUBU,		dName("SUBU"); dGPR(_Rd_); dGPR(_Rs_); dGPR(_Rt_);)
 MakeDisF(disXOR,		dName("XOR");  dGPR(_Rd_); dGPR(_Rs_); dGPR(_Rt_);)
 
-/*********************************************************
-* Register arithmetic & Register trap logic              *
-* Format:  OP rs, rt                                     *
-*********************************************************/
 MakeDisF(disDIV,		dName("DIV");   dGPR(_Rs_); dGPR(_Rt_);)
 MakeDisF(disDIVU,		dName("DIVU");  dGPR(_Rs_); dGPR(_Rt_);)
 MakeDisF(disMULT,		dName("MULT");  dGPR(_Rs_); dGPR(_Rt_);)
 MakeDisF(disMULTU,		dName("MULTU"); dGPR(_Rs_); dGPR(_Rt_);)
 
-/*********************************************************
-* Register branch logic                                  *
-* Format:  OP rs, offset                                 *
-*********************************************************/
 MakeDisF(disBGEZ,		dName("BGEZ");   dGPR(_Rs_); dOffset();)
 MakeDisF(disBGEZAL,		dName("BGEZAL"); dGPR(_Rs_); dOffset();)
 MakeDisF(disBGTZ,		dName("BGTZ");   dGPR(_Rs_); dOffset();)
@@ -113,46 +93,22 @@ MakeDisF(disBLEZ,		dName("BLEZ");   dGPR(_Rs_); dOffset();)
 MakeDisF(disBLTZ,		dName("BLTZ");   dGPR(_Rs_); dOffset();)
 MakeDisF(disBLTZAL,		dName("BLTZAL"); dGPR(_Rs_); dOffset();)
 
-/*********************************************************
-* Shift arithmetic with constant shift                   *
-* Format:  OP rd, rt, sa                                 *
-*********************************************************/
 MakeDisF(disSLL,		if (code) { dName("SLL"); dGPR(_Rd_); dGPR(_Rt_); dSa(); } else { dName("NOP"); })
 MakeDisF(disSRA,		dName("SRA"); dGPR(_Rd_); dGPR(_Rt_); dSa();)
 MakeDisF(disSRL,		dName("SRL"); dGPR(_Rd_); dGPR(_Rt_); dSa();)
 
-/*********************************************************
-* Shift arithmetic with variant register shift           *
-* Format:  OP rd, rt, rs                                 *
-*********************************************************/
 MakeDisF(disSLLV,		dName("SLLV");  dGPR(_Rd_); dGPR(_Rt_); dGPR(_Rs_);)
 MakeDisF(disSRAV,		dName("SRAV");  dGPR(_Rd_); dGPR(_Rt_); dGPR(_Rs_);)
 MakeDisF(disSRLV,		dName("SRLV");  dGPR(_Rd_); dGPR(_Rt_); dGPR(_Rs_);)
 
-/*********************************************************
-* Load higher 16 bits of the first word in GPR with imm  *
-* Format:  OP rt, immediate                              *
-*********************************************************/
 MakeDisF(disLUI,		dName("LUI"); dGPR(_Rt_); dImm();)
 
-/*********************************************************
-* Move from HI/LO to GPR                                 *
-* Format:  OP rd                                         *
-*********************************************************/
 MakeDisF(disMFHI,		dName("MFHI"); dGPR(_Rd_); dHI();)
 MakeDisF(disMFLO,		dName("MFLO"); dGPR(_Rd_); dLO();)
 
-/*********************************************************
-* Move from GPR to HI/LO                                 *
-* Format:  OP rd                                         *
-*********************************************************/
 MakeDisF(disMTHI,		dName("MTHI"); dHI(); dGPR(_Rs_);)
 MakeDisF(disMTLO,		dName("MTLO"); dLO(); dGPR(_Rs_);)
 
-/*********************************************************
-* Special purpose instructions                           *
-* Format:  OP                                            *
-*********************************************************/
 MakeDisF(disBREAK,		dName("BREAK"))
 MakeDisF(disRFE,		dName("RFE"))
 MakeDisF(disSYSCALL,	dName("SYSCALL"))
@@ -187,31 +143,15 @@ MakeDisF(disCFC2,		dName("CFC2"); dGPR(_Rt_);)
 MakeDisF(disMTC2,		dName("MTC2"))
 MakeDisF(disCTC2,		dName("CTC2"))
 
-/*********************************************************
-* Register branch logic                                  *
-* Format:  OP rs, rt, offset                             *
-*********************************************************/
 MakeDisF(disBEQ,		dName("BEQ"); dGPR(_Rs_); dGPR(_Rt_); dOffset();)
 MakeDisF(disBNE,		dName("BNE"); dGPR(_Rs_); dGPR(_Rt_); dOffset();)
 
-/*********************************************************
-* Jump to target                                         *
-* Format:  OP target                                     *
-*********************************************************/
 MakeDisF(disJ,			dName("J");   dTarget();)
 MakeDisF(disJAL,		dName("JAL"); dTarget(); dGPR(31);)
 
-/*********************************************************
-* Register jump                                          *
-* Format:  OP rs, rd                                     *
-*********************************************************/
 MakeDisF(disJR,			dName("JR");   dGPR(_Rs_);)
 MakeDisF(disJALR,		dName("JALR"); dGPR(_Rs_); dGPR(_Rd_))
 
-/*********************************************************
-* Load and store for GPR                                 *
-* Format:  OP rt, offset(base)                           *
-*********************************************************/
 MakeDisF(disLB,			dName("LB");    dGPR(_Rt_);  dOfB();)
 MakeDisF(disLBU,		dName("LBU");   dGPR(_Rt_);  dOfB();)
 MakeDisF(disLH,			dName("LH");    dGPR(_Rt_);  dOfB();)
@@ -227,23 +167,15 @@ MakeDisF(disSWL,		dName("SWL");   dGPR(_Rt_);  dOfB();)
 MakeDisF(disSWR,		dName("SWR");   dGPR(_Rt_);  dOfB();)
 MakeDisF(disSWC2,		dName("SWC2");  dGPR(_Rt_);  dOfB();)
 
-/*********************************************************
-* Moves between GPR and COPx                             *
-* Format:  OP rt, fs                                     *
-*********************************************************/
 MakeDisF(disMFC0,		dName("MFC0"); dGPR(_Rt_); dCP0(_Rd_);)
 MakeDisF(disMTC0,		dName("MTC0"); dCP0(_Rd_); dGPR(_Rt_);)
 MakeDisF(disCFC0,		dName("CFC0"); dGPR(_Rt_); dCP0(_Rd_);)
 MakeDisF(disCTC0,		dName("CTC0"); dCP0(_Rd_); dGPR(_Rt_);)
 
-/*********************************************************
-* Unknow instruction (would generate an exception)       *
-* Format:  ?                                             *
-*********************************************************/
 MakeDisF(disNULL,		dName("*** Bad OP ***");)
 
 
-TdisR3000AF disR3000A_SPECIAL[] = { // Subset of disSPECIAL
+TdisR3000AF disR3000A_SPECIAL[] = {
 	disSLL , disNULL , disSRL , disSRA , disSLLV   , disNULL  , disSRLV  , disSRAV ,
 	disJR  , disJALR , disNULL, disNULL, disSYSCALL, disBREAK , disNULL  , disNULL ,
 	disMFHI, disMTHI , disMFLO, disMTLO, disNULL   , disNULL  , disNULL  , disNULL ,
@@ -255,7 +187,7 @@ TdisR3000AF disR3000A_SPECIAL[] = { // Subset of disSPECIAL
 
 MakeDisF(disSPECIAL,	disR3000A_SPECIAL[_Funct_](code, pc))
 
-TdisR3000AF disR3000A_BCOND[] = { // Subset of disBCOND
+TdisR3000AF disR3000A_BCOND[] = {
 	disBLTZ  , disBGEZ  , disNULL, disNULL, disNULL, disNULL, disNULL, disNULL,
 	disNULL  , disNULL  , disNULL, disNULL, disNULL, disNULL, disNULL, disNULL,
 	disBLTZAL, disBGEZAL, disNULL, disNULL, disNULL, disNULL, disNULL, disNULL,
@@ -263,7 +195,7 @@ TdisR3000AF disR3000A_BCOND[] = { // Subset of disBCOND
 
 MakeDisF(disBCOND,	disR3000A_BCOND[_Rt_](code, pc))
 
-TdisR3000AF disR3000A_COP0[] = { // Subset of disCOP0
+TdisR3000AF disR3000A_COP0[] = {
 	disMFC0, disNULL, disCFC0, disNULL, disMTC0, disNULL, disCTC0, disNULL,
 	disNULL, disNULL, disNULL, disNULL, disNULL, disNULL, disNULL, disNULL,
 	disRFE , disNULL, disNULL, disNULL, disNULL, disNULL, disNULL, disNULL,
@@ -271,7 +203,7 @@ TdisR3000AF disR3000A_COP0[] = { // Subset of disCOP0
 
 MakeDisF(disCOP0,		disR3000A_COP0[_Rs_](code, pc))
 
-TdisR3000AF disR3000A_BASIC[] = { // Subset of disBASIC (based on rs)
+TdisR3000AF disR3000A_BASIC[] = {
 	disMFC2, disNULL, disCFC2, disNULL, disMTC2, disNULL, disCTC2, disNULL,
 	disNULL, disNULL, disNULL, disNULL, disNULL, disNULL, disNULL, disNULL,
 	disNULL, disNULL, disNULL, disNULL, disNULL, disNULL, disNULL, disNULL,
@@ -279,7 +211,7 @@ TdisR3000AF disR3000A_BASIC[] = { // Subset of disBASIC (based on rs)
 
 MakeDisF(disBASIC,		disR3000A_BASIC[_Rs_](code, pc))
 
-TdisR3000AF disR3000A_COP2[] = { // Subset of disR3000F_COP2 (based on funct)
+TdisR3000AF disR3000A_COP2[] = {
 	disBASIC, disRTPS , disNULL , disNULL , disNULL, disNULL , disNCLIP, disNULL,
 	disNULL , disNULL , disNULL , disNULL , disOP  , disNULL , disNULL , disNULL,
 	disDPCS , disINTPL, disMVMVA, disNCDS , disCDP , disNULL , disNCDT , disNULL,

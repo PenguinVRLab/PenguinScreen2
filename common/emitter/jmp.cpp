@@ -23,12 +23,10 @@ namespace x86Emitter
 
 	void xImpl_JmpCall::operator()(const xAddressReg& absreg) const
 	{
-		// Jumps are always wide and don't need the rex.W
 		xOpWrite(0, 0xff, isJmp ? 4 : 2, absreg.GetNonWide());
 	}
 	void xImpl_JmpCall::operator()(const xIndirectNative& src) const
 	{
-		// Jumps are always wide and don't need the rex.W
 		EmitRex(0, xIndirect32(src.Base, src.Index, 1, 0));
 		xWrite8(0xff);
 		EmitSibMagic(isJmp ? 4 : 2, src);
@@ -44,7 +42,6 @@ namespace x86Emitter
 		if (a1.IsEmpty())
 			return;
 
-		// Make sure we don't mess up if someone tries to fastcall with a1 in arg2reg and a2 in arg1reg
 		if (a2.Id != arg1reg.Id)
 		{
 			xMOV(Reg1(arg1reg), a1);
@@ -143,10 +140,6 @@ namespace x86Emitter
 
 	const xImpl_FastCall xFastCall = {};
 
-	// ------------------------------------------------------------------------
-	// Emits a 32 bit jump, and returns a pointer to the 32 bit displacement.
-	// (displacements should be assigned relative to the end of the jump instruction,
-	// or in other words *(retval+1) )
 	__emitinline s32* xJcc32(JccComparisonType comparison, s32 displacement)
 	{
 		if (comparison == Jcc_Unconditional)
@@ -161,10 +154,6 @@ namespace x86Emitter
 		return ((s32*)xGetPtr()) - 1;
 	}
 
-	// ------------------------------------------------------------------------
-	// Emits a 32 bit jump, and returns a pointer to the 8 bit displacement.
-	// (displacements should be assigned relative to the end of the jump instruction,
-	// or in other words *(retval+1) )
 	__emitinline s8* xJcc8(JccComparisonType comparison, s8 displacement)
 	{
 		xWrite8((comparison == Jcc_Unconditional) ? 0xeb : (0x70 | comparison));
@@ -172,16 +161,8 @@ namespace x86Emitter
 		return (s8*)xGetPtr() - 1;
 	}
 
-	// ------------------------------------------------------------------------
-	// Writes a jump at the current x86Ptr, which targets a pre-established target address.
-	// (usually a backwards jump)
-	//
-	// slideForward - used internally by xSmartJump to indicate that the jump target is going
-	// to slide forward in the event of an 8 bit displacement.
-	//
 	__emitinline void xJccKnownTarget(JccComparisonType comparison, const void* target, bool slideForward)
 	{
-		// Calculate the potential j8 displacement first, assuming an instruction length of 2:
 		sptr displacement8 = (sptr)target - (sptr)(xGetPtr() + 2);
 
 		const int slideVal = slideForward ? ((comparison == Jcc_Unconditional) ? 3 : 4) : 0;
@@ -196,19 +177,15 @@ namespace x86Emitter
 			xJcc8(comparison, displacement8);
 		else
 		{
-			// Perform a 32 bit jump instead. :(
 			s32* bah = xJcc32(comparison);
 			sptr distance = (sptr)target - (sptr)xGetPtr();
 
-			// This assert won't physically happen on x86 targets
 			pxAssertMsg(distance >= -0x80000000LL && distance < 0x80000000LL, "Jump target is too far away, needs an indirect register");
 
 			*bah = (s32)distance;
 		}
 	}
 
-	// Low-level jump instruction!  Specify a comparison type and a target in void* form, and
-	// a jump (either 8 or 32 bit) is generated.
 	__emitinline void xJcc(JccComparisonType comparison, const void* target)
 	{
 		xJccKnownTarget(comparison, target, false);
@@ -220,8 +197,8 @@ namespace x86Emitter
 		pxAssertMsg(cctype != Jcc_Unknown, "Invalid ForwardJump conditional type.");
 
 		BasePtr = (s8*)xGetPtr() +
-				  ((opsize == 1) ? 2 : // j8's are always 2 bytes.
-                                   ((cctype == Jcc_Unconditional) ? 5 : 6)); // j32's are either 5 or 6 bytes
+				  ((opsize == 1) ? 2 :
+                                   ((cctype == Jcc_Unconditional) ? 5 : 6));
 
 		if (opsize == 1)
 			xWrite8((cctype == Jcc_Unconditional) ? 0xeb : (0x70 | cctype));
@@ -251,19 +228,16 @@ namespace x86Emitter
 		}
 		else
 		{
-			// full displacement, no sanity checks needed :D
 			((s32*)BasePtr)[-1] = displacement;
 		}
 	}
 
-	// returns the inverted conditional type for this Jcc condition.  Ie, JNS will become JS.
 	__fi JccComparisonType xInvertCond(JccComparisonType src)
 	{
 		pxAssert(src != Jcc_Unknown);
 		if (Jcc_Unconditional == src)
 			return Jcc_Unconditional;
 
-		// x86 conditionals are clever!  To invert conditional types, just invert the lower bit:
 		return (JccComparisonType)((int)src ^ 1);
 	}
-} // namespace x86Emitter
+}

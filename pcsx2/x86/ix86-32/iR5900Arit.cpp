@@ -9,12 +9,6 @@ using namespace x86Emitter;
 
 namespace R5900::Dynarec::OpcodeImpl
 {
-/*********************************************************
-* Register arithmetic                                    *
-* Format:  OP rd, rs, rt                                 *
-*********************************************************/
-
-// TODO: overflow checks
 
 #ifndef ARITHMETIC_RECOMPILE
 
@@ -69,13 +63,11 @@ static void recMoveTtoD64(int info)
 		xMOV(xRegister64(EEREC_D), ptr64[&cpuRegs.GPR.r[_Rt_].UD[0]]);
 }
 
-//// ADD
 static void recADD_const()
 {
 	g_cpuConstRegs[_Rd_].SD[0] = s64(s32(g_cpuConstRegs[_Rs_].UL[0] + g_cpuConstRegs[_Rt_].UL[0]));
 }
 
-// s is constant
 static void recADD_consts(int info)
 {
 	pxAssert(!(info & PROCESS_EE_XMM));
@@ -87,7 +79,6 @@ static void recADD_consts(int info)
 	xMOVSX(xRegister64(EEREC_D), xRegister32(EEREC_D));
 }
 
-// t is constant
 static void recADD_constt(int info)
 {
 	pxAssert(!(info & PROCESS_EE_XMM));
@@ -99,7 +90,6 @@ static void recADD_constt(int info)
 	xMOVSX(xRegister64(EEREC_D), xRegister32(EEREC_D));
 }
 
-// nothing is constant
 static void recADD_(int info)
 {
 	pxAssert(!(info & PROCESS_EE_XMM));
@@ -141,19 +131,16 @@ static void recADD_(int info)
 
 EERECOMPILE_CODERC0(ADD, XMMINFO_WRITED | XMMINFO_READS | XMMINFO_READT);
 
-//// ADDU
 void recADDU(void)
 {
 	recADD();
 }
 
-//// DADD
 void recDADD_const(void)
 {
 	g_cpuConstRegs[_Rd_].UD[0] = g_cpuConstRegs[_Rs_].UD[0] + g_cpuConstRegs[_Rt_].UD[0];
 }
 
-// s is constant
 static void recDADD_consts(int info)
 {
 	pxAssert(!(info & PROCESS_EE_XMM));
@@ -164,7 +151,6 @@ static void recDADD_consts(int info)
 		xImm64Op(xADD, xRegister64(EEREC_D), rax, cval);
 }
 
-// t is constant
 static void recDADD_constt(int info)
 {
 	pxAssert(!(info & PROCESS_EE_XMM));
@@ -175,7 +161,6 @@ static void recDADD_constt(int info)
 		xImm64Op(xADD, xRegister64(EEREC_D), rax, cval);
 }
 
-// nothing is constant
 static void recDADD_(int info)
 {
 	pxAssert(!(info & PROCESS_EE_XMM));
@@ -215,13 +200,10 @@ static void recDADD_(int info)
 
 EERECOMPILE_CODERC0(DADD, XMMINFO_WRITED | XMMINFO_READS | XMMINFO_READT | XMMINFO_64BITOP);
 
-//// DADDU
 void recDADDU(void)
 {
 	recDADD();
 }
-
-//// SUB
 
 static void recSUB_const()
 {
@@ -265,7 +247,6 @@ static void recSUB_(int info)
 		return;
 	}
 
-	// a bit messier here because it's not commutative..
 	if ((info & PROCESS_EE_S) && (info & PROCESS_EE_T))
 	{
 		if (EEREC_D == EEREC_S)
@@ -275,7 +256,6 @@ static void recSUB_(int info)
 		}
 		else if (EEREC_D == EEREC_T)
 		{
-			// D might equal T
 			xMOV(eax, xRegister32(EEREC_S));
 			xSUB(eax, xRegister32(EEREC_T));
 			xMOVSX(xRegister64(EEREC_D), eax);
@@ -295,7 +275,6 @@ static void recSUB_(int info)
 	}
 	else if (info & PROCESS_EE_T)
 	{
-		// D might equal T
 		xMOV(eax, ptr32[&cpuRegs.GPR.r[_Rs_].UL[0]]);
 		xSUB(eax, xRegister32(EEREC_T));
 		xMOVSX(xRegister64(EEREC_D), eax);
@@ -310,13 +289,11 @@ static void recSUB_(int info)
 
 EERECOMPILE_CODERC0(SUB, XMMINFO_READS | XMMINFO_READT | XMMINFO_WRITED);
 
-//// SUBU
 void recSUBU(void)
 {
 	recSUB();
 }
 
-//// DSUB
 static void recDSUB_const()
 {
 	g_cpuConstRegs[_Rd_].UD[0] = g_cpuConstRegs[_Rs_].UD[0] - g_cpuConstRegs[_Rt_].UD[0];
@@ -326,7 +303,6 @@ static void recDSUB_consts(int info)
 {
 	pxAssert(!(info & PROCESS_EE_XMM));
 
-	// gross, because if d == t, we can't destroy t
 	const s64 sval = g_cpuConstRegs[_Rs_].SD[0];
 	const xRegister64 regd((info & PROCESS_EE_T && EEREC_D == EEREC_T) ? rax.GetId() : EEREC_D);
 	xMOV64(regd, sval);
@@ -336,7 +312,6 @@ static void recDSUB_consts(int info)
 	else
 		xSUB(regd, ptr64[&cpuRegs.GPR.r[_Rt_].SD[0]]);
 
-	// emitter will eliminate redundant moves.
 	xMOV(xRegister64(EEREC_D), regd);
 }
 
@@ -360,10 +335,8 @@ static void recDSUB_(int info)
 		return;
 	}
 
-	// a bit messier here because it's not commutative..
 	if ((info & PROCESS_EE_S) && (info & PROCESS_EE_T))
 	{
-		// D might equal T
 		const xRegister64 regd(EEREC_D == EEREC_T ? rax.GetId() : EEREC_D);
 		xMOV(regd, xRegister64(EEREC_S));
 		xSUB(regd, xRegister64(EEREC_T));
@@ -376,7 +349,6 @@ static void recDSUB_(int info)
 	}
 	else if (info & PROCESS_EE_T)
 	{
-		// D might equal T
 		const xRegister64 regd(EEREC_D == EEREC_T ? rax.GetId() : EEREC_D);
 		xMOV(regd, ptr64[&cpuRegs.GPR.r[_Rs_].UD[0]]);
 		xSUB(regd, xRegister64(EEREC_T));
@@ -391,7 +363,6 @@ static void recDSUB_(int info)
 
 EERECOMPILE_CODERC0(DSUB, XMMINFO_READS | XMMINFO_READT | XMMINFO_WRITED | XMMINFO_64BITOP);
 
-//// DSUBU
 void recDSUBU(void)
 {
 	recDSUB();
@@ -406,7 +377,7 @@ enum class LogicalOp
 	XOR,
 	NOR
 };
-} // namespace
+}
 
 static void recLogicalOp_constv(LogicalOp op, int info, int creg, u32 vreg, int regv)
 {
@@ -476,7 +447,6 @@ static void recLogicalOp(LogicalOp op, int info)
 	                         : *bad;
 	pxAssert(&xOP != bad);
 
-	// swap because it's commutative and Rd might be Rt
 	u32 rs = _Rs_, rt = _Rt_;
 	int regs = (info & PROCESS_EE_S) ? EEREC_S : -1, regt = (info & PROCESS_EE_T) ? EEREC_T : -1;
 	if (_Rd_ == _Rt_)
@@ -506,7 +476,6 @@ static void recLogicalOp(LogicalOp op, int info)
 	}
 }
 
-//// AND
 static void recAND_const()
 {
 	g_cpuConstRegs[_Rd_].UD[0] = g_cpuConstRegs[_Rs_].UD[0] & g_cpuConstRegs[_Rt_].UD[0];
@@ -529,7 +498,6 @@ static void recAND_(int info)
 
 EERECOMPILE_CODERC0(AND, XMMINFO_READS | XMMINFO_READT | XMMINFO_WRITED | XMMINFO_64BITOP);
 
-//// OR
 static void recOR_const()
 {
 	g_cpuConstRegs[_Rd_].UD[0] = g_cpuConstRegs[_Rs_].UD[0] | g_cpuConstRegs[_Rt_].UD[0];
@@ -552,7 +520,6 @@ static void recOR_(int info)
 
 EERECOMPILE_CODERC0(OR, XMMINFO_READS | XMMINFO_READT | XMMINFO_WRITED | XMMINFO_64BITOP);
 
-//// XOR
 static void recXOR_const()
 {
 	g_cpuConstRegs[_Rd_].UD[0] = g_cpuConstRegs[_Rs_].UD[0] ^ g_cpuConstRegs[_Rt_].UD[0];
@@ -575,7 +542,6 @@ static void recXOR_(int info)
 
 EERECOMPILE_CODERC0(XOR, XMMINFO_READS | XMMINFO_READT | XMMINFO_WRITED | XMMINFO_64BITOP);
 
-//// NOR
 static void recNOR_const()
 {
 	g_cpuConstRegs[_Rd_].UD[0] = ~(g_cpuConstRegs[_Rs_].UD[0] | g_cpuConstRegs[_Rt_].UD[0]);
@@ -598,7 +564,6 @@ static void recNOR_(int info)
 
 EERECOMPILE_CODERC0(NOR, XMMINFO_READS | XMMINFO_READT | XMMINFO_WRITED | XMMINFO_64BITOP);
 
-//// SLT - test with silent hill, lemans
 static void recSLT_const()
 {
 	g_cpuConstRegs[_Rd_].UD[0] = g_cpuConstRegs[_Rs_].SD[0] < g_cpuConstRegs[_Rt_].SD[0];
@@ -612,8 +577,6 @@ static void recSLTs_const(int info, int sign, int st)
 
 	const xImpl_Set& SET = st ? (sign ? xSETL : xSETB) : (sign ? xSETG : xSETA);
 
-	// If Rd == Rs or Rt, we can't xor it before it's used.
-	// So, allocate a temporary register first, and then reallocate it to Rd.
 	const xRegister32 dreg((_Rd_ == (st ? _Rs_ : _Rt_)) ? _allocX86reg(X86TYPE_TEMP, 0, 0) : EEREC_D);
 	const int regs = st ? ((info & PROCESS_EE_S) ? EEREC_S : -1) : ((info & PROCESS_EE_T) ? EEREC_T : -1);
 	xXOR(dreg, dreg);
@@ -637,10 +600,8 @@ static void recSLTs_(int info, int sign)
 
 	const xImpl_Set& SET = sign ? xSETL : xSETB;
 
-	// need to keep Rs/Rt around.
 	const xRegister32 dreg((_Rd_ == _Rt_ || _Rd_ == _Rs_) ? _allocX86reg(X86TYPE_TEMP, 0, 0) : EEREC_D);
 
-	// force Rs into a register, may as well cache it since we're loading anyway.
 	const int regs = (info & PROCESS_EE_S) ? EEREC_S : _allocX86reg(X86TYPE_GPR, _Rs_, MODE_READ);
 
 	xXOR(dreg, dreg);
@@ -675,7 +636,6 @@ static void recSLT_(int info)
 
 EERECOMPILE_CODERC0(SLT, XMMINFO_READS | XMMINFO_READT | XMMINFO_WRITED | XMMINFO_NORENAME);
 
-// SLTU - test with silent hill, lemans
 static void recSLTU_const()
 {
 	g_cpuConstRegs[_Rd_].UD[0] = g_cpuConstRegs[_Rs_].UD[0] < g_cpuConstRegs[_Rt_].UD[0];
@@ -700,4 +660,4 @@ EERECOMPILE_CODERC0(SLTU, XMMINFO_READS | XMMINFO_READT | XMMINFO_WRITED | XMMIN
 
 #endif
 
-} // namespace R5900::Dynarec::OpcodeImpl
+}

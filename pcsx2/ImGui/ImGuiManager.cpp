@@ -71,7 +71,7 @@ namespace ImGuiManager
 	static void DestroySoftwareCursorTextures();
 	static void DrawSoftwareCursor(const SoftwareCursor& sc, const std::pair<float, float>& pos);
 	static void DrawSoftwareCursors();
-} // namespace ImGuiManager
+}
 
 static float s_global_scale = 1.0f;
 
@@ -93,7 +93,6 @@ static float s_window_width;
 static float s_window_height;
 static Common::Timer s_last_render_time;
 
-// cached copies of WantCaptureKeyboard/Mouse, used to know when to dispatch events
 static std::atomic_bool s_imgui_wants_keyboard{false};
 static std::atomic_bool s_imgui_wants_mouse{false};
 static std::atomic_bool s_imgui_wants_text{false};
@@ -116,13 +115,11 @@ struct ControllerNavState
 };
 static std::unordered_map<u32, ControllerNavState> s_controller_nav_states;
 
-// mapping of host key -> imgui key
 static std::unordered_map<u32, ImGuiKey> s_imgui_key_map;
 
 static constexpr float OSD_FADE_IN_TIME = 0.1f;
 static constexpr float OSD_FADE_OUT_TIME = 0.4f;
 
-// need to keep track of this, so we can reinitialize on renderer switch
 static bool s_fullscreen_ui_was_initialized = false;
 static bool s_scale_changed = false;
 
@@ -164,7 +161,6 @@ bool ImGuiManager::Initialize()
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
 	io.KeyRepeatDelay = 0.5f;
 #ifdef __APPLE__
-	// For macOS we should use the standard macOS text editing shortcuts
 	io.ConfigMacOSXBehaviors = true;
 #endif
 
@@ -185,7 +181,7 @@ bool ImGuiManager::Initialize()
 
 	s_window_width = static_cast<float>(g_gs_device->GetWindowWidth());
 	s_window_height = static_cast<float>(g_gs_device->GetWindowHeight());
-	io.DisplayFramebufferScale = ImVec2(1, 1); // We already scale things ourselves, this would double-apply scaling
+	io.DisplayFramebufferScale = ImVec2(1, 1);
 	io.DisplaySize = ImVec2(s_window_width, s_window_height);
 
 	SetKeyMap();
@@ -209,7 +205,6 @@ bool ImGuiManager::Initialize()
 
 	NewFrame();
 
-	// reinitialize fsui if it was previously enabled
 	if (add_fullscreen_fonts)
 		InitializeFullscreenUI();
 
@@ -265,7 +260,6 @@ void ImGuiManager::WindowResized()
 	s_window_height = static_cast<float>(new_height);
 	ImGui::GetIO().DisplaySize = ImVec2(s_window_width, s_window_height);
 
-	// Scale might have changed as a result of window resize.
 	RequestScaleUpdate();
 
 	if (GImGui->NavWindow != nullptr)
@@ -330,8 +324,6 @@ void ImGuiManager::NewFrame()
 
 	ImGui::NewFrame();
 
-	// Disable nav input on the implicit (Debug##Default) window. Otherwise we end up requesting keyboard
-	// focus when there's nothing there. We use GetCurrentWindowRead() because otherwise it'll make it visible.
 	ImGui::GetCurrentWindowRead()->Flags |= ImGuiWindowFlags_NoNavInputs;
 	s_imgui_wants_keyboard.store(io.WantCaptureKeyboard, std::memory_order_relaxed);
 	s_imgui_wants_mouse.store(io.WantCaptureMouse, std::memory_order_release);
@@ -538,11 +530,10 @@ static u32 Load32BE(const u8* data)
 	return (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
 }
 
-// Attempt to find the font index for the given font in its font file
 static u32 GetFontIndex(const ImGuiManager::FontInfo& font)
 {
 	if (!font.face_name)
-		return 0; // No face name selected
+		return 0;
 #define RET_IF_ERR(x) \
 	do \
 	{ \
@@ -567,10 +558,8 @@ static u32 GetFontIndex(const ImGuiManager::FontInfo& font)
 	}
 	FT_Done_Face(face);
 	if (static_cast<FT_Long>(face_idx) == nfaces)
-		return 0; // Couldn't find face, just use first one
+		return 0;
 
-	// For fonts with variations, try to find one named "Regular"
-	// Getting a list of variation names with FT is painful, easier to just try to load variations until one fails
 	u32 variation = 1 << 16;
 	for (;; variation += 1 << 16)
 	{
@@ -586,14 +575,12 @@ static u32 GetFontIndex(const ImGuiManager::FontInfo& font)
 #undef RET_IF_ERR
 }
 
-// A resonable default font size is recommended
 #define FONT_BASE_SIZE 15.0f
 #define FONT_LINE_HEIGHT 1.25f
 #define FONT_ICON_SIZE (FONT_BASE_SIZE * 1.2f)
 
 ImFont* ImGuiManager::AddTextFont()
 {
-	// Exclude FA and PF ranges
 	// clang-format off
 	static constexpr ImWchar range_exclude_icons[] = { 0x2198,0x21a7,0x21b0,0x21b3,0x21ba,0x21c3,0x21ce,0x21d4,0x21dc,0x21e8,0x21f3,0x21f3,0x21f7,0x2202,0x2206,0x2208,0x221a,0x221a,0x227a,0x227f,0x2284,0x2284,0x22bf,0x22c8,0x2349,0x2349,0x235a,0x2367,0x237a,0x237f,0x23b2,0x23b5,0x23cc,0x23cc,0x23f4,0x23f7,0x2427,0x2452,0x2460,0x246b,0x248f,0x248f,0x24f5,0x24ff,0x2605,0x2605,0x2699,0x2699,0x278a,0x278e,0x27f6,0x27f6,0xff21,0xff3a,0x0,0x0 };
 	// clang-format on
@@ -662,9 +649,7 @@ ImFont* ImGuiManager::AddOsdFont()
 
 bool ImGuiManager::AddIconFonts()
 {
-	// Load FontAwesome after to avoid aliased codepoints overriding promptfont
 	{
-		// Exclude emojis
 		static constexpr ImWchar range_exclude_emojis[] = {0x10000, 0x1ffff, 0x0, 0x0};
 
 		ImFontConfig cfg;
@@ -683,7 +668,6 @@ bool ImGuiManager::AddIconFonts()
 	}
 
 	{
-		// Exclude any characters outside the BMP PUA plane
 		static constexpr ImWchar range_exclude_non_bmp[] = {0x1, 0xdfff, 0xf900, 0x10ffff, 0x0, 0x0};
 
 		ImFontConfig cfg;
@@ -707,9 +691,6 @@ bool ImGuiManager::AddIconFonts()
 bool ImGuiManager::AddEmojiFont()
 {
 	{
-		// ImGui can't correctly handle some Unicode codepoints
-		// Remove them to avoid rendering blank/fallback characters
-		// See https://github.com/ocornut/imgui/issues/8240
 		static ImFontLoader filter_loader;
 		filter_loader.Name = "Emoji Preprocessor";
 		filter_loader.FontSrcContainsGlyph = [](ImFontAtlas* atlas, ImFontConfig* src, ImWchar codepoint) {
@@ -721,7 +702,6 @@ bool ImGuiManager::AddEmojiFont()
 			if (codepoint != 0xfe0e && codepoint != 0xfe0f)
 				return false;
 
-			// Metrics only mode
 			if (out_advance_x != nullptr)
 			{
 				*out_advance_x = 0.0f;
@@ -747,7 +727,6 @@ bool ImGuiManager::AddEmojiFont()
 	{
 		ImFontConfig cfg;
 		cfg.MergeMode = true;
-		// Set GlyphMin/MaxAdvanceX to allow replacing FA/PF icons.
 		cfg.GlyphMinAdvanceX = FONT_ICON_SIZE;
 		cfg.GlyphMaxAdvanceX = FONT_ICON_SIZE;
 		cfg.FontLoaderFlags |= ImGuiFreeTypeLoaderFlags_LoadColor;
@@ -801,12 +780,12 @@ static std::deque<OSDMessage> s_osd_active_messages;
 static std::deque<OSDMessage> s_osd_posted_messages;
 static std::mutex s_osd_messages_lock;
 
-void Host::AddOSDMessage(std::string message, float duration /*= 2.0f*/)
+void Host::AddOSDMessage(std::string message, float duration )
 {
 	AddKeyedOSDMessage(std::string(), std::move(message), duration);
 }
 
-void Host::AddKeyedOSDMessage(std::string key, std::string message, float duration /* = 2.0f */)
+void Host::AddKeyedOSDMessage(std::string key, std::string message, float duration )
 {
 	if (!key.empty())
 		Console.WriteLn(Color_StrongGreen, fmt::format("OSD [{}]: {}", key, message));
@@ -828,7 +807,7 @@ void Host::AddKeyedOSDMessage(std::string key, std::string message, float durati
 	s_osd_posted_messages.push_back(std::move(msg));
 }
 
-void Host::AddIconOSDMessage(std::string key, const char* icon, const std::string_view message, float duration /* = 2.0f */)
+void Host::AddIconOSDMessage(std::string key, const char* icon, const std::string_view message, float duration )
 {
 	if (!key.empty())
 		Console.WriteLn(Color_StrongGreen, fmt::format("OSD [{}]: {}", key, message));
@@ -893,7 +872,6 @@ void ImGuiManager::AcquirePendingOSDMessages(Common::Timer::Value current_time)
 				iter->text = std::move(new_msg.text);
 				iter->duration = new_msg.duration;
 
-				// Don't fade it in again
 				const float time_passed =
 					static_cast<float>(Common::Timer::ConvertValueToSeconds(current_time - iter->start_time));
 				iter->start_time =
@@ -943,7 +921,6 @@ void ImGuiManager::DrawOSDMessages(Common::Timer::Value current_time)
 		case OsdOverlayPos::BottomLeft:
 		case OsdOverlayPos::BottomCenter:
 		case OsdOverlayPos::BottomRight:
-			// For bottom positions, start from the bottom and let messages stack upward
 			position_y = s_window_height - margin;
 			break;
 
@@ -980,12 +957,10 @@ void ImGuiManager::DrawOSDMessages(Common::Timer::Value current_time)
 		{
 			if (msg.last_y < 0.0f)
 			{
-				// First showing.
 				msg.last_y = expected_y;
 			}
 			else
 			{
-				// We got repositioned, probably due to another message above getting removed.
 				const float time_since_move =
 					static_cast<float>(Common::Timer::ConvertValueToSeconds(current_time - msg.move_time));
 				const float frac = Easing::OutExpo(time_since_move / MOVE_DURATION);
@@ -1019,7 +994,6 @@ void ImGuiManager::DrawOSDMessages(Common::Timer::Value current_time)
 			font->CalcTextSizeA(font_size, max_width, max_width, msg.text.c_str(), msg.text.c_str() + msg.text.length()));
 		const ImVec2 size(text_size.x + padding * 2.0f, text_size.y + padding * 2.0f);
 
-		// For bottom positions, adjust actual_y to try to account for message height
 		float final_y = actual_y;
 		if (GSConfig.OsdMessagesPos == OsdOverlayPos::BottomLeft ||
 			GSConfig.OsdMessagesPos == OsdOverlayPos::BottomCenter ||
@@ -1038,26 +1012,23 @@ void ImGuiManager::DrawOSDMessages(Common::Timer::Value current_time)
 		dl->AddText(font, font_size, ImVec2(text_rect.x, text_rect.y), IM_COL32(0xff, 0xff, 0xff, opacity), msg.text.c_str(),
 			msg.text.c_str() + msg.text.length(), max_width, &text_rect);
 
-		// Stack direction depends on the position upward for bottom positions, downward for others
 		if (GSConfig.OsdMessagesPos == OsdOverlayPos::BottomLeft ||
 			GSConfig.OsdMessagesPos == OsdOverlayPos::BottomCenter ||
 			GSConfig.OsdMessagesPos == OsdOverlayPos::BottomRight)
 		{
-			position_y -= (size.y + spacing); // Stack upward for bottom positions
+			position_y -= (size.y + spacing);
 		}
 		else
 		{
-			position_y += size.y + spacing; // Stack downward for top/center positions
+			position_y += size.y + spacing;
 		}
 	}
 }
 
 void ImGuiManager::RenderOSD()
 {
-	// acquire for IO.MousePos.
 	std::atomic_thread_fence(std::memory_order_acquire);
 
-	// Don't draw OSD when we're just running big picture.
 	if (VMManager::HasValidVM())
 		RenderOverlays();
 
@@ -1065,7 +1036,6 @@ void ImGuiManager::RenderOSD()
 	AcquirePendingOSDMessages(current_time);
 	DrawOSDMessages(current_time);
 
-	// Cursors are always last.
 	DrawSoftwareCursors();
 }
 
@@ -1119,7 +1089,6 @@ void ImGuiManager::AddTextInput(std::string str)
 	if (!s_imgui_wants_text.load(std::memory_order_acquire))
 		return;
 
-	// Has to go through the CPU -> GS thread :(
 	Host::RunOnCPUThread([str = std::move(str)]() {
 		MTGS::RunOnGSThread([str = std::move(str)]() {
 			if (!ImGui::GetCurrentContext())
@@ -1144,7 +1113,6 @@ bool ImGuiManager::ProcessPointerButtonEvent(InputBindingKey key, float value)
 	if (!ImGui::GetCurrentContext() || key.data >= std::size(ImGui::GetIO().MouseDown))
 		return false;
 
-	// still update state anyway
 	MTGS::RunOnGSThread([button = key.data, down = (value != 0.0f)]() { ImGui::GetIO().AddMouseButtonEvent(button, down); });
 
 	return s_imgui_wants_mouse.load(std::memory_order_acquire);
@@ -1155,7 +1123,6 @@ bool ImGuiManager::ProcessPointerAxisEvent(InputBindingKey key, float value)
 	if (!ImGui::GetCurrentContext() || value == 0.0f || key.data < static_cast<u32>(InputPointerAxis::WheelX))
 		return false;
 
-	// still update state anyway
 	const bool horizontal = (key.data == static_cast<u32>(InputPointerAxis::WheelX));
 	MTGS::RunOnGSThread([wheel_x = horizontal ? value : 0.0f, wheel_y = horizontal ? 0.0f : value]() {
 		ImGui::GetIO().AddMouseWheelEvent(wheel_x, wheel_y);
@@ -1195,7 +1162,6 @@ bool ImGuiManager::ProcessHostKeyEvent(InputBindingKey key, float value)
 	if (iter == s_imgui_key_map.end())
 		return false;
 
-	// still update state anyway
 	MTGS::RunOnGSThread([imkey = iter->second, down = (value != 0.0f)]() {
 		ImGuiIO& io = ImGui::GetIO();
 		io.AddKeyEvent(imkey, down);
@@ -1210,32 +1176,32 @@ bool ImGuiManager::ProcessHostKeyEvent(InputBindingKey key, float value)
 bool ImGuiManager::ProcessGenericInputEvent(GenericInputBinding key, InputLayout layout, float value, u32 controller_id)
 {
 	static constexpr ImGuiKey key_map[] = {
-		ImGuiKey_None, // Unknown,
-		ImGuiKey_GamepadDpadUp, // DPadUp
-		ImGuiKey_GamepadDpadRight, // DPadRight
-		ImGuiKey_GamepadDpadLeft, // DPadLeft
-		ImGuiKey_GamepadDpadDown, // DPadDown
-		ImGuiKey_GamepadDpadUp, // LeftStickUp
-		ImGuiKey_GamepadDpadRight, // LeftStickRight
-		ImGuiKey_GamepadDpadDown, // LeftStickDown
-		ImGuiKey_GamepadDpadLeft, // LeftStickLeft
-		ImGuiKey_GamepadL3, // L3
-		ImGuiKey_GamepadDpadUp, // RightStickUp
-		ImGuiKey_GamepadDpadRight, // RightStickRight
-		ImGuiKey_GamepadDpadDown, // RightStickDown
-		ImGuiKey_GamepadDpadLeft, // RightStickLeft
-		ImGuiKey_GamepadR3, // R3
-		ImGuiKey_GamepadFaceUp, // Triangle
-		ImGuiKey_GamepadFaceRight, // Circle
-		ImGuiKey_GamepadFaceDown, // Cross
-		ImGuiKey_GamepadFaceLeft, // Square
-		ImGuiKey_GamepadBack, // Select
-		ImGuiKey_GamepadStart, // Start
-		ImGuiKey_None, // System
-		ImGuiKey_GamepadL1, // L1
-		ImGuiKey_GamepadL2, // L2
-		ImGuiKey_GamepadR1, // R1
-		ImGuiKey_GamepadL2, // R2
+		ImGuiKey_None,
+		ImGuiKey_GamepadDpadUp,
+		ImGuiKey_GamepadDpadRight,
+		ImGuiKey_GamepadDpadLeft,
+		ImGuiKey_GamepadDpadDown,
+		ImGuiKey_GamepadDpadUp,
+		ImGuiKey_GamepadDpadRight,
+		ImGuiKey_GamepadDpadDown,
+		ImGuiKey_GamepadDpadLeft,
+		ImGuiKey_GamepadL3,
+		ImGuiKey_GamepadDpadUp,
+		ImGuiKey_GamepadDpadRight,
+		ImGuiKey_GamepadDpadDown,
+		ImGuiKey_GamepadDpadLeft,
+		ImGuiKey_GamepadR3,
+		ImGuiKey_GamepadFaceUp,
+		ImGuiKey_GamepadFaceRight,
+		ImGuiKey_GamepadFaceDown,
+		ImGuiKey_GamepadFaceLeft,
+		ImGuiKey_GamepadBack,
+		ImGuiKey_GamepadStart,
+		ImGuiKey_None,
+		ImGuiKey_GamepadL1,
+		ImGuiKey_GamepadL2,
+		ImGuiKey_GamepadR1,
+		ImGuiKey_GamepadL2,
 	};
 
 	if (!ImGui::GetCurrentContext())
@@ -1244,7 +1210,6 @@ bool ImGuiManager::ProcessGenericInputEvent(GenericInputBinding key, InputLayout
 	if (static_cast<u32>(key) >= std::size(key_map) || key_map[static_cast<u32>(key)] == ImGuiKey_None)
 		return false;
 
-	// Ignore diagonal D-pad input — neither direction fires when both axes are held simultaneously.
 	const bool is_dpad_h = (key == GenericInputBinding::DPadLeft || key == GenericInputBinding::DPadRight);
 	const bool is_dpad_v = (key == GenericInputBinding::DPadUp || key == GenericInputBinding::DPadDown);
 	if (is_dpad_h || is_dpad_v)
@@ -1278,11 +1243,9 @@ bool ImGuiManager::ProcessGenericInputEvent(GenericInputBinding key, InputLayout
 
 void ImGuiManager::ProcessGenericAxisEvent(GenericInputBinding negative_key, GenericInputBinding positive_key, InputLayout layout, float value, u32 controller_id)
 {
-	// Hysteresis prevents wobble: activate at 0.5, release at 0.2.
 	static constexpr float ACTIVATE_THRESHOLD = 0.5f;
 	static constexpr float RELEASE_THRESHOLD = 0.2f;
 
-	// Ignore diagonal input and track binary state per direction to suppress duplicate events.
 	using AxisState = ControllerNavState::AxisState;
 	ControllerNavState& nav = s_controller_nav_states[controller_id];
 
@@ -1321,7 +1284,6 @@ void ImGuiManager::ProcessGenericAxisEvent(GenericInputBinding negative_key, Gen
 			suppressed_value = 0.0f;
 	}
 
-	// Treat as binary like the D-pad: either fully pressed or released, with a deadzone.
 	bool* neg_active_ptr = state ? (is_x_axis ? &state->x_neg_active : &state->y_neg_active) : nullptr;
 	bool* pos_active_ptr = state ? (is_x_axis ? &state->x_pos_active : &state->y_pos_active) : nullptr;
 
@@ -1422,7 +1384,6 @@ void ImGuiManager::DrawSoftwareCursor(const SoftwareCursor& sc, const std::pair<
 
 void ImGuiManager::DrawSoftwareCursors()
 {
-	// This one's okay to race, worst that happens is we render the wrong number of cursors for a frame.
 	const u32 pointer_count = InputManager::MAX_POINTER_DEVICES;
 	for (u32 i = 0; i < pointer_count; i++)
 		DrawSoftwareCursor(s_software_cursors[i], InputManager::GetPointerAbsolutePosition(i));
@@ -1446,7 +1407,6 @@ void ImGuiManager::SetSoftwareCursor(u32 index, std::string image_path, float im
 		if (MTGS::IsOpen())
 			UpdateSoftwareCursorTexture(index);
 
-		// Hide the system cursor when we activate a software cursor.
 		if (is_hiding_or_showing && index == 0)
 			Host::RunOnCPUThread(&InputManager::UpdateHostMouseMode);
 	});
@@ -1480,7 +1440,6 @@ std::string ImGuiManager::StripIconCharacters(std::string_view str)
 		char32_t utf;
 		offset += StringUtil::DecodeUTF8(str, offset, &utf);
 
-		// icon if outside BMP/SMP/TIP, or inside private use area
 		if (utf > 0x32FFF || (utf >= 0xE000 && utf <= 0xF8FF))
 			continue;
 

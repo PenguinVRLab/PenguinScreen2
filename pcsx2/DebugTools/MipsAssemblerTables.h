@@ -15,24 +15,24 @@
 #define MA_EXPS2			0x0000400
 #define MA_EXPSP			0x0000800
 
-#define MO_IPCA			0x00000001	// pc >> 2
-#define MO_IPCR			0x00000002	// PC, -> difference >> 2
-#define MO_RSD			0x00000004	// rs = rd
-#define MO_RST			0x00000008	// rs = rt
-#define MO_RDT			0x00000010	// rd = rt
-#define MO_DELAY		0x00000020	// delay slot follows
-#define MO_NODELAYSLOT	0x00000040	// can't be in a delay slot
-#define MO_DELAYRT		0x00000080	// rt won't be available for one instruction
-#define MO_IGNORERTD	0x00000100	// don't care for rt delay
-#define MO_FRSD			0x00000200	// float rs + rd
-#define MO_IMMALIGNED	0x00000400	// immediate 4 byte aligned
-#define MO_VFPU_MIXED	0x00000800	// mixed mode vfpu register
-#define MO_VFPU_6BIT	0x00001000	// vfpu register can have 6 bits max
-#define MO_VFPU_SINGLE	0x00002000	// single vfpu reg
-#define MO_VFPU_QUAD	0x00004000	// quad vfpu reg
-#define MO_VFPU			0x00008000	// vfpu type opcode
-#define MO_64BIT		0x00010000	// only available on 64 bit cpus
-#define MO_FPU			0x00020000	// only available with an fpu
+#define MO_IPCA			0x00000001
+#define MO_IPCR			0x00000002
+#define MO_RSD			0x00000004
+#define MO_RST			0x00000008
+#define MO_RDT			0x00000010
+#define MO_DELAY		0x00000020
+#define MO_NODELAYSLOT	0x00000040
+#define MO_DELAYRT		0x00000080
+#define MO_IGNORERTD	0x00000100
+#define MO_FRSD			0x00000200
+#define MO_IMMALIGNED	0x00000400
+#define MO_VFPU_MIXED	0x00000800
+#define MO_VFPU_6BIT	0x00001000
+#define MO_VFPU_SINGLE	0x00002000
+#define MO_VFPU_QUAD	0x00004000
+#define MO_VFPU			0x00008000
+#define MO_64BIT		0x00010000
+#define MO_FPU			0x00020000
 
 #define BITFIELD(START,LENGTH,VALUE)	(((VALUE) << (START)))
 #define MIPS_FUNC(VALUE)				BITFIELD(0,6,(VALUE))

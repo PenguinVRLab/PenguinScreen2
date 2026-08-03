@@ -4,13 +4,9 @@
 #pragma once
 #include <cstdint>
 
-/* include/ui/console.h */
-/* keyboard/mouse support */
-
 #define MOUSE_EVENT_LBUTTON 0x01
 #define MOUSE_EVENT_RBUTTON 0x02
 #define MOUSE_EVENT_MBUTTON 0x04
-/* identical to the ps/2 keyboard bits */
 #define QEMU_SCROLL_LOCK_LED (1 << 0)
 #define QEMU_NUM_LOCK_LED (1 << 1)
 #define QEMU_CAPS_LOCK_LED (1 << 2)
@@ -19,19 +15,14 @@
 #define HID_TABLET 2
 #define HID_KEYBOARD 3
 
-/* scancode without modifiers */
 #define SCANCODE_KEYMASK 0xff
-/* scancode without grey or up bit */
 #define SCANCODE_KEYCODEMASK 0x7f
 
-/* "grey" keys will usually need a 0xe0 prefix */
 #define SCANCODE_GREY 0x80
 #define SCANCODE_EMUL0 0xE0
 #define SCANCODE_EMUL1 0xE1
-/* "up" flag */
 #define SCANCODE_UP 0x80
 
-/* Additional modifiers to use if not catched another way. */
 #define SCANCODE_SHIFT 0x100
 #define SCANCODE_CTRL 0x200
 #define SCANCODE_ALT 0x400
@@ -274,11 +265,11 @@ typedef void QEMUPutMouseEvent(HIDState* hs, InputEvent* evt);
 
 typedef struct HIDPointerEvent
 {
-	int32_t xdx, ydy; /* relative if it's a mouse, otherwise absolute */
+	int32_t xdx, ydy;
 	int32_t dz, buttons_state;
 } HIDPointerEvent;
 
-#define QUEUE_LENGTH 16 /* should be enough for a triple-click */
+#define QUEUE_LENGTH 16
 #define QUEUE_MASK (QUEUE_LENGTH - 1u)
 #define QUEUE_INCR(v) ((v)++, (v) &= QUEUE_MASK)
 
@@ -307,7 +298,7 @@ struct HIDState
 		HIDMouseState ptr;
 		HIDKeyboardState kbd;
 	};
-	uint32_t head; /* index into circular queue */
+	uint32_t head;
 	uint32_t n;
 	int kind;
 	int32_t protocol;

@@ -54,9 +54,9 @@ class ringbuffer_base
     static const int padding_size = __cachelinesize - sizeof(size_t);
 
     std::atomic<size_t> write_index_;
-    char padding1[padding_size]; /* force read_index and write_index to different cache lines */
+    char padding1[padding_size];
     std::atomic<size_t> read_index_;
-    char padding2[padding_size]; /* force read_index and pending_pop_read_index to different cache lines */
+    char padding2[padding_size];
 
     size_t pending_pop_read_index;
 
@@ -70,16 +70,10 @@ public:
     ringbuffer_base(void):
         write_index_(0), read_index_(0), pending_pop_read_index(0)
     {
-        // Use dynamically allocation here with no T object dependency
-        // Otherwise the ringbuffer_base destructor will call the destructor
-        // of T which crash if T is a (invalid) shared_ptr.
-        //
-        // Note another solution will be to create a char buffer as union of T
         buffer = (T*)_aligned_malloc(sizeof(T)*max_size, 32);
     }
 
     ~ringbuffer_base(void) {
-        // destroy all remaining items
         T out;
         while (pop(out)) {};
 
@@ -91,7 +85,6 @@ public:
     {
         size_t ret = arg + 1;
 #if 0
-        // Initial boost code
         while (unlikely(ret >= max_size))
             ret -= max_size;
 #else
@@ -102,13 +95,13 @@ public:
 
     bool push(T const & t)
     {
-        const size_t write_index = write_index_.load(std::memory_order_relaxed);  // only written from push thread
+        const size_t write_index = write_index_.load(std::memory_order_relaxed);
         const size_t next = next_index(write_index);
 
         if (next == read_index_.load(std::memory_order_acquire))
-            return false; /* ringbuffer is full */
+            return false;
 
-        new (buffer + write_index) T(t); // copy-construct
+        new (buffer + write_index) T(t);
 
         write_index_.store(next, std::memory_order_release);
 
@@ -118,7 +111,7 @@ public:
     bool pop (T & ret)
     {
         const size_t write_index = write_index_.load(std::memory_order_acquire);
-        const size_t read_index  = read_index_.load(std::memory_order_relaxed); // only written from pop thread
+        const size_t read_index  = read_index_.load(std::memory_order_relaxed);
         if (empty(write_index, read_index))
             return false;
 
@@ -132,7 +125,7 @@ public:
 
     T& front()
     {
-        pending_pop_read_index = read_index_.load(std::memory_order_relaxed); // only written from pop thread
+        pending_pop_read_index = read_index_.load(std::memory_order_relaxed);
 
         return buffer[pending_pop_read_index];
     }
@@ -149,7 +142,7 @@ public:
     bool consume_one(Functor & f)
     {
         const size_t write_index = write_index_.load(std::memory_order_acquire);
-        const size_t read_index  = read_index_.load(std::memory_order_relaxed); // only written from pop thread
+        const size_t read_index  = read_index_.load(std::memory_order_relaxed);
         if (empty(write_index, read_index))
             return false;
 
@@ -162,30 +155,17 @@ public:
     }
 
 public:
-    /** reset the ringbuffer
-     *
-     * \note Not thread-safe
-     * */
     void reset(void)
     {
         write_index_.store(0, std::memory_order_relaxed);
         read_index_.store(0, std::memory_order_release);
     }
 
-    /** Check if the ringbuffer is empty
-     *
-     * \return true, if the ringbuffer is empty, false otherwise
-     * \note Due to the concurrent nature of the ringbuffer the result may be inaccurate.
-     * */
     bool empty(void)
     {
         return empty(write_index_.load(std::memory_order_relaxed), read_index_.load(std::memory_order_relaxed));
     }
 
-    /**
-     * \return true, if implementation is lock-free.
-     *
-     * */
     bool is_lock_free(void) const
     {
         return write_index_.is_lock_free() && read_index_.is_lock_free();

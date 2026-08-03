@@ -38,7 +38,6 @@ static MRCOwned<id<MTLLibrary>> loadMainLibrary(id<MTLDevice> dev)
 
 static GSMTLDevice::MetalVersion detectLibraryVersion(id<MTLLibrary> lib)
 {
-	// These functions are defined in tfx.metal to indicate the metal version used to make the metallib
 	if (MRCTransfer([lib newFunctionWithName:@"metal_version_23"]))
 		return GSMTLDevice::MetalVersion::Metal23;
 	if (MRCTransfer([lib newFunctionWithName:@"metal_version_22"]))
@@ -50,7 +49,6 @@ static GSMTLDevice::MetalVersion detectLibraryVersion(id<MTLLibrary> lib)
 
 static bool detectPrimIDSupport(id<MTLDevice> dev, id<MTLLibrary> lib)
 {
-	// Nvidia Metal driver is missing primid support, yay
 	MRCOwned<MTLRenderPipelineDescriptor*> desc = MRCTransfer([MTLRenderPipelineDescriptor new]);
 	[desc setVertexFunction:MRCTransfer([lib newFunctionWithName:@"fs_triangle"])];
 	[desc setFragmentFunction:MRCTransfer([lib newFunctionWithName:@"primid_test"])];
@@ -64,24 +62,15 @@ namespace
 {
 	enum class DetectionResult
 	{
-		HaswellOrNotIntel, ///< Everything works fine
-		Broadwell,         ///< PrimID broken
-		Skylake,           ///< PrimID broken, FBFetch supported
+		HaswellOrNotIntel,
+		Broadwell,
+		Skylake,
 	};
 }
 
 static DetectionResult detectIntelGPU(id<MTLDevice> dev, id<MTLLibrary> lib)
 {
-	// Even though it's nowhere in the feature set tables, some Intel GPUs support fbfetch!
-	// Annoyingly, the Haswell compiler successfully makes a pipeline but actually miscompiles it and doesn't insert any fbfetch instructions
-	// The Broadwell compiler inserts the Skylake fbfetch instruction, but Broadwell doesn't support that.  It seems to make the shader not do anything
-	// So we actually have to test the thing
-	// In addition, Broadwell+ has broken primid so we need to disable that.
-	// Conveniently we can use the same test to detect both (except on macOS < 11.  All Broadwell machines support 11, so the answer to that is "upgrade")
-	// See https://github.com/tellowkrinkle/MetalBugReproduction/releases/tag/BrokenPrimID for details
 
-	// AMD compiler crashes and gets retried 3 times over multiple seconds trying to compile the pipeline
-	// We know this is only a possibility on Intel anyways
 	if (![[dev name] containsString:@"Intel"])
 		return DetectionResult::HaswellOrNotIntel;
 	auto pdesc = MRCTransfer([MTLRenderPipelineDescriptor new]);
@@ -117,7 +106,6 @@ static DetectionResult detectIntelGPU(id<MTLDevice> dev, id<MTLLibrary> lib)
 	[cmdbuf waitUntilCompleted];
 	u32 outpx;
 	memcpy(&outpx, [buf contents], 4);
-	// Proper fbfetch will double contents, Haswell will return black, and Broadwell will do nothing
 	if (outpx == 0x22446688)
 		return DetectionResult::Skylake;
 	else if (outpx == 0x11223344)
@@ -151,7 +139,7 @@ GSMTLDevice::GSMTLDevice(MRCOwned<id<MTLDevice>> dev)
 
 	if (@available(macOS 10.15, iOS 13.0, *))
 		if ([dev supportsFamily:MTLGPUFamilyMac2] || [dev supportsFamily:MTLGPUFamilyApple1])
-			features.has_fast_half = true; // Approximate guess
+			features.has_fast_half = true;
 
 	features.shader_version = detectLibraryVersion(shaders);
 	if (features.framebuffer_fetch && features.shader_version < MetalVersion::Metal23)
@@ -177,14 +165,13 @@ GSMTLDevice::GSMTLDevice(MRCOwned<id<MTLDevice>> dev)
 			switch (detectIntelGPU(dev, shaders))
 			{
 				case DetectionResult::HaswellOrNotIntel:
-					// Older Intel GPUs seem to be fine with depth feedback
 					features.depth_feedback = true;
 					break;
 				case DetectionResult::Broadwell:
-					features.primid = false; // Broken
+					features.primid = false;
 					break;
 				case DetectionResult::Skylake:
-					features.primid = false; // Broken
+					features.primid = false;
 					features.framebuffer_fetch = true;
 					break;
 			}
@@ -192,22 +179,17 @@ GSMTLDevice::GSMTLDevice(MRCOwned<id<MTLDevice>> dev)
 	}
 	else if ([name containsString:@"AMD"])
 	{
-		// RDNA+ seems to work fine with depth feedback
 		if (@available(macOS 13, iOS 16, *))
 			if ([dev supportsFamily:MTLGPUFamilyMetal3])
 				features.depth_feedback = true;
-		// ROV doesn't work on AMD GPUs with no render target
-		// Ideally the driver would insert a dummy texture for us (it does on Linux) but the Metal driver doesn't.
 		features.rov_requires_rt = true;
 	}
 	else if ([name containsString:@"NVIDIA"])
 	{
-		// macOS only supports Kepler, which seems to work fine with depth feedback
 		features.depth_feedback = true;
 	}
 	else if ([name containsString:@"Apple"])
 	{
-		// No special settings
 	}
 	else
 	{
@@ -237,7 +219,7 @@ u32 GSMTLDevice::GetMaxTextureSize(id<MTLDevice> dev)
 {
 	if (@available(macOS 10.15, iOS 13.0, *))
 	{
-		MTLGPUFamily apple10 = static_cast<MTLGPUFamily>(1010); // Avoid relying on latest SDK, define ourselves
+		MTLGPUFamily apple10 = static_cast<MTLGPUFamily>(1010);
 		if ([dev supportsFamily:apple10])
 			return 32768;
 		if ([dev supportsFamily:MTLGPUFamilyApple3])
@@ -259,4 +241,4 @@ const char* to_string(GSMTLDevice::MetalVersion ver)
 	}
 }
 
-#endif // __APPLE__
+#endif

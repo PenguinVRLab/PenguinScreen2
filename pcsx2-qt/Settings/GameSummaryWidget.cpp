@@ -73,7 +73,6 @@ void GameSummaryWidget::populateDetails(const GameList::Entry* entry)
 	m_ui.crc->setText(QString::fromStdString(fmt::format("{:08X}", entry->crc)));
 	m_ui.type->setCurrentIndex(static_cast<int>(entry->type));
 	m_ui.region->setCurrentIndex(static_cast<int>(entry->region));
-	//: First arg is a GameList compat; second is a string with space followed by star rating OR empty if Unknown compat
 	m_ui.compatibility->setText(
 		tr("%0%1")
 			.arg(GameList::EntryCompatibilityRatingToString(entry->compatibility_rating, true))
@@ -82,7 +81,6 @@ void GameSummaryWidget::populateDetails(const GameList::Entry* entry)
 					return QStringLiteral("");
 
 				const qsizetype compatibility_value = static_cast<qsizetype>(entry->compatibility_rating);
-				//: First arg is filled-in stars for game compatibility; second is empty stars; should be swapped for RTL languages
 				return tr(" %0%1").arg(QStringLiteral("★").repeated(compatibility_value - 1)).arg(QStringLiteral("☆").repeated(6 - compatibility_value));
 			}()));
 
@@ -131,7 +129,6 @@ void GameSummaryWidget::populateDiscPath(const GameList::Entry* entry)
 	}
 	else
 	{
-		// Makes no sense to have disc override for a disc.
 		int row = 0;
 		m_ui.detailsFormLayout->getWidgetPosition(m_ui.label_discPath, &row, nullptr);
 		m_ui.detailsFormLayout->removeRow(row);
@@ -156,7 +153,6 @@ void GameSummaryWidget::onDiscPathChanged(const QString& value)
 	else
 		dialog()->setStringSettingValue("EmuCore", "DiscPath", value.toStdString().c_str());
 
-	// force rescan of elf to update the serial
 	g_main_window->rescanFile(m_entry_path);
 
 	auto lock = GameList::GetLock();
@@ -176,7 +172,6 @@ void GameSummaryWidget::onDiscPathBrowseClicked()
 	if (filename.isEmpty())
 		return;
 
-	// let the signal take care of it
 	m_ui.discPath->setText(QDir::toNativeSeparators(filename));
 }
 
@@ -216,7 +211,6 @@ void GameSummaryWidget::populateTrackList(const GameList::Entry* entry)
 		m_ui.tracks->setItem(row, column, item);
 	};
 
-	// columns depend on CD vs DVD.
 	AddColumn(tr("#"));
 	if (hasher.IsCD())
 	{
@@ -270,7 +264,6 @@ void GameSummaryWidget::populateTrackList(const GameList::Entry* entry)
 
 void GameSummaryWidget::onVerifyClicked()
 {
-	// Can't do this while a VM is running because of stupid CDVD.
 	if (QtHost::IsVMValid())
 	{
 		QMessageBox::critical(QtUtils::GetRootWidget(this), tr("Error"), tr("Cannot verify image while a game is running."));
@@ -294,7 +287,6 @@ void GameSummaryWidget::onVerifyClicked()
 	const int hash_column = hasher.IsCD() ? 5 : 4;
 	int row = 0;
 
-	// convert to database format
 	std::vector<GameDatabase::TrackHash> thashes;
 	thashes.reserve(hasher.GetTrackCount());
 	for (const IsoHasher::Track& track : hasher.GetTracks())
@@ -308,20 +300,17 @@ void GameSummaryWidget::onVerifyClicked()
 			return;
 		}
 
-		// Use the first track's hash as the redump search term.
 		if (m_redump_search_keyword.empty())
 			m_redump_search_keyword = thash.toString();
 
 		thashes.push_back(thash);
 	}
 
-	// match the hashes. can't use vector<bool> here because it's not an actual array
 	std::unique_ptr<bool[]> val_results = std::make_unique<bool[]>(hasher.GetTrackCount());
 	std::string match_error;
 	const GameDatabase::HashDatabaseEntry* hentry =
 		GameDatabase::lookupHash(thashes.data(), thashes.size(), val_results.get(), &match_error);
 
-	// fill the UI with both the hashes and validation results
 	for (u32 i = 0; i < hasher.GetTrackCount(); i++)
 	{
 		QTableWidgetItem* const hash_item = m_ui.tracks->item(row, hash_column);

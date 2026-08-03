@@ -99,21 +99,17 @@ namespace PacketReader::IP::UDP::DNS
 	DNS_Packet::DNS_Packet(const u8* buffer, int bufferSize)
 	{
 		int offset = 0;
-		//Bits 0-31 //Bytes 0-3
 		NetLib::ReadUInt16(buffer, &offset, &id);
 		NetLib::ReadByte08(buffer, &offset, &flags1);
 		NetLib::ReadByte08(buffer, &offset, &flags2);
-		//Bits 32-63 //Bytes 4-7
 		u16 qCount;
 		u16 aCount;
 		u16 auCount;
 		u16 adCount;
 		NetLib::ReadUInt16(buffer, &offset, &qCount);
 		NetLib::ReadUInt16(buffer, &offset, &aCount);
-		//Bits 64-95 //Bytes 8-11
 		NetLib::ReadUInt16(buffer, &offset, &auCount);
 		NetLib::ReadUInt16(buffer, &offset, &adCount);
-		//Bits 96+   //Bytes 8+
 		for (int i = 0; i < qCount; i++)
 		{
 			DNS_QuestionEntry entry(buffer, &offset);
@@ -182,4 +178,4 @@ namespace PacketReader::IP::UDP::DNS
 	{
 		return new DNS_Packet(*this);
 	}
-} // namespace PacketReader::IP::UDP::DNS
+}

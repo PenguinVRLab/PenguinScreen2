@@ -13,50 +13,49 @@ union GSScanlineSelector
 {
 	struct
 	{
-		u32 fpsm  : 2; // 0
-		u32 zpsm  : 2; // 2
-		u32 ztst  : 2; // 4 (0: off, 1: write, 2: test (ge), 3: test (g))
-		u32 atst  : 3; // 6
-		u32 afail : 2; // 9
-		u32 iip   : 1; // 11
-		u32 tfx   : 3; // 12
-		u32 tcc   : 1; // 15
-		u32 fst   : 1; // 16
-		u32 ltf   : 1; // 17
-		u32 tlu   : 1; // 18
-		u32 fge   : 1; // 19
-		u32 date  : 1; // 20
-		u32 abe   : 1; // 21
-		u32 aba   : 2; // 22
-		u32 abb   : 2; // 24
-		u32 abc   : 2; // 26
-		u32 abd   : 2; // 28
-		u32 pabe  : 1; // 30
-		u32 aa1   : 1; // 31
+		u32 fpsm  : 2;
+		u32 zpsm  : 2;
+		u32 ztst  : 2;
+		u32 atst  : 3;
+		u32 afail : 2;
+		u32 iip   : 1;
+		u32 tfx   : 3;
+		u32 tcc   : 1;
+		u32 fst   : 1;
+		u32 ltf   : 1;
+		u32 tlu   : 1;
+		u32 fge   : 1;
+		u32 date  : 1;
+		u32 abe   : 1;
+		u32 aba   : 2;
+		u32 abb   : 2;
+		u32 abc   : 2;
+		u32 abd   : 2;
+		u32 pabe  : 1;
+		u32 aa1   : 1;
 
-		u32 fwrite    : 1; // 32
-		u32 ftest     : 1; // 33
-		u32 rfb       : 1; // 34
-		u32 zwrite    : 1; // 35
-		u32 ztest     : 1; // 36
-		u32 zoverflow : 1; // 37 (z max >= 0x80000000)
-		u32 zclamp    : 1; // 38
-		u32 wms       : 2; // 39
-		u32 wmt       : 2; // 41
-		u32 datm      : 1; // 43
-		u32 colclamp  : 1; // 44
-		u32 fba       : 1; // 45
-		u32 dthe      : 1; // 46
-		u32 prim      : 2; // 47
+		u32 fwrite    : 1;
+		u32 ftest     : 1;
+		u32 rfb       : 1;
+		u32 zwrite    : 1;
+		u32 ztest     : 1;
+		u32 zoverflow : 1;
+		u32 zclamp    : 1;
+		u32 wms       : 2;
+		u32 wmt       : 2;
+		u32 datm      : 1;
+		u32 colclamp  : 1;
+		u32 fba       : 1;
+		u32 dthe      : 1;
+		u32 prim      : 2;
 
-		u32 edge   : 1; // 49
-		u32 tw     : 3; // 50 (encodes values between 3 -> 10, texture cache makes sure it is at least 3)
-		u32 lcm    : 1; // 53
-		u32 mmin   : 2; // 54
-		u32 notest : 1; // 55 (no ztest, no atest, no date, no scissor test, and horizontally aligned to 4 pixels)
-		// TODO: 1D texture flag? could save 2 texture reads and 4 lerps with bilinear, and also the texture coordinate clamp/wrap code in one direction
-		u32 zequal : 1; // 56
-		u32 breakpoint : 1; // Insert a trap to stop the program, helpful to stop debugger on a program
+		u32 edge   : 1;
+		u32 tw     : 3;
+		u32 lcm    : 1;
+		u32 mmin   : 2;
+		u32 notest : 1;
+		u32 zequal : 1;
+		u32 breakpoint : 1;
 	};
 
 	struct
@@ -115,13 +114,9 @@ union GSScanlineSelector
 	}
 };
 
-struct alignas(32) GSScanlineGlobalData // per batch variables, this is like a pixel shader constant buffer
+struct alignas(32) GSScanlineGlobalData
 {
 	GSScanlineSelector sel;
-
-	// - the data of vm, tex may change, multi-threaded drawing must be finished before that happens, clut and dimx are copies
-	// - tex is a cached texture, it may be recycled to free up memory, its absolute address cannot be compiled into code
-	// - row and column pointers are allocated once and never change or freed, thier address can be used directly
 
 	void* vm;
 	const void* tex[7];
@@ -135,30 +130,29 @@ struct alignas(32) GSScanlineGlobalData // per batch variables, this is like a p
 
 	GSVector4i aref;
 	GSVector4i afix;
-	struct { GSVector4i min, max, minmax, mask, invmask; } t; // [u] x 4 [v] x 4
+	struct { GSVector4i min, max, minmax, mask, invmask; } t;
 
 #if _M_SSE >= 0x501
 
 	u32 fm, zm;
 	u32 frb, fga;
 	GSVector8 mxl;
-	GSVector8 k; // TEX1.K * 0x10000
-	GSVector8 l; // TEX1.L * -0x10000
-	struct { GSVector8i i, f; } lod; // lcm == 1
+	GSVector8 k;
+	GSVector8 l;
+	struct { GSVector8i i, f; } lod;
 
 #else
 
 	GSVector4i fm, zm;
 	GSVector4i frb, fga;
 	GSVector4 mxl;
-	GSVector4 k; // TEX1.K * 0x10000
-	GSVector4 l; // TEX1.L * -0x10000
-	struct { GSVector4i i, f; } lod; // lcm == 1
+	GSVector4 k;
+	GSVector4 l;
+	struct { GSVector4i i, f; } lod;
 
 #endif
 
 #ifdef ARCH_ARM64
-	// Mini version of constant data for ARM64, we don't need all of it
 	alignas(16) u32 const_test_128b[8][4] = {
 		{0x00000000, 0x00000000, 0x00000000, 0x00000000},
 		{0xffffffff, 0x00000000, 0x00000000, 0x00000000},
@@ -178,7 +172,7 @@ struct alignas(32) GSScanlineGlobalData // per batch variables, this is like a p
 #endif
 };
 
-struct alignas(32) GSScanlineLocalData // per prim variables, each thread has its own
+struct alignas(32) GSScanlineLocalData
 {
 #if _M_SSE >= 0x501
 
@@ -186,8 +180,6 @@ struct alignas(32) GSScanlineLocalData // per prim variables, each thread has it
 	struct step { GSVector4 stq; struct { u32 rb, ga; } c; struct { u64 z; u32 f; } p; } d8;
 	struct { u32 z, f; } p;
 	struct { GSVector8i rb, ga; } c;
-
-	// these should be stored on stack as normal local variables (no free regs to use, esp cannot be saved to anywhere, and we need an aligned stack)
 
 	struct
 	{
@@ -198,8 +190,6 @@ struct alignas(32) GSScanlineLocalData // per prim variables, each thread has it
 		GSVector8i zs, zd;
 		GSVector8i uf, vf;
 		GSVector8i cov;
-
-		// mipmapping
 
 		struct { GSVector8i i, f; } lod;
 		GSVector8i uv[2];
@@ -215,8 +205,6 @@ struct alignas(32) GSScanlineLocalData // per prim variables, each thread has it
 	struct { GSVector4i rb, ga; } c;
 	struct { GSVector4i z, f; } p;
 
-	// these should be stored on stack as normal local variables (no free regs to use, esp cannot be saved to anywhere, and we need an aligned stack)
-
 	struct
 	{
 		GSVector4 z0, z1;
@@ -227,8 +215,6 @@ struct alignas(32) GSScanlineLocalData // per prim variables, each thread has it
 		GSVector4i uf, vf;
 		GSVector4i cov;
 
-		// mipmapping
-
 		struct { GSVector4i i, f; } lod;
 		GSVector4i uv[2];
 		GSVector4i uv_minmax[2];
@@ -237,8 +223,6 @@ struct alignas(32) GSScanlineLocalData // per prim variables, each thread has it
 	} temp;
 
 #endif
-
-	//
 
 	const GSScanlineGlobalData* gd;
 };
@@ -253,11 +237,8 @@ namespace GSScanlineConstantData
 	};
 };
 
-// Constant shared by all threads (to reduce cache miss)
 struct alignas(64) GSScanlineConstantData256B
 {
-	// All AVX processors support unaligned access with little to no penalty as long as you don't cross a cache line.
-	// Take advantage of that to store single vectors that we index with single-element alignment
 	alignas(32) u8 m_test[24] = {
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 		0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,

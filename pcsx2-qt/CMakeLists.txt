@@ -177,6 +177,9 @@ target_sources(pcsx2-qt PRIVATE
 	Settings/USBBindingWidget_GunCon2.ui
 	Settings/USBBindingWidget_RyojouhenCon.ui
 	Settings/USBBindingWidget_ShinkansenCon.ui
+	Settings/VRSettingsWidget.cpp
+	Settings/VRSettingsWidget.h
+	Settings/VRSettingsWidget.ui
 	Debugger/AnalysisOptionsDialog.cpp
 	Debugger/AnalysisOptionsDialog.h
 	Debugger/AnalysisOptionsDialog.ui

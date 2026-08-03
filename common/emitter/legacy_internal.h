@@ -5,10 +5,6 @@
 
 #include "common/emitter/internal.h"
 
-//------------------------------------------------------------------
-// Legacy Helper Macros and Functions (depreciated)
-//------------------------------------------------------------------
-
 #define emitterT __fi
 
 using x86Emitter::xWrite8;

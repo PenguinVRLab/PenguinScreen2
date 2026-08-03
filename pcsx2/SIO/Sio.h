@@ -11,20 +11,20 @@
 struct _mcd
 {
 	u8 currentCommand;
-	u8 term; // terminator value;
+	u8 term;
 
-	bool goodSector; // xor sector check
+	bool goodSector;
 	u8 msb;
 	u8 lsb;
-	u32 sectorAddr;  // read/write sector address
-	u32 transferAddr; // Transfer address
+	u32 sectorAddr;
+	u32 transferAddr;
 
-	std::vector<u8> buf; // Buffer for reading and writing
+	std::vector<u8> buf;
 
-	u8 FLAG;  // for PSX;
+	u8 FLAG;
 
-	u8 port; // port
-	u8 slot; // and slot for this memcard
+	u8 port;
+	u8 slot;
 
 	size_t autoEjectTicks;
 
@@ -40,21 +40,16 @@ struct _mcd
 
 	void EraseBlock()
 	{
-		//DevCon.WriteLn("Memcard Erase (sectorAddr = %08X)", sectorAddr);
 		FileMcd_EraseBlock(port, slot, transferAddr);
 	}
 
-	// Read from memorycard to dest
 	void Read(u8 *dest, int size)
 	{
-		//DevCon.WriteLn("Memcard Read (sectorAddr = %08X)", sectorAddr);
 		FileMcd_Read(port, slot, dest, transferAddr, size);
 	}
 
-	// Write to memorycard from src
 	void Write(u8 *src, int size)
 	{
-		//DevCon.WriteLn("Memcard Write (sectorAddr = %08X)", sectorAddr);
 		FileMcd_Save(port, slot, src,transferAddr, size);
 	}
 
@@ -94,17 +89,10 @@ extern _mcd *mcd;
 
 extern void sioNextFrame();
 
-/// Converts a global pad index to a multitap port and slot.
 extern std::tuple<u32, u32> sioConvertPadToPortAndSlot(u32 index);
 
-/// Convert the PS2's port/slot addressing to a single value.
-/// Physical ports 0 and 1 still correspond to unified slots 0 and 1.
-/// The remaining unified slots are for multitapped slots.
-/// Port 0's three multitap slots then occupy unified slots 2, 3 and 4.
-/// Port 1's three multitap slots then occupy unified slots 5, 6 and 7.
 extern u32 sioConvertPortAndSlotToPad(u32 port, u32 slot);
 
-/// Returns true if the given pad index is a multitap slot.
 extern bool sioPadIsMultitapSlot(u32 index);
 extern bool sioPortAndSlotIsMultitap(u32 port, u32 slot);
 extern void sioSetGameSerial(const std::string& serial);
@@ -116,14 +104,10 @@ namespace AutoEject
 	extern void Clear(size_t port, size_t slot);
 	extern void SetAll();
 	extern void ClearAll();
-} // namespace AutoEject
+}
 
-// ~2 hours of memory card inactivity.
 constexpr u32 NUM_FRAMES_BEFORE_SAVESTATE_DEPENDENCY_WARNING = 60 * 60 * 60 * 2;
 
-// Set to the current frame count when there is memory card activity.
-// Used to detect the last frame when memory card activity was detected,
-// and if it exceeds a certain threshold, warns on savestate save/load.
 extern uint32_t sioLastFrameMcdBusy;
 
 namespace MemcardBusy

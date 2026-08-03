@@ -24,9 +24,6 @@ namespace x86Emitter
 	extern void xStoreReg(const xRegisterSSE& src);
 	extern void xRestoreReg(const xRegisterSSE& dest);
 
-	// ------------------------------------------------------------------------
-	// Group 1 Instruction Class
-
 	extern const xImpl_Group1 xADC;
 	extern const xImpl_Group1 xSBB;
 	extern const xImpl_Group1 xCMP;
@@ -38,13 +35,6 @@ namespace x86Emitter
 	extern const xImpl_G1Arith xADD;
 	extern const xImpl_G1Arith xSUB;
 
-	// ------------------------------------------------------------------------
-	// Group 2 Instruction Class
-	//
-	// Optimization Note: For Imm forms, we ignore the instruction if the shift count is
-	// zero.  This is a safe optimization since any zero-value shift does not affect any
-	// flags.
-
 	extern const xImpl_Mov xMOV;
 	extern const xImpl_MovImm64 xMOV64;
 	extern const xImpl_Test xTEST;
@@ -52,9 +42,6 @@ namespace x86Emitter
 		xRCL, xRCR,
 		xSHL, xSHR,
 		xSAR;
-
-	// ------------------------------------------------------------------------
-	// Group 3 Instruction Class
 
 	extern const xImpl_Group3 xNOT, xNEG;
 	extern const xImpl_Group3 xUMUL, xUDIV;
@@ -78,7 +65,6 @@ namespace x86Emitter
 	extern const xImpl_JmpCall xCALL;
 	extern const xImpl_FastCall xFastCall;
 
-	// ------------------------------------------------------------------------
 	extern const xImpl_CMov xCMOVA, xCMOVAE,
 		xCMOVB, xCMOVBE,
 		xCMOVG, xCMOVGE,
@@ -92,7 +78,6 @@ namespace x86Emitter
 		xCMOVS, xCMOVNS,
 		xCMOVPE, xCMOVPO;
 
-	// ------------------------------------------------------------------------
 	extern const xImpl_Set xSETA, xSETAE,
 		xSETB, xSETBE,
 		xSETG, xSETGE,
@@ -106,31 +91,14 @@ namespace x86Emitter
 		xSETS, xSETNS,
 		xSETPE, xSETPO;
 
-	// ------------------------------------------------------------------------
-	// BMI extra instruction requires BMI1/BMI2
-	extern const xImplBMI_RVM xMULX, xPDEP, xPEXT, xANDN_S; // Warning xANDN is already used by SSE
-
-	//////////////////////////////////////////////////////////////////////////////////////////
-	// Miscellaneous Instructions
-	// These are all defined inline or in ix86.cpp.
-	//
+	extern const xImplBMI_RVM xMULX, xPDEP, xPEXT, xANDN_S;
 
 	extern void xBSWAP(const xRegister32or64& to);
-
-	// ----- Lea Instructions (Load Effective Address) -----
-	// Note: alternate (void*) forms of these instructions are not provided since those
-	// forms are functionally equivalent to Mov reg,imm, and thus better written as MOVs
-	// instead.
 
 	extern void xLEA(xRegister64 to, const xIndirectVoid& src, bool preserve_flags = false);
 	extern void xLEA(xRegister32 to, const xIndirectVoid& src, bool preserve_flags = false);
 	extern void xLEA(xRegister16 to, const xIndirectVoid& src, bool preserve_flags = false);
-	/// LEA with a target that will be decided later, guarantees that no optimizations are performed that could change what needs to be written in
 	extern u32* xLEA_Writeback(xAddressReg to);
-
-	// ----- Push / Pop Instructions  -----
-	// Note: pushad/popad implementations are intentionally left out.  The instructions are
-	// invalid in x64, and are super slow on x32.  Use multiple Push/Pop instructions instead.
 
 	extern void xPOP(const xIndirectVoid& from);
 	extern void xPUSH(const xIndirectVoid& from);
@@ -140,13 +108,8 @@ namespace x86Emitter
 	extern void xPUSH(u32 imm);
 	extern void xPUSH(xRegister32or64 from);
 
-	// pushes the EFLAGS register onto the stack
 	extern void xPUSHFD();
-	// pops the EFLAGS register from the stack
 	extern void xPOPFD();
-
-	// ----- Miscellaneous Instructions  -----
-	// Various Instructions with no parameter and no special encoding logic.
 
 	extern void xLEAVE();
 	extern void xRET();
@@ -162,14 +125,11 @@ namespace x86Emitter
 	extern void xSTC();
 	extern void xCLC();
 
-	// NOP 1-byte
 	extern void xNOP();
 
 	extern void xINT(u8 imm);
 	extern void xINTO();
 
-	//////////////////////////////////////////////////////////////////////////////////////////
-	// Helper object to handle the various functions ABI
 	class xScopedStackFrame
 	{
 		bool m_base_frame;
@@ -181,8 +141,6 @@ namespace x86Emitter
 		~xScopedStackFrame();
 	};
 
-	//////////////////////////////////////////////////////////////////////////////////////////
-	/// Helper object to save some temporary registers before the call
 	class xScopedSavedRegisters
 	{
 		std::vector<std::reference_wrapper<const xAddressReg>> regs;
@@ -192,26 +150,12 @@ namespace x86Emitter
 		~xScopedSavedRegisters();
 	};
 
-	//////////////////////////////////////////////////////////////////////////////////////////
-	/// Helper function to calculate base+offset taking into account the limitations of x86-64's RIP-relative addressing
-	/// (Will either return `base+offset` or LEA `base` into `tmpRegister` and return `tmpRegister+offset`)
 	xAddressVoid xComplexAddress(const xAddressReg& tmpRegister, void* base, const xAddressVoid& offset);
 
-	//////////////////////////////////////////////////////////////////////////////////////////
-	/// Helper function to load addresses that may be far from the current instruction pointer
-	/// On i386, resolves to `mov dst, (sptr)addr`
-	/// On x86-64, resolves to either `mov dst, (sptr)addr` or `lea dst, [addr]` depending on the distance from RIP
 	void xLoadFarAddr(const xAddressReg& dst, void* addr);
 
-	//////////////////////////////////////////////////////////////////////////////////////////
-	/// Helper function to write a 64-bit constant to memory
-	/// May use `tmp` on x86-64
 	void xWriteImm64ToMem(u64* addr, const xAddressReg& tmp, u64 imm);
 
-	//////////////////////////////////////////////////////////////////////////////////////////
-	/// Helper function to run operations with large immediates
-	/// If the immediate fits in 32 bits, runs op(target, imm)
-	/// Otherwise, loads imm into tmpRegister and then runs op(dst, tmp)
 	template <typename Op, typename Dst>
 	void xImm64Op(const Op& op, const Dst& dst, const xRegister64& tmpRegister, s64 imm)
 	{
@@ -226,19 +170,9 @@ namespace x86Emitter
 		}
 	}
 
-	//////////////////////////////////////////////////////////////////////////////////////////
-	// JMP / Jcc Instructions!
-
 	extern void xJcc(JccComparisonType comparison, const void* target);
 	extern s8* xJcc8(JccComparisonType comparison = Jcc_Unconditional, s8 displacement = 0);
 	extern s32* xJcc32(JccComparisonType comparison = Jcc_Unconditional, s32 displacement = 0);
-
-	// ------------------------------------------------------------------------
-	// Conditional jumps to fixed targets.
-	// Jumps accept any pointer as a valid target (function or data), and will generate either
-	// 8 or 32 bit displacement versions of the jump, depending on relative displacement of
-	// the target (efficient!)
-	//
 
 	template <typename T>
 	__fi void xJE(T* func)
@@ -345,9 +279,6 @@ namespace x86Emitter
 		xJcc(Jcc_AboveOrEqual, (void*)(uptr)func);
 	}
 
-	// ------------------------------------------------------------------------
-	// Forward Jump Helpers (act as labels!)
-
 #define DEFINE_FORWARD_JUMP(label, cond) \
 	template <typename OperandType> \
 	class xForward##label : public xForwardJump<OperandType> \
@@ -358,10 +289,6 @@ namespace x86Emitter
 		{ \
 		} \
 	};
-
-	// ------------------------------------------------------------------------
-	// Note: typedefs below  are defined individually in order to appease Intellisense
-	// resolution.  Including them into the class definition macro above breaks it.
 
 	typedef xForwardJump<s8> xForwardJump8;
 	typedef xForwardJump<s32> xForwardJump32;
@@ -440,8 +367,6 @@ namespace x86Emitter
 	typedef xForwardJPO<s8> xForwardJPO8;
 	typedef xForwardJPO<s32> xForwardJPO32;
 
-	// ------------------------------------------------------------------------
-
 	extern void xEMMS();
 	extern void xSTMXCSR(const xIndirect32& dest);
 	extern void xLDMXCSR(const xIndirect32& src);
@@ -483,8 +408,6 @@ namespace x86Emitter
 	extern void xPALIGNR(const xRegisterSSE& dst, const xRegisterSSE& src1, const xRegisterSSE& src2, u8 imm8);
 	static inline void xPALIGNR(const xRegisterSSE& dst, const xRegisterSSE& src, u8 imm8) { xPALIGNR(dst, dst, src, imm8); }
 
-	// ------------------------------------------------------------------------
-
 	extern const xImplSimd_MoveSSE xMOVAPS;
 	extern const xImplSimd_MoveSSE xMOVUPS;
 	extern const xImplSimd_MoveSSE xMOVAPD;
@@ -513,16 +436,12 @@ namespace x86Emitter
 	extern void xEXTRACTPS(const xRegister32& dst, const xRegisterSSE& src, u8 imm8);
 	extern void xEXTRACTPS(const xIndirect32& dst, const xRegisterSSE& src, u8 imm8);
 
-	// ------------------------------------------------------------------------
-
 	extern const xImplSimd_3Arg xPAND;
 	extern const xImplSimd_3Arg xPANDN;
 	extern const xImplSimd_3Arg xPOR;
 	extern const xImplSimd_3Arg xPXOR;
 
 	extern const xImplSimd_Shuffle xSHUF;
-
-	// ------------------------------------------------------------------------
 
 	extern const xImplSimd_2Arg xPTEST;
 
@@ -541,9 +460,6 @@ namespace x86Emitter
 	extern const xImplSimd_PMinMax xPMIN;
 	extern const xImplSimd_PMinMax xPMAX;
 
-	// ------------------------------------------------------------------------
-	//
-	//
 	extern void xCVTDQ2PD(const xRegisterSSE& to, const xRegisterSSE& from);
 	extern void xCVTDQ2PD(const xRegisterSSE& to, const xIndirect64& from);
 	extern void xCVTDQ2PS(const xRegisterSSE& to, const xRegisterSSE& from);
@@ -592,8 +508,6 @@ namespace x86Emitter
 	extern void xCVTTSS2SI(const xRegister32or64& to, const xRegisterSSE& from);
 	extern void xCVTTSS2SI(const xRegister32or64& to, const xIndirect32& from);
 
-	// ------------------------------------------------------------------------
-
 	extern const xImplSimd_AndNot xANDN;
 	extern const xImplSimd_rSqrt xRCP;
 	extern const xImplSimd_rSqrt xRSQRT;
@@ -619,8 +533,6 @@ namespace x86Emitter
 	extern const xImplSimd_PInsert xPINSR;
 	extern const SimdImpl_PExtract xPEXTR;
 
-	// ------------------------------------------------------------------------
-
 	extern void xVZEROUPPER();
 
-} // namespace x86Emitter
+}

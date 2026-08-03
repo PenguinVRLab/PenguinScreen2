@@ -97,7 +97,6 @@ class GSVector8i;
 
 #endif
 
-// Position and order is important
 #include "GSVector4i.h"
 #include "GSVector4.h"
 #include "GSVector8i.h"
@@ -108,14 +107,11 @@ class GSVector8i;
 #include "GSVector4_arm64.h"
 #endif
 
-// conversion
-
 __forceinline_odr GSVector4i::GSVector4i(const GSVector4& v, bool truncate)
 {
 #if defined(ARCH_X86)
 	m = truncate ? _mm_cvttps_epi32(v) : _mm_cvtps_epi32(v);
 #elif defined(ARCH_ARM64)
-	// GS thread uses default (nearest) rounding.
 	v4s = truncate ? vcvtq_s32_f32(v.v4s) : vreinterpretq_s32_u32(vcvtnq_u32_f32(v.v4s));
 #endif
 }
@@ -163,8 +159,6 @@ __forceinline_odr void GSVector8i::sw32_inv(GSVector8i& a, GSVector8i& b)
 }
 
 #endif
-
-// casting
 
 __forceinline_odr GSVector4i GSVector4i::cast(const GSVector4& v)
 {

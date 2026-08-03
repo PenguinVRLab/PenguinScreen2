@@ -5,8 +5,6 @@
 
 using namespace metal;
 
-// use vs_convert from convert.metal
-
 static float4 ps_crt(float4 color, int i)
 {
 	constexpr float4 mask[4] =
@@ -30,8 +28,6 @@ static float4 ps_scanlines(float4 color, int i)
 
 	return color * saturate(mask[i] + 0.5f);
 }
-
-// use ps_copy from convert.metal
 
 fragment float4 ps_filter_scanlines(ConvertShaderData data [[stage_in]], ConvertPSRes res)
 {
@@ -60,18 +56,18 @@ fragment float4 ps_filter_complex(ConvertShaderData data [[stage_in]], ConvertPS
 	return factor * res.sample(float2(data.t.x, ycoord));
 }
 
-#define MaskingType 4                      //[1|2|3|4] The type of CRT shadow masking used. 1: compressed TV style, 2: Aperture-grille, 3: Stretched VGA style, 4: VGA style.
-#define ScanBrightness -8.00               //[-16.0 to 1.0] The overall brightness of the scanline effect. Lower for darker, higher for brighter.
-#define FilterCRTAmount -3.00              //[-4.0 to 1.0] The amount of filtering used, to replicate the TV CRT look. Lower for less, higher for more.
-#define HorizontalWarp 0.00                //[0.0 to 0.1] The distortion warping effect for the horizontal (x) axis of the screen. Use small increments.
-#define VerticalWarp 0.00                  //[0.0 to 0.1] The distortion warping effect for the verticle (y) axis of the screen. Use small increments.
-#define MaskAmountDark 0.50                //[0.0 to 1.0] The value of the dark masking line effect used. Lower for darker lower end masking, higher for brighter.
-#define MaskAmountLight 1.50               //[0.0 to 2.0] The value of the light masking line effect used. Lower for darker higher end masking, higher for brighter.
-#define BloomPixel -1.50                   //[-2.0 -0.5] Pixel bloom radius. Higher for increased softness of bloom.
-#define BloomScanLine -2.0                 //[-4.0 -1.0] Scanline bloom radius. Higher for increased softness of bloom.
-#define BloomAmount 0.15                   //[0.0 1.0] Bloom intensity. Higher for brighter.
-#define Shape 2.0                          //[0.0 10.0] Kernal filter shape. Lower values will darken image and introduce moire patterns if used with curvature.
-#define UseShadowMask 1                    //[0 or 1] Enables, or disables the use of the CRT shadow mask. 0 is disabled, 1 is enabled.
+#define MaskingType 4
+#define ScanBrightness -8.00
+#define FilterCRTAmount -3.00
+#define HorizontalWarp 0.00
+#define VerticalWarp 0.00
+#define MaskAmountDark 0.50
+#define MaskAmountLight 1.50
+#define BloomPixel -1.50
+#define BloomScanLine -2.0
+#define BloomAmount 0.15
+#define Shape 2.0
+#define UseShadowMask 1
 
 struct LottesCRTPass
 {
@@ -131,7 +127,6 @@ struct LottesCRTPass
 		float3 d = Fetch(pos, float2(1.0, off));
 		float dst = Dist(pos).x;
 
-		// Convert distance to weight.
 		float scale = FilterCRTAmount;
 		float wb = Gaus(dst - 1.0, scale);
 		float wc = Gaus(dst + 0.0, scale);
@@ -149,7 +144,6 @@ struct LottesCRTPass
 		float3 e = Fetch(pos, float2(2.0, off));
 		float dst = Dist(pos).x;
 
-		// Convert distance to weight.
 		float scale = FilterCRTAmount;
 
 		float wa = Gaus(dst - 2.0, scale);
@@ -172,7 +166,6 @@ struct LottesCRTPass
 		float3 g = Fetch(pos, float2( 3.0, off));
 
 		float dst = Dist(pos).x;
-		// Convert distance to weight.
 		float scale = BloomPixel;
 		float wa = Gaus(dst - 3.0, scale);
 		float wb = Gaus(dst - 2.0, scale);
@@ -182,11 +175,9 @@ struct LottesCRTPass
 		float wf = Gaus(dst + 2.0, scale);
 		float wg = Gaus(dst + 3.0, scale);
 
-		// Return filtered sample.
 		return (a * wa + b * wb + c * wc + d * wd + e * we + f * wf + g * wg) / (wa + wb + wc + wd + we + wf + wg);
 	}
 
-	// Return scanline weight.
 	float Scan(float2 pos, float off)
 	{
 		float dst = Dist(pos).y;
@@ -240,7 +231,6 @@ struct LottesCRTPass
 	float3 Mask(float2 pos)
 	{
 #if MaskingType == 1
-		// Very compressed TV style shadow mask.
 		float lines = MaskAmountLight;
 		float odd = 0.0;
 
@@ -273,7 +263,6 @@ struct LottesCRTPass
 		return mask;
 
 #elif MaskingType == 2
-		// Aperture-grille.
 		pos.x = fract(pos.x / 3.0);
 		float3 mask = float3(MaskAmountDark, MaskAmountDark, MaskAmountDark);
 
@@ -293,7 +282,6 @@ struct LottesCRTPass
 		return mask;
 
 #elif MaskingType == 3
-		// Stretched VGA style shadow mask (same as prior shaders).
 		pos.x += pos.y * 3.0;
 		float3 mask = float3(MaskAmountDark, MaskAmountDark, MaskAmountDark);
 		pos.x = fract(pos.x / 6.0);
@@ -314,7 +302,6 @@ struct LottesCRTPass
 		return mask;
 
 #else
-		// VGA style shadow mask.
 		pos.xy = floor(pos.xy * float2(1.0, 0.5));
 		pos.x += pos.y * 3.0;
 

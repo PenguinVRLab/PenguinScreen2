@@ -6,5 +6,4 @@
 #include "Common.h"
 #include "deci2.h"
 
-//void D2_(char *inbuffer, char *outbuffer, char *message);
 void sendTTYP(u16 protocol, u8 source, char *data);

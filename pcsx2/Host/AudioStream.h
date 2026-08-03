@@ -71,7 +71,6 @@ public:
 
 	u32 GetBufferedFramesRelaxed() const;
 
-	/// Temporarily pauses the stream, preventing it from requesting data.
 	virtual void SetPaused(bool paused);
 
 	void SetOutputVolume(u32 volume);
@@ -83,8 +82,6 @@ public:
 	void EndWrite(u32 num_frames);
 	void EmptyBuffer();
 
-	/// Nominal rate is used for both resampling and timestretching, input samples are assumed to be this amount faster
-	/// than the sample rate.
 	void SetNominalRate(float tempo);
 	void UpdateTargetTempo(float tempo);
 
@@ -185,12 +182,10 @@ private:
 
 	std::array<float, AVERAGING_BUFFER_SIZE> m_average_fullness = {};
 
-	// temporary staging buffer, used for timestretching
 	std::unique_ptr<SampleType[]> m_staging_buffer;
 
 	std::unique_ptr<FreeSurroundDecoder> m_expander;
 
-	// block buffer for expansion
 	std::unique_ptr<float[]> m_expand_buffer;
 	float* m_expand_output_buffer = nullptr;
 	u32 m_expand_buffer_pos = 0;
@@ -205,13 +200,12 @@ void AudioStream::SampleReaderImpl(SampleType* dest, const SampleType* src, u32 
 	static constexpr const std::array<std::pair<std::array<s8, MAX_OUTPUT_CHANNELS>, u8>,
 		static_cast<size_t>(AudioExpansionMode::Count)>
 		luts = {{
-			// FL FC FR SL SR RL RR LFE
-			{{0, -1, 1, -1, -1, -1, -1, -1}, 2}, // Disabled
-			{{0, -1, 1, -1, -1, -1, -1, 2}, 3}, // StereoLFE
-			{{0, -1, 1, -1, -1, 2, 3, -1}, 5}, // Quadraphonic
-			{{0, -1, 2, -1, -1, 2, 3, 4}, 5}, // QuadraphonicLFE
-			{{0, 1, 2, -1, -1, 3, 4, 5}, 6}, // Surround51
-			{{0, 1, 2, 3, 4, 5, 6, 7}, 8}, // Surround71
+			{{0, -1, 1, -1, -1, -1, -1, -1}, 2},
+			{{0, -1, 1, -1, -1, -1, -1, 2}, 3},
+			{{0, -1, 1, -1, -1, 2, 3, -1}, 5},
+			{{0, -1, 2, -1, -1, 2, 3, 4}, 5},
+			{{0, 1, 2, -1, -1, 3, 4, 5}, 6},
+			{{0, 1, 2, 3, 4, 5, 6, 7}, 8},
 		}};
 	constexpr const auto& lut = luts[static_cast<size_t>(mode)].first;
 	for (u32 i = 0; i < num_frames; i++)

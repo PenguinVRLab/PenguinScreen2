@@ -16,8 +16,6 @@ __fi void Threading::Timeslice()
 	::Sleep(0);
 }
 
-// For use in spin/wait loops,  Acts as a hint to Intel CPUs and should, in theory
-// improve performance and reduce cpu power consumption.
 __fi void Threading::SpinWait()
 {
 #ifdef ARCH_X86
@@ -29,11 +27,6 @@ __fi void Threading::SpinWait()
 
 __fi void Threading::EnableHiresScheduler()
 {
-	// This improves accuracy of Sleep() by some amount, and only adds a negligible amount of
-	// overhead on modern CPUs.  Typically desktops are already set pretty low, but laptops in
-	// particular may have a scheduler Period of 15 or 20ms to extend battery life.
-
-	// (note: this same trick is used by most multimedia software and games)
 
 	timeBeginPeriod(1);
 }
@@ -175,7 +168,6 @@ bool Threading::Thread::Start(EntryPoint func)
 	if (!m_native_handle)
 		return false;
 
-	// thread started, it'll release the memory
 	func_clone.release();
 	return true;
 }
@@ -226,8 +218,6 @@ u64 Threading::GetThreadCpuTime()
 u64 Threading::GetThreadTicksPerSecond()
 {
 #ifndef ARCH_ARM64
-	// On x86, despite what the MS documentation says, this basically appears to be rdtsc.
-	// So, the frequency is our base clock speed (and stable regardless of power management).
 	static u64 frequency = 0;
 	if (frequency == 0) [[unlikely]]
 	{
@@ -252,23 +242,18 @@ u64 Threading::GetThreadTicksPerSecond()
 
 void Threading::SetNameOfCurrentThread(const char* name)
 {
-	// This feature needs Windows headers and MSVC's SEH support:
 
 #if defined(_WIN32) && defined(_MSC_VER)
-
-	// This code sample was borrowed form some obscure MSDN article.
-	// In a rare bout of sanity, it's an actual Microsoft-published hack
-	// that actually works!
 
 	static const int MS_VC_EXCEPTION = 0x406D1388;
 
 #pragma pack(push, 8)
 	struct THREADNAME_INFO
 	{
-		DWORD dwType; // Must be 0x1000.
-		LPCSTR szName; // Pointer to name (in user addr space).
-		DWORD dwThreadID; // Thread ID (-1=caller thread).
-		DWORD dwFlags; // Reserved for future use, must be zero.
+		DWORD dwType;
+		LPCSTR szName;
+		DWORD dwThreadID;
+		DWORD dwFlags;
 	};
 #pragma pack(pop)
 

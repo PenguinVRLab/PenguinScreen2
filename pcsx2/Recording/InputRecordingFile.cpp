@@ -139,7 +139,6 @@ std::optional<PadData> InputRecordingFile::readPadData(const uint frame, const u
 
 	std::array<u8, s_controllerInputBytes> data{};
 
-	// TODO - slot unused, use it in the new format
 	const size_t seek = getRecordingBlockSeekPoint(frame) + s_controllerInputBytes * port;
 	if (fseek(m_recordingFile, seek, SEEK_SET) != 0 || fread(&data, 1, 18, m_recordingFile) != 1)
 	{
@@ -185,10 +184,8 @@ bool InputRecordingFile::writePadData(const uint frame, const PadData data) cons
 		return false;
 	}
 
-	// TODO - use the slot in the future
 	const size_t seek = getRecordingBlockSeekPoint(frame) + s_controllerInputBytes * data.m_port;
 
-	// seek to the correct position and write data to the file
 	if (fseek(m_recordingFile, seek, SEEK_SET) != 0 ||
 		fwrite(&data.m_compactPressFlagsGroupOne, 1, 1, m_recordingFile) != 1 ||
 		fwrite(&data.m_compactPressFlagsGroupTwo, 1, 1, m_recordingFile) != 1 ||
@@ -236,7 +233,6 @@ std::vector<PadData> InputRecordingFile::bulkReadPadData(u32 frameStart, u32 fra
 		return data;
 	}
 
-	// TODO - no multi-tap support
 	for (u32 currFrame = frameStart; currFrame < frameEnd; currFrame++)
 	{
 		const auto padData = readPadData(currFrame, port, 0);
@@ -259,7 +255,6 @@ bool InputRecordingFile::verifyRecordingFileHeader()
 	{
 		return false;
 	}
-	// Verify header contents
 	rewind(m_recordingFile);
 	if (fread(&m_header, sizeof(InputRecordingFileHeader), 1, m_recordingFile) != 1 ||
 		fread(&m_totalFrames, 4, 1, m_recordingFile) != 1 ||
@@ -269,7 +264,6 @@ bool InputRecordingFile::verifyRecordingFileHeader()
 		return false;
 	}
 
-	// Check for current verison
 	if (m_header.m_fileVersion != 1)
 	{
 		InputRec::consoleLog(fmt::format("Input recording file is not a supported version - {}", m_header.m_fileVersion));

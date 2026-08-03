@@ -10,26 +10,22 @@ class PadNegcon final : public PadBase
 public:
 	enum Inputs
 	{
-		PAD_UP, // Directional pad up
-		PAD_RIGHT, // Directional pad right
-		PAD_DOWN, // Directional pad down
-		PAD_LEFT, // Directional pad left
-		PAD_B, // B button
-		PAD_A, // A button
-		PAD_I, // I button
-		PAD_II, // II button
+		PAD_UP,
+		PAD_RIGHT,
+		PAD_DOWN,
+		PAD_LEFT,
+		PAD_B,
+		PAD_A,
+		PAD_I,
+		PAD_II,
 
-		// This workaround is necessary because InputRecorder doesn't support custom Pads beside DS2:
-		// https://github.com/PCSX2/pcsx2/blob/ded55635c105c547756f5369b998297f602ada2f/pcsx2/Recording/PadData.cpp#L42-L61
-		// We need to consider and avoid the DS2's indexes that aren't saved in InputRecorder
-		// and we also have to use DS2's analog indexes for our analog axes.
 		PAD_PADDING1,
 
-		PAD_START, // Start button
-		PAD_L, // L button
-		PAD_R, // R button
-		PAD_TWIST_LEFT, // Twist (Left)
-		PAD_TWIST_RIGHT, // Twist (Right)
+		PAD_START,
+		PAD_L,
+		PAD_R,
+		PAD_TWIST_LEFT,
+		PAD_TWIST_RIGHT,
 		LENGTH,
 	};
 
@@ -52,25 +48,22 @@ private:
 	std::array<float, 2> vibrationScale = {1.0f, 1.0f};
 	float twistDeadzone = 0.0f;
 	float twistScale = 1.0f;
-	// Used to store the last vibration mapping request the PS2 made for the small motor.
 	u8 smallMotorLastConfig = 0xff;
-	// Used to store the last vibration mapping request the PS2 made for the large motor.
 	u8 largeMotorLastConfig = 0xff;
 
-	// Since we reordered the buttons for better UI, we need to remap them here.
 	static constexpr std::array<u8, Inputs::LENGTH> bitmaskMapping = {{
-		12, // PAD_UP
-		13, // PAD_RIGHT
-		14, // PAD_DOWN
-		15, // PAD_LEFT
-		4, // PAD_B
-		5, // PAD_A
-		6, // PAD_I
-		7, // PAD_II
+		12,
+		13,
+		14,
+		15,
+		4,
+		5,
+		6,
+		7,
 		0,
-		11, // PAD_START
-		2, // PAD_L
-		3, // PAD_R
+		11,
+		2,
+		3,
 	}};
 
 	void ConfigLog();

@@ -10,10 +10,6 @@ using namespace x86Emitter;
 namespace R5900::Dynarec::OpcodeImpl
 {
 
-/*********************************************************
-* Shift arithmetic with constant shift                   *
-* Format:  OP rd, rt, sa                                 *
-*********************************************************/
 #ifndef SHIFT_RECOMPILE
 
 namespace Interp = R5900::Interpreter::OpcodeImpl;
@@ -55,14 +51,12 @@ static void recMoveTtoD64(int info)
 
 static void recMoveSToRCX(int info)
 {
-	// load full 64-bits for store->load forwarding, since we always store >=64.
 	if (info & PROCESS_EE_S)
 		xMOV(rcx, xRegister64(EEREC_S));
 	else
 		xMOV(rcx, ptr64[&cpuRegs.GPR.r[_Rs_].UL[0]]);
 }
 
-//// SLL
 static void recSLL_const()
 {
 	g_cpuConstRegs[_Rd_].SD[0] = (s32)(g_cpuConstRegs[_Rt_].UL[0] << _Sa_);
@@ -70,7 +64,6 @@ static void recSLL_const()
 
 static void recSLLs_(int info, int sa)
 {
-	// TODO: Use BMI
 	pxAssert(!(info & PROCESS_EE_XMM));
 
 	recMoveTtoD(info);
@@ -86,7 +79,6 @@ static void recSLL_(int info)
 
 EERECOMPILE_CODEX(eeRecompileCodeRC2, SLL, XMMINFO_WRITED | XMMINFO_READT);
 
-//// SRL
 static void recSRL_const()
 {
 	g_cpuConstRegs[_Rd_].SD[0] = (s32)(g_cpuConstRegs[_Rt_].UL[0] >> _Sa_);
@@ -109,7 +101,6 @@ static void recSRL_(int info)
 
 EERECOMPILE_CODEX(eeRecompileCodeRC2, SRL, XMMINFO_WRITED | XMMINFO_READT);
 
-//// SRA
 static void recSRA_const()
 {
 	g_cpuConstRegs[_Rd_].SD[0] = (s32)(g_cpuConstRegs[_Rt_].SL[0] >> _Sa_);
@@ -132,7 +123,6 @@ static void recSRA_(int info)
 
 EERECOMPILE_CODEX(eeRecompileCodeRC2, SRA, XMMINFO_WRITED | XMMINFO_READT);
 
-////////////////////////////////////////////////////
 static void recDSLL_const()
 {
 	g_cpuConstRegs[_Rd_].UD[0] = (u64)(g_cpuConstRegs[_Rt_].UD[0] << _Sa_);
@@ -154,7 +144,6 @@ static void recDSLL_(int info)
 
 EERECOMPILE_CODEX(eeRecompileCodeRC2, DSLL, XMMINFO_WRITED | XMMINFO_READT | XMMINFO_64BITOP);
 
-////////////////////////////////////////////////////
 static void recDSRL_const()
 {
 	g_cpuConstRegs[_Rd_].UD[0] = (u64)(g_cpuConstRegs[_Rt_].UD[0] >> _Sa_);
@@ -176,7 +165,6 @@ static void recDSRL_(int info)
 
 EERECOMPILE_CODEX(eeRecompileCodeRC2, DSRL, XMMINFO_WRITED | XMMINFO_READT | XMMINFO_64BITOP);
 
-//// DSRA
 static void recDSRA_const()
 {
 	g_cpuConstRegs[_Rd_].SD[0] = (u64)(g_cpuConstRegs[_Rt_].SD[0] >> _Sa_);
@@ -198,7 +186,6 @@ static void recDSRA_(int info)
 
 EERECOMPILE_CODEX(eeRecompileCodeRC2, DSRA, XMMINFO_WRITED | XMMINFO_READT | XMMINFO_64BITOP);
 
-///// DSLL32
 static void recDSLL32_const()
 {
 	g_cpuConstRegs[_Rd_].UD[0] = (u64)(g_cpuConstRegs[_Rt_].UD[0] << (_Sa_ + 32));
@@ -211,7 +198,6 @@ static void recDSLL32_(int info)
 
 EERECOMPILE_CODEX(eeRecompileCodeRC2, DSLL32, XMMINFO_WRITED | XMMINFO_READT | XMMINFO_64BITOP);
 
-//// DSRL32
 static void recDSRL32_const()
 {
 	g_cpuConstRegs[_Rd_].UD[0] = (u64)(g_cpuConstRegs[_Rt_].UD[0] >> (_Sa_ + 32));
@@ -224,7 +210,6 @@ static void recDSRL32_(int info)
 
 EERECOMPILE_CODEX(eeRecompileCodeRC2, DSRL32, XMMINFO_WRITED | XMMINFO_READT);
 
-//// DSRA32
 static void recDSRA32_const()
 {
 	g_cpuConstRegs[_Rd_].SD[0] = (u64)(g_cpuConstRegs[_Rt_].SD[0] >> (_Sa_ + 32));
@@ -236,11 +221,6 @@ static void recDSRA32_(int info)
 }
 
 EERECOMPILE_CODEX(eeRecompileCodeRC2, DSRA32, XMMINFO_WRITED | XMMINFO_READT | XMMINFO_64BITOP);
-
-/*********************************************************
-* Shift arithmetic with variant register shift           *
-* Format:  OP rd, rt, rs                                 *
-*********************************************************/
 
 static void recShiftV_constt(int info, const xImpl_Group2& shift)
 {
@@ -277,7 +257,6 @@ static void recDShiftV(int info, const xImpl_Group2& shift)
 	shift(xRegister64(EEREC_D), cl);
 }
 
-//// SLLV
 static void recSLLV_const()
 {
 	g_cpuConstRegs[_Rd_].SD[0] = (s32)(g_cpuConstRegs[_Rt_].UL[0] << (g_cpuConstRegs[_Rs_].UL[0] & 0x1f));
@@ -300,7 +279,6 @@ static void recSLLV_(int info)
 
 EERECOMPILE_CODERC0(SLLV, XMMINFO_READS | XMMINFO_READT | XMMINFO_WRITED);
 
-//// SRLV
 static void recSRLV_const()
 {
 	g_cpuConstRegs[_Rd_].SD[0] = (s32)(g_cpuConstRegs[_Rt_].UL[0] >> (g_cpuConstRegs[_Rs_].UL[0] & 0x1f));
@@ -323,7 +301,6 @@ static void recSRLV_(int info)
 
 EERECOMPILE_CODERC0(SRLV, XMMINFO_READS | XMMINFO_READT | XMMINFO_WRITED);
 
-//// SRAV
 static void recSRAV_const()
 {
 	g_cpuConstRegs[_Rd_].SD[0] = (s32)(g_cpuConstRegs[_Rt_].SL[0] >> (g_cpuConstRegs[_Rs_].UL[0] & 0x1f));
@@ -346,7 +323,6 @@ static void recSRAV_(int info)
 
 EERECOMPILE_CODERC0(SRAV, XMMINFO_READS | XMMINFO_READT | XMMINFO_WRITED);
 
-//// DSLLV
 static void recDSLLV_const()
 {
 	g_cpuConstRegs[_Rd_].UD[0] = (u64)(g_cpuConstRegs[_Rt_].UD[0] << (g_cpuConstRegs[_Rs_].UL[0] & 0x3f));
@@ -370,7 +346,6 @@ static void recDSLLV_(int info)
 
 EERECOMPILE_CODERC0(DSLLV, XMMINFO_READS | XMMINFO_READT | XMMINFO_WRITED | XMMINFO_64BITOP);
 
-//// DSRLV
 static void recDSRLV_const()
 {
 	g_cpuConstRegs[_Rd_].UD[0] = (u64)(g_cpuConstRegs[_Rt_].UD[0] >> (g_cpuConstRegs[_Rs_].UL[0] & 0x3f));
@@ -394,7 +369,6 @@ static void recDSRLV_(int info)
 
 EERECOMPILE_CODERC0(DSRLV, XMMINFO_READS | XMMINFO_READT | XMMINFO_WRITED | XMMINFO_64BITOP);
 
-//// DSRAV
 static void recDSRAV_const()
 {
 	g_cpuConstRegs[_Rd_].SD[0] = (s64)(g_cpuConstRegs[_Rt_].SD[0] >> (g_cpuConstRegs[_Rs_].UL[0] & 0x3f));
@@ -420,4 +394,4 @@ EERECOMPILE_CODERC0(DSRAV, XMMINFO_READS | XMMINFO_READT | XMMINFO_WRITED | XMMI
 
 #endif
 
-} // namespace R5900::Dynarec::OpcodeImpl
+}

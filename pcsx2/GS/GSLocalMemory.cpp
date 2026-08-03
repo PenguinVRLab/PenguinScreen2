@@ -29,8 +29,6 @@ static void foreachBlock(const GSOffset& off, GSLocalMemory* mem, const GSVector
 	}
 }
 
-//
-
 constexpr GSSwizzleInfo GSLocalMemory::swizzle32;
 constexpr GSSwizzleInfo GSLocalMemory::swizzle32Z;
 constexpr GSSwizzleInfo GSLocalMemory::swizzle16;
@@ -40,12 +38,8 @@ constexpr GSSwizzleInfo GSLocalMemory::swizzle16SZ;
 constexpr GSSwizzleInfo GSLocalMemory::swizzle8;
 constexpr GSSwizzleInfo GSLocalMemory::swizzle4;
 
-//
-
 GSLocalMemory::psm_t GSLocalMemory::m_psm[64];
 GSLocalMemory::readImage GSLocalMemory::m_readImageX;
-
-//
 
 GSLocalMemory::GSLocalMemory()
 	: m_clut(this)
@@ -265,8 +259,6 @@ GSPixelOffset* GSLocalMemory::GetPixelOffset(const GIFRegFRAME& FRAME, const GIF
 
 	pxAssert(m_psm[fpsm].trbpp > 8 || m_psm[zpsm].trbpp > 8);
 
-	// "(psm & 0x0f) ^ ((psm & 0xf0) >> 2)" creates 4 bit unique identifiers for render target formats (only)
-
 	u32 fpsm_hash = (fpsm & 0x0f) ^ ((fpsm & 0x30) >> 2);
 	u32 zpsm_hash = (zpsm & 0x0f) ^ ((zpsm & 0x30) >> 2);
 
@@ -318,8 +310,6 @@ GSPixelOffset4* GSLocalMemory::GetPixelOffset4(const GIFRegFRAME& FRAME, const G
 
 	pxAssert(m_psm[fpsm].trbpp > 8 || m_psm[zpsm].trbpp > 8);
 
-	// "(psm & 0x0f) ^ ((psm & 0xf0) >> 2)" creates 4 bit unique identifiers for render target formats (only)
-
 	u32 fpsm_hash = (fpsm & 0x0f) ^ ((fpsm & 0x30) >> 2);
 	u32 zpsm_hash = (zpsm & 0x0f) ^ ((zpsm & 0x30) >> 2);
 
@@ -363,7 +353,7 @@ GSPixelOffset4* GSLocalMemory::GetPixelOffset4(const GIFRegFRAME& FRAME, const G
 
 std::vector<GSVector2i>* GSLocalMemory::GetPage2TileMap(const GIFRegTEX0& TEX0)
 {
-	u64 hash = TEX0.U64 & 0x3ffffffffull; // TBP0 TBW PSM TW TH
+	u64 hash = TEX0.U64 & 0x3ffffffffull;
 
 	auto it = m_p2tmap.find(hash);
 
@@ -377,7 +367,6 @@ std::vector<GSVector2i>* GSLocalMemory::GetPage2TileMap(const GIFRegTEX0& TEX0)
 	int tw = std::max<int>(1 << TEX0.TW, bs.x);
 	int th = std::max<int>(1 << TEX0.TH, bs.y);
 
-	// Limit the size to the maximum size of the GS memory, there's no point in mapping more than this.
 	if ((tw * th) > static_cast<int>(VM_SIZE))
 	{
 		tw = 2048;
@@ -387,7 +376,7 @@ std::vector<GSVector2i>* GSLocalMemory::GetPage2TileMap(const GIFRegTEX0& TEX0)
 	GSOffset off = GetOffset(TEX0.TBP0, TEX0.TBW, TEX0.PSM);
 	GSOffset::BNHelper bn = off.bnMulti(0, 0);
 
-	std::unordered_map<u32, std::unordered_set<u32>> tmp; // key = page, value = y:x, 7 bits each, max 128x128 tiles for the worst case (1024x1024 32bpp 8x8 blocks)
+	std::unordered_map<u32, std::unordered_set<u32>> tmp;
 
 	for (; bn.blkY() < (th >> off.blockShiftY()); bn.nextBlockY())
 	{
@@ -398,8 +387,6 @@ std::vector<GSVector2i>* GSLocalMemory::GetPage2TileMap(const GIFRegTEX0& TEX0)
 			tmp[page].insert((bn.blkY() << 7) + bn.blkX());
 		}
 	}
-
-	// combine the lower 5 bits of the address into a 9:5 pointer:mask form, so the "valid bits" can be tested against an u32 array
 
 	auto p2t = new std::vector<GSVector2i>[GS_MAX_PAGES];
 
@@ -428,10 +415,7 @@ std::vector<GSVector2i>* GSLocalMemory::GetPage2TileMap(const GIFRegTEX0& TEX0)
 			}
 		}
 
-		// Allocate vector with initial size
 		p2t[page].reserve(m.size());
-
-		// sort by x and flip the mask (it will be used to erase a lot of bits in a loop, [x] &= ~y)
 
 		for (const auto& j : m)
 		{
@@ -462,10 +446,8 @@ bool GSLocalMemory::IsPageAligned(u32 psm, const GSVector4i& rc)
 
 u32 GSLocalMemory::GetStartBlockAddress(u32 bp, u32 bw, u32 psm, GSVector4i rect)
 {
-	u32 result = m_psm[psm].info.bn(rect.x, rect.y, bp, bw); // Valid only for color formats
+	u32 result = m_psm[psm].info.bn(rect.x, rect.y, bp, bw);
 
-	// If rect is page aligned, we can assume it's the start of the page. Z formats don't place block 0
-	// in the top-left, so we have to round them down.
 	const GSVector2i page_size = GSLocalMemory::m_psm[psm].pgs;
 	if ((rect.x & (page_size.x - 1)) == 0 && (rect.y & (page_size.y - 1)) == 0)
 	{
@@ -478,10 +460,8 @@ u32 GSLocalMemory::GetStartBlockAddress(u32 bp, u32 bw, u32 psm, GSVector4i rect
 
 u32 GSLocalMemory::GetEndBlockAddress(u32 bp, u32 bw, u32 psm, GSVector4i rect)
 {
-	u32 result = m_psm[psm].info.bn(rect.z - 1, rect.w - 1, bp, bw); // Valid only for color formats
+	u32 result = m_psm[psm].info.bn(rect.z - 1, rect.w - 1, bp, bw);
 
-	// If rect is page aligned, we can assume it's the start of the next block-1 as the max block position.
-	// Using real end point for Z formats causes problems because it's a lower value.
 	const GSVector2i page_size = GSLocalMemory::m_psm[psm].pgs;
 	if ((rect.z & (page_size.x - 1)) == 0 && (rect.w & (page_size.y - 1)) == 0)
 	{
@@ -535,8 +515,6 @@ bool GSLocalMemory::HasOverlap(const u32 src_bp, const u32 src_bw, const u32 src
 	return false;
 }
 
-///////////////////
-
 void GSLocalMemory::ReadTexture(const GSOffset& off, const GSVector4i& r, u8* dst, int dstpitch, const GIFRegTEXA& TEXA)
 {
 	const psm_t& psm = m_psm[off.psm()];
@@ -558,7 +536,6 @@ void GSLocalMemory::ReadTexture(const GSOffset& off, const GSVector4i& r, u8* ds
 
 		if (cr.rempty() || !aligned)
 		{
-			// TODO: expand r to block size, read into temp buffer
 
 			if (!aligned)
 				printf("unaligned memory pointer passed to ReadTexture\n");
@@ -618,8 +595,6 @@ void GSLocalMemory::ReadTexture(const GSOffset& off, const GSVector4i& r, u8* ds
 	}
 }
 
-//
-
 void GSLocalMemory::SaveBMP(const std::string& fn, u32 bp, u32 bw, u32 psm, int w, int h, int x, int y)
 {
 	int pitch = w * 4;
@@ -649,18 +624,14 @@ void GSLocalMemory::SaveBMP(const std::string& fn, u32 bp, u32 bw, u32 psm, int 
 	_aligned_free(bits);
 }
 
-// GSOffset
-
 namespace
 {
-	/// Helper for GSOffset::pageLooperForRect
 	struct alignas(16) TextureAligned
 	{
-		int ox1, oy1, ox2, oy2; ///< Block-aligned outer rect (smallest rectangle containing the original that is block-aligned)
-		int ix1, iy1, ix2, iy2; ///< Page-aligned inner rect (largest rectangle inside original that is page-aligned)
+		int ox1, oy1, ox2, oy2;
+		int ix1, iy1, ix2, iy2;
 	};
 
-	/// Helper for GSOffset::pageLooperForRect
 	TextureAligned align(const GSVector4i& rect, const GSVector2i& blockMask, const GSVector2i& pageMask, int blockShiftX, int blockShiftY)
 	{
 		GSVector4i outer = rect.ralign_presub<Align_Outside>(blockMask);
@@ -697,18 +668,10 @@ namespace
 #endif
 	}
 
-} // namespace
+}
 
 GSOffset::PageLooper GSOffset::pageLooperForRect(const GSVector4i& rect) const
 {
-	// Plan:
-	// - Split texture into tiles on page lines
-	// - When bp is not page-aligned, each page-sized tile of texture may touch the page on either side of it
-	//   e.g. if bp is 1 on PSMCT32, the top left tile uses page 1 if the rect covers the bottom right block, and uses page 0 if the rect covers any block other than the bottom right
-	// - Center tiles (ones that aren't first or last) cover all blocks that the first and last do in a row
-	//   Therefore, if the first tile in a row touches the higher of its two pages, subsequent non-last tiles will at least touch the higher of their pages as well (and same for center to last, etc)
-	// - Based on the above, we calculate the range of pages a row could touch with full coverage, then add one to the start if the first tile doesn't touch its lower page, and subtract one from the end if the last tile doesn't touch its upper page
-	// - This is done separately for the first and last rows in the y axis, as they may not have the same coverage as a row in the middle
 
 	PageLooper out;
 	const int topPg = rect.top >> m_pageShiftY;
@@ -724,7 +687,6 @@ GSOffset::PageLooper GSOffset::pageLooperForRect(const GSVector4i& rect) const
 	out.firstRowPgXEnd = out.midRowPgXEnd = out.lastRowPgXEnd = ((rect.right + m_pageMask.x) >> m_pageShiftX) + !aligned;
 	out.slowPath = static_cast<u32>(out.yCnt * out.yInc + out.midRowPgXEnd - out.midRowPgXStart) > GS_MAX_PAGES;
 
-	// Page-aligned bp is easy, all tiles touch their lower page but not the upper
 	if (aligned)
 		return out;
 
@@ -735,7 +697,6 @@ GSOffset::PageLooper GSOffset::pageLooperForRect(const GSVector4i& rect) const
 	const int blkW = 1 << shiftX;
 	const int blkH = 1 << shiftY;
 
-	/// Does the given rect in the texture touch the given page?
 	auto rectUsesPage = [&](int x1, int x2, int y1, int y2, bool lowPage) -> bool
 	{
 		for (int y = y1; y < y2; y++)
@@ -745,21 +706,16 @@ GSOffset::PageLooper GSOffset::pageLooperForRect(const GSVector4i& rect) const
 		return false;
 	};
 
-	/// Do the given coordinates stay within the boundaries of one page?
 	auto staysWithinOnePage = [](int o1, int o2, int i1, int i2) -> bool
 	{
-		// Inner rect being inside out indicates staying within one page
 		if (i2 < i1)
 			return true;
-		// If there's no inner rect, stays in one page if only one side of the page line is used
 		if (i2 == i1)
 			return o1 == i1 || o2 == i1;
 		return false;
 	};
 
 	const bool onePageX = staysWithinOnePage(a.ox1, a.ox2, a.ix1, a.ix2);
-	/// Adjusts start/end values for lines that don't touch their first/last page
-	/// (e.g. if the texture only touches the bottom-left corner of its top-right page, depending on the bp, it may not have any pixels that actually use the last page in the row)
 	auto adjustStartEnd = [&](int& start, int& end, int y1, int y2)
 	{
 		int startAdj1, startAdj2, endAdj1, endAdj2;
@@ -782,16 +738,13 @@ GSOffset::PageLooper GSOffset::pageLooperForRect(const GSVector4i& rect) const
 			end--;
 	};
 
-	// If y stays within one page, loop functions will only look at the `first` fields
 	if (staysWithinOnePage(a.oy1, a.oy2, a.iy1, a.iy2))
 	{
 		adjustStartEnd(out.firstRowPgXStart, out.firstRowPgXEnd, a.oy1, a.oy2);
 		return out;
 	}
 
-	// Mid rows (if any) will always have full range of y
 	adjustStartEnd(out.midRowPgXStart, out.midRowPgXEnd, 0, blkH);
-	// For first and last rows, either copy mid if they are full height or separately calculate them with their smaller ranges
 	if (a.oy1 != a.iy1)
 	{
 		adjustStartEnd(out.firstRowPgXStart, out.firstRowPgXEnd, a.oy1, a.iy1);

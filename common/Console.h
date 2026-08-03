@@ -10,8 +10,6 @@
 #include <cstdarg>
 #include <string>
 
-// TODO: This whole thing needs to get ripped out.
-
 enum ConsoleColors
 {
 	Color_Default = 0,
@@ -24,18 +22,16 @@ enum ConsoleColors
 	Color_Orange,
 	Color_Gray,
 
-	Color_Cyan, // faint visibility, intended for logging PS2/IOP output
-	Color_Yellow, // faint visibility, intended for logging PS2/IOP output
-	Color_White, // faint visibility, intended for logging PS2/IOP output
+	Color_Cyan,
+	Color_Yellow,
+	Color_White,
 
-	// Strong text *may* result in mis-aligned text in the console, depending on the
-	// font and the platform, so use these with caution.
 	Color_StrongBlack,
-	Color_StrongRed, // intended for errors
-	Color_StrongGreen, // intended for infrequent state information
-	Color_StrongBlue, // intended for block headings
+	Color_StrongRed,
+	Color_StrongGreen,
+	Color_StrongBlue,
 	Color_StrongMagenta,
-	Color_StrongOrange, // intended for warnings
+	Color_StrongOrange,
 	Color_StrongGray,
 
 	Color_StrongCyan,
@@ -47,7 +43,7 @@ enum ConsoleColors
 
 enum LOGLEVEL
 {
-	LOGLEVEL_NONE, // Silences all log traffic
+	LOGLEVEL_NONE,
 	LOGLEVEL_ERROR,
 	LOGLEVEL_WARNING,
 	LOGLEVEL_INFO,
@@ -58,44 +54,32 @@ enum LOGLEVEL
 	LOGLEVEL_COUNT,
 };
 
-// TODO: Move this elsewhere, add channels.
-
 namespace Log
 {
-	// log message callback type
 	using HostCallbackType = void (*)(LOGLEVEL level, ConsoleColors color, std::string_view message);
 
-	// returns the time in seconds since the start of the process
 	float GetCurrentMessageTime();
 
-	// adds a standard console output
 	bool IsConsoleOutputEnabled();
 	void SetConsoleOutputLevel(LOGLEVEL level);
 
-	// adds a debug console output
 	bool IsDebugOutputAvailable();
 	bool IsDebugOutputEnabled();
 	void SetDebugOutputLevel(LOGLEVEL level);
 
-	// adds a file output
 	bool IsFileOutputEnabled();
 	bool SetFileOutputLevel(LOGLEVEL level, std::string path);
 
-	// returns the log file, this is really dangerous to use if it changes...
 	std::FILE* GetFileLogHandle();
 
-	// adds host output
 	bool IsHostOutputEnabled();
 	void SetHostOutputLevel(LOGLEVEL level, HostCallbackType callback);
 
-	// sets logging timestamps
 	bool AreTimestampsEnabled();
 	void SetTimestampsEnabled(bool enabled);
 
-	// Returns the current global filtering level.
 	LOGLEVEL GetMaxLevel();
 
-	// writes a message to the log
 	void Write(LOGLEVEL level, ConsoleColors color, std::string_view message);
 	void Writef(LOGLEVEL level, ConsoleColors color, const char* format, ...);
 	void Writev(LOGLEVEL level, ConsoleColors color, const char* format, va_list ap);
@@ -104,13 +88,11 @@ namespace Log
 	template <typename... T>
 	__fi static void Write(LOGLEVEL level, ConsoleColors color, fmt::format_string<T...> fmt, T&&... args)
 	{
-		// Avoid arg packing if filtered.
 		if (level <= GetMaxLevel())
 			return WriteFmtArgs(level, color, fmt, fmt::make_format_args(args...));
 	}
-} // namespace Log
+}
 
-// Adapter classes to handle old code.
 template <LOGLEVEL level>
 struct ConsoleLogWriter
 {

@@ -33,7 +33,6 @@ public:
 	void Add(Key key, T value)
 	{
 		std::unique_lock modifyLock(accessMutex);
-		//Todo, check if key already exists?
 		map[key] = value;
 	}
 
@@ -66,7 +65,6 @@ public:
 		return keys;
 	}
 
-	//Does not error or insert if no key is found
 	bool TryGetValue(Key key, T* value)
 	{
 #ifdef NO_SHARED_MUTEX

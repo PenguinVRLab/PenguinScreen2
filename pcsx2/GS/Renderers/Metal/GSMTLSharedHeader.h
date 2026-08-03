@@ -38,9 +38,9 @@ struct GSMTLPresentPSUniform
 	vector_float2 source_size;
 	vector_float2 target_size;
 	vector_float2 target_resolution;
-	vector_float2 rcp_target_resolution; ///< 1 / target_resolution
+	vector_float2 rcp_target_resolution;
 	vector_float2 source_resolution;
-	vector_float2 rcp_source_resolution; ///< 1 / source_resolution
+	vector_float2 rcp_source_resolution;
 	float time;
 };
 
@@ -99,6 +99,8 @@ struct GSMTLMainVSUniform
 	vector_float2 point_size;
 	uint max_depth;
 	float line_aa1_width;
+	vector_float2 vr_stereo;
+	vector_float2 vr_pad;
 };
 
 struct GSMTLMainPSUniform
@@ -113,7 +115,7 @@ struct GSMTLMainPSUniform
 			float aref;
 		};
 	};
-	vector_float4 wh; ///< xy => PS2, zw => actual (upscaled)
+	vector_float4 wh;
 	vector_float2 ta;
 	float max_depth;
 	float alpha_fix;

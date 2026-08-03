@@ -9,26 +9,12 @@
 #include "Vif.h"
 #include "Vif_Dma.h"
 
-//////////////////////////////////////////////////////////////////////////
-/////////////////////////// Quick & dirty FIFO :D ////////////////////////
-//////////////////////////////////////////////////////////////////////////
-
-// Notes on FIFO implementation
-//
-// The FIFO consists of four separate pages of HW register memory, each mapped to a
-// PS2 device.  They are listed as follows:
-//
-// 0x4000 - 0x5000 : VIF0  (all registers map to 0x4000)
-// 0x5000 - 0x6000 : VIF1  (all registers map to 0x5000)
-// 0x6000 - 0x7000 : GS    (all registers map to 0x6000)
-// 0x7000 - 0x8000 : IPU   (registers map to 0x7000 and 0x7010, respectively)
-
 void ReadFIFO_VIF1(mem128_t* out)
 {
 	if (vif1Regs.stat.test(VIF1_STAT_INT | VIF1_STAT_VSS | VIF1_STAT_VIS | VIF1_STAT_VFS))
 		DevCon.Warning("Reading from vif1 fifo when stalled");
 
-	ZeroQWC(out); // Clear first in case no data gets written...
+	ZeroQWC(out);
 	pxAssertRel(vif1Regs.stat.FQC != 0, "FQC = 0 on VIF FIFO READ!");
 	if (vif1Regs.stat.FDR)
 	{
@@ -50,9 +36,6 @@ void ReadFIFO_VIF1(mem128_t* out)
 	VIF_LOG("ReadFIFO/VIF1 -> 0x%08X.%08X.%08X.%08X", out->_u32[0], out->_u32[1], out->_u32[2], out->_u32[3]);
 }
 
-//////////////////////////////////////////////////////////////////////////
-// WriteFIFO Pages
-//
 void WriteFIFO_VIF0(const mem128_t* value)
 {
 	VIF_LOG("WriteFIFO/VIF0 <- 0x%08X.%08X.%08X.%08X", value->_u32[0], value->_u32[1], value->_u32[2], value->_u32[3]);
@@ -106,7 +89,7 @@ void WriteFIFO_VIF1(const mem128_t* value)
 	{
 		gifRegs.stat.APATH = 0;
 		gifRegs.stat.OPH = 0;
-		vif1Regs.stat.VGW = false; //Let vif continue if it's stuck on a flush
+		vif1Regs.stat.VGW = false;
 
 		if (gifUnit.checkPaths(1, 0, 1))
 			gifUnit.Execute(false, true);
@@ -120,7 +103,6 @@ void WriteFIFO_GIF(const mem128_t* value)
 	GUNIT_LOG("WriteFIFO_GIF()");
 	if ((!gifUnit.CanDoPath3() || gif_fifo.fifoSize > 0))
 	{
-		//DevCon.Warning("GIF FIFO HW Write");
 		gif_fifo.write_fifo((u32*)value, 1);
 		gif_fifo.read_fifo();
 	}

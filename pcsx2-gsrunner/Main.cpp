@@ -45,10 +45,12 @@
 #include "pcsx2/SIO/Pad/Pad.h"
 #include "pcsx2/PerformanceMetrics.h"
 #include "pcsx2/VMManager.h"
+#ifdef ENABLE_VR
+#include "pcsx2/VR/VRProfileDB.h"
+#endif
 
 #include "svnrev.h"
 
-// Down here because X11 has a lot of defines that can conflict
 #if defined(__linux__)
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
@@ -69,7 +71,7 @@ namespace GSRunner
 	static std::optional<WindowInfo> GetPlatformWindowInfo();
 	static void PumpPlatformMessages(bool forever = false);
 	static void StopPlatformMessagePump();
-} // namespace GSRunner
+}
 
 static constexpr u32 WINDOW_WIDTH = 640;
 static constexpr u32 WINDOW_HEIGHT = 480;
@@ -81,7 +83,6 @@ static s32 s_loop_count = 1;
 static std::optional<bool> s_use_window;
 static bool s_no_console = false;
 
-// Owned by the GS thread.
 static u32 s_dump_frame_number = 0;
 static u32 s_loop_number = s_loop_count;
 static double s_last_internal_draws = 0;
@@ -151,7 +152,6 @@ bool GSRunner::InitializeConfig()
 		ImGuiManager::SetFonts(std::move(fonts));
 	}
 
-	// don't provide an ini path, or bother loading. we'll store everything in memory.
 	MemorySettingsInterface& si = s_settings_interface;
 	Host::Internal::SetBaseSettingsLayer(&si);
 
@@ -163,7 +163,6 @@ bool GSRunner::InitializeConfig()
 
 void Host::CommitBaseSettingChanges()
 {
-	// nothing to save, we're all in memory
 }
 
 void Host::LoadSettings(SettingsInterface& si, std::unique_lock<std::mutex>& lock)
@@ -176,18 +175,15 @@ void Host::CheckForSettingsChanges(const Pcsx2Config& old_config)
 
 bool Host::RequestResetSettings(bool folders, bool core, bool controllers, bool hotkeys, bool ui)
 {
-	// not running any UI, so no settings requests will come in
 	return false;
 }
 
 void Host::SetDefaultUISettings(SettingsInterface& si)
 {
-	// nothing
 }
 
 bool Host::LocaleCircleConfirm()
 {
-	// not running any UI, so no settings requests will come in
 	return false;
 }
 
@@ -214,7 +210,6 @@ void Host::ReportErrorAsync(const std::string_view title, const std::string_view
 
 void Host::OpenURL(const std::string_view url)
 {
-	// noop
 }
 
 bool Host::CopyTextToClipboard(const std::string_view text)
@@ -229,12 +224,10 @@ std::string Host::GetTextFromClipboard()
 
 void Host::BeginTextInput()
 {
-	// noop
 }
 
 void Host::EndTextInput()
 {
-	// noop
 }
 
 std::optional<WindowInfo> Host::GetTopLevelWindowInfo()
@@ -271,10 +264,8 @@ void Host::BeginPresentFrame()
 {
 	if (s_loop_number == 0 && !s_output_prefix.empty())
 	{
-		// when we wrap around, don't race other files
 		GSJoinSnapshotThreads();
 
-		// queue dumping of this frame
 		std::string dump_path(fmt::format("{}_frame{:05}.png", s_output_prefix, s_dump_frame_number));
 		GSQueueSnapshot(dump_path);
 	}
@@ -285,7 +276,6 @@ void Host::BeginPresentFrame()
 		const u32 last_uploads = s_total_uploads;
 
 		static constexpr auto update_stat = [](GSPerfMon::counter_t counter, u64& dst, double& last) {
-			// perfmon resets every 30 frames to zero
 			const double val = g_perfmon.GetCounter(counter);
 			dst += static_cast<u64>((val < last) ? val : (val - last));
 			last = val;
@@ -370,7 +360,7 @@ void Host::OnSaveStateSaved(const std::string_view filename)
 {
 }
 
-void Host::RunOnCPUThread(std::function<void()> function, bool block /* = false */)
+void Host::RunOnCPUThread(std::function<void()> function, bool block )
 {
 	pxFailRel("Not implemented");
 }
@@ -415,22 +405,18 @@ void Host::RequestVMShutdown(bool allow_confirm, bool allow_save_state, bool def
 
 void Host::OnAchievementsLoginSuccess(const char* username, u32 points, u32 sc_points, u32 unread_messages)
 {
-	// noop
 }
 
 void Host::OnAchievementsLoginRequested(Achievements::LoginRequestReason reason)
 {
-	// noop
 }
 
 void Host::OnAchievementsHardcoreModeChanged(bool enabled)
 {
-	// noop
 }
 
 void Host::OnAchievementsRefreshed()
 {
-	// noop
 }
 
 bool Host::InBatchMode()
@@ -527,7 +513,7 @@ void GSRunner::InitializeConsole()
 
 bool GSRunner::ParseCommandLineArgs(int argc, char* argv[], VMBootParameters& params)
 {
-	std::string dumpdir; // Save from argument -dumpdir for creating sub-directories
+	std::string dumpdir;
 	bool no_more_args = false;
 	for (int i = 1; i < argc; i++)
 	{
@@ -750,6 +736,11 @@ bool GSRunner::ParseCommandLineArgs(int argc, char* argv[], VMBootParameters& pa
 				for (const auto& [key, value] : si_ini.GetKeyValueList("EmuCore/GS"))
 					s_settings_interface.SetStringValue("EmuCore/GS", key.c_str(), value.c_str());
 
+#ifdef ENABLE_VR
+				for (const auto& [key, value] : si_ini.GetKeyValueList("VR"))
+					s_settings_interface.SetStringValue("VR", key.c_str(), value.c_str());
+#endif
+
 				continue;
 			}
 			else if (CHECK_ARG_PARAM("-upscale"))
@@ -770,7 +761,6 @@ bool GSRunner::ParseCommandLineArgs(int argc, char* argv[], VMBootParameters& pa
 				const char* logfile = argv[++i];
 				if (std::strlen(logfile) > 0)
 				{
-					// disable timestamps, since we want to be able to diff the logs
 					Console.WriteLn("Logging to %s...", logfile);
 					VMManager::Internal::SetFileLogPath(logfile);
 					s_settings_interface.SetBoolValue("Logging", "EnableFileLogging", true);
@@ -848,15 +838,11 @@ bool GSRunner::ParseCommandLineArgs(int argc, char* argv[], VMBootParameters& pa
 		if (s_settings_interface.GetStringValue("EmuCore/GS", "SWDumpDirectory").empty())
 			s_settings_interface.SetStringValue("EmuCore/GS", "SWDumpDirectory", dumpdir.c_str());
 		
-		// Disable saving frames with SaveSnapshotToMemory()
-		// Instead we save more "raw" snapshots when using -dump.
 		s_output_prefix = "";
 	}
 
-	// set up the frame dump directory
 	if (!s_output_prefix.empty())
 	{
-		// strip off all extensions
 		std::string_view title(Path::GetFileTitle(params.filename));
 		if (StringUtil::EndsWithNoCase(title, ".gs"))
 			title = Path::GetFileTitle(title);
@@ -870,36 +856,28 @@ bool GSRunner::ParseCommandLineArgs(int argc, char* argv[], VMBootParameters& pa
 
 void GSRunner::SettingsOverride()
 {
-	// complete as quickly as possible
 	s_settings_interface.SetBoolValue("EmuCore/GS", "FrameLimitEnable", false);
 	s_settings_interface.SetIntValue("EmuCore/GS", "VsyncEnable", false);
 
-	// Force screenshot quality settings to something more performant, overriding any defaults good for users.
 	s_settings_interface.SetIntValue("EmuCore/GS", "ScreenshotFormat", static_cast<int>(GSScreenshotFormat::PNG));
 	s_settings_interface.SetIntValue("EmuCore/GS", "ScreenshotQuality", 10);
 
-	// ensure all input sources are disabled, we're not using them
 	s_settings_interface.SetBoolValue("InputSources", "SDL", false);
 	s_settings_interface.SetBoolValue("InputSources", "XInput", false);
 
-	// we don't need any sound output
 	s_settings_interface.SetStringValue("SPU2/Output", "OutputModule", "nullout");
 
-	// none of the bindings are going to resolve to anything
 	Pad::ClearPortBindings(s_settings_interface, 0);
 	s_settings_interface.ClearSection("Hotkeys");
 
-	// force logging
 	s_settings_interface.SetBoolValue("Logging", "EnableSystemConsole", !s_no_console);
 	s_settings_interface.SetBoolValue("Logging", "EnableTimestamps", true);
 	s_settings_interface.SetBoolValue("Logging", "EnableVerbose", true);
 
-	// and show some stats :)
 	s_settings_interface.SetBoolValue("EmuCore/GS", "OsdShowFPS", true);
 	s_settings_interface.SetBoolValue("EmuCore/GS", "OsdShowResolution", true);
 	s_settings_interface.SetBoolValue("EmuCore/GS", "OsdShowGSStats", true);
 
-	// remove memory cards, so we don't have sharing violations
 	for (u32 i = 0; i < 2; i++)
 	{
 		s_settings_interface.SetBoolValue("MemoryCards", fmt::format("Slot{}_Enable", i + 1).c_str(), false);
@@ -936,7 +914,6 @@ void GSRunner::DumpStats()
 }
 
 #ifdef _WIN32
-// We can't handle unicode in filenames if we don't use wmain on Win32.
 #define main real_main
 #endif
 
@@ -946,13 +923,11 @@ static void CPUThreadMain(VMBootParameters* params, std::atomic<int>* ret)
 
 	if (VMManager::Internal::CPUThreadInitialize())
 	{
-		// apply new settings (e.g. pick up renderer change)
 		VMManager::ApplySettings();
 		GSDumpReplayer::SetIsDumpRunner(true);
 
 		if (VMManager::Initialize(*params) == VMBootResult::StartupSuccess)
 		{
-			// run until end
 			GSDumpReplayer::SetLoopCount(s_loop_count);
 			VMManager::SetState(VMState::Running);
 			if (s_perf_enable)
@@ -983,6 +958,27 @@ int main(int argc, char* argv[])
 		return EXIT_FAILURE;
 	}
 
+#ifdef ENABLE_VR
+	{
+		const auto& issues = VR::ProfileDB::ValidateAtLaunch();
+		if (!issues.empty())
+		{
+			for (const auto& issue : issues)
+			{
+				std::fputs(fmt::format("(VR) invalid profile file: {} — {}\n", issue.file, issue.message).c_str(), stderr);
+				Console.ErrorFmt("(VR) invalid profile file: {} — {}", issue.file, issue.message);
+			}
+			std::fputs(
+				fmt::format("(VR) {} invalid VR profile file(s) — refusing to run. Fix or remove them.\n", issues.size())
+					.c_str(),
+				stderr);
+			Console.ErrorFmt("(VR) {} invalid VR profile file(s) — refusing to run. Fix or remove them.", issues.size());
+			std::fflush(stderr);
+			return EXIT_FAILURE;
+		}
+	}
+#endif
+
 	VMBootParameters params;
 	if (!GSRunner::ParseCommandLineArgs(argc, argv, params))
 		return EXIT_FAILURE;
@@ -993,12 +989,11 @@ int main(int argc, char* argv[])
 		return EXIT_FAILURE;
 	}
 
-	// Override settings that shouldn't be picked up from defaults or INIs.
 	GSRunner::SettingsOverride();
 
 	std::atomic<int> thread_ret;
 	std::thread cputhread(CPUThreadMain, &params, &thread_ret);
-	GSRunner::PumpPlatformMessages(/*forever=*/true);
+	GSRunner::PumpPlatformMessages( true);
 	cputhread.join();
 
 	GSRunner::DestroyPlatformWindow();
@@ -1008,7 +1003,6 @@ int main(int argc, char* argv[])
 
 void Host::PumpMessagesOnCPUThread()
 {
-	// update GS thread copy of frame number
 	MTGS::RunOnGSThread([frame_number = GSDumpReplayer::GetFrameNumber()]() { s_dump_frame_number = frame_number; });
 	MTGS::RunOnGSThread([loop_number = GSDumpReplayer::GetLoopCount()]() { s_loop_number = loop_number; });
 }
@@ -1041,10 +1035,6 @@ std::string Host::TranslatePluralToString(const char* context, const char* msg, 
 
 	return ret;
 }
-
-//////////////////////////////////////////////////////////////////////////
-// Platform specific code
-//////////////////////////////////////////////////////////////////////////
 
 #ifdef _WIN32
 
@@ -1087,7 +1077,6 @@ bool GSRunner::CreatePlatformWindow()
 	ShowWindow(s_hwnd, SW_SHOW);
 	UpdateWindow(s_hwnd);
 
-	// make sure all messages are processed before returning
 	PumpPlatformMessages();
 	return true;
 }
@@ -1329,4 +1318,4 @@ void GSRunner::StopPlatformMessagePump()
 {
 	s_shutdown_requested.store(true);
 }
-#endif // _WIN32 / __APPLE__
+#endif

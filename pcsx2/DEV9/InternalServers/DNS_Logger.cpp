@@ -40,7 +40,7 @@ namespace InternalServers
 				str += std::to_string(data[i]) + ":";
 
 			str.pop_back();
-		} //else leave string empty
+		}
 
 		return str;
 	}
@@ -151,4 +151,4 @@ namespace InternalServers
 			Console.WriteLn("DEV9: DNS: Add%i Data %s", i, VectorToString(entry.data).c_str());
 		}
 	}
-} // namespace InternalServers
+}

@@ -11,10 +11,7 @@
 using namespace vtlb_private;
 using namespace x86Emitter;
 
-// we need enough for a 32-bit jump forwards (5 bytes)
 static constexpr u32 LOADSTORE_PADDING = 5;
-
-//#define LOG_STORES
 
 static u32 GetAllocatedGPRBitmask()
 {
@@ -37,56 +34,6 @@ static u32 GetAllocatedXMMBitmask()
 	}
 	return mask;
 }
-
-/*
-	// Pseudo-Code For the following Dynarec Implementations -->
-
-	u32 vmv = vmap[addr>>VTLB_PAGE_BITS].raw();
-	sptr ppf=addr+vmv;
-	if (!(ppf<0))
-	{
-		data[0]=*reinterpret_cast<DataType*>(ppf);
-		if (DataSize==128)
-			data[1]=*reinterpret_cast<DataType*>(ppf+8);
-		return 0;
-	}
-	else
-	{
-		//has to: translate, find function, call function
-		u32 hand=(u8)vmv;
-		u32 paddr=(ppf-hand) << 1;
-		//Console.WriteLn("Translated 0x%08X to 0x%08X",params addr,paddr);
-		return reinterpret_cast<TemplateHelper<DataSize,false>::HandlerType*>(RWFT[TemplateHelper<DataSize,false>::sidx][0][hand])(paddr,data);
-	}
-
-	// And in ASM it looks something like this -->
-
-	mov eax,ecx;
-	shr eax,VTLB_PAGE_BITS;
-	mov rax,[rax*wordsize+vmap];
-	add rcx,rax;
-	js _fullread;
-
-	//these are wrong order, just an example ...
-	mov [rax],ecx;
-	mov ecx,[rdx];
-	mov [rax+4],ecx;
-	mov ecx,[rdx+4];
-	mov [rax+4+4],ecx;
-	mov ecx,[rdx+4+4];
-	mov [rax+4+4+4+4],ecx;
-	mov ecx,[rdx+4+4+4+4];
-	///....
-
-	jmp cont;
-	_fullread:
-	movzx eax,al;
-	sub   ecx,eax;
-	call [eax+stuff];
-	cont:
-	........
-
-*/
 
 #ifdef LOG_STORES
 static std::FILE* logfile;
@@ -118,9 +65,6 @@ static void __vectorcall LogWriteQuad(u32 addr, __m128i val)
 
 namespace vtlb_private
 {
-	// ------------------------------------------------------------------------
-	// Prepares eax and ecx for Direct or Indirect operations.
-	//
 	static void DynGen_PrepRegs(int addr_reg, int value_reg, u32 sz, bool xmm)
 	{
 		_freeX86reg(arg1regd);
@@ -137,7 +81,6 @@ namespace vtlb_private
 			}
 			else if (xmm)
 			{
-				// 32bit xmms are passed in GPRs
 				pxAssert(sz == 32);
 				_freeX86reg(arg2regd);
 				xMOVD(arg2regd, xRegisterSSE(value_reg));
@@ -155,7 +98,6 @@ namespace vtlb_private
 		xADD(arg1reg, rax);
 	}
 
-	// ------------------------------------------------------------------------
 	static void DynGen_DirectRead(u32 bits, bool sign)
 	{
 		pxAssert(bits == 8 || bits == 16 || bits == 32 || bits == 64 || bits == 128);
@@ -195,7 +137,6 @@ namespace vtlb_private
 		}
 	}
 
-	// ------------------------------------------------------------------------
 	static void DynGen_DirectWrite(u32 bits)
 	{
 		switch (bits)
@@ -221,16 +162,12 @@ namespace vtlb_private
 				break;
 		}
 	}
-} // namespace vtlb_private
+}
 
 static constexpr u32 INDIRECT_DISPATCHER_SIZE = 32;
 static constexpr u32 INDIRECT_DISPATCHERS_SIZE = 2 * 5 * 2 * INDIRECT_DISPATCHER_SIZE;
 static u8* m_IndirectDispatchers = nullptr;
 
-// ------------------------------------------------------------------------
-// mode        - 0 for read, 1 for write!
-// operandsize - 0 thru 4 represents 8, 16, 32, 64, and 128 bits.
-//
 static u8* GetIndirectDispatcherPtr(int mode, int operandsize, int sign = 0)
 {
 	pxAssert(mode || operandsize >= 3 ? !sign : true);
@@ -238,11 +175,6 @@ static u8* GetIndirectDispatcherPtr(int mode, int operandsize, int sign = 0)
 	return &m_IndirectDispatchers[(mode * (8 * INDIRECT_DISPATCHER_SIZE)) + (sign * 5 * INDIRECT_DISPATCHER_SIZE) +
 								  (operandsize * INDIRECT_DISPATCHER_SIZE)];
 }
-
-// ------------------------------------------------------------------------
-// Generates a JS instruction that targets the appropriate templated instance of
-// the vtlb Indirect Dispatcher.
-//
 
 template <typename GenDirectFn>
 static void DynGen_HandlerTest(const GenDirectFn& gen_direct, int mode, int bits, bool sign = false)
@@ -265,13 +197,8 @@ static void DynGen_HandlerTest(const GenDirectFn& gen_direct, int mode, int bits
 	done.SetTarget();
 }
 
-// ------------------------------------------------------------------------
-// Generates the various instances of the indirect dispatchers
-// In: arg1reg: vtlb entry, arg2reg: data ptr (if mode >= 64)
-// Out: eax: result (if mode < 64)
 static void DynGen_IndirectTlbDispatcher(int mode, int bits, bool sign)
 {
-	// fixup stack
 #ifdef _WIN32
 	xSUB(rsp, 32 + 8);
 #else
@@ -283,8 +210,6 @@ static void DynGen_IndirectTlbDispatcher(int mode, int bits, bool sign)
 		xSUB(arg1regd, 0x80000000);
 	xSUB(arg1regd, eax);
 
-	// jump to the indirect handler, which is a C++ function.
-	// [ecx is address, edx is data]
 	sptr table = (sptr)vtlbdata.RWFT[bits][mode];
 	if (table == (s32)table)
 	{
@@ -328,14 +253,10 @@ static void DynGen_IndirectTlbDispatcher(int mode, int bits, bool sign)
 	xRET();
 }
 
-// One-time initialization procedure.  Multiple subsequent calls during the lifespan of the
-// process will be ignored.
-//
 void vtlb_DynGenDispatchers()
 {
 	m_IndirectDispatchers = xGetAlignedCallTarget();
 
-	// clear the buffer to 0xcc (easier debugging).
 	std::memset(m_IndirectDispatchers, 0xcc, INDIRECT_DISPATCHERS_SIZE);
 
 	for (int mode = 0; mode < 2; ++mode)
@@ -357,12 +278,6 @@ void vtlb_DynGenDispatchers()
 	xSetPtr(m_IndirectDispatchers + INDIRECT_DISPATCHERS_SIZE);
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////
-//                            Dynarec Load Implementations
-// ------------------------------------------------------------------------
-// Recompiled input registers:
-//   ecx - source address to read from
-//   Returns read value in eax.
 int vtlb_DynGenReadNonQuad(u32 bits, bool sign, bool xmm, int addr_reg, vtlb_ReadRegAllocCallback dest_reg_alloc)
 {
 	pxAssume(bits <= 64);
@@ -382,8 +297,6 @@ int vtlb_DynGenReadNonQuad(u32 bits, bool sign, bool xmm, int addr_reg, vtlb_Rea
 		}
 		else
 		{
-			// we shouldn't be loading any FPRs which aren't 32bit..
-			// we use MOVD here despite it being floating-point data, because we're going int->float reinterpret.
 			pxAssert(bits == 32);
 			x86_dest_reg = dest_reg_alloc ? dest_reg_alloc() : (_freeXMMreg(0), 0);
 			xMOVDZX(xRegisterSSE(x86_dest_reg), eax);
@@ -438,14 +351,6 @@ int vtlb_DynGenReadNonQuad(u32 bits, bool sign, bool xmm, int addr_reg, vtlb_Rea
 	return x86_dest_reg;
 }
 
-// ------------------------------------------------------------------------
-// Recompiled input registers:
-//   ecx - source address to read from
-//   Returns read value in eax.
-//
-// TLB lookup is performed in const, with the assumption that the COP0/TLB will clear the
-// recompiler if the TLB is changed.
-//
 int vtlb_DynGenReadNonQuad_Const(u32 bits, bool sign, bool xmm, u32 addr_const, vtlb_ReadRegAllocCallback dest_reg_alloc)
 {
 	EE::Profiler.EmitConstMem(addr_const);
@@ -485,7 +390,6 @@ int vtlb_DynGenReadNonQuad_Const(u32 bits, bool sign, bool xmm, u32 addr_const, 
 	}
 	else
 	{
-		// has to: translate, find function, call function
 		u32 paddr = vmv.assumeHandlerGetPAddr(addr_const);
 
 		int szidx = 0;
@@ -497,7 +401,6 @@ int vtlb_DynGenReadNonQuad_Const(u32 bits, bool sign, bool xmm, u32 addr_const, 
 			case 64: szidx = 3; break;
 		}
 
-		// Shortcut for the INTC_STAT register, which many games like to spin on heavily.
 		if ((bits == 32) && !EmuConfig.Speedhacks.IntcStat && (paddr == INTC_STAT))
 		{
 			x86_dest_reg = dest_reg_alloc ? dest_reg_alloc() : (_freeX86reg(eax), eax.GetId());
@@ -523,7 +426,6 @@ int vtlb_DynGenReadNonQuad_Const(u32 bits, bool sign, bool xmm, u32 addr_const, 
 				x86_dest_reg = dest_reg_alloc ? dest_reg_alloc() : (_freeX86reg(eax), eax.GetId());
 				switch (bits)
 				{
-					// save REX prefix by using 32bit dest for zext
 				case 8:
 					sign ? xMOVSX(xRegister64(x86_dest_reg), al) : xMOVZX(xRegister32(x86_dest_reg), al);
 					break;
@@ -563,14 +465,14 @@ int vtlb_DynGenReadQuad(u32 bits, int addr_reg, vtlb_ReadRegAllocCallback dest_r
 		DynGen_PrepRegs(arg1regd.GetId(), -1, bits, true);
 		DynGen_HandlerTest([bits]() {DynGen_DirectRead(bits, false); },  0, bits);
 
-		const int reg = dest_reg_alloc ? dest_reg_alloc() : (_freeXMMreg(0), 0); // Handler returns in xmm0
+		const int reg = dest_reg_alloc ? dest_reg_alloc() : (_freeXMMreg(0), 0);
 		if (reg >= 0)
 			xMOVAPS(xRegisterSSE(reg), xmm0);
 
 		return reg;
 	}
 
-	const int reg = dest_reg_alloc ? dest_reg_alloc() : (_freeXMMreg(0), 0); // Handler returns in xmm0
+	const int reg = dest_reg_alloc ? dest_reg_alloc() : (_freeXMMreg(0), 0);
 	const u8* codeStart = x86Ptr;
 
 	xMOVAPS(xRegisterSSE(reg), ptr128[RFASTMEMBASE + arg1reg]);
@@ -588,9 +490,6 @@ int vtlb_DynGenReadQuad(u32 bits, int addr_reg, vtlb_ReadRegAllocCallback dest_r
 }
 
 
-// ------------------------------------------------------------------------
-// TLB lookup is performed in const, with the assumption that the COP0/TLB will clear the
-// recompiler if the TLB is changed.
 int vtlb_DynGenReadQuad_Const(u32 bits, u32 addr_const, vtlb_ReadRegAllocCallback dest_reg_alloc)
 {
 	pxAssert(bits == 128);
@@ -608,7 +507,6 @@ int vtlb_DynGenReadQuad_Const(u32 bits, u32 addr_const, vtlb_ReadRegAllocCallbac
 	}
 	else
 	{
-		// has to: translate, find function, call function
 		u32 paddr = vmv.assumeHandlerGetPAddr(addr_const);
 
 		const int szidx = 4;
@@ -621,9 +519,6 @@ int vtlb_DynGenReadQuad_Const(u32 bits, u32 addr_const, vtlb_ReadRegAllocCallbac
 
 	return reg;
 }
-
-//////////////////////////////////////////////////////////////////////////////////////////
-//                            Dynarec Store Implementations
 
 void vtlb_DynGenWrite(u32 sz, bool xmm, int addr_reg, int value_reg)
 {
@@ -740,10 +635,6 @@ void vtlb_DynGenWrite(u32 sz, bool xmm, int addr_reg, int value_reg)
 }
 
 
-// ------------------------------------------------------------------------
-// Generates code for a store instruction, where the address is a known constant.
-// TLB lookup is performed in const, with the assumption that the COP0/TLB will clear the
-// recompiler if the TLB is changed.
 void vtlb_DynGenWrite_Const(u32 bits, bool xmm, u32 addr_const, int value_reg)
 {
 	EE::Profiler.EmitConstMem(addr_const);
@@ -847,7 +738,6 @@ void vtlb_DynGenWrite_Const(u32 bits, bool xmm, u32 addr_const, int value_reg)
 	}
 	else
 	{
-		// has to: translate, find function, call function
 		u32 paddr = vmv.assumeHandlerGetPAddr(addr_const);
 
 		int szidx = 0;
@@ -897,19 +787,13 @@ void vtlb_DynGenWrite_Const(u32 bits, bool xmm, u32 addr_const, int value_reg)
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////
-//							Extra Implementations
-
-//   ecx - virtual address
-//   Returns physical address in eax.
-//   Clobbers edx
 void vtlb_DynV2P()
 {
 	xMOV(eax, ecx);
-	xAND(ecx, VTLB_PAGE_MASK); // vaddr & VTLB_PAGE_MASK
+	xAND(ecx, VTLB_PAGE_MASK);
 
 	xSHR(eax, VTLB_PAGE_BITS);
-	xMOV(eax, ptr[xComplexAddress(rdx, vtlbdata.ppmap, rax * 4)]); // vtlbdata.ppmap[vaddr >> VTLB_PAGE_BITS];
+	xMOV(eax, ptr[xComplexAddress(rdx, vtlbdata.ppmap, rax * 4)]);
 
 	xOR(eax, ecx);
 }
@@ -921,7 +805,6 @@ void vtlb_DynBackpatchLoadStore(uptr code_address, u32 code_size, u32 guest_pc, 
 	static constexpr u32 GPR_SIZE = 8;
 	static constexpr u32 XMM_SIZE = 16;
 
-	// on win32, we need to reserve an additional 32 bytes shadow space when calling out to C
 #ifdef _WIN32
 	static constexpr u32 SHADOW_SIZE = 32;
 #else
@@ -936,7 +819,6 @@ void vtlb_DynBackpatchLoadStore(uptr code_address, u32 code_size, u32 guest_pc, 
 
 	u8* thunk = recBeginThunk();
 
-	// save regs
 	u32 num_gprs = 0;
 	u32 num_fprs = 0;
 
@@ -1032,7 +914,6 @@ void vtlb_DynBackpatchLoadStore(uptr code_address, u32 code_size, u32 guest_pc, 
 		DynGen_HandlerTest([size_in_bits]() { DynGen_DirectWrite(size_in_bits); }, 1, size_in_bits);
 	}
 
-	// restore regs
 	if (stack_size > 0)
 	{
 		u32 stack_offset = SHADOW_SIZE;
@@ -1061,11 +942,9 @@ void vtlb_DynBackpatchLoadStore(uptr code_address, u32 code_size, u32 guest_pc, 
 
 	recEndThunk();
 
-	// backpatch to a jump to the slowmem handler
 	x86Ptr = (u8*)code_address;
 	xJMP(thunk);
 
-	// fill the rest of it with nops, if any
 	pxAssertRel(static_cast<u32>((uptr)x86Ptr - code_address) <= code_size, "Overflowed when backpatching");
 	for (u32 i = static_cast<u32>((uptr)x86Ptr - code_address); i < code_size; i++)
 		xNOP();

@@ -10,10 +10,8 @@
 class GSTextureOGL final : public GSTexture
 {
 private:
-	GLuint m_texture_id = 0; // the texture id
+	GLuint m_texture_id = 0;
 
-	// Avoid alignment constrain
-	//GSVector4i m_r;
 	int m_r_x = 0;
 	int m_r_y = 0;
 	int m_r_w = 0;
@@ -21,7 +19,6 @@ private:
 	int m_layer = 0;
 	u32 m_map_offset = 0;
 
-	// internal opengl format/type/alignment
 	GLenum m_gl_format = 0;
 	GLenum m_int_format = 0;
 	GLenum m_int_type = 0;
@@ -86,6 +83,5 @@ private:
 
 	GLsync m_sync = {};
 
-	// used when buffer storage is not available
 	u8* m_cpu_buffer = nullptr;
 };

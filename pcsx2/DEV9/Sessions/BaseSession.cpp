@@ -36,4 +36,4 @@ namespace Sessions
 		for (size_t i = 0; i < Handlers.size(); i++)
 			Handlers[i](this);
 	}
-} // namespace Sessions
+}

@@ -23,7 +23,6 @@ static_assert(sizeof(off_t) >= 8, "off_t is not 64bit");
 
 ATA::ATA()
 {
-	//Power on, Would do self-Diag + Hardware Init
 	ResetBegin();
 	ResetEnd(true);
 }
@@ -42,7 +41,6 @@ int ATA::Open(const std::string& hddPath)
 
 	DevCon.WriteLn("DEV9: ATA: HddFile : %s", hddPath.c_str());
 
-	//Open File
 	if (!FileSystem::FileExists(hddPath.c_str()))
 		return -1;
 
@@ -54,46 +52,38 @@ int ATA::Open(const std::string& hddPath)
 		return -1;
 	}
 
-	// Open and read the content of the hddid file
 	std::string hddidPath = Path::ReplaceExtension(hddPath, "hddid");
 	std::optional<std::vector<u8>> fileContent = FileSystem::ReadBinaryFile(hddidPath.c_str());
 
 	if (fileContent.has_value() && fileContent.value().size() <= sizeof(sceSec))
 	{
-		// Copy the content to sceSec
 		std::copy(fileContent.value().begin(), fileContent.value().end(), sceSec);
 	}
 	else
 	{
-		// fill sceSec with default data if hdd id file is not present
-		memcpy(sceSec, "Sony Computer Entertainment Inc.", 32); // Always this magic header.
-		memcpy(sceSec + 0x20, "SCPH-20401", 10); // sometimes this matches HDD model, the rest 6 bytes filles with zeroes, or sometimes with spaces
-		memcpy(sceSec + 0x30, "  40", 4); // or " 120" for PSX DESR, reference for ps2 area size. The rest bytes filled with zeroes
+		memcpy(sceSec, "Sony Computer Entertainment Inc.", 32);
+		memcpy(sceSec + 0x20, "SCPH-20401", 10);
+		memcpy(sceSec + 0x30, "  40", 4);
 
-		sceSec[0x40] = 0; // 0x40 - 0x43 - 4-byte HDD internal SCE serial, does not match real HDD serial, currently hardcoded to 0x1000000
+		sceSec[0x40] = 0;
 		sceSec[0x41] = 0;
 		sceSec[0x42] = 0;
 		sceSec[0x43] = 0x01;
 
-		// purpose of next 12 bytes is unknown
-		sceSec[0x44] = 0; // always zero
-		sceSec[0x45] = 0; // always zero
+		sceSec[0x44] = 0;
+		sceSec[0x45] = 0;
 		sceSec[0x46] = 0x1a;
 		sceSec[0x47] = 0x01;
 		sceSec[0x48] = 0x02;
 		sceSec[0x49] = 0x20;
-		sceSec[0x4a] = 0; // always zero
-		sceSec[0x4b] = 0; // always zero
-		// next 4 bytes always these values
+		sceSec[0x4a] = 0;
+		sceSec[0x4b] = 0;
 		sceSec[0x4c] = 0x01;
 		sceSec[0x4d] = 0x03;
 		sceSec[0x4e] = 0x11;
 		sceSec[0x4f] = 0x01;
-		// 0x50 - 0x80 is a random unique block of data
-		// 0x80 and up - zero filled
 	}
 
-	//Store HddImage size for later use
 	hddImageSize = static_cast<u64>(size);
 	lba48Supported = (hddImageSize > ((static_cast<s64>(1) << 28) - 1) * 512);
 
@@ -125,8 +115,6 @@ void ATA::InitSparseSupport(const std::string& hddPath)
 	if (!hddSparse)
 		return;
 
-	// Get OS specific file handle for spare writing.
-	// HANDLE is owned by FILE* hddImage.
 	hddNativeHandle = reinterpret_cast<HANDLE>(_get_osfhandle(_fileno(hddImage)));
 	if (hddNativeHandle == INVALID_HANDLE_VALUE)
 	{
@@ -135,11 +123,8 @@ void ATA::InitSparseSupport(const std::string& hddPath)
 		return;
 	}
 
-	// Get sparse block size (Initially assumed as 4096 bytes).
 	hddSparseBlockSize = 4096;
 
-	// We need the drive letter for the drive the file actually resides on
-	// which means we need to deal with any junction links in the path.
 	DWORD len = GetFinalPathNameByHandle(hddNativeHandle, nullptr, 0, FILE_NAME_NORMALIZED);
 
 	if (len != 0)
@@ -171,28 +156,11 @@ void ATA::InitSparseSupport(const std::string& hddPath)
 	else
 		Console.Error("DEV9: ATA: Failed to get sparse block size (GetFinalPathNameByHandle() returned 0)");
 
-	/*  https://askbob.tech/the-ntfs-blog-sparse-and-compressed-file/
-	 *  NTFS Sparse Block Size are the same size as a compression unit
-	 *  Cluster Size    Compression Unit
-	 *  --------------------------------
-	 *  512bytes         8kb (0x02000)
-	 *    1kb           16kb (0x04000)
-	 *    2kb           32kb (0x08000)
-	 *    4kb           64kb (0x10000)
-	 *    8kb           64kb (0x10000)
-	 *   16kb           64kb (0x10000)
-	 *   32kb           64kb (0x10000)
-	 *   64kb           64kb (0x10000)
-	 *  --------------------------------
-	 */
-
-	// Get the filesystem type.
 	WCHAR fsName[MAX_PATH + 1];
 	const BOOL ret = GetVolumeInformationByHandleW(hddNativeHandle, nullptr, 0, nullptr, nullptr, nullptr, fsName, MAX_PATH);
 	if (ret == FALSE)
 	{
 		Console.Error("DEV9: ATA: Failed to get sparse block size (GetVolumeInformationByHandle() returned false)");
-		// Assume NTFS.
 		wcscpy(fsName, L"NTFS");
 	}
 	if ((wcscmp(fsName, L"NTFS") == 0))
@@ -219,19 +187,14 @@ void ATA::InitSparseSupport(const std::string& hddPath)
 				break;
 		}
 	}
-	// Otherwise assume SparseBlockSize == block size.
 
 #elif defined(__POSIX__)
-	// fd is owned by FILE* hddImage.
 	hddNativeHandle = fileno(hddImage);
 	hddSparse = false;
 	if (hddNativeHandle != -1)
 	{
-		// No way to check if we can hole punch without trying it
-		// so just assume sparse files are supported.
 		hddSparse = true;
 
-		// Get sparse block size (Initially assumed as 4096 bytes).
 		hddSparseBlockSize = 4096;
 		struct stat fileInfo;
 		if (fstat(hddNativeHandle, &fileInfo) == 0)
@@ -248,7 +211,6 @@ void ATA::InitSparseSupport(const std::string& hddPath)
 
 void ATA::Close()
 {
-	//Wait for async code to finish
 	if (ioRunning)
 	{
 		ioClose.store(true);
@@ -262,19 +224,15 @@ void ATA::Close()
 		ioRunning = false;
 	}
 
-	//verify queue
 	if (!writeQueue.IsQueueEmpty())
 	{
 		Console.Error("DEV9: ATA: Write queue not empty, possible data loss");
 		pxAssert(false);
-		abort(); //All data must be written at this point
+		abort();
 	}
 
-	//Close File Handle
 	if (hddSparse)
 	{
-		// hddNativeHandle is owned by hddImage.
-		// It will get closed in fclose(hddImage).
 		hddNativeHandle = INVALID_HANDLE_VALUE;
 
 		hddSparse = false;
@@ -302,8 +260,6 @@ void ATA::ResetEnd(bool hard)
 	curCylinders = 0;
 	curMultipleSectorsSetting = 128;
 
-	//UDMA Mode setting is preserved
-	//across SRST
 	if (hard)
 	{
 		pioMode = 4;
@@ -326,7 +282,6 @@ void ATA::ResetEnd(bool hard)
 
 void ATA::ATA_HardReset()
 {
-	//DevCon.WriteLn("DEV9: *ATA_HARD RESET");
 	ResetBegin();
 	ResetEnd(true);
 }
@@ -338,16 +293,12 @@ u16 ATA::Read(u32 addr, int width)
 		case ATA_R_DATA:
 			if (width == 8)
 				Console.Error("DEV9:ATA : ATA_R_DATA 8bit read???, Active %s", (GetSelectedDevice() == 0) ? "True" : "False");
-			//else
-			//	DevCon.WriteLn("DEV9: ATA: ATA_R_DATA %dbit read, Active %s", width, hard, (GetSelectedDevice() == 0) ? "True" : "False");
 			return ATAreadPIO();
 		case ATA_R_ERROR:
-			//DevCon.WriteLn("DEV9: ATA: ATA_R_ERROR %dbit read %x, Active %s", width, regError, (GetSelectedDevice() == 0) ? "True" : "False");
 			if (GetSelectedDevice() != 0)
 				return 0;
 			return regError;
 		case ATA_R_NSECTOR:
-			//DevCon.WriteLn("DEV9: ATA: ATA_R_NSECTOR %dbit read %x, Active %s", width, nsector, (GetSelectedDevice() == 0) ? "True" : "False");
 			if (GetSelectedDevice() != 0)
 				return 0;
 			if (!regControlHOBRead)
@@ -355,7 +306,6 @@ u16 ATA::Read(u32 addr, int width)
 			else
 				return regNsectorHOB;
 		case ATA_R_SECTOR:
-			//DevCon.WriteLn("DEV9: ATA: ATA_R_NSECTOR %dbit read %x, Active %s", width, regSector, (GetSelectedDevice() == 0) ? "True" : "False");
 			if (GetSelectedDevice() != 0)
 				return 0;
 			if (!regControlHOBRead)
@@ -363,7 +313,6 @@ u16 ATA::Read(u32 addr, int width)
 			else
 				return regSectorHOB;
 		case ATA_R_LCYL:
-			//DevCon.WriteLn("DEV9: ATA: ATA_R_LCYL %dbit read %x, Active %s", width, regLcyl, (GetSelectedDevice() == 0) ? "True" : "False");
 			if (GetSelectedDevice() != 0)
 				return 0;
 			if (!regControlHOBRead)
@@ -371,7 +320,6 @@ u16 ATA::Read(u32 addr, int width)
 			else
 				return regLcylHOB;
 		case ATA_R_HCYL:
-			//DevCon.WriteLn("DEV9: ATA: ATA_R_HCYL %dbit read %x, Active %s", width, regHcyl, (GetSelectedDevice() == 0) ? " True " : " False ");
 			if (GetSelectedDevice() != 0)
 				return 0;
 			if (!regControlHOBRead)
@@ -379,25 +327,19 @@ u16 ATA::Read(u32 addr, int width)
 			else
 				return regHcylHOB;
 		case ATA_R_SELECT:
-			//DevCon.WriteLn("DEV9: ATA: ATA_R_SELECT %dbit read %x, Active %s", width, regSelect, (GetSelectedDevice() == 0) ? " True " : " False ");
 			return regSelect;
 		case ATA_R_STATUS:
-			// Clear irqcause
 			pendingInterrupt = false;
 			dev9.irqcause &= ~ATA_INTR_INTRQ;
 			[[fallthrough]];
 		case ATA_R_ALT_STATUS:
-			//DevCon.WriteLn("DEV9: ATA: %s %dbit read %x, Active %s", addr == ATA_R_ALT_STATUS ? "ATA_R_ALT_STATUS" : "ATA_R_STATUS", width, regStatus, (GetSelectedDevice() == 0) ? " True " : " False ");
 
 			if (!EmuConfig.DEV9.HddEnable)
-				return 0xff7f; // PS2 confirmed response when no HDD is actually connected. The Expansion bay always says HDD support is connected.
+				return 0xff7f;
 
 			if (GetSelectedDevice() != 0)
 				return 0;
 
-			// When an error occurs, the seek bit shall not be changed until the Status Register is read, after which the bit then indicates the current Seek status.
-			// This handles reporting the locked value, and then unlocking if read form STATUS rather then ALT_STATUS.
-			// locking is performed where the errror occurs, by setting regStatusSeekLock to either 1 or -1 based on the locked SEEK value.
 			if (regStatusSeekLock != 0)
 			{
 				u8 hard = (regStatus & ~ATA_STAT_SEEK);
@@ -424,41 +366,34 @@ void ATA::Write(u32 addr, u16 value, int width)
 	switch (addr)
 	{
 		case ATA_R_FEATURE:
-			//DevCon.WriteLn("DEV9: ATA: ATA_R_FEATURE %dbit write %x", width, value);
 			ClearHOB();
 			regFeatureHOB = regFeature;
 			regFeature = static_cast<u8>(value);
 			break;
 		case ATA_R_NSECTOR:
-			//DevCon.WriteLn("DEV9: ATA: ATA_R_NSECTOR %dbit write %x", width, value);
 			ClearHOB();
 			regNsectorHOB = regNsector;
 			regNsector = static_cast<u8>(value);
 			break;
 		case ATA_R_SECTOR:
-			//DevCon.WriteLn("DEV9: ATA: ATA_R_SECTOR %dbit write %x", width, value);
 			ClearHOB();
 			regSectorHOB = regSector;
 			regSector = static_cast<u8>(value);
 			break;
 		case ATA_R_LCYL:
-			//DevCon.WriteLn("DEV9: ATA: ATA_R_LCYL %dbit write %x", width, value);
 			ClearHOB();
 			regLcylHOB = regLcyl;
 			regLcyl = static_cast<u8>(value);
 			break;
 		case ATA_R_HCYL:
-			//DevCon.WriteLn("DEV9: ATA: ATA_R_HCYL %dbit write %x", width, value);
 			ClearHOB();
 			regHcylHOB = regHcyl;
 			regHcyl = static_cast<u8>(value);
 			break;
 		case ATA_R_SELECT:
 		{
-			//DevCon.WriteLn("DEV9: ATA: ATA_R_SELECT %dbit write %x", width, value);
 			const int oldDev = GetSelectedDevice();
 			const int newDev = (value >> 4) & 1;
-			// Suppress INTRQ when not selected device
 			if (oldDev == 0 && newDev == 1)
 			{
 				dev9.irqcause &= ~ATA_INTR_INTRQ;
@@ -473,10 +408,8 @@ void ATA::Write(u32 addr, u16 value, int width)
 			break;
 		}
 		case ATA_R_CONTROL:
-			//DevCon.WriteLn("DEV9: ATA: ATA_R_CONTROL %dbit write %x", width, value);
 			if ((value & 0x2) != 0)
 			{
-				// Suppress INTRQ
 				dev9.irqcause &= ~ATA_INTR_INTRQ;
 				regControlEnableIRQ = false;
 			}
@@ -498,7 +431,6 @@ void ATA::Write(u32 addr, u16 value, int width)
 
 			break;
 		case ATA_R_CMD:
-			//DevCon.WriteLn("DEV9: ATA: ATA_R_CMD %dbit write %x", width, value);
 			regCommand = value;
 			regControlHOBRead = false;
 			pendingInterrupt = false;
@@ -522,30 +454,25 @@ void ATA::Async(uint cycles)
 		{
 			std::lock_guard ioSignallock(ioMutex);
 			if (ioRead || ioWrite)
-				//IO Running
 				return;
 		}
 
-		//Note, ioThread may still be working.
-		if (waitingCmd != nullptr) //Are we waiting to continue a command?
+		if (waitingCmd != nullptr)
 		{
-			//Log_Info("Running waiting command");
 			void (ATA::*cmd)() = waitingCmd;
 			waitingCmd = nullptr;
 			(this->*cmd)();
 		}
-		else if (!writeQueue.IsQueueEmpty()) //Flush cache
+		else if (!writeQueue.IsQueueEmpty())
 		{
-			//Log_Info("Starting async write");
 			{
 				std::lock_guard ioSignallock(ioMutex);
 				ioWrite = true;
 			}
 			ioReady.notify_all();
 		}
-		else if (awaitFlush) //Fire IRQ on flush completion?
+		else if (awaitFlush)
 		{
-			//Log_Info("Flush done, raise IRQ");
 			awaitFlush = false;
 			PostCmdNoData();
 		}
@@ -579,8 +506,6 @@ s64 ATA::HDD_GetLBA()
 		regError |= static_cast<u8>(ATA_ERR_ABORT);
 
 		Console.Error("DEV9: ATA: Tried to get LBA address while LBA mode disabled");
-		//(c.Nh + h).Ns+(s-1)
-		//s64 CHSasLBA = ((regLcyl + (regHcyl << 8)) * curHeads + (regSelect & 0x0F)) * curSectors + (regSector - 1);
 		return -1;
 	}
 }
@@ -624,14 +549,13 @@ bool ATA::HDD_CanSeek()
 bool ATA::HDD_CanAccess(int* sectors)
 {
 	s64 maxLBA = hddImageSize / 512 - 1;
-	if ((regSelect & 0x40) == 0) //CHS mode
+	if ((regSelect & 0x40) == 0)
 		maxLBA = std::min<s64>(maxLBA, curCylinders * curHeads * curSectors);
 
 	const s64 posStart = HDD_GetLBA();
 	if (posStart == -1)
 		return false;
 
-	//DevCon.WriteLn("DEV9: LBA :%i", lba);
 	if (posStart > maxLBA)
 	{
 		*sectors = -1;
@@ -650,9 +574,7 @@ bool ATA::HDD_CanAccess(int* sectors)
 	return true;
 }
 
-//QEMU stuff
 void ATA::ClearHOB()
 {
-	/* any write clears HOB high bit of device control register */
 	regControlHOBRead = false;
 }

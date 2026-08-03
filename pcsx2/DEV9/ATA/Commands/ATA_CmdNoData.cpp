@@ -23,9 +23,7 @@ void ATA::CmdNoDataAbort()
 	PostCmdNoData();
 }
 
-//GENRAL FEATURE SET
-
-void ATA::HDD_FlushCache() //Can't when DRQ set
+void ATA::HDD_FlushCache()
 {
 	if (!PreCmd())
 		return;
@@ -43,7 +41,7 @@ void ATA::HDD_FlushCache() //Can't when DRQ set
 
 void ATA::HDD_InitDevParameters()
 {
-	PreCmd(); //Ignore DRDY bit
+	PreCmd();
 	DevCon.WriteLn("DEV9: HDD_InitDevParameters");
 
 	curSectors = regNsector;
@@ -81,15 +79,11 @@ void ATA::HDD_Recalibrate()
 	DevCon.WriteLn("DEV9: HDD_Recalibrate");
 
 	lba48 = false;
-	// Report minimum address (LBA 0 or CHS 0/0/1).
-	// SetLBA currently only supports LBA, so set the regs directly.
 	regSelect = regSelect & 0xf0;
 	regHcyl = 0;
 	regLcyl = 0;
 	regSector = (regSelect & 0x40) ? 0 : 1;
 
-	// If recalibrate fails, we would set ATA_STAT_ERR in regStatus and ATA_ERR_TRACK0 in regError.
-	// we will never fail, so set ATA_STAT_SEEK in regStatus to indicate we finished seeking.
 	regStatus |= ATA_STAT_SEEK;
 
 	PostCmdNoData();
@@ -128,37 +122,34 @@ void ATA::HDD_SetFeatures()
 			break;
 		case 0x82:
 			fetWriteCacheEnabled = false;
-			awaitFlush = true; //Flush Cache
+			awaitFlush = true;
 			return;
-		case 0x03: //Set transfer mode
+		case 0x03:
 		{
-			const u16 xferMode = static_cast<u16>(regNsector); //Set Transfer mode
+			const u16 xferMode = static_cast<u16>(regNsector);
 
 			const int mode = xferMode & 0x07;
 			switch ((xferMode) >> 3)
 			{
-				case 0x00: //pio default
-					//if mode = 1, disable IORDY
+				case 0x00:
 					DevCon.WriteLn("DEV9: PIO Default");
 					pioMode = 4;
 					mdmaMode = -1;
 					udmaMode = -1;
 					break;
-				case 0x01: //pio mode (3,4)
+				case 0x01:
 					DevCon.WriteLn("DEV9: PIO Mode %i", mode);
 					pioMode = mode;
 					mdmaMode = -1;
 					udmaMode = -1;
 					break;
-				case 0x04: //Multi word dma mode (0,1,2)
+				case 0x04:
 					DevCon.WriteLn("DEV9: MDMA Mode %i", mode);
-					//pioMode = -1;
 					mdmaMode = mode;
 					udmaMode = -1;
 					break;
-				case 0x08: //Ulta dma mode (0,1,2,3,4,5,6)
+				case 0x08:
 					DevCon.WriteLn("DEV9: UDMA Mode %i", mode);
-					//pioMode = -1;
 					mdmaMode = -1;
 					udmaMode = mode;
 					break;
@@ -195,17 +186,12 @@ void ATA::HDD_Nop()
 
 	if (regFeature == 0)
 	{
-		//This would abort queues if the
-		//PS2 HDD supported them.
 	}
-	//Always ends in error
 	regError |= ATA_ERR_ABORT;
 	regStatus |= ATA_STAT_ERR;
 	regStatusSeekLock = (regStatus & ATA_STAT_SEEK) ? 1 : -1;
 	PostCmdNoData();
 }
-
-//Other Feature Sets
 
 void ATA::HDD_Idle()
 {
@@ -213,7 +199,7 @@ void ATA::HDD_Idle()
 		return;
 	DevCon.WriteLn("DEV9: HDD_Idle");
 
-	long idleTime = 0; //in seconds
+	long idleTime = 0;
 	if (regNsector >= 1 && regNsector <= 240)
 		idleTime = 5 * regNsector;
 	else if (regNsector >= 241 && regNsector <= 251)
@@ -228,10 +214,10 @@ void ATA::HDD_Idle()
 			case 252:
 				idleTime = 21 * 60;
 				break;
-			case 253: //bettween 8 and 12 hrs
+			case 253:
 				idleTime = 10 * 60 * 60;
 				break;
-			case 254: //reserved
+			case 254:
 				idleTime = -1;
 				break;
 			case 255:

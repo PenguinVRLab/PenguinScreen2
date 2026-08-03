@@ -137,7 +137,6 @@ namespace usb_printer
 				break;
 			}
 
-			// print_file might be null if we're loading a state
 			if (s->print_file)
 			{
 				FileSystem::FSeek64(s->print_file, sizeof(BMPHeader) + pos_out + 2 - s->data_pos % 3, SEEK_SET);
@@ -208,8 +207,6 @@ namespace usb_printer
 		const uint8_t print_compl[] = {0x1b, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00};
 
 		PrinterState* s = USB_CONTAINER_OF(dev, PrinterState, dev);
-		//const uint8_t ep_nr = p->ep->nr;
-		//const uint8_t ep_type = p->ep->type;
 
 		switch (p->pid)
 		{
@@ -354,8 +351,6 @@ namespace usb_printer
 		sw.Do(&s->data_size);
 		sw.Do(&s->data_pos);
 
-		// toss any file being saved when we're loading, since we'd probably
-		// end up with a corrupted file otherwise
 		if (sw.IsReading())
 			sony_cancel_file(s);
 
@@ -367,4 +362,4 @@ namespace usb_printer
 		return sPrinterNames;
 	}
 
-} // namespace usb_printer
+}

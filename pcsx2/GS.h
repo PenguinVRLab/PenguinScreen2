@@ -15,107 +15,44 @@ alignas(16) extern u8 g_RealGSMem[Ps2MemSize::GSregs];
 
 enum CSR_FifoState
 {
-	CSR_FIFO_NORMAL = 0, // Somwhere in between (Neither empty or almost full).
-	CSR_FIFO_EMPTY, // Empty
-	CSR_FIFO_FULL, // Almost Full
-	CSR_FIFO_RESERVED // Reserved / Unused.
+	CSR_FIFO_NORMAL = 0,
+	CSR_FIFO_EMPTY,
+	CSR_FIFO_FULL,
+	CSR_FIFO_RESERVED
 };
 
-// --------------------------------------------------------------------------------------
-//  tGS_CSR
-// --------------------------------------------------------------------------------------
-// This is the Control Register for the GS.  It is a dual-instance register that returns
-// distinctly different values for most fields when read and written.  In PCSX2 we house
-// the written version in the gsRegs buffer, and generate the readback version on-demand
-// from various other PCSX2 system statuses.
 union tGS_CSR
 {
 	struct
 	{
-		// Write:
-		//   0 - No action;
-		//   1 - Old event is cleared and event is enabled.
-		// Read:
-		//   0 - No SIGNAL pending.
-		//   1 - SIGNAL has been generated.
 		u64 SIGNAL : 1;
 
-		// Write:
-		//   0 - No action;
-		//   1 - FINISH event is enabled.
-		// Read:
-		//   0 - No FINISH event pending.
-		//   1 - FINISH event has been generated.
 		u64 FINISH : 1;
 
-		// Hsync Interrupt Control
-		// Write:
-		//   0 - No action;
-		//   1 - Hsync interrupt is enabled.
-		// Read:
-		//   0 - No Hsync interrupt pending.
-		//   1 - Hsync interrupt has been generated.
 		u64 HSINT : 1;
 
-		// Vsync Interrupt Control
-		// Write:
-		//   0 - No action;
-		//   1 - Vsync interrupt is enabled.
-		// Read:
-		//   0 - No Vsync interrupt pending.
-		//   1 - Vsync interrupt has been generated.
 		u64 VSINT : 1;
 
-		// Rect Area Write Termination Control
-		//   0 - No action;
-		//   1 - Rect area write interrupt is enabled.
-		// Read:
-		//   0 - No RAWrite interrupt pending.
-		//   1 - RAWrite interrupt has been generated.
 		u64 EDWINT : 1;
 
 		u64 _zero1 : 1;
 		u64 _zero2 : 1;
 		u64 pad1 : 1;
 
-		// FLUSH  (write-only!)
-		// Write:
-		//   0 - Resume drawing if suspended (?)
-		//   1 - Flush the GS FIFO and suspend drawing
-		// Read: Always returns 0. (?)
 		u64 FLUSH : 1;
 
-		// RESET (write-only!)
-		// Write:
-		//   0 - Do nothing.
-		//   1 - GS soft system reset.  Clears FIFOs and resets IMR to all 1's.
-		//       (PCSX2 implementation also clears GIFpaths, though that behavior may differ on real HW).
-		// Read: Always returns 0. (?)
 		u64 RESET : 1;
 
 		u64 _pad2 : 2;
 
-		// (I have no idea what this reg is-- air)
-		// Output value is updated by sampling the VSync. (?)
 		u64 NFIELD : 1;
 
-		// Current Field of Display [page flipping] (read-only?)
-		//  0 - EVEN
-		//  1 - ODD
 		u64 FIELD : 1;
 
-		// GS FIFO Status (read-only)
-		//  00 - Somewhere in between
-		//  01 - Empty
-		//  10 - Almost Full
-		//  11 - Reserved (unused)
-		// Assign values using the CSR_FifoState enum.
 		u64 FIFO : 2;
 
-		// Revision number of the GS (fairly arbitrary)
 		u64 REV : 8;
 
-		// ID of the GS (also fairly arbitrary)
 		u64 ID : 8;
 	};
 
@@ -123,8 +60,8 @@ union tGS_CSR
 
 	struct
 	{
-		u32 _u32; // lower 32 bits (all useful content!)
-		u32 _unused32; // upper 32 bits (unused -- should probably be 0)
+		u32 _u32;
+		u32 _unused32;
 	};
 
 	void SwapField()
@@ -140,8 +77,8 @@ union tGS_CSR
 	void Reset()
 	{
 		FIFO = CSR_FIFO_EMPTY;
-		REV = 0x1B; // GS Revision
-		ID = 0x55; // GS ID
+		REV = 0x1B;
+		ID = 0x55;
 	}
 
 	bool HasAnyInterrupts() const { return (SIGNAL || FINISH || HSINT || VSINT || EDWINT); }
@@ -161,20 +98,17 @@ union tGS_CSR
 	tGS_CSR() { Reset(); }
 };
 
-// --------------------------------------------------------------------------------------
-//  tGS_IMR
-// --------------------------------------------------------------------------------------
 union tGS_IMR
 {
 	struct
 	{
 		u32 _reserved1 : 8;
-		u32 SIGMSK : 1; // Signal evevnt interrupt mask
-		u32 FINISHMSK : 1; // Finish event interrupt mask
-		u32 HSMSK : 1; // HSync interrupt mask
-		u32 VSMSK : 1; // VSync interrupt mask
-		u32 EDWMSK : 1; // Rectangle write termination interrupt mask
-		u32 _undefined : 2; // undefined bits should be set to 1.
+		u32 SIGMSK : 1;
+		u32 FINISHMSK : 1;
+		u32 HSMSK : 1;
+		u32 VSMSK : 1;
+		u32 EDWMSK : 1;
+		u32 _undefined : 2;
 		u32 _reserved2 : 17;
 	};
 	u32 _u32;
@@ -187,16 +121,13 @@ union tGS_IMR
 	}
 	void set(u32 value)
 	{
-		_u32 = (value & 0x1f00); // Set only the interrupt mask fields.
-		_undefined = 0x3; // These should always be set.
+		_u32 = (value & 0x1f00);
+		_undefined = 0x3;
 	}
 
 	bool masked() const { return (SIGMSK || FINISHMSK || HSMSK || VSMSK || EDWMSK); }
 };
 
-// --------------------------------------------------------------------------------------
-//  GSRegSIGBLID
-// --------------------------------------------------------------------------------------
 struct GSRegSIGBLID
 {
 	u32 SIGID;
@@ -231,9 +162,6 @@ enum class GS_VideoMode : int
 extern GS_VideoMode gsVideoMode;
 extern u32 lastCSRFlag;
 extern bool gsIsInterlaced;
-
-/////////////////////////////////////////////////////////////////////////////
-// Generalized GS Functions and Stuff
 
 extern void gsReset();
 extern void gsSetVideoMode(GS_VideoMode mode);

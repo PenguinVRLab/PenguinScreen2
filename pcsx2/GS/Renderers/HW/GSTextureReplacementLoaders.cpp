@@ -43,10 +43,6 @@ GSTextureReplacements::ReplacementTextureLoader GSTextureReplacements::GetLoader
 	return nullptr;
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Helper routines
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 static u32 GetBlockCount(u32 extent, u32 block_size)
 {
 	return std::max(Common::AlignUp(extent, block_size) / block_size, 1u);
@@ -60,7 +56,6 @@ static void CalcBlockMipmapSize(u32 block_size, u32 bytes_per_block, u32 base_wi
 	const u32 blocks_wide = GetBlockCount(width, block_size);
 	const u32 blocks_high = GetBlockCount(height, block_size);
 
-	// Pitch can't be specified with each mip level, so we have to calculate it ourselves.
 	pitch = blocks_wide * bytes_per_block;
 	size = blocks_high * pitch;
 }
@@ -73,7 +68,6 @@ static void ConvertTexture_X8B8G8R8(u32 width, u32 height, std::vector<u8>& data
 
 		for (u32 x = 0; x < width; x++)
 		{
-			// Set alpha channel to full intensity.
 			data_ptr[3] = 0x80;
 			data_ptr += sizeof(u32);
 		}
@@ -88,7 +82,6 @@ static void ConvertTexture_A8R8G8B8(u32 width, u32 height, std::vector<u8>& data
 
 		for (u32 x = 0; x < width; x++)
 		{
-			// Byte swap ABGR -> RGBA
 			u32 val;
 			std::memcpy(&val, data_ptr, sizeof(val));
 			val = ((val & 0xFF00FF00) | ((val >> 16) & 0xFF) | ((val << 16) & 0xFF0000));
@@ -106,7 +99,6 @@ static void ConvertTexture_X8R8G8B8(u32 width, u32 height, std::vector<u8>& data
 
 		for (u32 x = 0; x < width; x++)
 		{
-			// Byte swap XBGR -> RGBX, and set alpha to full intensity.
 			u32 val;
 			std::memcpy(&val, data_ptr, sizeof(val));
 			val = ((val & 0x0000FF00) | ((val >> 16) & 0xFF) | ((val << 16) & 0xFF0000)) | 0xFF000000;
@@ -128,7 +120,6 @@ static void ConvertTexture_R8G8B8(u32 width, u32 height, std::vector<u8>& data, 
 
 		for (u32 x = 0; x < width; x++)
 		{
-			// This is BGR in memory.
 			u32 val;
 			std::memcpy(&val, rgb_data_ptr, sizeof(val));
 			val = ((val & 0x0000FF00) | ((val >> 16) & 0xFF) | ((val << 16) & 0xFF0000)) | 0xFF000000;
@@ -141,10 +132,6 @@ static void ConvertTexture_R8G8B8(u32 width, u32 height, std::vector<u8>& data, 
 	data = std::move(new_data);
 	pitch = new_pitch;
 }
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// PNG Handlers
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 bool PNGLoader(const std::string& filename, GSTextureReplacements::ReplacementTexture* tex, bool only_base_image)
 {
@@ -206,7 +193,7 @@ bool PNGLoader(const std::string& filename, GSTextureReplacements::ReplacementTe
 				u32 pixel = static_cast<u32>(*(row_ptr)++);
 				pixel |= static_cast<u32>(*(row_ptr)++) << 8;
 				pixel |= static_cast<u32>(*(row_ptr)++) << 16;
-				pixel |= 0x80000000u; // make opaque
+				pixel |= 0x80000000u;
 				std::memcpy(out_ptr, &pixel, sizeof(pixel));
 				out_ptr += sizeof(pixel);
 			}
@@ -255,7 +242,6 @@ bool GSTextureReplacements::SavePNGImage(const std::string& filename, u32 width,
 
 	for (u32 y = 0; y < height; ++y)
 	{
-		// cast is needed here for mac builder
 		png_write_row(png_ptr, (png_bytep)(buffer + y * pitch));
 	}
 
@@ -287,7 +273,7 @@ bool GSTextureReplacements::SavePNGImage(const std::string& filename, u32 width,
 
 #pragma pack(push, 1)
 
-static constexpr uint32_t DDS_MAGIC = 0x20534444; // "DDS "
+static constexpr uint32_t DDS_MAGIC = 0x20534444;
 
 struct DDS_PIXELFORMAT
 {
@@ -301,31 +287,30 @@ struct DDS_PIXELFORMAT
 	uint32_t dwABitMask;
 };
 
-#define DDS_FOURCC 0x00000004 // DDPF_FOURCC
-#define DDS_RGB 0x00000040 // DDPF_RGB
-#define DDS_RGBA 0x00000041 // DDPF_RGB | DDPF_ALPHAPIXELS
-#define DDS_LUMINANCE 0x00020000 // DDPF_LUMINANCE
-#define DDS_LUMINANCEA 0x00020001 // DDPF_LUMINANCE | DDPF_ALPHAPIXELS
-#define DDS_ALPHA 0x00000002 // DDPF_ALPHA
-#define DDS_PAL8 0x00000020 // DDPF_PALETTEINDEXED8
-#define DDS_PAL8A 0x00000021 // DDPF_PALETTEINDEXED8 | DDPF_ALPHAPIXELS
-#define DDS_BUMPDUDV 0x00080000 // DDPF_BUMPDUDV
+#define DDS_FOURCC 0x00000004
+#define DDS_RGB 0x00000040
+#define DDS_RGBA 0x00000041
+#define DDS_LUMINANCE 0x00020000
+#define DDS_LUMINANCEA 0x00020001
+#define DDS_ALPHA 0x00000002
+#define DDS_PAL8 0x00000020
+#define DDS_PAL8A 0x00000021
+#define DDS_BUMPDUDV 0x00080000
 
 #ifndef MAKEFOURCC
 #define MAKEFOURCC(ch0, ch1, ch2, ch3) \
 	((uint32_t)(uint8_t)(ch0) | ((uint32_t)(uint8_t)(ch1) << 8) | ((uint32_t)(uint8_t)(ch2) << 16) | \
 		((uint32_t)(uint8_t)(ch3) << 24))
-#endif /* defined(MAKEFOURCC) */
+#endif
 
 #define DDS_HEADER_FLAGS_TEXTURE \
-	0x00001007 // DDSD_CAPS | DDSD_HEIGHT | DDSD_WIDTH | DDSD_PIXELFORMAT
-#define DDS_HEADER_FLAGS_MIPMAP 0x00020000 // DDSD_MIPMAPCOUNT
-#define DDS_HEADER_FLAGS_VOLUME 0x00800000 // DDSD_DEPTH
-#define DDS_HEADER_FLAGS_PITCH 0x00000008 // DDSD_PITCH
-#define DDS_HEADER_FLAGS_LINEARSIZE 0x00080000 // DDSD_LINEARSIZE
+	0x00001007
+#define DDS_HEADER_FLAGS_MIPMAP 0x00020000
+#define DDS_HEADER_FLAGS_VOLUME 0x00800000
+#define DDS_HEADER_FLAGS_PITCH 0x00000008
+#define DDS_HEADER_FLAGS_LINEARSIZE 0x00080000
 #define DDS_MAX_TEXTURE_SIZE 32768
 
-// Subset here matches D3D10_RESOURCE_DIMENSION and D3D11_RESOURCE_DIMENSION
 enum DDS_RESOURCE_DIMENSION
 {
 	DDS_DIMENSION_TEXTURE1D = 2,
@@ -340,7 +325,7 @@ struct DDS_HEADER
 	uint32_t dwHeight;
 	uint32_t dwWidth;
 	uint32_t dwPitchOrLinearSize;
-	uint32_t dwDepth; // only if DDS_HEADER_FLAGS_VOLUME is set in dwFlags
+	uint32_t dwDepth;
 	uint32_t dwMipMapCount;
 	uint32_t dwReserved1[11];
 	DDS_PIXELFORMAT ddspf;
@@ -355,9 +340,9 @@ struct DDS_HEADER_DXT10
 {
 	uint32_t dxgiFormat;
 	uint32_t resourceDimension;
-	uint32_t miscFlag; // see DDS_RESOURCE_MISC_FLAG
+	uint32_t miscFlag;
 	uint32_t arraySize;
-	uint32_t miscFlags2; // see DDS_MISC_FLAGS2
+	uint32_t miscFlags2;
 };
 
 #pragma pack(pop)
@@ -375,8 +360,6 @@ constexpr DDS_PIXELFORMAT DDSPF_X8B8G8R8 = {
 	sizeof(DDS_PIXELFORMAT), DDS_RGB, 0, 32, 0x000000ff, 0x0000ff00, 0x00ff0000, 0x00000000};
 constexpr DDS_PIXELFORMAT DDSPF_R8G8B8 = {
 	sizeof(DDS_PIXELFORMAT), DDS_RGB, 0, 24, 0x00ff0000, 0x0000ff00, 0x000000ff, 0x00000000};
-
-// End of Microsoft code from DDS.h.
 
 static bool DDSPixelFormatMatches(const DDS_PIXELFORMAT& pf1, const DDS_PIXELFORMAT& pf2)
 {
@@ -410,25 +393,20 @@ static bool ParseDDSHeader(std::FILE* fp, DDSLoadInfo* info)
 	if (std::fread(&header, header_size, 1, fp) != 1 || header.dwSize < header_size)
 		return false;
 
-	// We should check for DDS_HEADER_FLAGS_TEXTURE here, but some tools don't seem
-	// to set it (e.g. compressonator). But we can still validate the size.
 	if (header.dwWidth == 0 || header.dwWidth >= DDS_MAX_TEXTURE_SIZE ||
 		header.dwHeight == 0 || header.dwHeight >= DDS_MAX_TEXTURE_SIZE)
 	{
 		return false;
 	}
 
-	// Image should be 2D.
 	if (header.dwFlags & DDS_HEADER_FLAGS_VOLUME)
 		return false;
 
-	// Presence of width/height fields is already tested by DDS_HEADER_FLAGS_TEXTURE.
 	info->width = header.dwWidth;
 	info->height = header.dwHeight;
 	if (info->width == 0 || info->height == 0)
 		return false;
 
-	// Check for mip levels.
 	if (header.dwFlags & DDS_HEADER_FLAGS_MIPMAP)
 	{
 		info->mip_count = header.dwMipMapCount;
@@ -442,11 +420,9 @@ static bool ParseDDSHeader(std::FILE* fp, DDSLoadInfo* info)
 		info->mip_count = 1;
 	}
 
-	// Handle fourcc formats vs uncompressed formats.
 	const bool has_fourcc = (header.ddspf.dwFlags & DDS_FOURCC) != 0;
 	if (has_fourcc)
 	{
-		// Handle DX10 extension header.
 		u32 dxt10_format = 0;
 		if (header.ddspf.dwFourCC == MAKEFOURCC('D', 'X', '1', '0'))
 		{
@@ -454,7 +430,6 @@ static bool ParseDDSHeader(std::FILE* fp, DDSLoadInfo* info)
 			if (std::fread(&dxt10_header, sizeof(dxt10_header), 1, fp) != 1)
 				return false;
 
-			// Can't handle array textures here. Doesn't make sense to use them, anyway.
 			if (dxt10_header.resourceDimension != DDS_DIMENSION_TEXTURE2D || dxt10_header.arraySize != 1)
 				return false;
 
@@ -463,7 +438,7 @@ static bool ParseDDSHeader(std::FILE* fp, DDSLoadInfo* info)
 		}
 
 		const GSDevice::FeatureSupport features(g_gs_device->Features());
-		if (header.ddspf.dwFourCC == MAKEFOURCC('D', 'X', 'T', '1') || dxt10_format == 71 /*DXGI_FORMAT_BC1_UNORM*/)
+		if (header.ddspf.dwFourCC == MAKEFOURCC('D', 'X', 'T', '1') || dxt10_format == 71 )
 		{
 			info->format = GSTexture::Format::BC1;
 			info->block_size = 4;
@@ -471,7 +446,7 @@ static bool ParseDDSHeader(std::FILE* fp, DDSLoadInfo* info)
 			if (!features.dxt_textures)
 				return false;
 		}
-		else if (header.ddspf.dwFourCC == MAKEFOURCC('D', 'X', 'T', '2') || header.ddspf.dwFourCC == MAKEFOURCC('D', 'X', 'T', '3') || dxt10_format == 74 /*DXGI_FORMAT_BC2_UNORM*/)
+		else if (header.ddspf.dwFourCC == MAKEFOURCC('D', 'X', 'T', '2') || header.ddspf.dwFourCC == MAKEFOURCC('D', 'X', 'T', '3') || dxt10_format == 74 )
 		{
 			info->format = GSTexture::Format::BC2;
 			info->block_size = 4;
@@ -479,7 +454,7 @@ static bool ParseDDSHeader(std::FILE* fp, DDSLoadInfo* info)
 			if (!features.dxt_textures)
 				return false;
 		}
-		else if (header.ddspf.dwFourCC == MAKEFOURCC('D', 'X', 'T', '4') || header.ddspf.dwFourCC == MAKEFOURCC('D', 'X', 'T', '5') || dxt10_format == 77 /*DXGI_FORMAT_BC3_UNORM*/)
+		else if (header.ddspf.dwFourCC == MAKEFOURCC('D', 'X', 'T', '4') || header.ddspf.dwFourCC == MAKEFOURCC('D', 'X', 'T', '5') || dxt10_format == 77 )
 		{
 			info->format = GSTexture::Format::BC3;
 			info->block_size = 4;
@@ -487,7 +462,7 @@ static bool ParseDDSHeader(std::FILE* fp, DDSLoadInfo* info)
 			if (!features.dxt_textures)
 				return false;
 		}
-		else if (dxt10_format == 98 /*DXGI_FORMAT_BC7_UNORM*/)
+		else if (dxt10_format == 98 )
 		{
 			info->format = GSTexture::Format::BC7;
 			info->block_size = 4;
@@ -497,7 +472,6 @@ static bool ParseDDSHeader(std::FILE* fp, DDSLoadInfo* info)
 		}
 		else
 		{
-			// Leave all remaining formats to SOIL.
 			return false;
 		}
 	}
@@ -521,32 +495,24 @@ static bool ParseDDSHeader(std::FILE* fp, DDSLoadInfo* info)
 		}
 		else if (DDSPixelFormatMatches(header.ddspf, DDSPF_A8B8G8R8))
 		{
-			// This format is already in RGBA order, so no conversion necessary.
 		}
 		else
 		{
 			return false;
 		}
 
-		// All these formats are RGBA, just with byte swapping.
 		info->format = GSTexture::Format::Color;
 		info->block_size = 1;
 		info->bytes_per_block = header.ddspf.dwRGBBitCount / 8;
 	}
 
-	// Mip levels smaller than the block size are padded to multiples of the block size.
 	const u32 blocks_wide = GetBlockCount(info->width, info->block_size);
 	const u32 blocks_high = GetBlockCount(info->height, info->block_size);
 
-	// Pitch can be specified in the header, otherwise we can derive it from the dimensions. For
-	// compressed formats, both DDS_HEADER_FLAGS_LINEARSIZE and DDS_HEADER_FLAGS_PITCH should be
-	// set. See https://msdn.microsoft.com/en-us/library/windows/desktop/bb943982(v=vs.85).aspx
 	if (header.dwFlags & DDS_HEADER_FLAGS_PITCH && header.dwFlags & DDS_HEADER_FLAGS_LINEARSIZE)
 	{
-		// Convert pitch (in bytes) to texels/row length.
 		if (header.dwPitchOrLinearSize < info->bytes_per_block)
 		{
-			// Likely a corrupted or invalid file.
 			return false;
 		}
 
@@ -555,12 +521,10 @@ static bool ParseDDSHeader(std::FILE* fp, DDSLoadInfo* info)
 	}
 	else
 	{
-		// Assume no padding between rows of blocks.
 		info->base_image_pitch = blocks_wide * info->bytes_per_block;
 		info->base_image_size = info->base_image_pitch * blocks_high;
 	}
 
-	// Check for truncated or corrupted files.
 	info->base_image_offset = sizeof(magic) + header_size;
 	if (info->base_image_offset >= FileSystem::FSize64(fp))
 		return false;
@@ -570,8 +534,6 @@ static bool ParseDDSHeader(std::FILE* fp, DDSLoadInfo* info)
 
 static bool ReadDDSMipLevel(std::FILE* fp, const std::string& filename, u32 mip_level, const DDSLoadInfo& info, u32 width, u32 height, std::vector<u8>& data, u32& pitch, u32 size)
 {
-	// D3D11 cannot handle block compressed textures where the first mip level is
-	// not a multiple of the block size.
 	if (mip_level == 0 && info.block_size > 1 &&
 		((width % info.block_size) != 0 || (height % info.block_size) != 0))
 	{
@@ -586,7 +548,6 @@ static bool ReadDDSMipLevel(std::FILE* fp, const std::string& filename, u32 mip_
 	if (std::fread(data.data(), size, 1, fp) != 1)
 		return false;
 
-	// Apply conversion function for uncompressed textures.
 	if (info.conversion_function)
 		info.conversion_function(width, height, data, pitch);
 
@@ -603,7 +564,6 @@ bool DDSLoader(const std::string& filename, GSTextureReplacements::ReplacementTe
 	if (!ParseDDSHeader(fp.get(), &info))
 		return false;
 
-	// always load the base image
 	if (FileSystem::FSeek64(fp.get(), info.base_image_offset, SEEK_SET) != 0)
 		return false;
 
@@ -614,7 +574,6 @@ bool DDSLoader(const std::string& filename, GSTextureReplacements::ReplacementTe
 	if (!ReadDDSMipLevel(fp.get(), filename, 0, info, tex->width, tex->height, tex->data, tex->pitch, info.base_image_size))
 		return false;
 
-	// Read in any remaining mip levels in the file.
 	if (!only_base_image)
 	{
 		for (u32 level = 1; level <= info.mip_count; level++)

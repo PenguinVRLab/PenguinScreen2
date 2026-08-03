@@ -56,7 +56,7 @@ enum MemCheckCondition
 	MEMCHECK_WRITE_ONCHANGE = 0x04,
 
 	MEMCHECK_READWRITE = 0x03,
-	MEMCHECK_INVALID = 0x08, // Invalid condition, used by the CSV parser to know if the line is for a memcheck
+	MEMCHECK_INVALID = 0x08,
 };
 
 enum MemCheckResult
@@ -100,9 +100,6 @@ struct MemCheck
 	}
 };
 
-// BreakPoints cannot overlap, only one is allowed per address.
-// MemChecks can overlap, as long as their ends are different.
-// WARNING: MemChecks are not used in the interpreter or HLE currently.
 class CBreakPoints
 {
 public:
@@ -119,7 +116,6 @@ public:
 	static void ClearAllBreakPoints();
 	static void ClearTemporaryBreakPoints();
 
-	// Makes a copy.  Temporary breakpoints can't have conditions.
 	static void ChangeBreakPointAddCond(BreakPointCpu cpu, u32 addr, const BreakPointCond& cond);
 	static void ChangeBreakPointRemoveCond(BreakPointCpu cpu, u32 addr);
 	static BreakPointCond* GetBreakPointCondition(BreakPointCpu cpu, u32 addr);
@@ -138,12 +134,10 @@ public:
 	static void ClearSkipFirst(BreakPointCpu cpu = BREAKPOINT_IOP_AND_EE);
 	static void CommitClearSkipFirst(BreakPointCpu cpu);
 
-	// Includes uncached addresses.
 	static const std::vector<MemCheck> GetMemCheckRanges();
 
 	static const std::vector<MemCheck> GetMemChecks(BreakPointCpu cpu);
 	static const std::vector<BreakPoint> GetBreakpoints(BreakPointCpu cpu, bool includeTemp);
-	// Returns count of all non-temporary breakpoints
 	static size_t GetNumBreakpoints()
 	{
 		return std::count_if(breakPoints_.begin(), breakPoints_.end(), [](BreakPoint& bp) { return !bp.temporary; });
@@ -165,7 +159,6 @@ public:
 
 private:
 	static size_t FindBreakpoint(BreakPointCpu cpu, u32 addr, bool matchTemp = false, bool temp = false);
-	// Finds exactly, not using a range check.
 	static size_t FindMemCheck(BreakPointCpu cpu, u32 start, u32 end);
 
 	static std::vector<BreakPoint> breakPoints_;
@@ -183,5 +176,4 @@ private:
 };
 
 
-// called from the dynarec
 u32 standardizeBreakpointAddress(u32 addr);

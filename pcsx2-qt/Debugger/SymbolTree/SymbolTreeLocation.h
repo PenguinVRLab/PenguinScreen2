@@ -10,14 +10,13 @@
 
 class DebugInterface;
 
-// A memory location, either a register or an address.
 struct SymbolTreeLocation
 {
 	enum Type
 	{
 		REGISTER,
 		MEMORY,
-		NONE // Put NONE last so nodes of this type sort to the bottom.
+		NONE
 	};
 
 	Type type = NONE;

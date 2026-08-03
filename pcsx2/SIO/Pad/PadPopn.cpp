@@ -53,9 +53,6 @@ void PadPopn::ConfigLog()
 			break;
 	}
 
-	// AL: Analog Light (is it turned on right now)
-	// AB: Analog Button (is it useable or is it locked in its current state)
-	// RB: Response Bytes (what data is included in the controller's responses - D = Digital, A = Analog, P = Pressure)
 	Console.WriteLn(fmt::format("Pad: Pop'n Config Finished - P{0}/S{1} - AL: {2} - AB: {3} - RB: {4} (0x{5:08X})",
 		port + 1,
 		slot + 1,
@@ -118,7 +115,6 @@ u8 PadPopn::Poll(u8 commandByte)
 		case 3:
 			return (buttons >> 8) & 0xff;
 		case 4:
-			// PS1 mode: If the controller is still in digital mode, it is time to stop acknowledging.
 			if (this->currentMode == Pad::Mode::DIGITAL)
 			{
 				g_Sio0.SetAcknowledge(false);
@@ -160,9 +156,6 @@ u8 PadPopn::Config(u8 commandByte)
 		}
 	}
 
-	// PS1 mode: Config mode would have been triggered by a prior byte in this command sequence;
-	// if we are now in config mode, check the current mode and if this is the last byte. If so,
-	// don't acknowledge.
 	if (this->isInConfig)
 	{
 		if ((this->currentMode == Pad::Mode::DIGITAL && this->commandBytesReceived == 4) || (this->currentMode == Pad::Mode::ANALOG && this->commandBytesReceived == 8))
@@ -174,7 +167,6 @@ u8 PadPopn::Config(u8 commandByte)
 	return 0x00;
 }
 
-// Changes the mode of the controller between digital and analog, and adjusts the analog LED accordingly.
 u8 PadPopn::ModeSwitch(u8 commandByte)
 {
 	switch (commandBytesReceived)
@@ -302,13 +294,6 @@ u8 PadPopn::Constant3(u8 commandByte)
 	}
 }
 
-// Set which byte of the poll command will correspond to a motor's power level.
-// In all known cases, games never rearrange the motors. We've hard coded pad polls
-// to always use the first vibration byte as small motor, and the second as big motor.
-// There is no reason to rearrange these. Games never rearrange these. If someone does
-// try to rearrange these, they should suffer.
-//
-// The return values for cases 3 and 4 are just to notify the pad module of what the mapping was, prior to this command.
 u8 PadPopn::VibrationMap(u8 commandByte)
 {
 	return 0xff;
@@ -462,11 +447,6 @@ std::tuple<u8, u8> PadPopn::GetRawRightAnalog() const
 
 u32 PadPopn::GetButtons() const
 {
-	// A quirk of the Pop'n controller, the "D-Pad" left right and down buttons are always pressed.
-	// Likely this was a simple way to identify their controllers by always reporting this button combination,
-	// since it was both impossible for a normal pad to do and quite impractical to imitate without
-	// some level of hardware tampering. This also meant they could just have the pad identify as a seemingly
-	// normal PS1 digital pad to work with the standard pad libraries across the board.
 	return buttons & ~(0xE000);
 }
 
@@ -490,7 +470,6 @@ bool PadPopn::Freeze(StateWrapper& sw)
 	if (!PadBase::Freeze(sw) || !sw.DoMarker("PadPopn"))
 		return false;
 
-	// Private PadPopn members
 	sw.Do(&analogLight);
 	sw.Do(&analogLocked);
 	sw.Do(&analogPressed);

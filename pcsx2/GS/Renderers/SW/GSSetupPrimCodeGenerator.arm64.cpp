@@ -22,7 +22,6 @@ static const auto& _vscratch = v31;
 
 static constexpr const GSScanlineConstantData128B& g_const = g_const_128b;
 
-// Yay, you can't offsetof with non-constant array indices in GCC
 #define OFFSETOF(base, field) (reinterpret_cast<uptr>(&reinterpret_cast<base*>(0)->field))
 #define _local(field) MemOperand(_locals, OFFSETOF(GSScanlineLocalData, field))
 #define armAsm (&m_emitter)
@@ -73,11 +72,8 @@ void GSSetupPrimCodeGenerator::Depth()
 	{
 		if (m_en.f)
 		{
-			// GSVector4 df = t.wwww();
 			armAsm->Add(_scratchaddr, _dscan, offsetof(GSVertexSW, t.w));
 			armAsm->Ld1r(v1.V4S(), MemOperand(_scratchaddr));
-
-			// m_local.d4.f = GSVector4i(df * 4.0f).xxzzlh();
 
 			armAsm->Fmul(v2.V4S(), v1.V4S(), v3.V4S());
 			armAsm->Fcvtzs(v2.V4S(), v2.V4S());
@@ -87,7 +83,6 @@ void GSSetupPrimCodeGenerator::Depth()
 
 			for (int i = 0; i < (m_sel.notest ? 1 : 4); i++)
 			{
-				// m_local.d[i].f = GSVector4i(df * m_shift[i]).xxzzlh();
 
 				armAsm->Fmul(v2.V4S(), v1.V4S(), VRegister(4 + i, kFormat4S));
 				armAsm->Fcvtzs(v2.V4S(), v2.V4S());
@@ -99,11 +94,9 @@ void GSSetupPrimCodeGenerator::Depth()
 
 		if (m_en.z)
 		{
-			// VectorF dz = VectorF::broadcast64(&dscan.p.z)
 			armAsm->Add(_scratchaddr, _dscan, offsetof(GSVertexSW, p.z));
 			armAsm->Ld1r(_vscratch.V2D(), MemOperand(_scratchaddr));
 
-			// m_local.d4.z = dz.mul64(GSVector4::f32to64(shift));
 			armAsm->Fcvtl(v1.V2D(), v3.V2S());
 			armAsm->Fmul(v1.V2D(), v1.V2D(), _vscratch.V2D());
 			armAsm->Str(v1.V2D(), _local(d4.z));
@@ -113,8 +106,6 @@ void GSSetupPrimCodeGenerator::Depth()
 
 			for (int i = 0; i < (m_sel.notest ? 1 : 4); i++)
 			{
-				// m_local.d[i].z0 = dz.mul64(VectorF::f32to64(half_shift[2 * i + 2]));
-				// m_local.d[i].z1 = dz.mul64(VectorF::f32to64(half_shift[2 * i + 3]));
 
 				armAsm->Fmul(v1.V4S(), v0.V4S(), VRegister(4 + i, kFormat4S));
 				armAsm->Str(v1.V4S(), _local(d[i].z));
@@ -123,15 +114,13 @@ void GSSetupPrimCodeGenerator::Depth()
 	}
 	else
 	{
-		// GSVector4 p = vertex[index[1]].p;
 
 		armAsm->Ldrh(w4, MemOperand(_index, sizeof(u16)));
-		armAsm->Lsl(w4, w4, 6); // * sizeof(GSVertexSW)
+		armAsm->Lsl(w4, w4, 6);
 		armAsm->Add(x4, _vertex, x4);
 
 		if (m_en.f)
 		{
-			// m_local.p.f = GSVector4i(p).zzzzh().zzzz();
 
 			armAsm->Ldr(v0, MemOperand(x4, offsetof(GSVertexSW, p)));
 
@@ -143,7 +132,6 @@ void GSSetupPrimCodeGenerator::Depth()
 
 		if (m_en.z)
 		{
-			// uint32 z is bypassed in t.w
 
 			armAsm->Add(_scratchaddr, x4, offsetof(GSVertexSW, t.w));
 			armAsm->Ld1r(v0.V4S(), MemOperand(_scratchaddr));
@@ -159,40 +147,31 @@ void GSSetupPrimCodeGenerator::Texture()
 		return;
 	}
 
-	// GSVector4 t = dscan.t;
-
 	armAsm->Ldr(v0, MemOperand(_dscan, offsetof(GSVertexSW, t)));
 	armAsm->Fmul(v1.V4S(), v0.V4S(), v3.V4S());
 
 	if (m_sel.fst)
 	{
-		// m_local.d4.stq = GSVector4i(t * 4.0f);
 		armAsm->Fcvtzs(v1.V4S(), v1.V4S());
 		armAsm->Str(v1, MemOperand(_locals, offsetof(GSScanlineLocalData, d4.stq)));
 	}
 	else
 	{
-		// m_local.d4.stq = t * 4.0f;
 		armAsm->Str(v1, MemOperand(_locals, offsetof(GSScanlineLocalData, d4.stq)));
 	}
 
 	for (int j = 0, k = m_sel.fst ? 2 : 3; j < k; j++)
 	{
-		// GSVector4 ds = t.xxxx();
-		// GSVector4 dt = t.yyyy();
-		// GSVector4 dq = t.zzzz();
 
 		armAsm->Dup(v1.V4S(), v0.V4S(), j);
 
 		for (int i = 0; i < (m_sel.notest ? 1 : 4); i++)
 		{
-			// GSVector4 v = ds/dt * m_shift[i];
 
 			armAsm->Fmul(v2.V4S(), v1.V4S(), VRegister(4 + i, 128, 4));
 
 			if (m_sel.fst)
 			{
-				// m_local.d[i].s/t = GSVector4i(v);
 
 				armAsm->Fcvtzs(v2.V4S(), v2.V4S());
 
@@ -204,7 +183,6 @@ void GSSetupPrimCodeGenerator::Texture()
 			}
 			else
 			{
-				// m_local.d[i].s/t/q = v;
 
 				switch (j)
 				{
@@ -226,11 +204,8 @@ void GSSetupPrimCodeGenerator::Color()
 
 	if (m_sel.iip)
 	{
-		// GSVector4 c = dscan.c;
 		armAsm->Ldr(v16, MemOperand(_dscan, offsetof(GSVertexSW, c)));
 
-		// GSVector4i tmp = GSVector4i(dscan.c * step_shift).xzyw();
-		// local.d4.c = tmp.uzp1_16(tmp); // Not currently in GSVector since that's mainly targeting x86 for now
 		armAsm->Fmul(v2.V4S(), v16.V4S(), v3.V4S());
 		armAsm->Fcvtzs(v2.V4S(), v2.V4S());
 		armAsm->Rev64(_vscratch.V4S(), v2.V4S());
@@ -238,50 +213,33 @@ void GSSetupPrimCodeGenerator::Color()
 		armAsm->Uzp1(v2.V8H(), v2.V8H(), v2.V8H());
 		armAsm->Str(v2, MemOperand(_locals, offsetof(GSScanlineLocalData, d4.c)));
 
-		// GSVector4 dr = c.xxxx();
-		// GSVector4 db = c.zzzz();
-
 		armAsm->Dup(v0.V4S(), v16.V4S(), 0);
 		armAsm->Dup(v1.V4S(), v16.V4S(), 2);
 
 		for (int i = 0; i < (m_sel.notest ? 1 : 4); i++)
 		{
-			// VectorI r = VectorI(dr * shift[1 + i]);
 
 			armAsm->Fmul(v2.V4S(), v0.V4S(), VRegister(4 + i, kFormat4S));
 			armAsm->Fcvtzs(v2.V4S(), v2.V4S());
 
-			// VectorI b = VectorI(db * shift[1 + i]);
-
 			armAsm->Fmul(v3.V4S(), v1.V4S(), VRegister(4 + i, kFormat4S));
 			armAsm->Fcvtzs(v3.V4S(), v3.V4S());
 
-			// m_local.d[i].rb = r.trn1_16(b); // Not currently in GSVector since that's mainly targeting x86 for now
 			armAsm->Trn1(v2.V8H(), v2.V8H(), v3.V8H());
 			armAsm->Str(v2, _local(d[i].rb));
 		}
-
-		// GSVector4 c = dscan.c;
-
-		// GSVector4 dg = c.yyyy();
-		// GSVector4 da = c.wwww();
 
 		armAsm->Dup(v0.V4S(), v16.V4S(), 1);
 		armAsm->Dup(v1.V4S(), v16.V4S(), 3);
 
 		for (int i = 0; i < (m_sel.notest ? 1 : 4); i++)
 		{
-			// VectorI g = VectorI(dg * shift[1 + i]);
 
 			armAsm->Fmul(v2.V4S(), v0.V4S(), VRegister(4 + i, kFormat4S));
 			armAsm->Fcvtzs(v2.V4S(), v2.V4S());
 
-			// VectorI a = VectorI(da * shift[1 + i]);
-
 			armAsm->Fmul(v3.V4S(), v1.V4S(), VRegister(4 + i, kFormat4S));
 			armAsm->Fcvtzs(v3.V4S(), v3.V4S());
-
-			// m_local.d[i].ga = g.trn1_16(a); // Not currently in GSVector since that's mainly targeting x86 for now
 
 			armAsm->Trn1(v2.V8H(), v2.V8H(), v3.V8H());
 			armAsm->Str(v2, _local(d[i].ga));
@@ -289,7 +247,6 @@ void GSSetupPrimCodeGenerator::Color()
 	}
 	else
 	{
-		// GSVector4i c = GSVector4i(vertex[index[last].c);
 
 		int last = 0;
 
@@ -301,28 +258,21 @@ void GSSetupPrimCodeGenerator::Color()
 			case GS_SPRITE_CLASS:   last = 1; break;
 		}
 
-		if (!(m_sel.prim == GS_SPRITE_CLASS && (m_en.z || m_en.f))) // if this is a sprite, the last vertex was already loaded in Depth()
+		if (!(m_sel.prim == GS_SPRITE_CLASS && (m_en.z || m_en.f)))
 		{
 			armAsm->Ldrh(w4, MemOperand(_index, sizeof(u16) * last));
-			armAsm->Lsl(w4, w4, 6); // * sizeof(GSVertexSW)
+			armAsm->Lsl(w4, w4, 6);
 			armAsm->Add(x4, _vertex, x4);
 		}
 
 		armAsm->Ldr(v0, MemOperand(x4, offsetof(GSVertexSW, c)));
 		armAsm->Fcvtzs(v0.V4S(), v0.V4S());
 
-		// c = c.upl16(c.zwxy());
-
 		armAsm->Ext(v1.V16B(), v0.V16B(), v0.V16B(), 8);
 		armAsm->Zip1(v0.V8H(), v0.V8H(), v1.V8H());
 
-		// if (!tme) c = c.srl16(7);
-
 		if (m_sel.tfx == TFX_NONE)
 			armAsm->Ushr(v0.V8H(), v0.V8H(), 7);
-
-		// m_local.c.rb = c.xxxx();
-		// m_local.c.ga = c.zzzz();
 
 		armAsm->Dup(v1.V4S(), v0.V4S(), 0);
 		armAsm->Dup(v2.V4S(), v0.V4S(), 2);

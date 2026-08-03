@@ -80,41 +80,41 @@ void BIOSSettingsWidget::populateList(QTreeWidget* list, const std::string& dire
 
 		switch (bios_region)
 		{
-			case 0: // Japan
+			case 0:
 				item->setIcon(0, QIcon(QStringLiteral("%1/icons/flags/jp.svg").arg(res_path)));
 				break;
 
-			case 1: // USA
+			case 1:
 				item->setIcon(0, QIcon(QStringLiteral("%1/icons/flags/us.svg").arg(res_path)));
 				break;
 
-			case 2: // Europe
+			case 2:
 				item->setIcon(0, QIcon(QStringLiteral("%1/icons/flags/eu.svg").arg(res_path)));
 				break;
 
-			case 3: // Oceania
+			case 3:
 				item->setIcon(0, QIcon(QStringLiteral("%1/icons/flags/au.svg").arg(res_path)));
 				break;
 
-			case 4: // Asia
+			case 4:
 				item->setIcon(0, QIcon(QStringLiteral("%1/icons/flags/hk.svg").arg(res_path)));
 				break;
 
-			case 5: // Russia
+			case 5:
 				item->setIcon(0, QIcon(QStringLiteral("%1/icons/flags/ru.svg").arg(res_path)));
 				break;
 
-			case 6: // China
+			case 6:
 				item->setIcon(0, QIcon(QStringLiteral("%1/icons/flags/cn.svg").arg(res_path)));
 				break;
 
-			case 7: // Mexico
+			case 7:
 				item->setIcon(0, QIcon(QStringLiteral("%1/icons/flags/mx.svg").arg(res_path)));
 				break;
 
-			case 8: // T10K
-			case 9: // Test
-			case 10: // Free
+			case 8:
+			case 9:
+			case 10:
 			default:
 				item->setIcon(0, QIcon(QStringLiteral("%1/icons/flags/jp.svg").arg(res_path)));
 				break;

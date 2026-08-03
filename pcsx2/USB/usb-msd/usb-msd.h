@@ -27,4 +27,4 @@ namespace usb_msd
 		std::span<const char*> SubTypes() const override;
 		std::span<const SettingInfo> Settings(u32 subtype) const override;
 	};
-} // namespace usb_msd
+}

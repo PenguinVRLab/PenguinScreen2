@@ -31,7 +31,6 @@ public:
 	{
 		int min, max;
 
-		// Separate inference for depth if using AA1 coverage alpha, since edges don't write depth.
 		int depth_min, depth_max;
 
 		bool valid;
@@ -50,7 +49,7 @@ public:
 
 	Vertex m_min = {};
 	Vertex m_max = {};
-	VertexAlpha m_alpha = {}; // source alpha range after tfx, GSRenderer::GetAlphaMinMax() updates it
+	VertexAlpha m_alpha = {};
 
 	union
 	{
@@ -77,7 +76,7 @@ public:
 		struct { u32 mmag:1, mmin:1, linear:1, opt_linear:1; };
 	} m_filter = {};
 
-	GSVector2 m_lod = {}; // x = min, y = max
+	GSVector2 m_lod = {};
 
 public:
 	GSVertexTrace(const GSState* state);

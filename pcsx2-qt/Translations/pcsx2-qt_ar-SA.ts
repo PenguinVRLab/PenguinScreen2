@@ -1569,11 +1569,6 @@ Leaderboard Position: {1} of {2}</source>
       <translation>اختار الحالة المحفوظة</translation>
     </message>
     <message>
-      <location filename="../Settings/AdvancedSettingsWidget.ui" line="505"/>
-      <source>PINE Settings</source>
-      <translation>إعدادات PINE</translation>
-    </message>
-    <message>
       <location filename="../Settings/AdvancedSettingsWidget.ui" line="527"/>
       <source>Slot:</source>
       <translation>خانة:</translation>

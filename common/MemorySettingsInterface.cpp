@@ -210,7 +210,6 @@ void MemorySettingsInterface::SetValue(const char* section, const char* key, std
 	iter->second = std::move(value);
 	++iter;
 
-	// remove other values
 	while (iter != range.second)
 	{
 		auto remove = iter++;

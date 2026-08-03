@@ -7,14 +7,11 @@
 #include "Vif_Dma.h"
 #include "newVif.h"
 
-// --------------------------------------------------------------------------------------
-//  VifUnpackSSE_Base
-// --------------------------------------------------------------------------------------
 class VifUnpackSSE_Base
 {
 public:
-	bool usn;    // unsigned flag
-	bool doMask; // masking write enable flag
+	bool usn;
+	bool doMask;
 	int  UnpkLoopIteration;
 	int  UnpkNoOfIterations;
 	int  IsAligned;
@@ -62,9 +59,6 @@ protected:
 	virtual void xUPK_V4_5() const;
 };
 
-// --------------------------------------------------------------------------------------
-//  VifUnpackSSE_Simple
-// --------------------------------------------------------------------------------------
 class VifUnpackSSE_Simple : public VifUnpackSSE_Base
 {
 	typedef VifUnpackSSE_Base _parent;
@@ -84,24 +78,21 @@ protected:
 	virtual void doMaskWrite(const xRegisterSSE& regX) const;
 };
 
-// --------------------------------------------------------------------------------------
-//  VifUnpackSSE_Dynarec
-// --------------------------------------------------------------------------------------
 class VifUnpackSSE_Dynarec : public VifUnpackSSE_Base
 {
 	typedef VifUnpackSSE_Base _parent;
 
 public:
 	bool isFill;
-	int  doMode; // two bit value representing difference mode
+	int  doMode;
 	bool skipProcessing;
 	bool inputMasked;
 
 protected:
 	xAddressReg vifPtr;
-	const nVifStruct& v;   // vif0 or vif1
-	const nVifBlock&  vB;  // some pre-collected data from VifStruct
-	int               vCL; // internal copy of vif->cl
+	const nVifStruct& v;
+	const nVifBlock&  vB;
+	int               vCL;
 
 	std::array<xRegisterSSE, 4> colRegs;
 	xRegisterSSE rowReg;
@@ -109,7 +100,7 @@ protected:
 
 public:
 	VifUnpackSSE_Dynarec(const nVifStruct& vif_, const nVifBlock& vifBlock_);
-	VifUnpackSSE_Dynarec(const VifUnpackSSE_Dynarec& src) // copy constructor
+	VifUnpackSSE_Dynarec(const VifUnpackSSE_Dynarec& src)
 		: _parent(src)
 		, v(src.v)
 		, vB(src.vB)

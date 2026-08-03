@@ -8,7 +8,6 @@
 #include "common/Assertions.h"
 #include "common/Console.h"
 
-//Designed to allow one thread to queue data to another thread
 template <class T>
 class SimpleQueue
 {
@@ -26,12 +25,8 @@ private:
 public:
 	SimpleQueue();
 
-	//Used by single queue thread (i.e. EE)
 	void Enqueue(T entry);
-	//Used by single worker thread (i.e. IO)
 	bool Dequeue(T* entry);
-	//May return false negative when another thread is mid Queue()
-	//Intended to only be used from queue thread
 	bool IsQueueEmpty();
 
 	~SimpleQueue();
@@ -47,15 +42,12 @@ SimpleQueue<T>::SimpleQueue()
 template <class T>
 void SimpleQueue<T>::Enqueue(T entry)
 {
-	//Allocate Next entry, and assign to head
 	SimpleQueueEntry* newHead = new SimpleQueueEntry();
 	SimpleQueueEntry* newEntry = head.exchange(newHead);
 
-	//Fill in
 	newEntry->value = std::move(entry);
 	newEntry->next = newHead;
 
-	//Set ready (can be dequeued)
 	newEntry->ready.store(true);
 }
 
@@ -73,7 +65,6 @@ bool SimpleQueue<T>::Dequeue(T* entry)
 	return true;
 }
 
-//Note, next entry may not be ready to dequeue
 template <class T>
 bool SimpleQueue<T>::IsQueueEmpty()
 {
@@ -90,7 +81,6 @@ SimpleQueue<T>::~SimpleQueue()
 			Console.Error("DEV9: Queue not empty");
 			pxAssert(false);
 
-			//Empty Queue
 			T entry;
 			while (!IsQueueEmpty())
 				Dequeue(&entry);

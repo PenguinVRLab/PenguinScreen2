@@ -19,9 +19,7 @@
 
 namespace MipsStackWalk
 {
-	// In the worst case, we scan this far above the pc for an entry.
 	const int MAX_FUNC_SIZE = 32768 * 4;
-	// After this we assume we're stuck.
 	const size_t MAX_DEPTH = 1024;
 
 	static u32 GuessEntry(DebugInterface* cpu, u32 pc)
@@ -77,17 +75,13 @@ namespace MipsStackWalk
 
 	bool ScanForAllocaSignature(DebugInterface* cpu, u32 pc)
 	{
-		// In God Eater Burst, for example, after 0880E750, there's what looks like an alloca().
-		// It's surrounded by "mov fp, sp" and "mov sp, fp", which is unlikely to be used for other reasons.
 
-		// It ought to be pretty close.
 		u32 stop = pc - 32 * 4;
 		for (; cpu->isValidAddress(pc) && pc >= stop; pc -= 4)
 		{
 			u32 rawOp = cpu->Read32(pc);
 			const R5900::OPCODE& op = R5900::GetInstruction(rawOp);
 
-			// We're looking for a "mov fp, sp" close by a "addiu sp, sp, -N".
 			if (IsMovRegsInstr(op, rawOp) && _RD == MIPS_REG_FP && (_RS == MIPS_REG_SP || _RT == MIPS_REG_SP))
 			{
 				return true;
@@ -98,14 +92,10 @@ namespace MipsStackWalk
 
 	bool ScanForEntry(DebugInterface* cpu, StackFrame& frame, u32 entry, u32& ra)
 	{
-		// Let's hope there are no > 1MB functions on the PSP, for the sake of humanity...
 		const u32 LONGEST_FUNCTION = 1024 * 1024;
-		// TODO: Check if found entry is in the same symbol?  Might be wrong sometimes...
 
 		int ra_offset = -1;
 
-		// The instruction pointed to by pc hasn't been executed yet,
-		// so we don't want to consider it here
 		const u32 start = frame.pc - 4;
 		u32 stop = entry;
 
@@ -119,18 +109,13 @@ namespace MipsStackWalk
 			u32 rawOp = cpu->Read32(pc);
 			const R5900::OPCODE& op = R5900::GetInstruction(rawOp);
 
-			// Look for RA write to ram
 			if (IsSWInstr(op) && _RT == MIPS_REG_RA && _RS == MIPS_REG_SP)
 			{
 				ra_offset = _IMM16;
 			}
 
-			// Look for previous function end
 			if (IsJRInstr(op) && _RS == MIPS_REG_RA)
 			{
-				// Found previous function end
-				// Since no stack setup was found assume this is a leaf
-				// with no stack usage
 				pc = pc + 8;
 
 				frame.entry = pc;
@@ -139,13 +124,10 @@ namespace MipsStackWalk
 				return true;
 			}
 
-			// Look for the frame allocation stack pointer subtraction
 			if (IsAddImmInstr(op) && _RT == MIPS_REG_SP && _RS == MIPS_REG_SP)
 			{
-				// A positive imm either means alloca() or we went too far.
 				if (_IMM16 > 0)
 				{
-					// TODO: Maybe check for any alloca() signature and bail?
 					continue;
 				}
 				if (ScanForAllocaSignature(cpu, pc))
@@ -169,19 +151,15 @@ namespace MipsStackWalk
 	{
 		if (ScanForEntry(cpu, frame, possibleEntry, ra))
 		{
-			// Awesome, found one that looks right.
 			return true;
 		}
 		else if (ra != INVALIDTARGET && possibleEntry != INVALIDTARGET)
 		{
-			// Let's just assume it's a leaf.
 			frame.entry = possibleEntry;
 			frame.stackSize = 0;
 			return true;
 		}
 
-		// Okay, we failed to get one.  Our possibleEntry could be wrong, it often is.
-		// Let's just scan upward.
 		u32 newPossibleEntry = frame.pc > threadEntry ? threadEntry : frame.pc - MAX_FUNC_SIZE;
 		return ScanForEntry(cpu, frame, newPossibleEntry, ra);
 	}
@@ -208,7 +186,6 @@ namespace MipsStackWalk
 				}
 				if (current.entry == prevEntry || frames.size() >= MAX_DEPTH)
 				{
-					// Recursion, means we're screwed.  Let's just give up.
 					break;
 				}
 				prevEntry = current.entry;
@@ -221,7 +198,6 @@ namespace MipsStackWalk
 			}
 			else
 			{
-				// Well, we got as far as we could.
 				current.entry = possibleEntry;
 				current.stackSize = 0;
 				frames.push_back(current);
@@ -231,4 +207,4 @@ namespace MipsStackWalk
 
 		return frames;
 	}
-}; // namespace MipsStackWalk
+};

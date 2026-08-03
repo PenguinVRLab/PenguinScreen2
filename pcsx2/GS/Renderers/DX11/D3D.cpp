@@ -81,13 +81,10 @@ std::vector<GSAdapterInfo> D3D::GetAdapterInfo(IDXGIFactory5* factory)
 		GSAdapterInfo ai;
 		ai.name = FixupDuplicateAdapterNames(adapters, GetAdapterName(adapter.get()));
 
-		// Unfortunately we can't get any properties such as feature level without creating the device.
-		// So just assume a max of the D3D11 max across the board.
 		ai.max_texture_size = D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION;
 		ai.max_upscale_multiplier = GSGetMaxUpscaleMultiplier(ai.max_texture_size);
 
 		wil::com_ptr_nothrow<IDXGIOutput> output;
-		// Only check the first output, which would be the primary display (if any is connected)
 		if (SUCCEEDED(hr = adapter->EnumOutputs(0, &output)))
 		{
 			UINT num_modes = 0;
@@ -126,11 +123,8 @@ std::vector<GSAdapterInfo> D3D::GetAdapterInfo(IDXGIFactory5* factory)
 bool D3D::GetRequestedExclusiveFullscreenModeDesc(IDXGIFactory5* factory, HWND window_hwnd, u32 width,
 	u32 height, float refresh_rate, DXGI_FORMAT format, DXGI_MODE_DESC* fullscreen_mode, IDXGIOutput** output)
 {
-	// We need to find which monitor the window is located on.
-	// DXGI seems to use the nearest monitor if the window is out of bounds.
 	const auto* monitor = MonitorFromWindow(window_hwnd, MONITOR_DEFAULTTONEAREST);
 
-	// The monitor might be on a different adapter to which we are rendering.. so we have to enumerate them all.
 	HRESULT hr;
 	wil::com_ptr_nothrow<IDXGIOutput> first_output, monitor_output;
 
@@ -159,7 +153,6 @@ bool D3D::GetRequestedExclusiveFullscreenModeDesc(IDXGIFactory5* factory, HWND w
 				break;
 			}
 
-			// Fallback to the first monitor.
 			if (!first_output)
 				first_output = std::move(this_output);
 		}
@@ -201,8 +194,6 @@ wil::com_ptr_nothrow<IDXGIAdapter1> D3D::GetAdapterByName(IDXGIFactory5* factory
 	if (name.empty() || name == GetDefaultAdapter())
 		return {};
 
-	// This might seem a bit odd to cache the names.. but there's a method to the madness.
-	// We might have two GPUs with the same name... :)
 	std::vector<GSAdapterInfo> adapter_names;
 
 	wil::com_ptr_nothrow<IDXGIAdapter1> adapter;
@@ -350,7 +341,6 @@ GSRendererType D3D::GetPreferredRenderer()
 	const auto factory = CreateFactory(false);
 	const auto adapter = GetChosenOrFirstAdapter(factory.get(), GSConfig.Adapter);
 
-	// If we somehow can't get a D3D11 device, it's unlikely any of the renderers are going to work.
 	if (!adapter)
 		return GSRendererType::DX11;
 
@@ -404,7 +394,6 @@ GSRendererType D3D::GetPreferredRenderer()
 			if (!feature_level.has_value())
 				return GSRendererType::DX11;
 			else if (feature_level == D3D_FEATURE_LEVEL_12_0)
-				//return check_vulkan_supported() ? GSRendererType::VK : GSRendererType::OGL;
 				return GSRendererType::DX12;
 			else if (feature_level == D3D_FEATURE_LEVEL_11_0)
 				return GSRendererType::OGL;
@@ -418,7 +407,6 @@ GSRendererType D3D::GetPreferredRenderer()
 			if (!feature_level.has_value())
 				return GSRendererType::DX11;
 			else if (feature_level == D3D_FEATURE_LEVEL_12_0)
-				//return check_vulkan_supported() ? GSRendererType::VK : GSRendererType::DX12;
 				return GSRendererType::DX12;
 			else if (feature_level == D3D_FEATURE_LEVEL_11_1)
 				return GSRendererType::DX12;
@@ -428,10 +416,7 @@ GSRendererType D3D::GetPreferredRenderer()
 
 		case VendorID::Intel:
 		{
-			// Vulkan has broken barriers, prior to Xe.
 
-			// Sampler feedback Tier 0.9 is only present in Tiger Lake/Xe/Arc, so we can use that to
-			// differentiate between them. Unfortunately, that requires a D3D12 device.
 			const auto device12 = get_d3d12_device();
 			if (device12)
 			{
@@ -457,7 +442,6 @@ GSRendererType D3D::GetPreferredRenderer()
 
 		default:
 		{
-			// Default is D3D11, but prefer DX12 on ARM (better drivers).
 #ifdef ARCH_ARM64
 			return GSRendererType::DX12;
 #else
@@ -485,8 +469,8 @@ const char* D3D::ShaderModelToCacheString(D3D::ShaderModel shader_model)
 }
 
 wil::com_ptr_nothrow<ID3DBlob> D3D::CompileShader(D3D::ShaderType type, D3D::ShaderModel shader_model, bool debug,
-	const std::string_view code, const D3D_SHADER_MACRO* macros /* = nullptr */,
-	const char* entry_point /* = "main" */)
+	const std::string_view code, const D3D_SHADER_MACRO* macros ,
+	const char* entry_point )
 {
 	const GSShaderCompileIndicator::CompileTimer compile_timer;
 

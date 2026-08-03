@@ -23,9 +23,6 @@ enum isoType
 
 static constexpr int CD_FRAMESIZE_RAW = 2448;
 
-// --------------------------------------------------------------------------------------
-//  isoFile
-// --------------------------------------------------------------------------------------
 class InputIsoFile final
 {
 	DeclareNoncopyableObject(InputIsoFile);
@@ -43,7 +40,6 @@ protected:
 	s32 m_blockofs;
 	u32 m_blocksize;
 
-	// total number of blocks in the ISO image (including all parts)
 	u32 m_blocks;
 
 	bool m_read_inprogress;
@@ -95,10 +91,8 @@ protected:
 	s32 m_blockofs;
 	u32 m_blocksize;
 
-	// total number of blocks in the ISO image (including all parts)
 	u32 m_blocks;
 
-	// dtable is used when reading blockdumps
 	std::vector<u32> m_dtable;
 
 	std::FILE* m_outstream = nullptr;

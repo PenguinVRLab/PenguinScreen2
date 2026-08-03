@@ -3,9 +3,6 @@
 
 #pragma once
 
-// Clang note: 64bit bitfields are cast to 32bit here, since in VS it uses the format specified (64bit == 64bit), but in clang it converts to uint32_t.
-// Since we're only using 64bit for bitfield alignment mess, we can just cast it to 32bit for everything.
-
 #include "GSLocalMemory.h"
 
 #include <string>

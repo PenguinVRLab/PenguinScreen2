@@ -20,7 +20,6 @@ public:
 	size_t capacity() const;
 	size_t size() const;
 
-	// Overwrites old data if nbytes > size()
 	void write(const void* src, size_t nbytes);
 	size_t read(void* dst, size_t nbytes);
 

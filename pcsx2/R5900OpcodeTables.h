@@ -25,7 +25,6 @@ enum Syscall : u8
 	GetMemorySize = 127
 };
 
-// TODO : Move these into the OpcodeTables namespace
 extern  void (*Int_COP2PrintTable[32])();
 extern  void (*Int_COP2BC2PrintTable[32])();
 extern  void (*Int_COP2SPECIAL1PrintTable[64])();
@@ -36,9 +35,6 @@ void COP2_SPECIAL();
 void COP2_SPECIAL2();
 void COP2_Unknown();
 
-// reserve the lower 8 bits for opcode specific types
-// which of these are actually used depends on the opcode
-// flags further below
 #define MEMTYPE_MASK         (0x07 << 0)
 #define MEMTYPE_BYTE         (0x01 << 0)
 #define MEMTYPE_HALF         (0x02 << 0)
@@ -120,36 +116,23 @@ namespace R5900
 
 	} }
 
-	///////////////////////////////////////////////////////////////////////////
-	// Encapsulates information about every opcode on the Emotion Engine and
-	// it's many co-processors.
 	struct OPCODE
 	{
-		// Textual name of the instruction.
 		const char Name[16];
 
-		// Number of cycles this instruction normally uses.
 		u8 cycles;
 
-		// Information about the opcode
 		u32 flags;
 
 		const OPCODE& (*getsubclass)(u32 op);
 
-		// Process the instruction using the interpreter.
-		// The action is performed immediately on the EE's cpu state.
 		void (*interpret)();
 
-		// Generate recompiled code for this instruction, injected into
-		// the current EErec block state.
 		void (*recompile)();
 
-		// Generates a string representation of the instruction and it's parameters,
-		// and pastes it into the given output parameter.
 		void (*disasm)( std::string& output );
 	};
 
-	// Returns the current real instruction, as per the current cpuRegs settings.
 	const OPCODE& GetCurrentInstruction();
 	const OPCODE& GetInstruction(u32 op);
 	namespace OpcodeTables
@@ -158,23 +141,6 @@ namespace R5900
 
 		extern const OPCODE tbl_Standard[64];
 
-		/*extern const OPCODE Standard[64];
-		extern const OPCODE Special[64];
-		extern const OPCODE RegImm[32];
-		extern const OPCODE MMI[64];
-		extern const OPCODE MMI0[32];
-		extern const OPCODE MMI1[32];
-		extern const OPCODE MMI2[32];
-		extern const OPCODE MMI3[32];
-
-		extern const OPCODE COP0[32];
-		extern const OPCODE COP0_BC0[32];
-		extern const OPCODE COP0_C0[64];
-
-		extern const OPCODE COP1[32];
-		extern const OPCODE COP1_BC1[32];
-		extern const OPCODE COP1_S[64];
-		extern const OPCODE COP1_W[64];*/
 	}
 
 	namespace Opcodes
@@ -201,7 +167,6 @@ namespace R5900
 
 	namespace OpcodeDisasm
 	{
-//****************************************************************
 		void Unknown( std::string& output );
 		void COP0_Unknown( std::string& output );
 		void COP1_Unknown( std::string& output );
@@ -209,7 +174,6 @@ namespace R5900
 
 		void COP2( std::string& output );
 
-// **********************Standard Opcodes**************************
 		void J( std::string& output );
 		void JAL( std::string& output );
 		void BEQ( std::string& output );
@@ -257,8 +221,6 @@ namespace R5900
 		void LQ( std::string& output );
 		void SQ( std::string& output );
 		void SWC1( std::string& output );
-//*****************end of standard opcodes**********************
-//********************SPECIAL OPCODES***************************
 		void SLL( std::string& output );
 		void SRL( std::string& output );
 		void SRA( std::string& output );
@@ -311,8 +273,6 @@ namespace R5900
 		void MOVN( std::string& output );
 		void MFSA( std::string& output );
 		void MTSA( std::string& output );
-//*******************END OF SPECIAL OPCODES************************
-//***********************REGIMM OPCODES****************************
 		void BLTZ( std::string& output );
 		void BGEZ( std::string& output );
 		void BLTZL( std::string& output );
@@ -329,8 +289,6 @@ namespace R5900
 		void BGEZALL( std::string& output );
 		void MTSAB( std::string& output );
 		void MTSAH( std::string& output );
-//*******************END OF REGIMM OPCODES***********************
-//***********************MMI OPCODES*****************************
 		void MADD( std::string& output );
 		void MADDU( std::string& output );
 		void PLZCW( std::string& output );
@@ -352,8 +310,6 @@ namespace R5900
 		void PSLLW( std::string& output );
 		void PSRLW( std::string& output );
 		void PSRAW( std::string& output );
-//********************END OF MMI OPCODES***********************
-//***********************MMI0 OPCODES**************************
 		void PADDW( std::string& output );
 		void PSUBW( std::string& output );
 		void PCGTW( std::string& output );
@@ -379,8 +335,6 @@ namespace R5900
 		void PPACB( std::string& output );
 		void PEXT5( std::string& output );
 		void PPAC5( std::string& output );
-//******************END OF MMI0 OPCODES***********************
-//*********************MMI1 OPCODES***************************
 		void PABSW( std::string& output );
 		void PCEQW( std::string& output );
 		void PMINW( std::string& output );
@@ -399,8 +353,6 @@ namespace R5900
 		void PSUBUB( std::string& output );
 		void PEXTUB( std::string& output );
 		void QFSRV( std::string& output );
-//*****************END OF MMI1 OPCODES***********************
-//*********************MMI2 OPCODES**************************
 		void PMADDW( std::string& output );
 		void PSLLVW( std::string& output );
 		void PSRLVW( std::string& output );
@@ -423,8 +375,6 @@ namespace R5900
 		void PDIVBW( std::string& output );
 		void PEXEW( std::string& output );
 		void PROT3W( std::string& output );
-//********************END OF MMI2 OPCODES********************
-//***********************MMI3 OPCODES************************
 		void PMADDUW( std::string& output );
 		void PSRAVW( std::string& output );
 		void PMTHI( std::string& output );
@@ -438,8 +388,6 @@ namespace R5900
 		void PEXCH( std::string& output );
 		void PCPYH( std::string& output );
 		void PEXCW( std::string& output );
-//*********************END OF MMI3 OPCODES*******************
-//************************COP0 OPCODES***********************
 		void MFC0( std::string& output );
 		void MTC0( std::string& output );
 		void BC0F( std::string& output );
@@ -453,8 +401,6 @@ namespace R5900
 		void ERET( std::string& output );
 		void DI( std::string& output );
 		void EI( std::string& output );
-//***********************END OF COP0*************************
-//**************COP1 - Floating Point Unit (FPU)*************
 		void MFC1( std::string& output );
 		void CFC1( std::string& output );
 		void MTC1( std::string& output );
@@ -487,7 +433,6 @@ namespace R5900
 		void C_LT( std::string& output );
 		void C_LE( std::string& output );
 		void CVT_S( std::string& output );
-//**********************END OF COP1***********************
 	}
 
 	namespace Interpreter {
@@ -502,7 +447,6 @@ namespace R5900
 		void COP0_Unknown();
 		void COP1_Unknown();
 
-// **********************Standard Opcodes**************************
 		void J();
 		void JAL();
 		void BEQ();
@@ -550,8 +494,6 @@ namespace R5900
 		void LQ();
 		void SQ();
 		void SWC1();
-//*****************end of standard opcodes**********************
-//********************SPECIAL OPCODES***************************
 		void SLL();
 		void SRL();
 		void SRA();
@@ -604,8 +546,6 @@ namespace R5900
 		void MOVN();
 		void MFSA();
 		void MTSA();
-//*******************END OF SPECIAL OPCODES************************
-//***********************REGIMM OPCODES****************************
 		void BLTZ();
 		void BGEZ();
 		void BLTZL();
@@ -622,8 +562,6 @@ namespace R5900
 		void BGEZALL();
 		void MTSAB();
 		void MTSAH();
-//*******************END OF REGIMM OPCODES***********************
-//***********************MMI OPCODES*****************************
 		void MADD();
 		void MADDU();
 		void MADD1();
@@ -647,8 +585,6 @@ namespace R5900
 		void PSLLW();
 		void PSRLW();
 		void PSRAW();
-//********************END OF MMI OPCODES***********************
-//***********************MMI0 OPCODES**************************
 		void PADDW();
 		void PSUBW();
 		void PCGTW();
@@ -674,8 +610,6 @@ namespace R5900
 		void PPACB();
 		void PEXT5();
 		void PPAC5();
-//******************END OF MMI0 OPCODES***********************
-//*********************MMI1 OPCODES***************************
 		void PABSW();
 		void PCEQW();
 		void PMINW();
@@ -694,8 +628,6 @@ namespace R5900
 		void PSUBUB();
 		void PEXTUB();
 		void QFSRV();
-//*****************END OF MMI1 OPCODES***********************
-//*********************MMI2 OPCODES**************************
 		void PMADDW();
 		void PSLLVW();
 		void PSRLVW();
@@ -718,8 +650,6 @@ namespace R5900
 		void PDIVBW();
 		void PEXEW();
 		void PROT3W();
-//********************END OF MMI2 OPCODES********************
-//***********************MMI3 OPCODES************************
 		void PMADDUW();
 		void PSRAVW();
 		void PMTHI();
@@ -734,8 +664,6 @@ namespace R5900
 		void PCPYH();
 		void PEXCW();
 		}
-//**********************END OF MMI3 OPCODES********************
-//*************************COP0 OPCODES************************
 		namespace COP0 {
 		void MFC0();
 		void MTC0();
@@ -751,8 +679,6 @@ namespace R5900
 		void DI();
 		void EI();
 		}
-//********************END OF COP0 OPCODES************************
-//************COP1 OPCODES - Floating Point Unit*****************
 		namespace COP1 {
 		void MFC1();
 		void CFC1();
@@ -788,11 +714,8 @@ namespace R5900
 		void CVT_S();
 		}
 	} }
-}	// End namespace R5900
+}
 
-//****************************************************************************
-//** COP2 - (VU0)                                                           **
-//****************************************************************************
 void QMFC2();
 void CFC2();
 void QMTC2();
@@ -801,7 +724,6 @@ void BC2F();
 void BC2T();
 void BC2FL();
 void BC2TL();
-//*****************SPECIAL 1 VUO TABLE*******************************
 void VADDx();
 void VADDy();
 void VADDz();
@@ -857,8 +779,6 @@ void VIAND();
 void VIOR();
 void VCALLMS();
 void VCALLMSR();
-//***********************************END OF SPECIAL1 VU0 TABLE*****************************
-//******************************SPECIAL2 VUO TABLE*****************************************
 void VADDAx();
 void VADDAy();
 void VADDAz();
@@ -924,4 +844,3 @@ void VRNEXT();
 void VRGET();
 void VRINIT();
 void VRXOR();
-//*******************END OF SPECIAL2 *********************

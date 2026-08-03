@@ -38,8 +38,6 @@ bool IOCtlSrc::Reopen(Error* error)
 	if (m_device != -1)
 		close(m_device);
 
-	// O_NONBLOCK allows a valid file descriptor to be returned even if the
-	// drive is empty. Probably does other things too.
 	m_device = open(m_filename.c_str(), O_RDONLY | O_NONBLOCK);
 	if (m_device == -1)
 	{
@@ -47,8 +45,6 @@ bool IOCtlSrc::Reopen(Error* error)
 		return false;
 	}
 
-	// DVD detection MUST be first on Linux - The TOC ioctls work for both
-	// CDs and DVDs.
 	if (ReadDVDInfo() || ReadCDInfo())
 		SetSpindleSpeed(false);
 
@@ -70,7 +66,6 @@ void IOCtlSrc::SetSpindleSpeed(bool restore_defaults) const
 		DevCon.WriteLn("CDVD: Spindle speed set to %d", speed);
 	}
 #else
-	// FIXME: FreeBSD equivalent for DKIOCDVDSETSPEED DKIOCCDSETSPEED.
 	DevCon.Warning("CDVD: Setting spindle speed not supported!");
 #endif
 }
@@ -158,14 +153,12 @@ bool IOCtlSrc::ReadDVDInfo()
 	u32 end_sector = *(u32*)layer0.endPhysicalSectorNumberOfDataArea;
 	if (layer0.numberOfLayers == 0)
 	{
-		// Single layer
 		m_media_type = 0;
 		m_layer_break = 0;
 		m_sectors = end_sector - start_sector + 1;
 	}
 	else if (layer0.trackPath == 0)
 	{
-		// Dual layer, Parallel Track Path
 		DVDPhysicalFormatInfo layer1;
 		dvdrs.layer = 1;
 		dvdrs.buffer = &layer1;
@@ -182,7 +175,6 @@ bool IOCtlSrc::ReadDVDInfo()
 	}
 	else
 	{
-		// Dual layer, Opposite Track Path
 		u32 end_sector_layer0 = *(u32*)layer0.endSectorNumberInLayerZero;
 		m_media_type = 2;
 		m_layer_break = end_sector_layer0 - start_sector;
@@ -226,7 +218,7 @@ bool IOCtlSrc::ReadCDInfo()
 			u32 lba = CDConvertMSFToLBA(desc.p);
 			m_toc.push_back({lba, desc.point, desc.adr, desc.control});
 		}
-		else if (desc.point == 0xa2) // lead out, use to get total sector count
+		else if (desc.point == 0xa2)
 		{
 			m_sectors = CDConvertMSFToLBA(desc.p);
 		}

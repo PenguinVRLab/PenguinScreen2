@@ -3,11 +3,6 @@
 
 #pragma once
 
-/*********************************************************
-* Shift arithmetic with constant shift                   *
-* Format:  OP rd, rt, sa                                 *
-*********************************************************/
-
 namespace R5900 {
 namespace Dynarec {
 namespace OpcodeImpl {
@@ -29,6 +24,6 @@ namespace OpcodeImpl {
 	void recDSRLV();
 	void recDSRAV();
 
-} // namespace OpcodeImpl
-} // namespace Dynarec
-} // namespace R5900
+}
+}
+}

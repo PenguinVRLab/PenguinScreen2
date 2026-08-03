@@ -171,8 +171,6 @@ void NewSymbolDialog::updateSizeField()
 	}
 	else
 	{
-		// Add some padding to the end of the radio button text so that the
-		// layout engine knows we need some more space for the size.
 		QString padding(16, ' ');
 		m_ui.fillExistingFunctionRadioButton->setText(tr("Fill existing function").append(padding));
 		m_ui.fillEmptySpaceRadioButton->setText(tr("Fill space").append(padding));
@@ -237,8 +235,6 @@ u32 NewSymbolDialog::parseAddress(QString& error_message)
 
 	return address;
 }
-
-// *****************************************************************************
 
 NewFunctionDialog::NewFunctionDialog(DebugInterface& cpu, QWidget* parent)
 	: NewSymbolDialog(GLOBAL_STORAGE | SIZE_FIELD | EXISTING_FUNCTIONS_FIELD, 4, cpu, parent)
@@ -308,7 +304,6 @@ bool NewFunctionDialog::parseUserInput()
 			return;
 		}
 
-		// Handle an existing function if it exists.
 		const ccc::Function* existing_function = database.functions.symbol_overlapping_address(m_address);
 		m_existing_function = ccc::FunctionHandle();
 		if (existing_function)
@@ -362,8 +357,6 @@ void NewFunctionDialog::createSymbol()
 	if (!error_message.isEmpty())
 		AsyncDialogs::warning(g_debugger_window, tr("Cannot Create Function"), error_message);
 }
-
-// *****************************************************************************
 
 NewGlobalVariableDialog::NewGlobalVariableDialog(DebugInterface& cpu, QWidget* parent)
 	: NewSymbolDialog(GLOBAL_STORAGE | TYPE_FIELD, 1, cpu, parent)
@@ -420,8 +413,6 @@ void NewGlobalVariableDialog::createSymbol()
 		AsyncDialogs::warning(g_debugger_window, tr("Cannot Create Global Variable"), error_message);
 }
 
-// *****************************************************************************
-
 NewLocalVariableDialog::NewLocalVariableDialog(DebugInterface& cpu, QWidget* parent)
 	: NewSymbolDialog(GLOBAL_STORAGE | REGISTER_STORAGE | STACK_STORAGE | TYPE_FIELD | FUNCTION_FIELD, 1, cpu, parent)
 {
@@ -472,7 +463,6 @@ bool NewLocalVariableDialog::parseUserInput()
 				ccc::StackStorage& stack_storage = m_storage.emplace<ccc::StackStorage>();
 				stack_storage.stack_pointer_offset = m_ui.stackPointerOffsetSpinBox->value();
 
-				// Convert to caller sp relative.
 				if (std::optional<u32> stack_frame_size = m_cpu.getStackFrameSize(*function))
 					stack_storage.stack_pointer_offset -= *stack_frame_size;
 				else
@@ -538,8 +528,6 @@ void NewLocalVariableDialog::createSymbol()
 		AsyncDialogs::warning(g_debugger_window, tr("Cannot Create Local Variable"), error_message);
 }
 
-// *****************************************************************************
-
 NewParameterVariableDialog::NewParameterVariableDialog(DebugInterface& cpu, QWidget* parent)
 	: NewSymbolDialog(REGISTER_STORAGE | STACK_STORAGE | TYPE_FIELD | FUNCTION_FIELD, 1, cpu, parent)
 {
@@ -585,7 +573,6 @@ bool NewParameterVariableDialog::parseUserInput()
 				ccc::StackStorage& stack_storage = m_storage.emplace<ccc::StackStorage>();
 				stack_storage.stack_pointer_offset = m_ui.stackPointerOffsetSpinBox->value();
 
-				// Convert to caller sp relative.
 				if (std::optional<u32> stack_frame_size = m_cpu.getStackFrameSize(*function))
 					stack_storage.stack_pointer_offset -= *stack_frame_size;
 				else

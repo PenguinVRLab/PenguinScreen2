@@ -22,11 +22,6 @@ namespace PacketReader::IP::UDP::DNS
 		u8 flags1 = 0;
 		u8 flags2 = 0;
 
-		//QuestionCount
-		//AnswerCount
-		//Authorities
-		//Additional
-
 	public:
 		std::vector<DNS_QuestionEntry> questions;
 		std::vector<DNS_ResponseEntry> answers;
@@ -70,4 +65,4 @@ namespace PacketReader::IP::UDP::DNS
 		virtual void WriteBytes(u8* buffer, int* offset);
 		virtual DNS_Packet* Clone() const;
 	};
-} // namespace PacketReader::IP::UDP::DNS
+}

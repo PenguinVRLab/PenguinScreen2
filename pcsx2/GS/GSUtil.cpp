@@ -220,23 +220,16 @@ bool GSUtil::HasSharedBits(u32 spsm, const u32* RESTRICT ptr)
 	return (ptr[spsm >> 5] & (1 << (spsm & 0x1f))) == 0;
 }
 
-// Pixels can NOT coexist in the same 32bits of space.
-// Example: Using PSMT8H or PSMT4HL/HH with CT24 would fail this check.
 bool GSUtil::HasSharedBits(u32 spsm, u32 dpsm)
 {
 	return (s_maps.SharedBitsField[dpsm][spsm >> 5] & (1 << (spsm & 0x1f))) == 0;
 }
 
-// Pixels can NOT coexist in the same 32bits of space.
-// Example: Using PSMT8H or PSMT4HL/HH with CT24 would fail this check.
-// SBP and DBO must match.
 bool GSUtil::HasSharedBits(u32 sbp, u32 spsm, u32 dbp, u32 dpsm)
 {
 	return ((sbp ^ dbp) | (s_maps.SharedBitsField[dpsm][spsm >> 5] & (1 << (spsm & 0x1f)))) == 0;
 }
 
-// Shares bit depths, only detects 16/24/32 bit formats.
-// 24/32bit cross compatible, 16bit compatbile with 16bit.
 bool GSUtil::HasCompatibleBits(u32 spsm, u32 dpsm)
 {
 	return (s_maps.CompatibleBitsField[spsm][dpsm >> 5] & (1 << (dpsm & 0x1f))) != 0;
@@ -255,8 +248,8 @@ u32 GSUtil::GetChannelMask(u32 spsm)
 		case PSMZ24:
 			return 0x7;
 		case PSMT8H:
-		case PSMT4HH: // This sucks, I'm sorry, but we don't have a way to do half channels
-		case PSMT4HL: // So uuhh TODO I guess.
+		case PSMT4HH:
+		case PSMT4HL:
 			return 0x8;
 		default:
 			return 0xf;
@@ -275,28 +268,22 @@ u32 GSUtil::GetChannelMask(u32 spsm, u32 fbmsk)
 
 GSRendererType GSUtil::GetPreferredRenderer()
 {
-	// Memorize the value, so we don't keep re-querying it.
 	static GSRendererType preferred_renderer = GSRendererType::Auto;
 	if (preferred_renderer == GSRendererType::Auto)
 	{
 #if defined(__APPLE__)
-		// Mac: Prefer Metal hardware.
 		preferred_renderer = GSRendererType::Metal;
 #elif defined(_WIN32) && defined(ARCH_ARM64)
-		// Default to DX12 on Windows-on-ARM.
 		preferred_renderer = GSRendererType::DX12;
 #elif defined(_WIN32)
-		// Use D3D device info to select renderer.
 		preferred_renderer = D3D::GetPreferredRenderer();
 #else
-		// Linux: Prefer Vulkan if the driver isn't buggy.
 #if defined(ENABLE_VULKAN)
 		if (GSDeviceVK::IsSuitableDefaultRenderer())
 			preferred_renderer = GSRendererType::VK;
 #endif
 
-			// Otherwise, whatever is available.
-	if (preferred_renderer == GSRendererType::Auto) // If it's still auto, VK wasn't selected.
+	if (preferred_renderer == GSRendererType::Auto)
 #if defined(ENABLE_OPENGL)
 		preferred_renderer = GSRendererType::OGL;
 #elif defined(ENABLE_VULKAN)
@@ -314,20 +301,17 @@ const char* GSUtil::GetPSMName(int psm)
 {
 	switch (psm)
 	{
-		// Normal color
 		case PSMCT32:  return "C_32";
 		case PSMCT24:  return "C_24";
 		case PSMCT16:  return "C_16";
 		case PSMCT16S: return "C_16S";
 
-		// Palette color
 		case PSMT8:    return "P_8";
 		case PSMT4:    return "P_4";
 		case PSMT8H:   return "P_8H";
 		case PSMT4HL:  return "P_4HL";
 		case PSMT4HH:  return "P_4HH";
 
-		// Depth
 		case PSMZ32:   return "Z_32";
 		case PSMZ24:   return "Z_24";
 		case PSMZ16:   return "Z_16";

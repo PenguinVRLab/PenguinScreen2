@@ -19,7 +19,6 @@ bool CBreakPoints::breakpointTriggered_ = false;
 BreakPointCpu CBreakPoints::breakpointTriggeredCpu_;
 bool CBreakPoints::corePaused = false;
 
-// called from the dynarec
 u32 standardizeBreakpointAddress(u32 addr)
 {
 	if (addr >= 0xFFFF8000)
@@ -63,8 +62,6 @@ void MemCheck::Action(u32 addr, bool write, int size, u32 pc)
 		Log(addr, write, size, pc);
 		if (result & MEMCHECK_BREAK)
 		{
-			//	Core_EnableStepping(true);
-			//	host->SetDebugMode(true);
 		}
 	}
 }
@@ -78,8 +75,6 @@ void MemCheck::JitBefore(u32 addr, bool write, int size, u32 pc)
 		lastPC = pc;
 		lastSize = size;
 
-		// We have to break to find out if it changed.
-		//Core_EnableStepping(true);
 	}
 	else
 	{
@@ -92,24 +87,6 @@ void MemCheck::JitCleanup()
 {
 	if (lastAddr == 0 || lastPC == 0)
 		return;
-	/*
-	// Here's the tricky part: would this have changed memory?
-	// Note that it did not actually get written.
-	bool changed = MIPSAnalyst::OpWouldChangeMemory(lastPC, lastAddr);
-	if (changed)
-	{
-		++numHits;
-		Log(lastAddr, true, lastSize, lastPC);
-	}
-
-	// Resume if it should not have gone to stepping, or if it did not change.
-	if ((!(result & MEMCHECK_BREAK) || !changed) && coreState == CORE_STEPPING)
-	{
-		CBreakPoints::SetSkipFirst(lastPC);
-		Core_EnableStepping(false);
-	}
-	else
-		host->SetDebugMode(true);*/
 }
 
 size_t CBreakPoints::FindBreakpoint(BreakPointCpu cpu, u32 addr, bool matchTemp, bool temp)
@@ -151,7 +128,6 @@ bool CBreakPoints::IsAddressBreakPoint(BreakPointCpu cpu, u32 addr)
 	size_t bp = FindBreakpoint(cpu, addr);
 	if (bp != INVALID_BREAKPOINT && breakPoints_[bp].enabled)
 		return true;
-	// Check again for overlapping temp breakpoint
 	bp = FindBreakpoint(cpu, addr, true, true);
 	return bp != INVALID_BREAKPOINT && breakPoints_[bp].enabled;
 }
@@ -208,7 +184,6 @@ void CBreakPoints::RemoveBreakPoint(BreakPointCpu cpu, u32 addr)
 	{
 		breakPoints_.erase(breakPoints_.begin() + bp);
 
-		// Check again, there might've been an overlapping temp breakpoint.
 		bp = FindBreakpoint(cpu, addr);
 		if (bp != INVALID_BREAKPOINT)
 			breakPoints_.erase(breakPoints_.begin() + bp);
@@ -275,7 +250,6 @@ void CBreakPoints::ChangeBreakPointRemoveCond(BreakPointCpu cpu, u32 addr)
 BreakPointCond* CBreakPoints::GetBreakPointCondition(BreakPointCpu cpu, u32 addr)
 {
 	size_t bp = FindBreakpoint(cpu, addr, true, true);
-	//temp breakpoints are unconditional
 	if (bp != INVALID_BREAKPOINT)
 		return NULL;
 
@@ -297,7 +271,6 @@ void CBreakPoints::ChangeBreakPointDescription(BreakPointCpu cpu, u32 addr, cons
 
 void CBreakPoints::AddMemCheck(BreakPointCpu cpu, u32 start, u32 end, MemCheckCondition cond, MemCheckResult result)
 {
-	// This will ruin any pending memchecks.
 	cleanupMemChecks_.clear();
 
 	const size_t mc = FindMemCheck(cpu, start, end);
@@ -323,7 +296,6 @@ void CBreakPoints::AddMemCheck(BreakPointCpu cpu, u32 start, u32 end, MemCheckCo
 
 void CBreakPoints::RemoveMemCheck(BreakPointCpu cpu, u32 start, u32 end)
 {
-	// This will ruin any pending memchecks.
 	cleanupMemChecks_.clear();
 
 	const size_t mc = FindMemCheck(cpu, start, end);
@@ -378,7 +350,6 @@ void CBreakPoints::ChangeMemCheckDescription(BreakPointCpu cpu, u32 start, u32 e
 
 void CBreakPoints::ClearAllMemChecks()
 {
-	// This will ruin any pending memchecks.
 	cleanupMemChecks_.clear();
 
 	if (!memChecks_.empty())
@@ -442,7 +413,6 @@ const std::vector<MemCheck> CBreakPoints::GetMemCheckRanges()
 	for (auto it = memChecks_.begin(), end = memChecks_.end(); it != end; ++it)
 	{
 		MemCheck check = *it;
-		// Toggle the cached part of the address.
 		check.start ^= 0x40000000;
 		if (check.end != 0)
 			check.end ^= 0x40000000;
@@ -488,7 +458,7 @@ void CBreakPoints::Update(BreakPointCpu cpu, u32 addr)
 	bool resume = false;
 	if (!r5900Debug.isCpuPaused())
 	{
-		corePaused = true; // This will be set to false in whatever handles the VM pause event
+		corePaused = true;
 		r5900Debug.pauseCpu();
 		resume = true;
 	}

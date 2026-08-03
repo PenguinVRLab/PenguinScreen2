@@ -44,10 +44,6 @@ void SPU2::FileLog(const char* fmt, ...)
 	va_end(ap);
 }
 
-//Note to developer on the usage of ConLog:
-//  while ConLog doesn't print anything if messages to console are disabled at the GUI,
-//    it's still better to outright not call it on tight loop scenarios, by testing MsgToConsole() (which is inline and very quick).
-//    Else, there's some (small) overhead in calling and returning from ConLog.
 void SPU2::ConLog(const char* fmt, ...)
 {
 	if (!SPU2::MsgToConsole())
@@ -271,16 +267,15 @@ __forceinline static void _RegLog_(const char* action, int level, const char* RN
 
 void SPU2::WriteRegLog(const char* action, u32 rmem, u16 value)
 {
-	//u32 vx=0, vc=0;
 	u32 core = 0, omem, mem;
-	omem = mem = rmem & 0x7FF; //FFFF;
+	omem = mem = rmem & 0x7FF;
 	if (mem & 0x400)
 	{
 		omem ^= 0x400;
 		core = 1;
 	}
 
-	if (omem < 0x0180) // Voice Params (VP)
+	if (omem < 0x0180)
 	{
 		const u32 voice = (omem & 0x1F0) >> 4;
 		const u32 param = (omem & 0xF) >> 1;
@@ -288,7 +283,7 @@ void SPU2::WriteRegLog(const char* action, u32 rmem, u16 value)
 		snprintf(dest, std::size(dest), "Voice %d %s", voice, ParamNames[param]);
 		RegLog(2, dest, rmem, core, value);
 	}
-	else if ((omem >= 0x01C0) && (omem < 0x02E0)) // Voice Addressing Params (VA)
+	else if ((omem >= 0x01C0) && (omem < 0x02E0))
 	{
 		const u32 voice = ((omem - 0x01C0) / 12);
 		const u32 address = ((omem - 0x01C0) % 12) >> 1;
@@ -479,11 +474,9 @@ void SPU2::WriteRegLog(const char* action, u32 rmem, u16 value)
 				RegLog(2, "TSAL", rmem, core, value);
 				break;
 			case REG_S_ENDX:
-				//ConLog("* SPU2: Core %d ENDX cleared!\n",core);
 				RegLog(2, "ENDX0", rmem, core, value);
 				break;
 			case (REG_S_ENDX + 2):
-				//ConLog("* SPU2: Core %d ENDX cleared!\n",core);
 				RegLog(2, "ENDX1", rmem, core, value);
 				break;
 			case REG_P_MVOLL:
@@ -494,7 +487,6 @@ void SPU2::WriteRegLog(const char* action, u32 rmem, u16 value)
 				break;
 			case REG_S_ADMAS:
 				RegLog(3, "ADMAS", rmem, core, value);
-				//ConLog("* SPU2: Core %d AutoDMAControl set to %d\n",core,value);
 				break;
 			case REG_P_STATX:
 				RegLog(3, "STATX", rmem, core, value);
@@ -549,4 +541,4 @@ void SPU2::WriteRegLog(const char* action, u32 rmem, u16 value)
 
 #undef RegLog
 
-#endif // PCSX2_DEVBUILD
+#endif

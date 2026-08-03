@@ -9,10 +9,6 @@ using namespace x86Emitter;
 
 namespace R5900::Dynarec::OpcodeImpl
 {
-/*********************************************************
-* Register branch logic                                  *
-* Format:  OP rs, rt, offset                             *
-*********************************************************/
 #ifndef BRANCH_RECOMPILE
 
 namespace Interp = R5900::Interpreter::OpcodeImpl;
@@ -38,8 +34,6 @@ REC_SYS_DEL(BGEZALL, 31);
 
 static void recSetBranchEQ(int bne, int process)
 {
-	// TODO(Stenzek): This is suboptimal if the registers are in XMMs.
-	// If the constant register is already in a host register, we don't need the immediate...
 
 	if (process & PROCESS_CONSTS)
 	{
@@ -65,7 +59,6 @@ static void recSetBranchEQ(int bne, int process)
 	}
 	else
 	{
-		// force S into register, since we need to load it, may as well cache.
 		_deleteGPRtoXMMreg(_Rt_, DELETE_REG_FLUSH_AND_FREE);
 		const int regs = _allocX86reg(X86TYPE_GPR, _Rs_, MODE_READ);
 		const int regt = _checkX86reg(X86TYPE_GPR, _Rt_, MODE_READ);
@@ -113,7 +106,6 @@ static void recSetBranchL(int ltz)
 		j32Ptr[0] = JL32(0);
 }
 
-//// BEQ
 static void recBEQ_const()
 {
 	u32 branchTo;
@@ -154,7 +146,6 @@ static void recBEQ_process(int process)
 
 		if (!swap)
 		{
-			// recopy the next inst
 			pc -= 4;
 			LoadBranchState();
 			recompileNextInstruction(true, false);
@@ -166,7 +157,6 @@ static void recBEQ_process(int process)
 
 void recBEQ()
 {
-	// prefer using the host register over an immediate, it'll be smaller code.
 	if (GPR_IS_CONST2(_Rs_, _Rt_))
 		recBEQ_const();
 	else if (GPR_IS_CONST1(_Rs_) && _checkX86reg(X86TYPE_GPR, _Rs_, MODE_READ) < 0)
@@ -177,7 +167,6 @@ void recBEQ()
 		recBEQ_process(0);
 }
 
-//// BNE
 static void recBNE_const()
 {
 	u32 branchTo;
@@ -218,7 +207,6 @@ static void recBNE_process(int process)
 
 	if (!swap)
 	{
-		// recopy the next inst
 		pc -= 4;
 		LoadBranchState();
 		recompileNextInstruction(true, false);
@@ -239,7 +227,6 @@ void recBNE()
 		recBNE_process(0);
 }
 
-//// BEQL
 static void recBEQL_const()
 {
 	if (g_cpuConstRegs[_Rs_].SD[0] == g_cpuConstRegs[_Rt_].SD[0])
@@ -281,7 +268,6 @@ void recBEQL()
 		recBEQL_process(0);
 }
 
-//// BNEL
 static void recBNEL_const()
 {
 	if (g_cpuConstRegs[_Rs_].SD[0] != g_cpuConstRegs[_Rt_].SD[0])
@@ -307,7 +293,6 @@ static void recBNEL_process(int process)
 
 	x86SetJ32(j32Ptr[0]);
 
-	// recopy the next inst
 	LoadBranchState();
 	recompileNextInstruction(true, false);
 	SetBranchImm(branchTo);
@@ -325,24 +310,6 @@ void recBNEL()
 		recBNEL_process(0);
 }
 
-/*********************************************************
-* Register branch logic                                  *
-* Format:  OP rs, offset                                 *
-*********************************************************/
-
-////////////////////////////////////////////////////
-//void recBLTZAL()
-//{
-//	Console.WriteLn("BLTZAL");
-//	_eeFlushAllUnused();
-//	xMOV(ptr32[(u32*)((int)&cpuRegs.code)], cpuRegs.code );
-//	xMOV(ptr32[(u32*)((int)&cpuRegs.pc)], pc );
-//	iFlushCall(FLUSH_EVERYTHING);
-//	xFastCall((void*)(int)BLTZAL );
-//	branch = 2;
-//}
-
-////////////////////////////////////////////////////
 void recBLTZAL()
 {
 	EE::Profiler.EmitOp(eeOpcode::BLTZAL);
@@ -382,7 +349,6 @@ void recBLTZAL()
 
 	if (!swap)
 	{
-		// recopy the next inst
 		pc -= 4;
 		LoadBranchState();
 		recompileNextInstruction(true, false);
@@ -391,7 +357,6 @@ void recBLTZAL()
 	SetBranchImm(pc);
 }
 
-////////////////////////////////////////////////////
 void recBGEZAL()
 {
 	EE::Profiler.EmitOp(eeOpcode::BGEZAL);
@@ -431,7 +396,6 @@ void recBGEZAL()
 
 	if (!swap)
 	{
-		// recopy the next inst
 		pc -= 4;
 		LoadBranchState();
 		recompileNextInstruction(true, false);
@@ -440,7 +404,6 @@ void recBGEZAL()
 	SetBranchImm(pc);
 }
 
-////////////////////////////////////////////////////
 void recBLTZALL()
 {
 	EE::Profiler.EmitOp(eeOpcode::BLTZALL);
@@ -478,7 +441,6 @@ void recBLTZALL()
 	SetBranchImm(pc);
 }
 
-////////////////////////////////////////////////////
 void recBGEZALL()
 {
 	EE::Profiler.EmitOp(eeOpcode::BGEZALL);
@@ -517,7 +479,6 @@ void recBGEZALL()
 }
 
 
-//// BLEZ
 void recBLEZ()
 {
 	EE::Profiler.EmitOp(eeOpcode::BLEZ);
@@ -557,7 +518,6 @@ void recBLEZ()
 
 	if (!swap)
 	{
-		// recopy the next inst
 		pc -= 4;
 		LoadBranchState();
 		recompileNextInstruction(true, false);
@@ -566,7 +526,6 @@ void recBLEZ()
 	SetBranchImm(pc);
 }
 
-//// BGTZ
 void recBGTZ()
 {
 	EE::Profiler.EmitOp(eeOpcode::BGTZ);
@@ -606,7 +565,6 @@ void recBGTZ()
 
 	if (!swap)
 	{
-		// recopy the next inst
 		pc -= 4;
 		LoadBranchState();
 		recompileNextInstruction(true, false);
@@ -615,7 +573,6 @@ void recBGTZ()
 	SetBranchImm(pc);
 }
 
-////////////////////////////////////////////////////
 void recBLTZ()
 {
 	EE::Profiler.EmitOp(eeOpcode::BLTZ);
@@ -648,7 +605,6 @@ void recBLTZ()
 
 	if (!swap)
 	{
-		// recopy the next inst
 		pc -= 4;
 		LoadBranchState();
 		recompileNextInstruction(true, false);
@@ -657,7 +613,6 @@ void recBLTZ()
 	SetBranchImm(pc);
 }
 
-////////////////////////////////////////////////////
 void recBGEZ()
 {
 	EE::Profiler.EmitOp(eeOpcode::BGEZ);
@@ -691,7 +646,6 @@ void recBGEZ()
 
 	if (!swap)
 	{
-		// recopy the next inst
 		pc -= 4;
 		LoadBranchState();
 		recompileNextInstruction(true, false);
@@ -700,7 +654,6 @@ void recBGEZ()
 	SetBranchImm(pc);
 }
 
-////////////////////////////////////////////////////
 void recBLTZL()
 {
 	EE::Profiler.EmitOp(eeOpcode::BLTZL);
@@ -733,7 +686,6 @@ void recBLTZL()
 }
 
 
-////////////////////////////////////////////////////
 void recBGEZL()
 {
 	EE::Profiler.EmitOp(eeOpcode::BGEZL);
@@ -767,12 +719,6 @@ void recBGEZL()
 
 
 
-/*********************************************************
-* Register branch logic  Likely                          *
-* Format:  OP rs, offset                                 *
-*********************************************************/
-
-////////////////////////////////////////////////////
 void recBLEZL()
 {
 	EE::Profiler.EmitOp(eeOpcode::BLEZL);
@@ -811,7 +757,6 @@ void recBLEZL()
 	SetBranchImm(pc);
 }
 
-////////////////////////////////////////////////////
 void recBGTZL()
 {
 	EE::Profiler.EmitOp(eeOpcode::BGTZL);
@@ -853,4 +798,4 @@ void recBGTZL()
 
 #endif
 
-} // namespace R5900::Dynarec::OpcodeImpl
+}

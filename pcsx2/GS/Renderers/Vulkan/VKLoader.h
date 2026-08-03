@@ -10,7 +10,6 @@ class Error;
 #ifdef _WIN32
 #define VK_USE_PLATFORM_WIN32_KHR
 
-// vulkan.h pulls in windows.h on Windows, so we need to include our replacement header first
 #include "common/RedtapeWindows.h"
 #endif
 
@@ -30,7 +29,6 @@ class Error;
 
 #if defined(X11_API)
 
-// This breaks a bunch of our code. They shouldn't be #defines in the first place.
 #ifdef None
 #undef None
 #endif
@@ -69,7 +67,6 @@ class Error;
 
 #include "VKEntryPoints.h"
 
-// We include vk_mem_alloc globally, so we don't accidentally include it before the vulkan header somewhere.
 #ifdef __clang__
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wnullability-completeness"
@@ -95,4 +92,4 @@ namespace Vulkan
 	bool LoadVulkanDeviceFunctions(VkDevice device);
 	void UnloadVulkanLibrary();
 	void ResetVulkanLibraryFunctionPointers();
-} // namespace Vulkan
+}

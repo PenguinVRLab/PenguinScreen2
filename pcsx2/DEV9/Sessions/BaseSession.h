@@ -10,7 +10,7 @@
 
 namespace Sessions
 {
-	class BaseSession; //Forward declare
+	class BaseSession;
 
 	typedef std::function<void(BaseSession*)> ConnectionClosedEventHandler;
 
@@ -58,9 +58,8 @@ namespace Sessions
 	protected:
 		void RaiseEventConnectionClosed();
 	};
-} // namespace Sessions
+}
 
-//ConnectionKey Hash function
 template <>
 struct std::hash<Sessions::ConnectionKey>
 {

@@ -13,22 +13,12 @@ extern uptr *psxMemWLUT;
 extern const uptr *psxMemRLUT;
 
 
-// Obtains a writable pointer into the IOP's memory, with TLB address translation.
-// If the address maps to read-only memory, NULL is returned.
-// Hacky!  This should really never be used, ever, since it bypasses the iop's Hardware
-// Register handler and SPU/DEV/USB maps.
 template<typename T>
 static __fi T* iopVirtMemW( u32 mem )
 {
 	return (psxMemWLUT[(mem) >> 16] == 0) ? NULL : (T*)(psxMemWLUT[(mem) >> 16] + ((mem) & 0xffff));
 }
 
-// Obtains a read-safe pointer into the IOP's physical memory, with TLB address translation.
-// Returns NULL if the address maps to an invalid/unmapped physical address.
-//
-// Hacky!  This should really never be used, since anything reading through the
-// TLB should be using iopMemRead/Write instead for each individual access.  That ensures
-// correct handling of page boundary crossings.
 template<typename T>
 static __fi const T* iopVirtMemR( u32 mem )
 {
@@ -36,7 +26,6 @@ static __fi const T* iopVirtMemR( u32 mem )
 	return (psxMemRLUT[mem >> 16] == 0) ? NULL : (const T*)(psxMemRLUT[mem >> 16] + (mem & 0xffff));
 }
 
-// Obtains a pointer to the IOP's physical mapping (bypasses the TLB)
 static __fi u8* iopPhysMem( u32 addr )
 {
 	return &iopMem->Main[addr & (Ps2MemSize::ExposedIopRam - 1)];
@@ -74,7 +63,6 @@ extern void iopMemWrite8 (u32 mem, u8 value);
 extern void iopMemWrite16(u32 mem, u16 value);
 extern void iopMemWrite32(u32 mem, u32 value);
 
-// NOTE: Does not call MMIO handlers.
 extern int iopMemSafeCmpBytes(u32 mem, const void* src, u32 size);
 extern bool iopMemSafeReadBytes(u32 mem, void* dst, u32 size);
 extern bool iopMemSafeWriteBytes(u32 mem, const void* src, u32 size);
@@ -83,7 +71,6 @@ std::string iopMemReadString(u32 mem, int maxlen = 65536);
 
 namespace IopMemory
 {
-	// Sif functions not made yet (will for future Iop improvements):
 	extern mem8_t SifRead8( u32 iopaddr );
 	extern mem16_t SifRead16( u32 iopaddr );
 	extern mem32_t SifRead32( u32 iopaddr );

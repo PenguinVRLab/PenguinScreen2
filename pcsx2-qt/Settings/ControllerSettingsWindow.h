@@ -55,7 +55,6 @@ public:
 	void updateListDescription(u32 global_slot, ControllerBindingWidget* widget);
 	void updateListDescription(u32 port, USBDeviceWidget* widget);
 
-	// Helper functions for updating setting values globally or in the profile.
 	bool getBoolValue(const char* section, const char* key, bool default_value) const;
 	s32 getIntValue(const char* section, const char* key, s32 default_value) const;
 	std::string getStringValue(const char* section, const char* key, const char* default_value) const;

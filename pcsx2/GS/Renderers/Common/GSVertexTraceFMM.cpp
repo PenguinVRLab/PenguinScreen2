@@ -77,7 +77,6 @@ void GSVertexTraceFMM::FindMinMax(GSVertexTrace& vt, const void* vertex, const u
 
 	const GSVertex* RESTRICT v = (GSVertex*)vertex;
 
-	// Process 2 vertices at a time for increased efficiency
 	auto processVertices = [&tmin, &tmax, &cmin, &cmax, &pmin, &pmax, &tnan](const GSVertex& v0, const GSVertex& v1, bool finalVertex)
 	{
 		if (color)
@@ -91,9 +90,7 @@ void GSVertexTraceFMM::FindMinMax(GSVertexTrace& vt, const void* vertex, const u
 			}
 			else if (n == 2)
 			{
-				// For even n, we process v1 and v2 of the same prim
-				// (For odd n, we process one vertex from each of two prims)
-				GSVector4i c = c1; // second color is provoking in flat-shaded primitives
+				GSVector4i c = c1;
 				cmin = cmin.min_u8(c);
 				cmax = cmax.max_u8(c);
 			}
@@ -107,16 +104,11 @@ void GSVertexTraceFMM::FindMinMax(GSVertexTrace& vt, const void* vertex, const u
 				GSVector4 stq1 = GSVector4::cast(GSVector4i(v1.m[0]));
 
 				GSVector4 q;
-				// Sprites always have indices == vertices, so we don't have to look at the index table here
 				if (primclass == GS_SPRITE_CLASS)
 					q = stq1.wwww();
 				else
 					q = stq0.wwww(stq1);
 
-				// Note: If in the future this is changed in a way that causes parts of calculations to go unused,
-				//       make sure to remove the z (rgba) field as it's often denormal.
-				//       Then, use GSVector4::noopt() to prevent clang from optimizing out your "useless" shuffle
-				//       e.g. stq = (stq.xyww() / stq.wwww()).noopt().xyww(stq);
 				GSVector4 st = stq0.xyxy(stq1) / q;
 
 				stq0 = st.xyww(primclass == GS_SPRITE_CLASS ? stq1 : stq0);
@@ -125,7 +117,6 @@ void GSVertexTraceFMM::FindMinMax(GSVertexTrace& vt, const void* vertex, const u
 				const GSVector4i nan0 = GSVector4i::cast(stq0 != stq0);
 				const GSVector4i nan1 = GSVector4i::cast(stq1 != stq1);
 
-				// Only update entries that are not NaN.
 				tmin = tmin.blend32(tmin.min(stq0), GSVector4::cast(~nan0));
 				tmin = tmin.blend32(tmin.min(stq1), GSVector4::cast(~nan1));
 				tmax = tmax.blend32(tmax.max(stq0), GSVector4::cast(~nan0));
@@ -168,17 +159,15 @@ void GSVertexTraceFMM::FindMinMax(GSVertexTrace& vt, const void* vertex, const u
 			processVertices(v[index[i + 0]], v[index[i + 1]], false);
 		}
 	}
-	else if (iip || n == 1) // iip means final and non-final vertexes are treated the same
+	else if (iip || n == 1)
 	{
 		int i = 0;
-		for (; i < (count - 1); i += 2) // 2x loop unroll
+		for (; i < (count - 1); i += 2)
 		{
 			processVertices(v[index[i + 0]], v[index[i + 1]], true);
 		}
 		if (count & 1)
 		{
-			// Compiler optimizations go!
-			// (And if they don't, it's only one vertex out of many)
 			processVertices(v[index[i]], v[index[i]], true);
 		}
 	}
@@ -194,8 +183,6 @@ void GSVertexTraceFMM::FindMinMax(GSVertexTrace& vt, const void* vertex, const u
 		if (count & 1)
 		{
 			processVertices(v[index[i + 0]], v[index[i + 1]], false);
-			// Compiler optimizations go!
-			// (And if they don't, it's only one vertex out of many)
 			processVertices(v[index[i + 2]], v[index[i + 2]], true);
 		}
 	}
@@ -210,7 +197,6 @@ void GSVertexTraceFMM::FindMinMax(GSVertexTrace& vt, const void* vertex, const u
 	vt.m_min.p = (GSVector4(pmin) - o) * s;
 	vt.m_max.p = (GSVector4(pmax) - o) * s;
 
-	// Fix signed int conversion
 	vt.m_min.p = vt.m_min.p.insert32<0, 2>(GSVector4::load((float)(u32)pmin.extract32<2>()));
 	vt.m_max.p = vt.m_max.p.insert32<0, 2>(GSVector4::load((float)(u32)pmax.extract32<2>()));
 
@@ -229,7 +215,7 @@ void GSVertexTraceFMM::FindMinMax(GSVertexTrace& vt, const void* vertex, const u
 		vt.m_max.t = tmax * s;
 
 		if (!fst)
-			vt.nan.value = tnan.mask() & ~4; // Remove pad bit.
+			vt.nan.value = tnan.mask() & ~4;
 	}
 	else
 	{

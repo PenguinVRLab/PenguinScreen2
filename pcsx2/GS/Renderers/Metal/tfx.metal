@@ -199,28 +199,22 @@ struct MainPSOut
 	}
 };
 
-// MARK: - Vertex functions
-
 static void texture_coord(thread const MainVSIn& v, thread MainVSOut& out, constant GSMTLMainVSUniform& cb)
 {
 	float2 uv = float2(v.uv) - cb.texture_offset;
 	float2 st = v.st - cb.texture_offset;
 
-	// Float coordinate
 	out.t.xy = st;
 	out.t.w = v.q;
 
-	// Integer coordinate => normalized
 	out.ti.xy = uv * cb.texture_scale;
 
 	if (FST)
 	{
-		// Integer coordinate => integral
 		out.ti.zw = uv;
 	}
 	else
 	{
-		// Some games uses float coordinate for post-processing effects
 		out.ti.zw = st / cb.texture_scale;
 	}
 }
@@ -229,7 +223,6 @@ static MainVSOut vs_main_run(thread const MainVSIn& v, constant GSMTLMainVSUnifo
 {
 	constexpr float exp_min32 = 0x1p-32;
 	MainVSOut out;
-	// Clamp to max depth, gs doesn't wrap
 	uint z = min(v.z, cb.max_depth);
 	out.p.xy = float2(v.p) - float2(0.05, 0.05);
 	out.p.xy = out.p.xy * float2(cb.vertex_scale.x, -cb.vertex_scale.y) - float2(cb.vertex_offset.x, -cb.vertex_offset.y);
@@ -243,7 +236,7 @@ static MainVSOut vs_main_run(thread const MainVSIn& v, constant GSMTLMainVSUnifo
 	else
 		out.fc = v.c;
 
-	out.t.z = v.f.x; // pack fog with texture
+	out.t.z = v.f.x;
 
 	if (VS_POINT_SIZE)
 		out.point_size = cb.point_size.x;
@@ -269,13 +262,11 @@ static MainVSIn load_vertex(GSMTLMainVertex base)
 	return out;
 }
 
-// Convert XY from NDC to GS pixel coordinates (i.e. 1.0 = 1 GS pixel).
 static float2 get_xy_unscaled(float2 xy, constant GSMTLMainVSUniform& cb [[buffer(GSMTLBufferIndexHWUniforms)]])
 {
 	return round(xy / cb.vertex_scale) / 16.0f;
 }
 
-// Get the XY deltas in GS pixel coordinates, using first vertex as the origin.
 static float2x2 get_xy_deltas_unscaled(thread const MainVSOut& v0, thread const MainVSOut& v1, thread const MainVSOut& v2,
 	constant GSMTLMainVSUniform& cb [[buffer(GSMTLBufferIndexHWUniforms)]])
 {
@@ -285,10 +276,6 @@ static float2x2 get_xy_deltas_unscaled(thread const MainVSOut& v0, thread const 
 	return float2x2(xy1 - xy0, xy2 - xy0);
 }
 
-// Get the AA1 outward expand direction to the edge formed by the first two vertices.
-// This is up or down for shallow (X dominant) edges, and right or left for steep (Y dominant) edges.
-// Similar expansion to line AA1 except instead of expanding on both sides of the line,
-// expand on on the side towards the outside of the triangle.
 float2 get_aa1_triangle_expand_dir(thread const MainVSOut& v0, thread const MainVSOut& v1, thread const MainVSOut& v2,
 	constant GSMTLMainVSUniform& cb [[buffer(GSMTLBufferIndexHWUniforms)]])
 {
@@ -301,7 +288,6 @@ float2 get_aa1_triangle_expand_dir(thread const MainVSOut& v0, thread const Main
 
 	if ((dot(line_expand, line_normal) >= 0.0f) == (dot(line_opposite, line_normal) >= 0.0f))
 	{
-		// Expand direction point towards the interior so flip it.
 		line_expand = -line_expand;
 	}
 
@@ -313,12 +299,9 @@ float2x2 get_inverse(const thread float2x2& mat, float det)
 	return float2x2(mat[1][1], -mat[0][1], -mat[1][0], mat[0][0]) * (1 / det);
 }
 
-// Extrapolate triangle attributes from the first vertex along the given direction.
-// dp_mat is derived from the input vertices, it is passed in to avoid recomputing.
 void extrapolate_aa1_triangle_edge(thread MainVSOut& v0, thread const MainVSOut& v1, thread const MainVSOut& v2,
 	thread const float2x2& dp_mat, float2 dp, constant GSMTLMainVSUniform& cb [[buffer(GSMTLBufferIndexHWUniforms)]])
 {
-	// Get texture deltas
 	float2x2 dt;
 	if (FST)
 	{
@@ -329,35 +312,30 @@ void extrapolate_aa1_triangle_edge(thread MainVSOut& v0, thread const MainVSOut&
 		dt = float2x2(v1.t.xy - v0.t.xy, v2.t.xy - v0.t.xy);
 	}
 
-	// Get color delta if interpolating
 	float2x4 dc;
 	if (IIP)
 	{
 		dc = float2x4(v1.c - v0.c, v2.c - v0.c);
 	}
 
-	float2 dz = float2(v1.p.z - v0.p.z, v2.p.z - v0.p.z); // Z deltas
+	float2 dz = float2(v1.p.z - v0.p.z, v2.p.z - v0.p.z);
 
-	float2 df = float2(v1.t.z - v0.t.z, v2.t.z - v0.t.z); // Fog deltas
+	float2 df = float2(v1.t.z - v0.t.z, v2.t.z - v0.t.z);
 
-	float2 dq = float2(v1.t.w - v0.t.w, v2.t.w - v0.t.w); // Q deltas
+	float2 dq = float2(v1.t.w - v0.t.w, v2.t.w - v0.t.w);
 
-	// To prevent unstable extrapolation, do not extrapolate if the
-	// minimum perpendicular length of the triangle is < 2 pixels.
-	float dp_det = determinant(dp_mat); // Twice signed triangle area.
+	float dp_det = determinant(dp_mat);
 	float len0 = length(dp_mat[0]);
 	float len1 = length(dp_mat[1]);
 	float len2 = length(dp_mat[1] - dp_mat[0]);
 	float min_perp_length = abs(dp_det) / max(max(len0, len1), len2);
 
-	// Get the position -> barycentric weight matrix
 	float2x2 inv_dp_mat = get_inverse(dp_mat, dp_det);
 
 	float2 weights = min_perp_length < 2 ? 0 : inv_dp_mat * dp;
 
-	v0.p.xy += dp * cb.point_size; // Extrapolate position
+	v0.p.xy += dp * cb.point_size;
 
-	// Extrapolate texture coords
 	if (FST)
 	{
 			v0.ti.zw += dt * weights;
@@ -370,16 +348,15 @@ void extrapolate_aa1_triangle_edge(thread MainVSOut& v0, thread const MainVSOut&
 		v0.t.w += dot(dq, weights);
 	}
 
-	// Extrapolate and clamp color
 	if (IIP)
 	{
 		v0.c += dc * weights;
 		v0.c = clamp(v0.c, 0, 255);
 	}
 
-	v0.p.z += dot(dz, weights); // Extrapolate depth
+	v0.p.z += dot(dz, weights);
 
-	v0.t.z += dot(df, weights); // Extrapolate fog
+	v0.t.z += dot(df, weights);
 }
 
 vertex MainVSOut vs_main_expand(
@@ -411,7 +388,6 @@ vertex MainVSOut vs_main_expand(
 			MainVSOut point = vs_main_run(load_vertex(vertices[vid_base]), cb);
 			MainVSOut other = vs_main_run(load_vertex(vertices[vid_other]), cb);
 
-			// Use bottom minus top for delta regardless of which vertex we are expanding.
 			float2 line_delta = is_bottom ? point.p.xy - other.p.xy : other.p.xy - point.p.xy;
 			float2 line_vector = normalize(line_delta / cb.vertex_scale);
 			float2 line_expand = float2(line_vector.y, -line_vector.x);
@@ -426,10 +402,6 @@ vertex MainVSOut vs_main_expand(
 			if (VS_EXPAND_TYPE == VSExpand::LineAA1)
 				point.inv_cov = is_right ? 1.f : -1.f;
 
-			// Lines will be run as (0 1 2) (1 2 3)
-			// This means that both triangles will have a point based off the top line point as their first point
-			// So we don't have to do anything for !IIP
-
 			return point;
 		}
 		case VSExpand::Sprite:
@@ -437,7 +409,6 @@ vertex MainVSOut vs_main_expand(
 			uint vid_base = vid >> 1;
 			bool is_bottom = vid & 2;
 			bool is_right = vid & 1;
-			// Sprite points are always in pairs
 			uint vid_lt = vid_base & ~1;
 			uint vid_rb = vid_base | 1;
 
@@ -463,17 +434,9 @@ vertex MainVSOut vs_main_expand(
 		}
 		case VSExpand::TriangleAA1:
 		{
-			// Triangles with AA1 are expanded as follows:
-			// - Vertices 0-2: Interior of triangle (1 triangle).
-			// - Vertices 3-8: First edge expanded (2 triangles).
-			// - Vertices 9-14: Second edge expanded (2 triangles).
-			// - Vertices 15-20: Third edge expanded (2 triangles).
-			// - Vertices 21-26: First corner cap (2 triangles).
-			// - Vertices 27-32: Second corner cap (2 triangles).
-			// - Vertices 33-38: Third corner cap (2 triangles).
 
 			uint prim_id = vid / 39;
-			uint prim_offset = vid - 39 * prim_id; // range: 0-38
+			uint prim_offset = vid - 39 * prim_id;
 			bool interior = prim_offset < 3;
 			bool edge = 3 <= prim_offset && prim_offset < 21;
 
@@ -486,15 +449,12 @@ vertex MainVSOut vs_main_expand(
 			}
 			else if (edge)
 			{
-				// Vertex indices for this edge. We need all 3 for determining exterior/interior.
-				uint prim_offset_edges = prim_offset - 3; // range: 0-17
+				uint prim_offset_edges = prim_offset - 3;
 				uint i0 = prim_offset_edges / 6;
 				uint i1 = (i0 >= 2) ? i0 - 2 : i0 + 1;
 				uint i2 = (i0 >= 1) ? i0 - 1 : i0 + 2;
-				uint edge_offset = prim_offset_edges - 6 * i0; // range: 0-5
+				uint edge_offset = prim_offset_edges - 6 * i0;
 
-				// Note: order of top/bottom, inside/outside is arbitrary,
-				// as long as it assembles into two triangles forming a quad.
 				bool is_bottom = (2 <= edge_offset) && (edge_offset <= 4);
 				bool is_outside = edge_offset & 1;
 
@@ -506,21 +466,19 @@ vertex MainVSOut vs_main_expand(
 
 				float2 expand_dir = is_outside ? get_aa1_triangle_expand_dir(out, other, opposite, cb) : 0;
 
-				// Do actual extrapolation, or no-op if expand_dir == 0.
 				extrapolate_aa1_triangle_edge(out, other, opposite, pos_deltas, expand_dir, cb);
 
-				out.inv_cov = is_outside ? 1.0f : 0.0f; // No coverage on outside, otherwise full.
+				out.inv_cov = is_outside ? 1.0f : 0.0f;
 
 				out.interior = 0;
 			}
-			else // Corner cap
+			else
 			{
-				// Vertex indices for this cap. We need all 3 for determining exterior/interior.
-				uint prim_offset_cap = prim_offset - 21; // range: 0-8
+				uint prim_offset_cap = prim_offset - 21;
 				uint i0 = prim_offset_cap / 6;
 				uint i1 = (i0 >= 2) ? i0 - 2 : i0 + 1;
 				uint i2 = (i0 >= 1) ? i0 - 1 : i0 + 2;
-				uint cap_offset = prim_offset_cap - 6 * i0; // range: 0-5
+				uint cap_offset = prim_offset_cap - 6 * i0;
 
 				bool is_near_corner = cap_offset == 0 || cap_offset == 3;
 				bool is_far_corner = cap_offset == 2 || cap_offset == 5;
@@ -532,27 +490,20 @@ vertex MainVSOut vs_main_expand(
 
 				float2x2 pos_deltas = get_xy_deltas_unscaled(out, other, opposite, cb);
 
-				// Get the edge expansion directions of both incident edges.
 				float2 edge_expand_dir_0 = get_aa1_triangle_expand_dir(out, other, opposite, cb);
 				float2 edge_expand_dir_1 = get_aa1_triangle_expand_dir(out, opposite, other, cb);
 
-				// Check if the corner is already filled by the expanded edges.
-				// This happens if the expand directions are the same.
-				// If so we output a degenerate triangle at this corner.
 				bool corner_filled = all(edge_expand_dir_0 == edge_expand_dir_1);
 
-				// Nothing if corner is filled, otherwise opposite to the bisector of the corner angle.
 				float2 far_corner_dir = corner_filled ? 0 : -normalize((pos_deltas[0] + pos_deltas[1]) / 2);
 
-				// Determine the expand direction.
-				float2 expand_dir = is_near_corner ? 0 :             // No extrapolation
-														is_far_corner ? far_corner_dir : // Opposite to the angle bisector of corner
-														edge_expand_dir_0;               // Standard AA1 edge expansion
+				float2 expand_dir = is_near_corner ? 0 :
+														is_far_corner ? far_corner_dir :
+														edge_expand_dir_0;
 
-				// Do the actual extrapolation (no-op if expand_dir == 0).
 				extrapolate_aa1_triangle_edge(out, other, opposite, pos_deltas, expand_dir, cb);
 
-				out.inv_cov = is_near_corner ? 0.0f : 1.0f; // Full coverage at near corner, otherwise none.
+				out.inv_cov = is_near_corner ? 0.0f : 1.0f;
 			
 				out.interior = 0;
 			}
@@ -561,8 +512,6 @@ vertex MainVSOut vs_main_expand(
 		}
 	}
 }
-
-// MARK: - Fragment functions
 
 struct PSMain
 {
@@ -632,30 +581,21 @@ struct PSMain
 
 	float manual_lod(float uv_w)
 	{
-		// FIXME add LOD: K - ( LOG2(Q) * (1 << L))
 		float K = cb.lod_params.x;
 		float L = cb.lod_params.y;
 		float bias = cb.lod_params.z;
 		float max_lod = cb.lod_params.w;
 
 		float gs_lod = K - log2(abs(uv_w)) * L;
-		// FIXME max useful ?
-		//return max(min(gs_lod, max_lod) - bias, 0.0f);
 		return min(gs_lod, max_lod) - bias;
 	}
 
 	float4 sample_c_af(float2 uv, float uv_w)
 	{
-		// HW sampler will reject bad UVs, match that here.
 		uv = any(isnan(uv) | isinf(uv)) ? float2(0.0f, 0.0f) : uv;
 
-		// Large floating point values risk NaN/Inf values.
-		// Above this value floats lose decimal precision, so seems a resonable limit for UVs.
 		uv = clamp(uv, -8388608.0f, 8388608.0f);
 
-		// Below taken from https://microsoft.github.io/DirectX-Specs/d3d/archive/D3D11_3_FunctionalSpec.htm#7.18.11%20LOD%20Calculations
-		// And https://registry.khronos.org/OpenGL/extensions/EXT/EXT_texture_filter_anisotropic.txt
-		// With guidance from https://pema.dev/2025/05/09/mipmaps-too-much-detail/
 		float2 sz = float2(get_tex_dims());
 		float2 dX = dfdx(uv) * sz;
 		float2 dY = dfdy(uv) * sz;
@@ -663,7 +603,6 @@ struct PSMain
 		float length_x = length(dX);
 		float length_y = length(dY);
 
-		// Calculate Ellipse Transform
 		bool d_zero = length_x < 0.001f || length_y < 0.001f;
 		float f = (dX.x * dY.y - dX.y * dY.x);
 		bool d_par = f < 0.001f;
@@ -711,7 +650,6 @@ struct PSMain
 			}
 		}
 
-		// Compute AF values
 		bool is_major_x = length_x > length_y;
 		float length_major = is_major_x ? length_x : length_y;
 		float length_minor = is_major_x ? length_y : length_x;
@@ -721,9 +659,6 @@ struct PSMain
 		float2 aniso_line;
 		if (length_major <= 1.0f)
 		{
-			// A zero length_major would result in NaN Lod and break sampling.
-			// A small length_major would result in aniso_ratio getting clamped to 1.
-			// Perform isotropic filtering instead.
 			aniso_ratio = 1.0f;
 			length_lod = length_major;
 			aniso_line = float2(0.0f, 0.0f);
@@ -735,7 +670,6 @@ struct PSMain
 			aniso_ratio = min(length_major / length_minor, float(PS_SW_ANISO));
 			length_lod = length_major / aniso_ratio;
 
-			// clamp to top Lod
 			if (length_lod < 1.0f)
 				aniso_ratio = max(1.0f, aniso_ratio * length_lod);
 
@@ -831,8 +765,6 @@ struct PSMain
 			}
 			else if (PS_WMS == 3)
 			{
-				// wrap negative uv coords to avoid an off by one error that shifted
-				// textures. Fixes Xenosaga's hair issue.
 				if (!FST)
 					uv = fract(uv);
 
@@ -884,7 +816,6 @@ struct PSMain
 
 		if (PS_REGION_RECT)
 		{
-			// Normalized -> Integer Coordinates.
 			uv = clamp(uv * cb.wh.zwzw + cb.st_range.xyxy, cb.st_range.xyxy, cb.st_range.zwzw);
 		}
 
@@ -905,11 +836,6 @@ struct PSMain
 	{
 		float4 c;
 
-		// Either GS will send a texture that contains a single alpha channel
-		// Or we have an old RT (ie RGBA8) that contains index (4/8) in the alpha channel
-
-		// Note: texture gather can't be used because of special clamping/wrapping
-		// Also it doesn't support lod
 		c.x = sample_c(uv.xy).a;
 		c.y = sample_c(uv.zy).a;
 		c.z = sample_c(uv.xw).a;
@@ -919,11 +845,11 @@ struct PSMain
 		
 		if (PS_RTA_SRC_CORRECTION)
 		{
-			i = uint4(round(c * 128.25f)); // Denormalize value
+			i = uint4(round(c * 128.25f));
 		}
 		else
 		{
-			i = uint4(c * 255.5f); // Denormalize value
+			i = uint4(c * 255.5f);
 		}
 		
 		if (PS_PAL_FMT == 1)
@@ -967,13 +893,9 @@ struct PSMain
 			return tex.read(uv);
 	}
 
-	// MARK: Depth sampling
-
 	ushort2 clamp_wrap_uv_depth(ushort2 uv)
 	{
 		ushort2 uv_out = uv;
-		// Keep the full precision
-		// It allow to multiply the ScalingFactor before the 1/16 coeff
 		ushort4 mask = ushort4(cb.uv_msk_fix) << 4;
 
 		if (PS_WMS == PS_WMT)
@@ -1011,26 +933,16 @@ struct PSMain
 
 		if (PS_TALES_OF_ABYSS_HLE)
 		{
-			// Warning: UV can't be used in channel effect
 			ushort depth = fetch_raw_depth();
-			// Convert msb based on the palette
 			t = palette.read(ushort2((depth >> 8) & 0xFF, 0)) * 255.f;
 		}
 		else if (PS_URBAN_CHAOS_HLE)
 		{
-			// Depth buffer is read as a RGB5A1 texture. The game try to extract the green channel.
-			// So it will do a first channel trick to extract lsb, value is right-shifted.
-			// Then a new channel trick to extract msb which will shifted to the left.
-			// OpenGL uses a FLOAT32 format for the depth so it requires a couple of conversion.
-			// To be faster both steps (msb&lsb) are done in a single pass.
 
-			// Warning: UV can't be used in channel effect
 			ushort depth = fetch_raw_depth();
 
-			// Convert lsb based on the palette
 			t = palette.read(ushort2(depth & 0xFF, 0)) * 255.f;
 
-			// Msb is easier
 			float green = float((depth >> 8) & 0xFF) * 36.f;
 			green = min(green, 255.0f);
 
@@ -1049,7 +961,6 @@ struct PSMain
 			t = fetch_c(uv) * 255.f;
 		}
 
-		// macOS 10.15 ICE's on bool3(t.rgb), so use != 0 instead
 		if (PS_AEM_FMT == FMT_24)
 			t.a = (!PS_AEM || any(t.rgb != 0)) ? 255.f * cb.ta.x : 0.f;
 		else if (PS_AEM_FMT == FMT_16)
@@ -1059,8 +970,6 @@ struct PSMain
 			
 		return t;
 	}
-
-	// MARK: Fetch a Single Channel
 
 	float4 fetch_red()
 	{
@@ -1130,8 +1039,6 @@ struct PSMain
 				dd = fract(uv.xy * cb.wh.zw);
 				if (!FST)
 				{
-					// Background in Shin Megami Tensei Lucifers
-					// I suspect that uv isn't a standard number, so fract is outside of the [0;1] range
 					dd = saturate(dd);
 				}
 			}
@@ -1150,7 +1057,6 @@ struct PSMain
 
 		for (int i = 0; i < 4; i++)
 		{
-			// macOS 10.15 ICE's on bool3(c[i].rgb), so use != 0 instead
 			if (PS_AEM_FMT == FMT_24)
 				c[i].a = !PS_AEM || any(c[i].rgb != 0) ? cb.ta.x : 0.f;
 			else if (PS_AEM_FMT == FMT_16)
@@ -1165,9 +1071,6 @@ struct PSMain
 		if (PS_AEM_FMT == FMT_32 && PS_PAL_FMT == 0 && PS_RTA_SRC_CORRECTION)
 			t.a = t.a * (128.5f / 255.0f);
 			
-		// The 0.05f helps to fix the overbloom of sotc
-		// I think the issue is related to the rounding of texture coodinate. The linear (from fixed unit)
-		// interpolation could be slightly below the correct one.
 		
 		return trunc(t * 255.f + 0.05f);
 	}
@@ -1190,7 +1093,6 @@ struct PSMain
 		if (!PS_TCC)
 			C_out.a = C.a;
 
-		// Clamp only when it is useful
 		if (PS_TFX == 0 || PS_TFX == 2 || PS_TFX == 3)
 			C_out = min(C_out, 255.f);
 
@@ -1203,7 +1105,7 @@ struct PSMain
 		switch (PS_ATST)
 		{
 			case ATST::NONE:
-				break; // Nothing to do
+				break;
 			case ATST::LEQUAL:
 				if (a > cb.aref)
 					return false;
@@ -1240,7 +1142,6 @@ struct PSMain
 		}
 		else
 		{
-			// Note: xy are normalized coordinates
 			st = in.ti.xy;
 			st_int = in.ti.zw;
 		}
@@ -1311,8 +1212,6 @@ struct PSMain
 			fpos = ushort2(in.p.xy * float2(cb.scale_factor.y));
 		float value = cb.dither_matrix[fpos.y & 3][fpos.x & 3];
 
-		// The idea here is we add on the dither amount adjusted by the alpha before it goes to the hw blend
-		// so after the alpha blend the resulting value should be the same as (Cs - Cd) * As + Cd + Dither.
 		if (PS_DITHER_ADJUST)
 		{
 			float Alpha = PS_BLEND_C == 2 ? cb.alpha_fix : As;
@@ -1327,24 +1226,14 @@ struct PSMain
 
 	void ps_color_clamp_wrap(thread float4& C)
 	{
-		// When dithering the bottom 3 bits become meaningless and cause lines in the picture
-		// so we need to limit the color depth on dithered items
 		if (SW_BLEND || (PS_DITHER > 0 && PS_DITHER < 3) || PS_FBMASK)
 		{
 			if (PS_DST_FMT == FMT_16 && PS_BLEND_MIX == 0 && PS_ROUND_INV)
-				C.rgb += 7.f; // Need to round up, not down since the shader will invert
+				C.rgb += 7.f;
 
-			// Correct the Color value based on the output format
 			if (PS_COLCLIP == 0 && PS_COLCLIP_HW == 0)
-				C.rgb = clamp(C.rgb, 0.f, 255.f); // Standard Clamp
+				C.rgb = clamp(C.rgb, 0.f, 255.f);
 
-			// FIXME rouding of negative float?
-			// compiler uses trunc but it might need floor
-
-			// Warning: normally blending equation is mult(A, B) = A * B >> 7. GPU have the full accuracy
-			// GS: Color = 1, Alpha = 255 => output 1
-			// GPU: Color = 1/255, Alpha = 255/255 * 255/128 => output 1.9921875
-			// In 16 bits format, only 5 bits of colors are used. It impacts shadows computation of Castlevania
 			if (PS_DST_FMT == FMT_16 && PS_DITHER != 3 && (PS_BLEND_MIX == 0 || PS_DITHER))
 				C.rgb = float3(short3(C.rgb) & 0xF8);
 			else if (PS_COLCLIP == 1 || PS_COLCLIP_HW == 1)
@@ -1366,11 +1255,8 @@ struct PSMain
 		
 		if (SW_BLEND)
 		{
-			// PABE
 			if (PS_PABE)
 			{
-				// As_rgba needed for accumulation blend to manipulate Cd.
-				// No blending so early exit
 				if (As < 1.f)
 				{
 					As_rgba.rgb = float3(0.f);
@@ -1409,21 +1295,12 @@ struct PSMain
 			float  C = pick(PS_BLEND_C, As, Ad, cb.alpha_fix);
 			float3 D = pick(PS_BLEND_D, Cs, Cd, float3(0.f));
 
-			// As/Af clamp alpha for Blend mix
-			// We shouldn't clamp blend mix with blend hw 1 as we want alpha higher
 			float C_clamped = C;
 			if (PS_BLEND_MIX > 0 && PS_BLEND_HW != 1 && PS_BLEND_HW != 2)
 				C_clamped = saturate(C_clamped);
 
 			if (PS_BLEND_A == PS_BLEND_B)
 				Color.rgb = D;
-			// In blend_mix, HW adds on some alpha factor * dst.
-			// Truncating here wouldn't quite get the right result because it prevents the <1 bit here from combining with a <1 bit in dst to form a ≥1 amount that pushes over the truncation.
-			// Instead, apply an offset to convert HW's round to a floor.
-			// Since alpha is in 1/128 increments, subtracting (0.5 - 0.5/128 == 127/256) would get us what we want if GPUs blended in full precision.
-			// But they don't.  Details here: https://github.com/PCSX2/pcsx2/pull/6809#issuecomment-1211473399
-			// Based on the scripts at the above link, the ideal choice for Intel GPUs is 126/256, AMD 120/256.  Nvidia is a lost cause.
-			// 124/256 seems like a reasonable compromise, providing the correct answer 99.3% of the time on Intel (vs 99.6% for 126/256), and 97% of the time on AMD (vs 97.4% for 120/256).
 			else if (PS_BLEND_MIX == 2)
 				Color.rgb = ((A - B) * C_clamped + D) + (124.f/256.f);
 			else if (PS_BLEND_MIX == 1)
@@ -1433,31 +1310,18 @@ struct PSMain
 
 			if (PS_BLEND_HW == 1)
 			{
-				// As or Af
 				As_rgba.rgb = float3(C);
-				// Subtract 1 for alpha to compensate for the changed equation,
-				// if c.rgb > 255.0f then we further need to adjust alpha accordingly,
-				// we pick the lowest overflow from all colors because it's the safest,
-				// we divide by 255 the color because we don't know Cd value,
-				// changed alpha should only be done for hw blend.
 				float3 alpha_compensate = max(float3(1.f), Color.rgb / float3(255.f));
 				As_rgba.rgb -= alpha_compensate;
 			}
 			else if (PS_BLEND_HW == 2)
 			{
-				// Since we can't do Cd*(Alpha + 1) - Cs*Alpha in hw blend
-				// what we can do is adjust the Cs value that will be
-				// subtracted, this way we can get a better result in hw blend.
-				// Result is still wrong but less wrong than before.
 				float division_alpha = 1.f + C;
 				Color.rgb /= float3(division_alpha);
 			}
 			else if (PS_BLEND_HW == 3)
 			{
-				// As, Ad or Af clamped.
 				As_rgba.rgb = float3(C_clamped);
-				// Cs*(Alpha + 1) might overflow, if it does then adjust alpha value
-				// that is sent on second output to compensate.
 				float3 overflow_check = (Color.rgb - float3(255.f)) / 255.f;
 				float3 alpha_compensate = max(float3(0.f), overflow_check);
 				As_rgba.rgb -= alpha_compensate;
@@ -1467,22 +1331,15 @@ struct PSMain
 		{
 			if (PS_BLEND_HW == 1)
 			{
-				// Needed for Cd * (As/Ad/F + 1) blending modes
 				Color.rgb = 255.f;
 			}
 			else if (PS_BLEND_HW == 2)
 			{
-				// Cd*As,Cd*Ad or Cd*F
 				float Alpha = PS_BLEND_C == 2 ? cb.alpha_fix : As;
 				Color.rgb = saturate(Alpha - 1.f) * 255.f;
 			}
 			else if (PS_BLEND_HW == 3 && PS_RTA_CORRECTION == 0)
 			{
-				// Needed for Cs*Ad, Cs*Ad + Cd, Cd - Cs*Ad
-				// Multiply Color.rgb by (255/128) to compensate for wrong Ad/255 value when rgb are below 128.
-				// When any color channel is higher than 128 then adjust the compensation automatically
-				// to give us more accurate colors, otherwise they will be wrong.
-				// The higher the value (>128) the lower the compensation will be.
 				float max_color = max(max(Color.r, Color.g), Color.b);
 				float color_compensate = 255.f / max(128.f, max_color);
 				Color.rgb *= float3(color_compensate);
@@ -1513,7 +1370,6 @@ struct PSMain
 
 		if (PS_DATE >= 5)
 		{
-			// 1 => DATM == 0, 2 => DATM == 1
 			float rt_a = PS_WRITE_RG ? current_color.g : current_color.a;
 			bool bad = PS_RTA_CORRECTION ? ((PS_DATE & 3) == 1 ? (rt_a > (254.5f / 255.f)) : (rt_a < (254.5f / 255.f))) : ((PS_DATE & 3) == 1 ? (rt_a > 0.5) : (rt_a < 0.5));
 
@@ -1524,27 +1380,22 @@ struct PSMain
 		if (PS_DATE == 3)
 		{
 			float stencil_ceil = prim_id_tex.read(uint2(in.p.xy)).r;
-			// Note prim_id == stencil_ceil will be the primitive that will update
-			// the bad alpha value so we must keep it.
 			if (float(prim_id) > stencil_ceil)
 				discard();
 		}
 
 		float4 C = ps_color();
 
-		// Must be done before alpha correction
-
 		if (PS_AA1 != AA1::NONE)
 		{
 			float cov = PS_AA1 == AA1::LINE
-				? saturate(cb.line_cov_scale * (1.f - abs(in.inv_cov))) // Blur only outer part of the line by scaling coverage.
+				? saturate(cb.line_cov_scale * (1.f - abs(in.inv_cov)))
 				: saturate(1.f - abs(in.inv_cov));
-			if (!PS_ABE || floor(C.a) == 128.f) // The coverage is only used if the fragment alpha is 128.
+			if (!PS_ABE || floor(C.a) == 128.f)
 				C.a = 128.f * cov;
 		}
 		else if (PS_FIXED_ONE_A)
 		{
-			// AA (Fixed one) will output a coverage of 1.0 as alpha
 			C.a = 128.0f;
 		}
 
@@ -1573,16 +1424,13 @@ struct PSMain
 				C.a += 128.f;
 		}
 
-		// Get first primitive that will write a failing alpha value
 		if (PS_DATE == 1)
 		{
-			// DATM == 0, Pixel with alpha equal to 1 will failed (128-255)
 			out.c0 = C.a > 127.5f ? float(prim_id) : FLT_MAX;
 			return out;
 		}
 		else if (PS_DATE == 2)
 		{
-			// DATM == 1, Pixel with alpha equal to 0 will failed (0-127)
 			out.c0 = C.a < 127.5f ? float(prim_id) : FLT_MAX;
 			return out;
 		}
@@ -1606,7 +1454,6 @@ struct PSMain
 				}
 			}
 
-			// Special case for 32bit input and 16bit output, shuffle used by The Godfather
 			if (PS_SHUFFLE_SAME)
 			{
 				uint4 denorm_c = uint4(C);
@@ -1616,7 +1463,6 @@ struct PSMain
 				else
 					C.ga = C.rg;
 			}
-			// Copy of a 16bit source in to this target
 			else if (PS_READ16_SRC)
 			{
 				uint4 denorm_c = uint4(C);
@@ -1647,12 +1493,10 @@ struct PSMain
 
 		ps_dither(C, alpha_blend.a);
 
-		// Color clamp/wrap needs to be done after sw blending and dithering
 		ps_color_clamp_wrap(C);
 
 		ps_fbmask(C);
 
-		// Use alpha blend factor to determine whether to update A.
 		if (PS_AFAIL == AFAIL::RGB_ONLY_DSB)
 			alpha_blend.a = float(atst_pass);
 
@@ -1668,12 +1512,12 @@ struct PSMain
 			input_z = min(input_z, cb.max_depth);
 
 		if (PS_AA1 == AA1::TRIANGLE_SW_Z && !in.interior)
-			discard_depth(input_z); // No depth update for triangle edges.
+			discard_depth(input_z);
 
 		if (!atst_pass)
 		{
 			if (PS_AFAIL == AFAIL::RGB_ONLY_SW_Z || PS_AFAIL == AFAIL::RGB_ONLY)
-				out.c0.a = current_color.a; // discard alpha
+				out.c0.a = current_color.a;
 			else if (PS_AFAIL == AFAIL::ZB_ONLY)
 				discard_color(out.c0);
 
@@ -1796,7 +1640,6 @@ fragment MainPSOut ps_main(
 	return out;
 }
 
-// Metal doesn't let you toggle eft with function constants so we need a separate function for it
 [[early_fragment_tests]]
 fragment void ps_main_rov_eft(
 	MainPSIn in [[stage_in]],
@@ -1840,8 +1683,6 @@ fragment uint primid_test(uint id [[primitive_id]])
 	return id;
 }
 #endif
-
-// MARK: Markers for detecting the Metal version a metallib was compiled against
 
 #if __METAL_VERSION__ >= 210
 kernel void metal_version_21() {}

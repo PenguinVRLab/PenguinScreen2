@@ -53,16 +53,16 @@ static constexpr int DEFAULT_SORT_INDEX = static_cast<int>(DEFAULT_SORT_COLUMN);
 static constexpr Qt::SortOrder DEFAULT_SORT_ORDER = Qt::AscendingOrder;
 
 static constexpr std::array<int, GameListModel::Column_Count> DEFAULT_COLUMN_WIDTHS = {{
-	55, // type
-	85, // code
-	-1, // title
-	-1, // file title
-	75, // crc
-	95, // time played
-	90, // last played
-	80, // size
-	60, // region
-	120 // compatibility
+	55,
+	85,
+	-1,
+	-1,
+	75,
+	95,
+	90,
+	80,
+	60,
+	120
 }};
 static_assert(static_cast<int>(DEFAULT_COLUMN_WIDTHS.size()) <= GameListModel::Column_Count,
 	"Game List: More default column widths than column types.");
@@ -132,7 +132,6 @@ private:
 
 namespace
 {
-	// Used for Type, Region, and Compatibility columns to center icons; Qt::AlignCenter only works on DisplayRole (text).
 	class GameListIconStyleDelegate final : public QStyledItemDelegate
 	{
 	public:
@@ -142,41 +141,32 @@ namespace
 		}
 		~GameListIconStyleDelegate() = default;
 
-		// See: QStyledItemDelegate::paint(), QItemDelegate::drawDecoration(), and Qt::QStyleOptionViewItem.
 		void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override
 		{
 			Q_ASSERT(index.isValid());
 
-			// Draw highlight for cell.
 			QApplication::style()->drawControl(QStyle::CE_ItemViewItem, &option, painter, option.widget);
 
-			// Fetch icon pixmap and stop if no icon exists
 			const QPixmap icon = qvariant_cast<QPixmap>(index.data(Qt::DecorationRole));
 
 			if (icon.isNull())
 				return;
 
-			// Save painter state and restore later so clip setting doesn't persist across cell draws.
 			painter->save();
 
-			// Clip pixmap so it doesn't extend outside the cell.
 			const QRect rect = option.rect;
 			painter->setClipRect(rect);
 
-			// Determine starting location of icon (Qt uses top-left origin).
 			const int icon_width = static_cast<int>(static_cast<qreal>(icon.width()) / icon.devicePixelRatio());
 			const int icon_height = static_cast<int>(static_cast<qreal>(icon.height()) / icon.devicePixelRatio());
 			const QPoint icon_top_left = QPoint((rect.width() - icon_width) / 2, (rect.height() - icon_height) / 2);
 
-			// Change palette if the item is selected.
 			if (option.state & QStyle::State_Selected)
 			{
-				// Set color based on whether cell is enabled.
 				const bool enabled = option.state & QStyle::State_Enabled;
 				QColor color = option.palette.color(enabled ? QPalette::Normal : QPalette::Disabled, QPalette::Highlight);
 				color.setAlphaF(0.3f);
 
-				// Fetch pixmap from cache or construct a new one.
 				const QString key = QString::fromStdString(fmt::format("{:016X}-{:d}-{:08X}", icon.cacheKey(), enabled, color.rgba()));
 				QPixmap highlighted_icon;
 				if (!QPixmapCache::find(key, &highlighted_icon))
@@ -194,10 +184,8 @@ namespace
 
 				painter->drawPixmap(rect.topLeft() + icon_top_left, highlighted_icon);
 			}
-			// Recolor the icon based on the custom background color
 			else if (index.column() == GameListModel::Column_Type)
 			{
-				// Fetch pixmap from cache or construct a new one.
 				const QColor color = option.palette.color(QPalette::Text);
 				const QString key = QString::fromStdString(fmt::format("type-{:016X}-{:08X}", icon.cacheKey(), color.rgba()));
 
@@ -222,13 +210,12 @@ namespace
 				painter->drawPixmap(rect.topLeft() + icon_top_left, icon);
 			}
 
-			// Restore the old clip path.
 			painter->restore();
 		}
 	};
-} // namespace
+}
 
-GameListWidget::GameListWidget(QWidget* parent /* = nullptr */)
+GameListWidget::GameListWidget(QWidget* parent )
 	: QWidget(parent)
 {
 }
@@ -299,7 +286,6 @@ void GameListWidget::initialize()
 	m_table_view->verticalHeader()->hide();
 	m_table_view->setVerticalScrollMode(QAbstractItemView::ScrollMode::ScrollPerPixel);
 
-	// Custom painter to center-align DisplayRoles (icons)
 	m_table_view->setItemDelegateForColumn(0, new GameListIconStyleDelegate(this));
 	m_table_view->setItemDelegateForColumn(8, new GameListIconStyleDelegate(this));
 	m_table_view->setItemDelegateForColumn(9, new GameListIconStyleDelegate(this));
@@ -312,13 +298,11 @@ void GameListWidget::initialize()
 	connect(m_table_view->horizontalHeader(), &QHeaderView::customContextMenuRequested, this,
 		&GameListWidget::onTableViewHeaderContextMenuRequested);
 
-	// Save state when header state changes (hiding and showing handled within onTableViewHeaderContextMenuRequested).
 	connect(m_table_view->horizontalHeader(), &QHeaderView::sectionMoved, this, &GameListWidget::onTableHeaderStateChanged);
 	connect(m_table_view->horizontalHeader(), &QHeaderView::sectionResized, this, &GameListWidget::onTableHeaderStateChanged);
 	connect(m_table_view->horizontalHeader(), &QHeaderView::sortIndicatorChanged, this,
 		[this](const int column, const Qt::SortOrder sort_order) { GameListWidget::saveSortSettings(column, sort_order); GameListWidget::onTableHeaderStateChanged(); });
 
-	// Load the last session's header state or create a new one.
 	if (Host::ContainsBaseSettingValue("GameListTableView", "HeaderState"))
 	{
 		loadTableHeaderState();
@@ -328,11 +312,8 @@ void GameListWidget::initialize()
 		applyTableHeaderDefaults();
 	}
 
-	// After header state load to account for user-specified sort.
 	m_table_view->setSortingEnabled(true);
 
-	// Safety Fallback: Ensure the header is actually visible and
-	// force it to stretch correctly on the first launch. This is an edgecase in case it already broke for some people or broke on older versions
 	m_table_view->horizontalHeader()->show();
 	resizeTableViewColumnsToFit();
 
@@ -385,7 +366,6 @@ void GameListWidget::initialize()
 
 void GameListWidget::setCustomBackground()
 {
-	// Cleanup old animation if it still exists on gamelist
 	if (m_background_movie != nullptr)
 	{
 		m_background_movie->disconnect(this);
@@ -393,12 +373,10 @@ void GameListWidget::setCustomBackground()
 		m_background_movie = nullptr;
 	}
 
-	// Get the path to the custom background
 	std::string path = Host::GetBaseStringSettingValue("UI", "GameListBackgroundPath");
 	if (!Path::IsAbsolute(path))
 		path = Path::Combine(EmuFolders::DataRoot, path);
 
-	// Only try to create background if path are valid
 	if (!path.empty() && FileSystem::FileExists(path.c_str()))
 	{
 		QString img_path = QString::fromStdString(path);
@@ -410,15 +388,12 @@ void GameListWidget::setCustomBackground()
 			delete m_background_movie;
 			m_background_movie = nullptr;
 		}
-		// Cache all frames for small images so loops don't keep re-decoding
 		else if (const s64 file_size = FileSystem::GetPathFileSize(path.c_str()); file_size > 0 && file_size < 64 * 1024 * 1024)
 			m_background_movie->setCacheMode(QMovie::CacheAll);
 	}
 
-	// Invalidate frame cache so the next animated frame triggers full reprocessing
 	m_background_last_size = QSize();
 
-	// If there is no valid background then reset fallback to default UI state
 	if (!m_background_movie)
 	{
 		m_background_pixmap = QPixmap();
@@ -436,7 +411,6 @@ void GameListWidget::setCustomBackground()
 		return;
 	}
 
-	// Retrieve scaling setting
 	m_background_scaling = QtUtils::ScalingMode::Fit;
 	const std::string ar_value = Host::GetBaseStringSettingValue("UI", "GameListBackgroundMode", InterfaceSettingsWidget::BACKGROUND_SCALE_NAMES[static_cast<u8>(QtUtils::ScalingMode::Fit)]);
 	for (u8 i = 0; i < static_cast<u8>(QtUtils::ScalingMode::MaxCount); i++)
@@ -451,10 +425,8 @@ void GameListWidget::setCustomBackground()
 		}
 	}
 
-	// Retrieve opacity setting
 	m_background_opacity = Host::GetBaseFloatSettingValue("UI", "GameListBackgroundOpacity", 100.0f);
 
-	// Selected Custom background is valid, connect the signals and start animation in gamelist
 	connect(m_background_movie, &QMovie::frameChanged, this, &GameListWidget::processBackgroundFrames);
 	m_ui.stack->setAutoFillBackground(false);
 
@@ -570,7 +542,6 @@ void GameListWidget::cancelRefresh()
 	m_refresh_thread->cancel();
 	m_refresh_thread->wait();
 
-	// Cancelling might not be instant if we're say, scanning a gzip dump. Wait until it's done.
 	while (m_refresh_thread)
 		QApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 1);
 }
@@ -584,7 +555,6 @@ void GameListWidget::reloadThemeSpecificImages()
 
 void GameListWidget::onRefreshProgress(const QString& status, int current, int total)
 {
-	// switch away from the placeholder while we scan, in case we find anything
 	if (m_ui.stack->currentIndex() == 2)
 	{
 		m_ui.stack->setCurrentIndex(Host::GetBaseBoolSettingValue("UI", "GameListGridView", false) ? 1 : 0);
@@ -605,7 +575,6 @@ void GameListWidget::onRefreshComplete()
 	delete m_refresh_thread;
 	m_refresh_thread = nullptr;
 
-	// if we still had no games, switch to the helper widget
 	if (m_model->rowCount() == 0)
 	{
 		m_ui.stack->setCurrentIndex(2);
@@ -657,32 +626,23 @@ void GameListWidget::onTableViewHeaderContextMenuRequested(const QPoint& point)
 	QMenu* menu = new QMenu(this);
 	menu->setAttribute(Qt::WA_DeleteOnClose);
 
-	// Iterate through all available columns defined in the model.
 	for (int column = 0; column < GameListModel::Column_Count; column++)
 	{
-		// Skip the cover art column as it shouldn't be toggled manually.
 		if (column == GameListModel::Column_Cover)
 			continue;
-		// Create a checkable menu item for each column title.
 		const QString title = m_model->headerData(column, Qt::Horizontal, Qt::DisplayRole).toString();
 		QAction* const action = menu->addAction(title);
 		action->setCheckable(true);
 		action->setChecked(!header->isSectionHidden(column));
-		// Update the GUI when the user toggles a column with left-click actions in the right-click menu on the column.
 		connect(action, &QAction::triggered, [this, header, column, action]() {
 			header->setSectionHidden(column, !action->isChecked());
-			// Safety check: prevent the user from hiding every single column.
 			ensureMinimumOneColumnVisible();
-			// Lastly push the new header state to settings.
 			onTableHeaderStateChanged();
 		});
 	}
 
 	menu->addSeparator();
 
-	// Add a "panic button" that fully restores the default column layout.
-	// This allows users to recover without editing configuration files such as [GameListTableView] has a key with
-	// and variable HeaderState which you can remove the line to also do the same effect but old method is not user-friendly.
 	menu->addAction(tr("Reset All Columns"), this, &GameListWidget::resetTableHeaderToDefault);
 
 	menu->popup(header->mapToGlobal(point));
@@ -740,7 +700,6 @@ void GameListWidget::showGameList()
 
 	if (m_ui.stack->currentIndex() == 0 || m_model->rowCount() == 0)
 	{
-		// We can click the toolbar multiple times, so keep it correct.
 		updateToolbar();
 		return;
 	}
@@ -759,7 +718,6 @@ void GameListWidget::showGameGrid()
 
 	if (m_ui.stack->currentIndex() == 1 || m_model->rowCount() == 0)
 	{
-		// We can click the toolbar multiple times, so keep it correct.
 		updateToolbar();
 		return;
 	}
@@ -900,7 +858,6 @@ void GameListWidget::loadTableHeaderState()
 	if (!header)
 		return;
 
-	// Decode Base64 string from settings to QByteArray state.
 	const std::string state_setting = Host::GetBaseStringSettingValue("GameListTableView", "HeaderState");
 	if (state_setting.empty())
 		return;
@@ -910,10 +867,6 @@ void GameListWidget::loadTableHeaderState()
 
 	header->setSectionHidden(GameListModel::Column_Cover, true);
 
-	// Enforce at least one column is visible immediately after loading.
-	// This handles cases where a config (perhaps from an older version) has 0 columns and
-	// no games are visible to be changed (such as per-game config) or played as you can't click on any.
-	// Will automatically repair a broken header state from config (PCSX2.ini) file.
 	ensureMinimumOneColumnVisible();
 }
 
@@ -933,11 +886,6 @@ void GameListWidget::ensureMinimumOneColumnVisible()
 		}
 	}
 
-	// If absolutely everything is hidden, force the Title column to be visible.
-	// This ensures there is always a right-click menu on the column available to restore
-	// other columns or access the "Reset All Columns" option or even re-order them with drag and drop.
-	// By default Qt will hide everything if it sees 0 viable columns, so just enforce atleast 1 column.
-	// Adding ghost columns would be hacky and ugly so let's not do that.
 	if (!any_visible)
 	{
 		header->setSectionHidden(GameListModel::Column_Title, false);
@@ -951,7 +899,6 @@ void GameListWidget::onTableHeaderStateChanged()
 	if (!header)
 		return;
 
-	// Encode QByteArray state as Base64 string for storage.
 	Host::SetBaseStringSettingValue("GameListTableView", "HeaderState", header->saveState().toBase64());
 	Host::CommitBaseSettingChanges();
 }
@@ -981,9 +928,6 @@ void GameListWidget::applyTableHeaderDefaults()
 	Host::CommitBaseSettingChanges();
 }
 
-// TODO (Tech): Create a button for this in the minibar. Currently unused.
-// TODO (Red): Not sure if I should integrate it in the minibar for now when I made sure they can't break their order and there is a reset function now when you right-click the column.
-//             They could accidentaly press on it when they didn't want to, could be revised later still because people without mouses can't do it such as controller mode on the TV.
 void GameListWidget::resetTableHeaderToDefault()
 {
 	QHeaderView* header = m_table_view->horizontalHeader();
@@ -997,7 +941,6 @@ void GameListWidget::resetTableHeaderToDefault()
 			if (column == GameListModel::Column_Cover)
 				continue;
 
-			// Reset size, position, and visibility.
 			header->resizeSection(column, DEFAULT_COLUMN_WIDTHS[column]);
 			header->moveSection(header->visualIndex(column), column);
 			header->setSectionHidden(column,
@@ -1010,7 +953,6 @@ void GameListWidget::resetTableHeaderToDefault()
 	Host::SetBaseStringSettingValue("GameListTableView", "HeaderState", header->saveState().toBase64());
 	Host::CommitBaseSettingChanges();
 
-	// This makes the columns expand to fill the window right now.
 	resizeTableViewColumnsToFit();
 }
 
@@ -1059,13 +1001,11 @@ std::optional<GameList::Entry> GameListWidget::getSelectedEntry() const
 	if (!entry)
 		return std::nullopt;
 
-	// Copy the entry here instead of keeping the lock held to avoid deadlocks.
 	return *entry;
 }
 
 void GameListWidget::rescanFile(const std::string& path)
 {
-	// We can't do this while there's a VM running, because of CDVD state... ugh.
 	if (QtHost::IsVMValid())
 	{
 		Console.Error(fmt::format("Can't re-scan ELF at '{}' because we have a VM running.", path));
@@ -1076,7 +1016,7 @@ void GameListWidget::rescanFile(const std::string& path)
 	m_model->refresh();
 }
 
-GameListGridListView::GameListGridListView(QWidget* parent /*= nullptr*/)
+GameListGridListView::GameListGridListView(QWidget* parent )
 	: QListView(parent)
 {
 }

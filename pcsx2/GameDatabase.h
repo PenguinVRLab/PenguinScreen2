@@ -43,7 +43,6 @@ namespace GameDatabaseSchema
 
 	enum class GSHWFixId : u32
 	{
-		// boolean settings
 		AutoFlush,
 		CPUFramebufferConversion,
 		FlushTCOnClose,
@@ -64,7 +63,6 @@ namespace GameDatabaseSchema
 		PCRTCOffsets,
 		PCRTCOverscan,
 
-		// integer settings
 		TrilinearFiltering,
 		SkipDrawStart,
 		SkipDrawEnd,
@@ -111,21 +109,17 @@ namespace GameDatabaseSchema
 		std::unordered_map<u32, std::string> patches;
 		std::vector<Patch::DynamicPatch> dynaPatches;
 
-		// Returns the list of memory card serials as a `/` delimited string
 		std::string memcardFiltersAsString() const;
 		const std::string* findPatch(u32 crc) const;
 		const char* compatAsString() const;
 
-		/// Applies Core game fixes to an existing config.
 		void applyGameFixes(Pcsx2Config& config, bool applyAuto) const;
 
-		/// Applies GS hardware fixes to an existing config.
 		void applyGSHardwareFixes(Pcsx2Config::GSOptions& config) const;
 
-		/// Returns true if the current config value for the specified hw fix id matches the value.
 		static bool configMatchesHWFix(const Pcsx2Config::GSOptions& config, GSHWFixId id, int value);
 	};
-}; // namespace GameDatabaseSchema
+};
 
 namespace GameDatabase
 {
@@ -164,4 +158,4 @@ namespace GameDatabase
 	bool loadHashDatabase();
 	void unloadHashDatabase();
 	const HashDatabaseEntry* lookupHash(const TrackHash* tracks, size_t num_tracks, bool* tracks_matched, std::string* match_error);
-}; // namespace GameDatabase
+};

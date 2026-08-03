@@ -20,11 +20,8 @@ EEINST* g_pCurInstInfo = NULL;
 
 _xmmregs xmmregs[iREGCNT_XMM], s_saveXMMregs[iREGCNT_XMM];
 
-// X86 caching
 _x86regs x86regs[iREGCNT_GPR], s_saveX86regs[iREGCNT_GPR];
 
-// Clear current register mapping structure
-// Clear allocation counter
 void _initXMMregs()
 {
 	std::memset(xmmregs, 0, sizeof(xmmregs));
@@ -33,43 +30,33 @@ void _initXMMregs()
 
 bool _isAllocatableX86reg(int x86reg)
 {
-	// we use rax, rcx and rdx as scratch (they have special purposes...)
 	if (x86reg <= 2)
 		return false;
 
-	// We keep the first two argument registers free.
-	// On windows, this is ecx/edx, and it's taken care of above, but on Linux, it uses rsi/rdi.
-	// The issue is when we do a load/store, the address register overlaps a cached register.
-	// TODO(Stenzek): Rework loadstores to handle this and allow caching.
 	if (x86reg == arg1reg.GetId() || x86reg == arg2reg.GetId())
 		return false;
 
-	// arg3reg is also used for dispatching without fastmem
 	if (!CHECK_FASTMEM && x86reg == arg3reg.GetId())
 		return false;
 
-	// rbp is used as the fastmem base
 	if (CHECK_FASTMEM && x86reg == 5)
 		return false;
 
-	// rbx is used to reference PCSX2 program text
 	if (xGetTextPtr() && x86reg == RTEXTPTR.GetId())
 		return false;
 
 #ifdef ENABLE_VTUNE
-	// vtune needs ebp...
 	if (!CHECK_FASTMEM && x86reg == 5)
 		return false;
 #endif
 
-	// rsp is never allocatable..
 	if (x86reg == 4)
 		return false;
 
 	return true;
 }
 
-bool _hasX86reg(int type, int reg, int required_mode /*= 0*/)
+bool _hasX86reg(int type, int reg, int required_mode )
 {
 	for (uint i = 0; i < iREGCNT_GPR; i++)
 	{
@@ -82,27 +69,17 @@ bool _hasX86reg(int type, int reg, int required_mode /*= 0*/)
 	return false;
 }
 
-// Get the index of a free register
-// Step1: check any available register (inuse == 0)
-// Step2: check registers that are not live (both EEINST_LIVE* are cleared)
-// Step3: check registers that won't use SSE in the future (likely broken as EEINST_XMM isn't set properly)
-// Step4: take a randome register
-//
-// Note: I don't understand why we don't check register that aren't useful anymore
-// (i.e EEINST_USED is cleared)
 int _getFreeXMMreg(u32 maxreg)
 {
 	int i, tempi;
 	u32 bestcount = 0x10000;
 
-	// check for free registers
 	for (i = 0; (uint)i < maxreg; i++)
 	{
 		if (!xmmregs[i].inuse)
 			return i;
 	}
 
-	// check for dead regs
 	tempi = -1;
 	bestcount = 0xffff;
 	for (i = 0; (uint)i < maxreg; i++)
@@ -111,7 +88,6 @@ int _getFreeXMMreg(u32 maxreg)
 		if (xmmregs[i].needed)
 			continue;
 
-		// temps should be needed
 		pxAssert(xmmregs[i].type != XMMTYPE_TEMP);
 
 		if (xmmregs[i].counter < bestcount)
@@ -150,7 +126,6 @@ int _getFreeXMMreg(u32 maxreg)
 		return tempi;
 	}
 
-	// lastly, try without the used check
 	bestcount = 0xffff;
 	for (i = 0; (uint)i < maxreg; i++)
 	{
@@ -175,7 +150,6 @@ int _getFreeXMMreg(u32 maxreg)
 	return -1;
 }
 
-// Reserve a XMM register for temporary operation.
 int _allocTempXMMreg(XMMSSEType type)
 {
 	const int xmmreg = _getFreeXMMreg();
@@ -187,19 +161,12 @@ int _allocTempXMMreg(XMMSSEType type)
 	return xmmreg;
 }
 
-// Search register "reg" of type "type" which is inuse
-// If register doesn't have the read flag but mode is read
-// then populate the register from the memory
-// Note: There is a special HALF mode (to handle low 64 bits copy) but it seems to be unused
-//
-// So basically it is mostly used to set the mode of the register, and load value if we need to read it
 int _checkXMMreg(int type, int reg, int mode)
 {
 	for (size_t i = 0; i < iREGCNT_XMM; i++)
 	{
 		if (xmmregs[i].inuse && (xmmregs[i].type == (type & 0xff)) && (xmmregs[i].reg == reg))
 		{
-			// shouldn't have dirty constants...
 			pxAssert(type != XMMTYPE_GPRREG || !GPR_IS_DIRTY_CONST(reg));
 
 			if (type == XMMTYPE_GPRREG && !(xmmregs[i].mode & (MODE_READ | MODE_WRITE)) && (mode & MODE_READ))
@@ -207,12 +174,11 @@ int _checkXMMreg(int type, int reg, int mode)
 
 			if (type == XMMTYPE_GPRREG && (mode & MODE_WRITE))
 			{
-				// go through the alloc path instead, because we might need to invalidate a gpr.
 				return _allocGPRtoXMMreg(reg, mode);
 			}
 
 			xmmregs[i].mode |= mode;
-			xmmregs[i].counter = g_xmmAllocCounter++; // update counter
+			xmmregs[i].counter = g_xmmAllocCounter++;
 			xmmregs[i].needed = 1;
 			return i;
 		}
@@ -221,7 +187,7 @@ int _checkXMMreg(int type, int reg, int mode)
 	return -1;
 }
 
-bool _hasXMMreg(int type, int reg, int required_mode /*= 0*/)
+bool _hasXMMreg(int type, int reg, int required_mode )
 {
 	for (uint i = 0; i < iREGCNT_XMM; i++)
 	{
@@ -234,13 +200,6 @@ bool _hasXMMreg(int type, int reg, int required_mode /*= 0*/)
 	return false;
 }
 
-// Fully allocate a FPU register
-// first trial:
-//     search an already reserved reg then populate it if we read it
-// Second trial:
-//     reserve a new reg, then populate it if we read it
-//
-// Note: FPU are always in XMM register
 int _allocFPtoXMMreg(int fpreg, int mode)
 {
 	for (size_t i = 0; i < iREGCNT_XMM; i++)
@@ -259,7 +218,7 @@ int _allocFPtoXMMreg(int fpreg, int mode)
 		}
 
 		g_xmmtypes[i] = XMMT_FPS;
-		xmmregs[i].counter = g_xmmAllocCounter++; // update counter
+		xmmregs[i].counter = g_xmmAllocCounter++;
 		xmmregs[i].needed = 1;
 		xmmregs[i].mode |= mode;
 		return i;
@@ -285,7 +244,6 @@ int _allocGPRtoXMMreg(int gprreg, int mode)
 {
 #define MODE_STRING(x) ((((x) & MODE_READ)) ? (((x)&MODE_WRITE) ? "readwrite" : "read") : "write")
 
-	// is this already in a gpr?
 	const int hostx86reg = _checkX86reg(X86TYPE_GPR, gprreg, MODE_READ);
 
 	for (u32 i = 0; i < iREGCNT_XMM; i++)
@@ -311,13 +269,12 @@ int _allocGPRtoXMMreg(int gprreg, int mode)
 			}
 			if (hostx86reg >= 0)
 			{
-				// x86 register should be up to date, because if it was written, it should've been invalidated
 				pxAssert(!(x86regs[hostx86reg].mode & MODE_WRITE));
 				_freeX86regWithoutWriteback(hostx86reg);
 			}
 		}
 
-		xmmregs[i].counter = g_xmmAllocCounter++; // update counter
+		xmmregs[i].counter = g_xmmAllocCounter++;
 		xmmregs[i].needed = true;
 		xmmregs[i].mode |= mode;
 		return i;
@@ -345,14 +302,12 @@ int _allocGPRtoXMMreg(int gprreg, int mode)
 			{
 				RALOG("Writing constant value %lld from guest reg %d to host XMM reg %d\n", g_cpuConstRegs[gprreg].SD[0], gprreg, xmmreg);
 
-				// load lower+upper, replace lower
 				xMOVDQA(xRegisterSSE(xmmreg), ptr128[&cpuRegs.GPR.r[gprreg].UQ]);
 				xMOV64(rax, g_cpuConstRegs[gprreg].SD[0]);
 				xPINSR.Q(xRegisterSSE(xmmreg), rax, 0);
-				xmmregs[xmmreg].mode |= MODE_WRITE; // reg is dirty
+				xmmregs[xmmreg].mode |= MODE_WRITE;
 				g_cpuFlushedConstReg |= (1u << gprreg);
 
-				// kill any gpr allocation which is dirty, since it's a constant value
 				if (hostx86reg >= 0)
 				{
 					RALOG("Invalidating guest reg %d in GPR %d due to constant value write to XMM %d\n", gprreg, hostx86reg, xmmreg);
@@ -363,10 +318,8 @@ int _allocGPRtoXMMreg(int gprreg, int mode)
 			{
 				RALOG("Copying (for guest reg %d) host GPR %d to XMM %d\n", gprreg, hostx86reg, xmmreg);
 
-				// load lower+upper, replace lower if dirty
 				xMOVDQA(xRegisterSSE(xmmreg), ptr128[&cpuRegs.GPR.r[gprreg].UQ]);
 
-				// if the gpr was written to (dirty), we need to invalidate it
 				if (x86regs[hostx86reg].mode & MODE_WRITE)
 				{
 					RALOG("Moving dirty guest reg %d from GPR %d to XMM %d\n", gprreg, hostx86reg, xmmreg);
@@ -377,7 +330,6 @@ int _allocGPRtoXMMreg(int gprreg, int mode)
 			}
 			else
 			{
-				// not loaded
 				RALOG("Loading guest reg %d to host FPR %d\n", gprreg, xmmreg);
 				xMOVDQA(xRegisterSSE(xmmreg), ptr128[&cpuRegs.GPR.r[gprreg].UQ]);
 			}
@@ -399,8 +351,6 @@ int _allocGPRtoXMMreg(int gprreg, int mode)
 #undef MODE_STRING
 }
 
-// Same code as _allocFPtoXMMreg but for the FPU ACC register
-// (seriously boy you could have factorized it)
 int _allocFPACCtoXMMreg(int mode)
 {
 	for (size_t i = 0; i < iREGCNT_XMM; i++)
@@ -417,7 +367,7 @@ int _allocFPACCtoXMMreg(int mode)
 		}
 
 		g_xmmtypes[i] = XMMT_FPS;
-		xmmregs[i].counter = g_xmmAllocCounter++; // update counter
+		xmmregs[i].counter = g_xmmAllocCounter++;
 		xmmregs[i].needed = 1;
 		xmmregs[i].mode |= mode;
 		return i;
@@ -441,7 +391,7 @@ int _allocFPACCtoXMMreg(int mode)
 	return xmmreg;
 }
 
-void _reallocateXMMreg(int xmmreg, int newtype, int newreg, int newmode, bool writeback /*= true*/)
+void _reallocateXMMreg(int xmmreg, int newtype, int newreg, int newmode, bool writeback )
 {
 	pxAssert(xmmreg >= 0 && xmmreg <= static_cast<int>(iREGCNT_XMM));
 	_xmmregs& xr = xmmregs[xmmreg];
@@ -455,8 +405,6 @@ void _reallocateXMMreg(int xmmreg, int newtype, int newreg, int newmode, bool wr
 	xr.needed = true;
 }
 
-// Mark reserved GPR reg as needed. It won't be evicted anymore.
-// You must use _clearNeededXMMregs to clear the flag
 void _addNeededGPRtoX86reg(int gprreg)
 {
 	for (uint i = 0; i < iREGCNT_GPR; i++)
@@ -468,7 +416,7 @@ void _addNeededGPRtoX86reg(int gprreg)
 		if (x86regs[i].reg != gprreg)
 			continue;
 
-		x86regs[i].counter = g_x86AllocCounter++; // update counter
+		x86regs[i].counter = g_x86AllocCounter++;
 		x86regs[i].needed = 1;
 		break;
 	}
@@ -485,7 +433,7 @@ void _addNeededPSXtoX86reg(int gprreg)
 		if (x86regs[i].reg != gprreg)
 			continue;
 
-		x86regs[i].counter = g_x86AllocCounter++; // update counter
+		x86regs[i].counter = g_x86AllocCounter++;
 		x86regs[i].needed = 1;
 		break;
 	}
@@ -502,14 +450,12 @@ void _addNeededGPRtoXMMreg(int gprreg)
 		if (xmmregs[i].reg != gprreg)
 			continue;
 
-		xmmregs[i].counter = g_xmmAllocCounter++; // update counter
+		xmmregs[i].counter = g_xmmAllocCounter++;
 		xmmregs[i].needed = 1;
 		break;
 	}
 }
 
-// Mark reserved FPU reg as needed. It won't be evicted anymore.
-// You must use _clearNeededXMMregs to clear the flag
 void _addNeededFPtoXMMreg(int fpreg)
 {
 	for (uint i = 0; i < iREGCNT_XMM; i++)
@@ -521,14 +467,12 @@ void _addNeededFPtoXMMreg(int fpreg)
 		if (xmmregs[i].reg != fpreg)
 			continue;
 
-		xmmregs[i].counter = g_xmmAllocCounter++; // update counter
+		xmmregs[i].counter = g_xmmAllocCounter++;
 		xmmregs[i].needed = 1;
 		break;
 	}
 }
 
-// Mark reserved FPU ACC reg as needed. It won't be evicted anymore.
-// You must use _clearNeededXMMregs to clear the flag
 void _addNeededFPACCtoXMMreg()
 {
 	for (uint i = 0; i < iREGCNT_XMM; i++)
@@ -538,14 +482,12 @@ void _addNeededFPACCtoXMMreg()
 		if (xmmregs[i].type != XMMTYPE_FPACC)
 			continue;
 
-		xmmregs[i].counter = g_xmmAllocCounter++; // update counter
+		xmmregs[i].counter = g_xmmAllocCounter++;
 		xmmregs[i].needed = 1;
 		break;
 	}
 }
 
-// Clear needed flags of all registers
-// Written register will set MODE_READ (aka data is valid, no need to load it)
 void _clearNeededXMMregs()
 {
 	for (uint i = 0; i < iREGCNT_XMM; i++)
@@ -554,7 +496,6 @@ void _clearNeededXMMregs()
 		if (xmmregs[i].needed)
 		{
 
-			// setup read to any just written regs
 			if (xmmregs[i].inuse && (xmmregs[i].mode & MODE_WRITE))
 				xmmregs[i].mode |= MODE_READ;
 			xmmregs[i].needed = 0;
@@ -567,10 +508,6 @@ void _clearNeededXMMregs()
 	}
 }
 
-// Flush is 0: _freeXMMreg. Flush in memory if MODE_WRITE. Clear inuse
-// Flush is 1: Flush in memory. But register is still valid
-// Flush is 2: like 0 ...
-// Flush is 3: drop register content
 void _deleteGPRtoX86reg(int reg, int flush)
 {
 	for (uint i = 0; i < iREGCNT_XMM; i++)
@@ -589,7 +526,6 @@ void _deleteGPRtoX86reg(int reg, int flush)
 						pxAssert(reg != 0);
 						xMOV(ptr64[&cpuRegs.GPR.r[reg].UL[0]], xRegister64(i));
 
-						// get rid of MODE_WRITE since don't want to flush again
 						x86regs[i].mode &= ~MODE_WRITE;
 						x86regs[i].mode |= MODE_READ;
 					}
@@ -627,7 +563,6 @@ void _deletePSXtoX86reg(int reg, int flush)
 						pxAssert(reg != 0);
 						xMOV(ptr32[&psxRegs.GPR.r[reg]], xRegister32(i));
 
-						// get rid of MODE_WRITE since don't want to flush again
 						x86regs[i].mode &= ~MODE_WRITE;
 						x86regs[i].mode |= MODE_READ;
 
@@ -667,10 +602,8 @@ void _deleteGPRtoXMMreg(int reg, int flush)
 					{
 						pxAssert(reg != 0);
 
-						//pxAssert( g_xmmtypes[i] == XMMT_INT );
 						xMOVDQA(ptr[&cpuRegs.GPR.r[reg].UL[0]], xRegisterSSE(i));
 
-						// get rid of MODE_WRITE since don't want to flush again
 						xmmregs[i].mode &= ~MODE_WRITE;
 						xmmregs[i].mode |= MODE_READ;
 					}
@@ -689,9 +622,6 @@ void _deleteGPRtoXMMreg(int reg, int flush)
 	}
 }
 
-// Flush is 0: _freeXMMreg. Flush in memory if MODE_WRITE. Clear inuse
-// Flush is 1: Flush in memory. But register is still valid
-// Flush is 2: drop register content
 void _deleteFPtoXMMreg(int reg, int flush)
 {
 	for (size_t i = 0; i < iREGCNT_XMM; i++)
@@ -709,7 +639,6 @@ void _deleteFPtoXMMreg(int reg, int flush)
 					if (xmmregs[i].mode & MODE_WRITE)
 					{
 						xMOVSS(ptr[&fpuRegs.fpr[reg].UL], xRegisterSSE(i));
-						// get rid of MODE_WRITE since don't want to flush again
 						xmmregs[i].mode &= ~MODE_WRITE;
 						xmmregs[i].mode |= MODE_READ;
 					}
@@ -756,9 +685,6 @@ void _writebackXMMreg(int xmmreg)
 	}
 }
 
-// Free cached register
-// Step 1: flush content in memory if MODE_WRITE
-// Step 2: clear 'inuse' field
 void _freeXMMreg(int xmmreg)
 {
 	pxAssert(static_cast<uint>(xmmreg) < iREGCNT_XMM);
@@ -790,7 +716,6 @@ void _freeXMMregWithoutWriteback(int xmmreg)
 
 int _allocVFtoXMMreg(int vfreg, int mode)
 {
-	// mode == 0 is called by the microvu side, and we don't want to clash with its temps...
 	if (mode != 0)
 	{
 		for (uint i = 0; i < iREGCNT_XMM; i++)
@@ -805,7 +730,6 @@ int _allocVFtoXMMreg(int vfreg, int mode)
 		}
 	}
 
-	// -1 here because we don't want to allocate PQ.
 	const int xmmreg = _getFreeXMMreg(iREGCNT_XMM - 1);
 	xmmregs[xmmreg].inuse = true;
 	xmmregs[xmmreg].type = XMMTYPE_VFREG;
@@ -849,7 +773,6 @@ void _flushXMMreg(int xmmreg)
 	}
 }
 
-// Flush in memory all inuse registers but registers are still valid
 void _flushXMMregs()
 {
 	for (u32 i = 0; i < iREGCNT_XMM; ++i)
@@ -871,7 +794,6 @@ int _allocIfUsedVItoX86(int vireg, int mode)
 	if (x86reg >= 0)
 		return x86reg;
 
-	// Prefer not to stop on COP2 reserved registers here.
 	return EEINST_VIUSEDTEST(vireg) ? _allocX86reg(X86TYPE_VIREG, vireg, mode | MODE_COP2) : -1;
 }
 
@@ -895,7 +817,6 @@ int _allocIfUsedFPUtoXMM(int fpureg, int mode)
 
 void _recClearInst(EEINST* pinst)
 {
-	// we set everything as being live to begin with, since it needs to be written at the end of the block
 	std::memset(pinst, 0, sizeof(EEINST));
 	std::memset(pinst->regs, EEINST_LIVE, sizeof(pinst->regs));
 	std::memset(pinst->fpuregs, EEINST_LIVE, sizeof(pinst->fpuregs));
@@ -903,7 +824,6 @@ void _recClearInst(EEINST* pinst)
 	std::memset(pinst->viregs, EEINST_LIVE, sizeof(pinst->viregs));
 }
 
-// returns nonzero value if reg has been written between [startpc, endpc-4]
 u32 _recIsRegReadOrWritten(EEINST* pinst, int size, u8 xmmtype, u8 reg)
 {
 	u32 inst = 1;

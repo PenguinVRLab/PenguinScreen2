@@ -26,7 +26,6 @@ void IPU_Fifo_Input::clear()
 	readpos = 0;
 	writepos = 0;
 
-	// Because the FIFO is drained it will request more data immediately
 	IPUCoreStatus.DataRequested = true;
 
 	if (ipu1ch.chcr.STR && cpuRegs.eCycle[4] == 0x9999)
@@ -85,10 +84,8 @@ int IPU_Fifo_Input::write(const u32* pMem, int size)
 
 int IPU_Fifo_Input::read(void *value)
 {
-	// wait until enough data to ensure proper streaming.
 	if (g_BP.IFC <= 1)
 	{
-		// IPU FIFO is empty and DMA is waiting so lets tell the DMA we are ready to put data in the FIFO
 		IPUCoreStatus.DataRequested = true;
 
 		if(ipu1ch.chcr.STR && cpuRegs.eCycle[4] == 0x9999)
@@ -137,9 +134,6 @@ void IPU_Fifo_Output::read(void *value, uint size)
 	pxAssert(ipuRegs.ctrl.OFC >= size);
 	ipuRegs.ctrl.OFC -= size;
 
-	// Zeroing the read data is not needed, since the ringbuffer design will never read back
-	// the zero'd data anyway. --air
-
 	const int first_words = std::min((32 - readpos), static_cast<int>(size << 2));
 	const int second_words = static_cast<int>(size << 2) - first_words;
 
@@ -159,18 +153,15 @@ void ReadFIFO_IPUout(mem128_t* out)
 		return;
 	ipu_fifo.out.read(out, 1);
 
-	// Games should always check the fifo before reading from it -- so if the FIFO has no data
-	// its either some glitchy game or a bug in pcsx2.
 }
 
 void WriteFIFO_IPUin(const mem128_t* value)
 {
 	IPU_LOG( "WriteFIFO/IPUin <- 0x%08X.%08X.%08X.%08X", value->_u32[0], value->_u32[1], value->_u32[2], value->_u32[3]);
 
-	//committing every 16 bytes
 	if( ipu_fifo.in.write(value->_u32, 1) > 0 )
 	{
-		if (ipuRegs.ctrl.BUSY /*&& IPUCoreStatus.WaitingOnIPUTo*/)
+		if (ipuRegs.ctrl.BUSY )
 		{
 			IPUCoreStatus.WaitingOnIPUFrom = false;
 			IPUCoreStatus.WaitingOnIPUTo = false;

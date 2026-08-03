@@ -3,41 +3,7 @@
 
 #include "MipsAssemblerTables.h"
 
-/* Placeholders for encoding
-
-	s	source register
-	d	destination register
-	t	target register
-	S	float source reg
-	D	float dest reg
-	T	float traget reg
-	i	16 bit immediate value
-	I	32 bit immediate value
-	u	Shifted 16 bit immediate (upper)
-	n	negative 16 bit immediate (for subi/u aliases)
-	b	26 bit immediate
-	a	5 bit immediate
-*/
-
-// NOTE: This tables also contains opcodes that aren't available on PS2. This was done
-// because it's shared between multiple projects, and manually removing the opcodes every
-// time is error prone and makes it harder to maintain. They aren't accessible, so they
-// cause no harm besides appearing here.
 const tMipsOpcode MipsOpcodes[] = {
-//     31---------26---------------------------------------------------0
-//     |  opcode   |                                                   |
-//     ------6----------------------------------------------------------
-//     |--000--|--001--|--010--|--011--|--100--|--101--|--110--|--111--| lo
-// 000 | *1    | *2    | J     | JAL   | BEQ   | BNE   | BLEZ  | BGTZ  | 00..07
-// 001 | ADDI  | ADDIU | SLTI  | SLTIU | ANDI  | ORI   | XORI  | LUI   | 08..0F
-// 010 | *3    | *4    | ---   | ---   | BEQL  | BNEL  | BLEZL | BGTZL | 10..17
-// 011 | DADDI | DADDIU| LDL   | LDR   | ---   | ---   | LQ    | SQ   | 18..1F
-// 100 | LB    | LH    | LWL   | LW    | LBU   | LHU   | LWR   | LWU   | 20..27
-// 101 | SB    | SH    | SWL   | SW    | SDL   | SDR   | SWR   | CACHE | 28..2F
-// 110 | LL    | LWC1  | LV.S  | ---   | LLD   | ULV.Q | LV.Q  | LD    | 30..37
-// 111 | SC    | SWC1  | SV.S  | ---   | SCD   | USV.Q | SV.Q  | SD    | 38..3F
-//  hi |-------|-------|-------|-------|-------|-------|-------|-------|
-//		*1 = SPECIAL	*2 = REGIMM		*3 = COP0		*4 = COP1
 	{ "j",		"I",			MIPS_OP(0x02), 			MA_MIPS1,	MO_IPCA|MO_DELAY|MO_NODELAYSLOT },
 	{ "jal",	"I",			MIPS_OP(0x03),			MA_MIPS1,	MO_IPCA|MO_DELAY|MO_NODELAYSLOT },
 	{ "beq",	"s,t,i",		MIPS_OP(0x04),			MA_MIPS1,	MO_IPCR|MO_DELAY|MO_NODELAYSLOT },
@@ -150,23 +116,6 @@ const tMipsOpcode MipsOpcodes[] = {
 	{ "sd",		"t,i(s)",		MIPS_OP(0x3F),			MA_MIPS3,	MO_64BIT|MO_DELAYRT },
 	{ "sd",		"t,(s)",		MIPS_OP(0x3F),			MA_MIPS3,	MO_64BIT|MO_DELAYRT },
 
-//     31---------26------------------------------------------5--------0
-//     |=   SPECIAL|                                         | function|
-//     ------6----------------------------------------------------6-----
-//     |--000--|--001--|--010--|--011--|--100--|--101--|--110--|--111--| lo
-// 000 | SLL   | ---   | SRL*1 | SRA   | SLLV  |  ---  | SRLV*2| SRAV  | 00..07
-// 001 | JR    | JALR  | MOVZ  | MOVN  |SYSCALL| BREAK |  ---  | SYNC  | 08..0F
-// 010 | MFHI  | MTHI  | MFLO  | MTLO  | DSLLV |  ---  |   *3  |  *4   | 10..17
-// 011 | MULT  | MULTU | DIV   | DIVU  | MADD  | MADDU | ----  | ----- | 18..1F
-// 100 | ADD   | ADDU  | SUB   | SUBU  | AND   | OR    | XOR   | NOR   | 20..27
-// 101 | mfsa  | mtsa  | SLT   | SLTU  |  *5   |  *6   |  *7   |  *8   | 28..2F
-// 110 | TGE   | TGEU  | TLT   | TLTU  | TEQ   |  ---  | TNE   |  ---  | 30..37
-// 111 | dsll  |  ---  | dsrl  | dsra  |dsll32 |  ---  |dsrl32 |dsra32 | 38..3F
-//  hi |-------|-------|-------|-------|-------|-------|-------|-------|
-// *1:	rotr when rs = 1 (PSP only)		*2:	rotrv when sa = 1 (PSP only)
-// *3:	dsrlv on PS2, clz on PSP		*4:	dsrav on PS2, clo on PSP
-// *5:	dadd on PS2, max on PSP			*6:	daddu on PS2, min on PSP
-// *7:	dsub on PS2, msub on PSP		*8:	dsubu on PS2, msubu on PSP
 	{ "sll",	"d,t,a",	MIPS_SPECIAL(0x00),				MA_MIPS1,	0 },
 	{ "sll",	"d,a",		MIPS_SPECIAL(0x00),				MA_MIPS1,	MO_RDT },
 	{ "nop",	"",			MIPS_SPECIAL(0x00),				MA_MIPS1,	0 },
@@ -279,16 +228,6 @@ const tMipsOpcode MipsOpcodes[] = {
 	{ "dsra32",	"d,t,a",	MIPS_SPECIAL(0x3F),				MA_MIPS3,	MO_64BIT },
 	{ "dsra32",	"d,a",		MIPS_SPECIAL(0x3F),				MA_MIPS3,	MO_64BIT|MO_RDT },
 
-//     REGIMM: encoded by the rt field when opcode field = REGIMM.
-//     31---------26----------20-------16------------------------------0
-//     |=    REGIMM|          |   rt    |                              |
-//     ------6---------------------5------------------------------------
-//     |--000--|--001--|--010--|--011--|--100--|--101--|--110--|--111--| lo
-//  00 | BLTZ  | BGEZ  | BLTZL | BGEZL |  ---  |  ---  |  ---  |  ---  | 00-07
-//  01 | tgei  | tgeiu | tlti  | tltiu | teqi  |  ---  | tnei  |  ---  | 08-0F
-//  10 | BLTZAL| BGEZAL|BLTZALL|BGEZALL|  ---  |  ---  |  ---  |  ---  | 10-17
-//  11 | mtsab | mtsah |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  | 18-1F
-//  hi |-------|-------|-------|-------|-------|-------|-------|-------|
 	{ "bltz",	"s,i",		MIPS_REGIMM(0x00),				MA_MIPS1,	MO_IPCR|MO_DELAY|MO_NODELAYSLOT },
 	{ "bgez",	"s,i",		MIPS_REGIMM(0x01),				MA_MIPS1,	MO_IPCR|MO_DELAY|MO_NODELAYSLOT },
 	{ "bltzl",	"s,i",		MIPS_REGIMM(0x02),				MA_MIPS2,	MO_IPCR|MO_DELAY|MO_NODELAYSLOT },
@@ -306,19 +245,6 @@ const tMipsOpcode MipsOpcodes[] = {
 	{ "mtsab",	"s,i",		MIPS_REGIMM(0x18),				MA_PS2,	0 },
 	{ "mtsah",	"s,i",		MIPS_REGIMM(0x19),				MA_PS2,	0 },
 
-//     31---------26------------------------------------------5--------0
-//     |=       MMI|                                         | function|
-//     ------6----------------------------------------------------6-----
-//     |--000--|--001--|--010--|--011--|--100--|--101--|--110--|--111--| lo
-// 000 | MADD  | MADDU |  ---  |  ---  | PLZCW |  ---  |  ---  |  ---  | 00-07
-// 001 | MMI0  | MMI2  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  | 08-0F
-// 010 | MFHI1 | MTHI1 | MFLO1 | MTLO1 |  ---  |  ---  |  ---  |  ---  | 10-17
-// 011 | MULT1 | MULTU1| DIV1  | DIVU1 |  ---  |  ---  |  ---  |  ---  | 18-1F
-// 100 | MADD1 | MADDU1|  ---  |  ---  |  ---  |  ---  |  ---  |  ---  | 20..27
-// 101 | MMI1  | MMI3  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  | 28..2F
-// 110 | PMFHL | PMTHL |  ---  |  ---  | PSLLH |  ---  |  ---  | PSRAH | 30..37
-// 111 |  ---  |  ---  |  ---  |  ---  | PSLLW |  ---  | PSRLW | PSRAW | 38..3F
-//  hi |-------|-------|-------|-------|-------|-------|-------|-------|
 	{ "madd",	"d,s,t",	MIPS_MMI(0x00),				MA_PS2,		0 },
 	{ "madd",	"s,t",		MIPS_MMI(0x00),				MA_PS2,		MO_RSD },
 	{ "maddu",	"d,s,t",	MIPS_MMI(0x01),				MA_PS2,		0 },
@@ -352,19 +278,6 @@ const tMipsOpcode MipsOpcodes[] = {
 	{ "psrlw",	"d,t,a",	MIPS_MMI(0x3E),				MA_PS2,		0 },
 	{ "psraw",	"d,t,a",	MIPS_MMI(0x3F),				MA_PS2,		0 },
 	
-//     31---------26--------------------------------10--------6-5-------0
-//     |=      MMI|                                 | function |  MMI0  |
-//     -----6--------------------------------------------5---------6-----
-//     |---00---|---01---|---10---|---11---| lo
-// 000 | PADDW  |  PSUBW |  PCGTW |  PMAXW | 00..03
-// 001 | PADDH  |  PSUBH |  PCGTH |  PMAXH | 04..07
-// 010 | PADDB  |  PSUBB |  PCGTB |  ----  | 08..0B
-// 011 |  ----  |  ----  |  ----  |  ----  | 0C..0F
-// 100 | PADDSW | PSUBSW | PEXTLW |  PPACW | 10..13
-// 101 | PADDSH | PSUBSH | PEXTLH |  PPACH | 14..17
-// 110 | PADDSB | PSUBSB | PEXTLB |  PPACB | 18..1B
-// 111 |  ----  |  ---   | PEXT5  |  PPAC5 | 1C..1F
-//  hi |--------|--------|--------|--------|
 	{ "paddw",	"d,s,t",	MIPS_MMI0(0x00),			MA_PS2,	0 },
 	{ "paddw",	"s,t",		MIPS_MMI0(0x00),			MA_PS2,	MO_RSD },
 	{ "psubw",	"d,s,t",	MIPS_MMI0(0x01),			MA_PS2,	0 },
@@ -414,19 +327,6 @@ const tMipsOpcode MipsOpcodes[] = {
 	{ "pext5",	"d,t",		MIPS_MMI0(0x1E),			MA_PS2,	0 },
 	{ "ppac5",	"d,t",		MIPS_MMI0(0x1F),			MA_PS2,	0 },
 	
-//     31---------26--------------------------------10--------6-5-------0
-//     |=      MMI|                                 | function |  MMI1  |
-//     -----6--------------------------------------------5---------6-----
-//     |---00---|---01---|---10---|---11---| lo
-// 000 |  ----  |  PABSW |  PCEQW |  PMINW | 00..03
-// 001 | PADSBH |  PABSH |  PCEQH |  PMINH | 04..07
-// 010 |  ----  |  ----  |  PCEQB |  ----  | 08..0B
-// 011 |  ----  |  ----  |  ----  |  ----  | 0C..0F
-// 100 | PADDUW | PSUBUW | PEXTUW |  PPACW | 10..13
-// 101 | PADDUH | PSUBUH | PEXTUH |  PPACH | 14..17
-// 110 | PADDUB | PSUBUB | PEXTUB |  QFSRV | 18..1B
-// 111 |  ----  |  ---   |  ----  |  ----  | 1C..1F
-//  hi |--------|--------|--------|--------|
 	{ "pabsw",	"d,t",		MIPS_MMI1(0x01),			MA_PS2,	0 },
 	{ "pceqw",	"d,s,t",	MIPS_MMI1(0x02),			MA_PS2,	0 },
 	{ "pceqw",	"s,t",		MIPS_MMI1(0x02),			MA_PS2,	MO_RSD },
@@ -466,19 +366,6 @@ const tMipsOpcode MipsOpcodes[] = {
 	{ "qfsrv",	"d,s,t",	MIPS_MMI1(0x1B),			MA_PS2,	0 },
 	{ "qfsrv",	"s,t",		MIPS_MMI1(0x1B),			MA_PS2,	MO_RSD },
 	
-//     31---------26--------------------------------10--------6-5-------0
-//     |=      MMI|                                 | function |  MMI2  |
-//     -----6--------------------------------------------5---------6-----
-//     |---00---|---01---|---10---|---11---| lo
-// 000 | PMADDW |  ----  | PSLLVW | PSRLVW | 00..03
-// 001 | PMSUBW |  ----  |  ----  |  ----  | 04..07
-// 010 |  PMFHI |  PMFLO |  PINTH |  ----  | 08..0B
-// 011 | PMULTW |  PDIVW | PCPYLD |  ----  | 0C..0F
-// 100 | PMADDH | PHMADH |  PAND  |  PXOR  | 10..13
-// 101 | PMSUBH | PHMSBH |  ----  |  ----  | 14..17
-// 110 |  ----  |  ----  |  PEXEH |  PREVH | 18..1B
-// 111 | PMULTH | PDIVBW |  PEXEW | PROT3W | 1C..1F
-//  hi |--------|--------|--------|--------|
 	{ "pmaddw",	"d,s,t",	MIPS_MMI2(0x00),			MA_PS2,	0 },
 	{ "pmaddw",	"s,t",		MIPS_MMI2(0x00),			MA_PS2,	MO_RSD },
 	{ "psllvw",	"d,s,t",	MIPS_MMI2(0x02),			MA_PS2,	0 },
@@ -516,19 +403,6 @@ const tMipsOpcode MipsOpcodes[] = {
 	{ "pexew",	"d,t",		MIPS_MMI2(0x1E),			MA_PS2,	0 },
 	{ "prot3w",	"d,t",		MIPS_MMI2(0x1F),			MA_PS2,	0 },
 
-//     31---------26--------------------------------10--------6-5-------0
-//     |=      MMI|                                 | function |  MMI3  |
-//     -----6--------------------------------------------5---------6-----
-//     |---00---|---01---|---10---|---11---| lo
-// 000 | PMADDUW|  ----  |  ----  | PSRAVW | 00..03
-// 001 |  ----  |  ----  |  ----  |  ----  | 04..07
-// 010 |  PMTHI |  PMTLO | PINTEH |  ----  | 08..0B
-// 011 | PMULTUW| PDIVUW | PCPYUD |  ----  | 0C..0F
-// 100 |  ----  |  ----  |   POR  |  PNOR  | 10..13
-// 101 |  ----  |  ----  |  ----  |  ----  | 14..17
-// 110 |  ----  |  ----  |  PEXCH |  PCPYH | 18..1B
-// 111 |  ----  |  ----  |  PEXCW |  ----  | 1C..1F
-//  hi |--------|--------|--------|--------|
 	{ "pmadduw","d,s,t",	MIPS_MMI3(0x00),			MA_PS2,	0 },
 	{ "pmadduw","s,t",		MIPS_MMI3(0x00),			MA_PS2,	MO_RSD },
 	{ "psravw",	"d,s,t",	MIPS_MMI3(0x03),			MA_PS2,	0 },
@@ -551,17 +425,6 @@ const tMipsOpcode MipsOpcodes[] = {
 	{ "pcpyh",	"s,t",		MIPS_MMI3(0x1B),			MA_PS2,	MO_RSD },
 	{ "pexcw",	"d,t",		MIPS_MMI3(0x1E),			MA_PS2,	0 },
 
-// COP2 (VU0 Macro Mode)
-// Incomplete, only field type 11 supported (top bit of opcode is unset)
-//     31-------26---------21----------------------------------------1-0
-//     |=    COP2|  opcode  |                                        |I|
-//     -----6---------5-----------------------------------------------1-
-//     |--000--|--001--|--010--|--011--|--100--|--101--|--110--|--111--| lo
-//  00 |  ---  | QMFC2 |  CFC2 |  ---  |  ---  | QMTC2 |  CTC2 |  ---  | 00..07
-//  01 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  | 08..0F
-//  10 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  | 10..17
-//  11 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  | 18..1F
-//  hi |-------|-------|-------|-------|-------|-------|-------|-------|
 	{ "qmfc2",		"t,Vs",	MIPS_COP2_NI(0x01),				MA_PS2,	0 },
 	{ "qmfc2.ni",	"t,Vs",	MIPS_COP2_NI(0x01),				MA_PS2,	0 },
 	{ "qmfc2.i",	"t,Vs",	MIPS_COP2_I(0x01),				MA_PS2,	0 },
@@ -575,47 +438,16 @@ const tMipsOpcode MipsOpcodes[] = {
 	{ "ctc2.ni",	"t,Vis",MIPS_COP2_NI(0x06),				MA_PS2,	0 },
 	{ "ctc2.i",		"t,Vis",MIPS_COP2_I(0x06),				MA_PS2,	0 },
 
-//     31-------26------21---------------------------------------------0
-//     |=    COP1|  rs  |                                              |
-//     -----6-------5---------------------------------------------------
-//     |--000--|--001--|--010--|--011--|--100--|--101--|--110--|--111--| lo
-//  00 |  MFC1 |  ---  |  CFC1 |  ---  |  MTC1 |  ---  |  CTC1 |  ---  | 00..07
-//  01 |  BC*  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  | 08..0F
-//  10 |  S*   |  ---  |  ---  |  ---  |  W*   |  ---  |  ---  |  ---  | 10..17
-//  11 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  | 18..1F
-//  hi |-------|-------|-------|-------|-------|-------|-------|-------|
 	{ "mfc1",	"t,S",		MIPS_COP1(0x00),				MA_MIPS2,	0 },
 	{ "cfc1",	"t,S",		MIPS_COP1(0x02),				MA_MIPS2,	0 },
 	{ "mtc1",	"t,S",		MIPS_COP1(0x04),				MA_MIPS2,	0 },
 	{ "ctc1",	"t,S",		MIPS_COP1(0x06),				MA_MIPS2,	0 },
 	
-//     31---------21-------16------------------------------------------0
-//     |=    COP1BC|  rt   |                                           |
-//     ------11---------5-----------------------------------------------
-//     |--000--|--001--|--010--|--011--|--100--|--101--|--110--|--111--| lo
-//  00 |  BC1F | BC1T  | BC1FL | BC1TL |  ---  |  ---  |  ---  |  ---  | 00..07
-//  01 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  | 08..0F
-//  10 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  | 10..17
-//  11 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  | 18..1F
-//  hi |-------|-------|-------|-------|-------|-------|-------|-------|
 	{ "bc1f",	"i",		MIPS_COP1BC(0x00),				MA_MIPS2,	MO_IPCR|MO_DELAY|MO_NODELAYSLOT },
 	{ "bc1t",	"i",		MIPS_COP1BC(0x01),				MA_MIPS2,	MO_IPCR|MO_DELAY|MO_NODELAYSLOT },
 	{ "bc1fl",	"i",		MIPS_COP1BC(0x02),				MA_MIPS2,	MO_IPCR|MO_DELAY|MO_NODELAYSLOT },
 	{ "bc1tl",	"i",		MIPS_COP1BC(0x03),				MA_MIPS2,	MO_IPCR|MO_DELAY|MO_NODELAYSLOT },
 
-//     31---------21------------------------------------------5--------0
-//     |=  COP1S  |                                          | function|
-//     -----11----------------------------------------------------6-----
-//     |--000--|--001--|--010--|--011--|--100--|--101--|--110--|--111--| lo
-// 000 |  add  |  sub  |  mul  |  div  | sqrt  |  abs  |  mov  |  neg  | 00..07
-// 001 |  ---  |  ---  |  ---  |  ---  |round.w|trunc.w|ceil.w |floor.w| 08..0F
-// 010 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  | rsqrt |  ---  | 10..17
-// 011 |  adda |  suba | mula  |  ---  | madd  |  msub | madda | msuba | 18..1F
-// 100 |  ---  |  ---  |  ---  |  ---  | cvt.w |  ---  |  ---  |  ---  | 20..27
-// 101 |  max  |  min  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  | 28..2F
-// 110 |  c.f  | c.un  | c.eq  | c.ueq |c.(o)lt| c.ult |c.(o)le| c.ule | 30..37
-// 110 |  c.sf | c.ngle| c.seq | c.ngl | c.lt  | c.nge | c.le  | c.ngt | 38..3F
-//  hi |-------|-------|-------|-------|-------|-------|-------|-------|
 	{ "add.s",		"D,S,T",	MIPS_COP1S(0x00),			MA_MIPS2,	0 },
 	{ "add.s",		"S,T",		MIPS_COP1S(0x00),			MA_MIPS2,	MO_FRSD },
 	{ "sub.s",		"D,S,T",	MIPS_COP1S(0x01),			MA_MIPS2,	0 },
@@ -664,51 +496,24 @@ const tMipsOpcode MipsOpcodes[] = {
 	{ "c.le.s",		"S,T",		MIPS_COP1S(0x3E),			MA_PSP,	0 },
 	{ "c.ngt.s",	"S,T",		MIPS_COP1S(0x3F),			MA_PSP,	0 },
 
-//     COP1W: encoded by function field
-//     31---------21------------------------------------------5--------0
-//     |=  COP1W  |                                          | function|
-//     -----11----------------------------------------------------6-----
-//     |--000--|--001--|--010--|--011--|--100--|--101--|--110--|--111--| lo
-// 000 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  | 00..07
-// 001 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  | 08..0F
-// 010 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  | 10..17
-// 011 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  | 18..1F
-// 100 |cvt.s.w|  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  | 20..27
-// 101 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  | 28..2F
-// 110 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  | 30..37
-// 110 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  | 38..3F
-//  hi |-------|-------|-------|-------|-------|-------|-------|-------|
 	{ "cvt.s.w",	"D,S",		MIPS_COP1W(0x20),			MA_MIPS2,	0 },
 
-//     31---------26-----23--------------------------------------------0
-//     |= VFPU0| VOP | |
-//     ------6--------3-------------------------------------------------
-//     |--000--|--001--|--010--|--011--|--100--|--101--|--110--|--111--|
-// 000 | VADD  | VSUB  | VSBN  | ---   | ---   | ---   | ---   | VDIV  | 00..07
-//  hi |-------|-------|-------|-------|-------|-------|-------|-------|
 	{ "vadd.S",		"vd,vs,vt",	MIPS_VFPU0(0x00),			MA_PSP,	MO_VFPU },
 	{ "vsub.S",		"vd,vs,vt",	MIPS_VFPU0(0x01),			MA_PSP,	MO_VFPU },
 	{ "vsbn.S",		"vd,vs,vt",	MIPS_VFPU0(0x02),			MA_PSP,	MO_VFPU },
 	{ "vdiv.S",		"vd,vs,vt",	MIPS_VFPU0(0x07),			MA_PSP,	MO_VFPU },
 
-	// allegrex0
 	{ "seh",		"d,t",		MIPS_ALLEGREX0(16),			MA_PSP },
 	{ "seh",		"d,t",		MIPS_ALLEGREX0(24),			MA_PSP },
 
-	// END
 	{ nullptr,		nullptr,	0,			0 }
 };
 
 
 const MipsArchDefinition mipsArchs[] = {
-	// MARCH_PSX
 	{ "PSX",		MA_MIPS1,							MA_EXPSX,	0 },
-	// MARCH_N64
 	{ "N64",		MA_MIPS1|MA_MIPS2|MA_MIPS3,			MA_EXN64,	MO_FPU },
-	// MARCH_PS2
 	{ "PS2",		MA_MIPS1|MA_MIPS2|MA_MIPS3|MA_PS2,	MA_EXPS2,	MO_64BIT|MO_FPU },
-	// MARCH_PSP
 	{ "PSP",		MA_MIPS1|MA_MIPS2|MA_MIPS3|MA_PSP,	MA_EXPSP,	MO_FPU },
-	// MARCH_INVALID
 	{ "Invalid",	0,									0,			0 },
 };

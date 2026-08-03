@@ -50,7 +50,6 @@ public:
 		SPECIAL
 	};
 
-	// register stuff
 	virtual int getRegisterCategoryCount() = 0;
 	virtual const char* getRegisterCategoryName(int cat) = 0;
 	virtual int getRegisterSize(int cat) = 0;
@@ -118,7 +117,6 @@ public:
 
 	bool CompareBytes(u32 address, const void* src, u32 size) override;
 
-	// register stuff
 	int getRegisterCategoryCount() override;
 	const char* getRegisterCategoryName(int cat) override;
 	int getRegisterSize(int cat) override;
@@ -164,7 +162,6 @@ public:
 
 	bool CompareBytes(u32 address, const void* src, u32 size) override;
 
-	// register stuff
 	int getRegisterCategoryCount() override;
 	const char* getRegisterCategoryName(int cat) override;
 	int getRegisterSize(int cat) override;
@@ -191,7 +188,6 @@ public:
 	BreakPointCpu getCpuType() override;
 };
 
-// Provides access to the loadable segments from the ELF as they are on disk.
 class ElfMemoryReader : public MemoryInterface
 {
 public:

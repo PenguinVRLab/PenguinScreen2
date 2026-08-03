@@ -18,7 +18,6 @@ layout(location = 0) out vec4 SV_Target0;
 void ps_main0()
 {
 	vec4 c = texture(TextureSampler, PSin_t);
-	// Note: clamping will be done by fixed unit
 	c.a *= 2.0f;
 	SV_Target0 = c;
 }

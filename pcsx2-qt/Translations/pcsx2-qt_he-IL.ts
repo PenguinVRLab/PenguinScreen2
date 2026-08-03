@@ -1556,11 +1556,6 @@ Leaderboard Position: {1} of {2}</source>
       <translation>השתמש בבוחר מצב שמירה</translation>
     </message>
     <message>
-      <location filename="../Settings/AdvancedSettingsWidget.ui" line="505"/>
-      <source>PINE Settings</source>
-      <translation>הגדרות PINE</translation>
-    </message>
-    <message>
       <location filename="../Settings/AdvancedSettingsWidget.ui" line="527"/>
       <source>Slot:</source>
       <translation>תאים:</translation>

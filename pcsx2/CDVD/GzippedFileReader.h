@@ -24,14 +24,13 @@ public:
 	u32 GetBlockCount() const override;
 
 private:
-	static constexpr int GZFILE_SPAN_DEFAULT = (1048576 * 4); /* distance between direct access points when creating a new index */
-	static constexpr int GZFILE_READ_CHUNK_SIZE = (256 * 1024); /* zlib extraction chunks size (at 0-based boundaries) */
-	static constexpr int GZFILE_CACHE_SIZE_MB = 200; /* cache size for extracted data. must be at least GZFILE_READ_CHUNK_SIZE (in MB)*/
+	static constexpr int GZFILE_SPAN_DEFAULT = (1048576 * 4);
+	static constexpr int GZFILE_READ_CHUNK_SIZE = (256 * 1024);
+	static constexpr int GZFILE_CACHE_SIZE_MB = 200;
 
-	// Verifies that we have an index, or try to create one
 	bool LoadOrCreateIndex(Error* error);
 
-	Access* m_index = nullptr; // Quick access index
+	Access* m_index = nullptr;
 
 	std::FILE* m_src = nullptr;
 

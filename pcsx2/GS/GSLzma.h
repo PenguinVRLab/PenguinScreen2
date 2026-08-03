@@ -267,7 +267,7 @@ namespace GSDumpTypes
 				return "UNKNOWN";
 		}
 	}
-} // namespace GSDumpTypes
+}
 
 class GSDumpFile
 {
@@ -318,5 +318,4 @@ private:
 	GSDataArray m_dump_packets;
 };
 
-// Initializes CRC tables used by LZMA SDK.
 void GSInit7ZCRCTables();

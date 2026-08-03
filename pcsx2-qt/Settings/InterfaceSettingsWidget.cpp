@@ -15,41 +15,25 @@
 
 const char* InterfaceSettingsWidget::THEME_NAMES[] = {
 	QT_TRANSLATE_NOOP("InterfaceSettingsWidget", "Native"),
-//: Ignore what Crowdin says in this string about "[Light]/[Dark]" being untouchable here, these are not variables in this case and must be translated.
 #ifdef _WIN32
 	QT_TRANSLATE_NOOP("InterfaceSettingsWidget", "Classic Windows"),
 #endif
 	QT_TRANSLATE_NOOP("InterfaceSettingsWidget", "Fusion [Light/Dark]"),
-	//: Ignore what Crowdin says in this string about "[Light]/[Dark]" being untouchable here, these are not variables in this case and must be translated.
 	QT_TRANSLATE_NOOP("InterfaceSettingsWidget", "Dark Fusion (Gray) [Dark]"),
-	//: Ignore what Crowdin says in this string about "[Light]/[Dark]" being untouchable here, these are not variables in this case and must be translated.
 	QT_TRANSLATE_NOOP("InterfaceSettingsWidget", "Dark Fusion (Blue) [Dark]"),
-	//: Ignore what Crowdin says in this string about "[Light]/[Dark]" being untouchable here, these are not variables in this case and must be translated.
 	QT_TRANSLATE_NOOP("InterfaceSettingsWidget", "Grey Matter (Gray) [Dark]"),
-	//: Ignore what Crowdin says in this string about "[Light]/[Dark]" being untouchable here, these are not variables in this case and must be translated.
 	QT_TRANSLATE_NOOP("InterfaceSettingsWidget", "Untouched Lagoon (Grayish Green/-Blue ) [Light]"),
-	//: Ignore what Crowdin says in this string about "[Light]/[Dark]" being untouchable here, these are not variables in this case and must be translated.
 	QT_TRANSLATE_NOOP("InterfaceSettingsWidget", "Baby Pastel (Pink) [Light]"),
-	//: Ignore what Crowdin says in this string about "[Light]/[Dark]" being untouchable here, these are not variables in this case and must be translated.
 	QT_TRANSLATE_NOOP("InterfaceSettingsWidget", "Pizza Time! (Brown-ish/Creamy White) [Light]"),
-	//: Ignore what Crowdin says in this string about "[Light]/[Dark]" being untouchable here, these are not variables in this case and must be translated.
-	QT_TRANSLATE_NOOP("InterfaceSettingsWidget", "PCSX2 (White/Blue) [Light]"),
-	//: Ignore what Crowdin says in this string about "[Light]/[Dark]" being untouchable here, these are not variables in this case and must be translated.
+	QT_TRANSLATE_NOOP("InterfaceSettingsWidget", "PenguinScreen2 (White/Blue) [Light]"),
 	QT_TRANSLATE_NOOP("InterfaceSettingsWidget", "Scarlet Devil (Red/Purple) [Dark]"),
-	//: Ignore what Crowdin says in this string about "[Light]/[Dark]" being untouchable here, these are not variables in this case and must be translated.
 	QT_TRANSLATE_NOOP("InterfaceSettingsWidget", "Violet Angel (Blue/Purple) [Dark]"),
-	//: Ignore what Crowdin says in this string about "[Light]/[Dark]" being untouchable here, these are not variables in this case and must be translated.
 	QT_TRANSLATE_NOOP("InterfaceSettingsWidget", "Cobalt Sky (Blue) [Dark]"),
-	//: Ignore what Crowdin says in this string about "[Light]/[Dark]" being untouchable here, these are not variables in this case and must be translated.
 	QT_TRANSLATE_NOOP("InterfaceSettingsWidget", "AMOLED (Black) [Dark]"),
-	//: Ignore what Crowdin says in this string about "[Light]/[Dark]" being untouchable here, these are not variables in this case and must be translated.
 	QT_TRANSLATE_NOOP("InterfaceSettingsWidget", "Ruby (Black/Red) [Dark]"),
-	//: Ignore what Crowdin says in this string about "[Light]/[Dark]" being untouchable here, these are not variables in this case and must be translated.
 	QT_TRANSLATE_NOOP("InterfaceSettingsWidget", "Sapphire (Black/Blue) [Dark]"),
-	//: Ignore what Crowdin says in this string about "[Light]/[Dark]" being untouchable here, these are not variables in this case and must be translated.
 	QT_TRANSLATE_NOOP("InterfaceSettingsWidget", "Emerald (Black/Green) [Dark]"),
-	//: "custom.qss" must be kept as-is.
-	QT_TRANSLATE_NOOP("InterfaceSettingsWidget", "custom.qss [Drop in PCSX2 Folder]"),
+	QT_TRANSLATE_NOOP("InterfaceSettingsWidget", "custom.qss [Drop in PenguinScreen2 Folder]"),
 	nullptr};
 
 const char* InterfaceSettingsWidget::THEME_VALUES[] = {
@@ -103,7 +87,7 @@ InterfaceSettingsWidget::InterfaceSettingsWidget(SettingsWindow* settings_dialog
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.preferEnglishGameList, "UI", "PreferEnglishGameList", false);
 	connect(m_ui.preferEnglishGameList, &QCheckBox::checkStateChanged, this, [this] { emit preferEnglishGameListChanged(); });
 
-#ifdef __linux__ // Mouse locking is only supported on X11
+#ifdef __linux__
 	const bool mouse_lock_supported = QGuiApplication::platformName().toLower() == "xcb";
 #else
 	const bool mouse_lock_supported = true;
@@ -148,7 +132,6 @@ InterfaceSettingsWidget::InterfaceSettingsWidget(SettingsWindow* settings_dialog
 	SettingWidgetBinder::BindWidgetToStringSetting(sif, m_ui.language, "UI", "Language", QtHost::GetDefaultLanguage());
 	connect(m_ui.language, &QComboBox::currentIndexChanged, [this]() { emit languageChanged(); });
 
-	// Per-game settings is special, we don't want to bind it if we're editing per-game settings.
 	if (!dialog()->isPerGameSettings())
 	{
 		SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.pauseOnStart, "UI", "StartPaused", false);
@@ -165,7 +148,6 @@ InterfaceSettingsWidget::InterfaceSettingsWidget(SettingsWindow* settings_dialog
 		SettingWidgetBinder::BindWidgetToStringSetting(sif, m_ui.autoUpdateTag, "AutoUpdater", "UpdateTag",
 			AutoUpdaterDialog::getDefaultTag());
 
-		//: Variable %1 shows the version number and variable %2 shows a timestamp.
 		m_ui.autoUpdateCurrentVersion->setText(tr("%1 (%2)").arg(AutoUpdaterDialog::getCurrentVersion()).arg(AutoUpdaterDialog::getCurrentVersionDate()));
 		connect(m_ui.checkForUpdates, &QPushButton::clicked, this, []() { g_main_window->checkForUpdates(true, true); });
 	}
@@ -177,11 +159,9 @@ InterfaceSettingsWidget::InterfaceSettingsWidget(SettingsWindow* settings_dialog
 
 	if (dialog()->isPerGameSettings())
 	{
-		// language/theme doesn't make sense to have in per-game settings
 		m_ui.verticalLayout->removeWidget(m_ui.appearancesGroup);
 		m_ui.appearancesGroup->hide();
 
-		// start paused doesn't make sense, because settings are applied after ELF load.
 		m_ui.pauseOnStart->setEnabled(false);
 	}
 
@@ -220,7 +200,7 @@ InterfaceSettingsWidget::InterfaceSettingsWidget(SettingsWindow* settings_dialog
 		tr("Shows the game you are currently playing as part of your profile in Discord."));
 	dialog()->registerWidgetHelp(
 		m_ui.mouseLock, tr("Enable Mouse Lock"), tr("Unchecked"),
-		tr("Locks the mouse cursor to the windows when PCSX2 is in focus and all other windows are closed.<br><b>Unavailable on Linux Wayland.</b><br><b>Requires accessibility permissions on macOS.</b>"));
+		tr("Locks the mouse cursor to the windows when PenguinScreen2 is in focus and all other windows are closed.<br><b>Unavailable on Linux Wayland.</b><br><b>Requires accessibility permissions on macOS.</b>"));
 	dialog()->registerWidgetHelp(
 		m_ui.doubleClickTogglesFullscreen, tr("Double-Click Toggles Fullscreen"), tr("Checked"),
 		tr("Allows switching in and out of fullscreen mode by double-clicking the game window."));
@@ -229,7 +209,7 @@ InterfaceSettingsWidget::InterfaceSettingsWidget(SettingsWindow* settings_dialog
 		tr("Prevents the main window from being resized."));
 	dialog()->registerWidgetHelp(
 		m_ui.startFullscreenUI, tr("Start In Big Picture Mode"), tr("Unchecked"),
-		tr("Automatically starts Big Picture Mode instead of the regular Qt interface when PCSX2 launches."));
+		tr("Automatically starts Big Picture Mode instead of the regular Qt interface when PenguinScreen2 launches."));
 	dialog()->registerWidgetHelp(
 		m_ui.backgroundBrowse, tr("Game List Background"), tr("None"),
 		tr("Enable an animated/static background on the game list (where you launch your games).<br>"

@@ -1550,11 +1550,6 @@ Leaderboard Position: {1} of {2}</source>
       <translation>استفاده از انتخابگر وضعیت ذخیره</translation>
     </message>
     <message>
-      <location filename="../Settings/AdvancedSettingsWidget.ui" line="505"/>
-      <source>PINE Settings</source>
-      <translation>تنظیمات PINE</translation>
-    </message>
-    <message>
       <location filename="../Settings/AdvancedSettingsWidget.ui" line="527"/>
       <source>Slot:</source>
       <translation>اسلات:</translation>

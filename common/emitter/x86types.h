@@ -12,9 +12,8 @@ static const uint iREGCNT_GPR = 16;
 
 enum XMMSSEType
 {
-	XMMT_INT = 0, // integer (sse2 only)
-	XMMT_FPS = 1, // floating point
-	//XMMT_FPD = 3, // double
+	XMMT_INT = 0,
+	XMMT_FPS = 1,
 };
 
 extern thread_local u8* x86Ptr;
@@ -22,14 +21,12 @@ extern thread_local XMMSSEType g_xmmtypes[iREGCNT_XMM];
 
 namespace x86Emitter
 {
-	// Win32 requires 32 bytes of shadow stack in the caller's frame.
 #ifdef _WIN32
 	static constexpr int SHADOW_STACK_SIZE = 32;
 #else
 	static constexpr int SHADOW_STACK_SIZE = 0;
 #endif
 
-	/// This will switch all SSE instructions to generate AVX instructions instead
 	extern bool use_avx;
 
 	extern void xWrite8(u8 val);
@@ -39,8 +36,6 @@ namespace x86Emitter
 
 	extern const char* xGetRegName(int regid, int operandSize);
 
-	//------------------------------------------------------------------
-	// templated version of is_s8 is required, so that u16's get correct sign extension treatment.
 	template <typename T>
 	static __fi bool is_s8(T imm)
 	{
@@ -50,41 +45,20 @@ namespace x86Emitter
 	template <typename T>
 	void xWrite(T val);
 
-// --------------------------------------------------------------------------------------
-//  __emitline - preprocessors definition
-// --------------------------------------------------------------------------------------
-// This is configured to inline emitter functions appropriately for release builds, and
-// disables some of the more aggressive inlines for dev builds (which can be helpful when
-// debugging).  Additionally,  I've set up the inlining to be as practical and intelligent
-// as possible with regard to constant propagation.  Namely this involves forcing inlining
-// for (void*) forms of ModRM, which (thanks to constprop) reduce to virtually no code, and
-// force-disabling inlining on complicated SibSB forms [since MSVC would sometimes inline
-// despite being a generally bad idea].
-//
-// In the case of (Reg, Imm) forms, the inlining is up to the discreation of the compiler.
-//
-// Note: I *intentionally* use __fi directly for most single-line class members,
-// when needed.  There's no point in using __emitline in these cases since the debugger
-// can't trace into single-line functions anyway.
-//
 #ifdef PCSX2_DEVBUILD
 #define __emitinline
 #else
 #define __emitinline __fi
 #endif
 
-	// ModRM 'mod' field enumeration.   Provided mostly for reference:
 	enum ModRm_ModField
 	{
-		Mod_NoDisp = 0, // effective address operation with no displacement, in the form of [reg] (or uses special Disp32-only encoding in the case of [ebp] form)
-		Mod_Disp8, // effective address operation with 8 bit displacement, in the form of [reg+disp8]
-		Mod_Disp32, // effective address operation with 32 bit displacement, in the form of [reg+disp32],
-		Mod_Direct, // direct reg/reg operation
+		Mod_NoDisp = 0,
+		Mod_Disp8,
+		Mod_Disp32,
+		Mod_Direct,
 	};
 
-	// ----------------------------------------------------------------------------
-	// JccComparisonType - enumerated possibilities for inspired code branching!
-	//
 	enum JccComparisonType
 	{
 		Jcc_Unknown = -2,
@@ -111,12 +85,6 @@ namespace x86Emitter
 		Jcc_Greater = 0xf,
 	};
 
-	// Not supported yet:
-	//E3 cb 	JECXZ rel8 	Jump short if ECX register is 0.
-
-	// ----------------------------------------------------------------------------
-	// SSE2_ComparisonType - enumerated possibilities for SIMD data comparison!
-	//
 	enum SSE2_ComparisonType
 	{
 		SSE2_Equal = 0,
@@ -129,10 +97,10 @@ namespace x86Emitter
 		SSE2_Ordered
 	};
 
-	static const int ModRm_UseSib = 4; // same index value as ESP (used in RM field)
-	static const int ModRm_UseDisp32 = 5; // same index value as EBP (used in Mod field)
-	static const int Sib_EIZ = 4; // same index value as ESP (used in Index field)
-	static const int Sib_UseDisp32 = 5; // same index value as EBP (used in Base field)
+	static const int ModRm_UseSib = 4;
+	static const int ModRm_UseDisp32 = 5;
+	static const int Sib_EIZ = 4;
+	static const int Sib_UseDisp32 = 5;
 
 	extern void xSetPtr(void* ptr);
 	extern void xSetTextPtr(void* ptr);
@@ -148,9 +116,6 @@ namespace x86Emitter
 
 	class xAddressVoid;
 
-	// --------------------------------------------------------------------------------------
-	//  OperandSizedObject
-	// --------------------------------------------------------------------------------------
 	class OperandSizedObject
 	{
 	protected:
@@ -187,7 +152,7 @@ namespace x86Emitter
 				case 4:
 					return 4;
 				case 8:
-					return 4; // Only mov's take 64-bit immediates
+					return 4;
 					jNO_DEFAULT
 			}
 			return 0;
@@ -212,21 +177,10 @@ namespace x86Emitter
 		}
 	};
 
-	// Represents an unused or "empty" register assignment.  If encountered by the emitter, this
-	// will be ignored (in some cases it is disallowed and generates an assertion)
 	static const int xRegId_Empty = -1;
 
-	// Represents an invalid or uninitialized register.  If this is encountered by the emitter it
-	// will generate an assertion.
 	static const int xRegId_Invalid = -2;
 
-	// --------------------------------------------------------------------------------------
-	//  xRegisterBase  -  type-unsafe x86 register representation.
-	// --------------------------------------------------------------------------------------
-	// Unless doing some fundamental stuff, use the friendly xRegister32/16/8 and xRegisterSSE
-	// instead, which are built using this class and provide strict register type safety when
-	// passed into emitter instructions.
-	//
 	class xRegisterBase : public OperandSizedObject
 	{
 	protected:
@@ -234,8 +188,6 @@ namespace x86Emitter
 			: OperandSizedObject(operandSize)
 			, Id(regId)
 		{
-			// Note: to avoid tons of ifdef, the 32 bits build will instantiate
-			// all 16x64 bits registers.
 			pxAssert((Id >= xRegId_Empty) && (Id < 16));
 		}
 
@@ -250,31 +202,24 @@ namespace x86Emitter
 
 		bool IsEmpty() const { return Id < 0; }
 		bool IsInvalid() const { return Id == xRegId_Invalid; }
-		bool IsExtended() const { return (Id >= 0 && (Id & 0x0F) > 7); } // Register 8-15 need an extra bit to be selected
+		bool IsExtended() const { return (Id >= 0 && (Id & 0x0F) > 7); }
 		bool IsExtended8Bit() const { return (Is8BitOp() && Id >= 0x10); }
 		bool IsMem() const { return false; }
 		bool IsReg() const { return true; }
 
-		// Returns true if the register is a valid accumulator: Eax, Ax, Al, XMM0.
 		bool IsAccumulator() const { return Id == 0; }
 
-		// IsSIMD: returns true if the register is a valid XMM register.
 		bool IsSIMD() const { return GetOperandSize() == 16; }
 
-// IsWide: return true if the register is 64 bits (requires a wide op on the rex prefix)
 		bool IsWide() const
 		{
 			return GetOperandSize() == 8;
 		}
-		// return true if the register is a valid YMM register
 		bool IsWideSIMD() const { return GetOperandSize() == 32; }
 
-		// Diagnostics -- returns a string representation of this register.  Return string
-		// is a valid non-null string for any Id, valid or invalid.  No assertions are generated.
 		const char* GetName();
 		int GetId() const { return Id; }
 
-		/// Returns true if the specified register is caller-saved (volatile).
 		static inline bool IsCallerSaved(uint id);
 	};
 
@@ -291,13 +236,11 @@ namespace x86Emitter
 	public:
 		xRegisterInt() = default;
 
-		/// IDs in [4, 8) are h registers in 8-bit
 		int isIDSameInAllSizes() const
 		{
 			return Id < 4 || Id >= 8;
 		}
 
-		/// Checks if mapping the ID directly would be a good idea
 		bool canMapIDTo(int otherSize) const
 		{
 			if ((otherSize == 1) == (GetOperandSize() == 1))
@@ -305,7 +248,6 @@ namespace x86Emitter
 			return isIDSameInAllSizes();
 		}
 
-		/// Get a non-wide version of the register (for use with e.g. mov, where `mov eax, 3` and `mov rax, 3` are functionally identical but `mov eax, 3` is shorter)
 		xRegisterInt GetNonWide() const
 		{
 			return GetOperandSize() == 8 ? xRegisterInt(4, Id) : *this;
@@ -317,9 +259,6 @@ namespace x86Emitter
 		bool operator!=(const xRegisterInt& src) const { return !operator==(src); }
 	};
 
-	// --------------------------------------------------------------------------------------
-	//  xRegister8/16/32/64  -  Represents a basic 8/16/32/64 bit GPR on the x86
-	// --------------------------------------------------------------------------------------
 	class xRegister8 : public xRegisterInt
 	{
 		typedef xRegisterInt _parent;
@@ -411,12 +350,6 @@ namespace x86Emitter
 		bool operator!=(const xRegister64& src) const { return this->Id != src.Id; }
 	};
 
-	// --------------------------------------------------------------------------------------
-	//  xRegisterSSE  -  Represents either a 64 bit or 128 bit SIMD register
-	// --------------------------------------------------------------------------------------
-	// This register type is provided to allow legal syntax for instructions that accept
-	// an XMM register as a parameter, but do not allow for a GPR.
-
 	struct xRegisterYMMTag {};
 
 	class xRegisterSSE : public xRegisterBase
@@ -440,12 +373,8 @@ namespace x86Emitter
 		static const inline xRegisterSSE& GetInstance(uint id);
 		static const inline xRegisterSSE& GetYMMInstance(uint id);
 
-		/// Returns the register to use when calling a C function.
-		/// arg_number is the argument position from the left, starting with 0.
-		/// sse_number is the argument position relative to the number of vector registers.
 		static const inline xRegisterSSE& GetArgRegister(uint arg_number, uint sse_number, bool ymm = false);
 
-		/// Returns true if the specified register is caller-saved (volatile).
 		static inline bool IsCallerSaved(uint id);
 	};
 
@@ -457,17 +386,6 @@ namespace x86Emitter
 		{
 		}
 	};
-
-	// --------------------------------------------------------------------------------------
-	//  xAddressReg
-	// --------------------------------------------------------------------------------------
-	// Use 32/64 bit registers as our index registers (for ModSib-style memory address calculations).
-	// This type is implicitly exchangeable with xRegister32/64.
-	//
-	// Only xAddressReg provides operators for constructing xAddressInfo types.  These operators
-	// could have been added to xRegister32/64 directly instead, however I think this design makes
-	// more sense and allows the programmer a little more type protection if needed.
-	//
 
 #define xRegisterLong xRegister64
 	static const int wordsize = sizeof(sptr);
@@ -485,12 +403,8 @@ namespace x86Emitter
 		{
 		}
 
-		// Returns true if the register is the stack pointer: ESP.
 		bool IsStackPointer() const { return Id == 4; }
 
-		/// Returns the register to use when calling a C function.
-		/// arg_number is the argument position from the left, starting with 0.
-		/// sse_number is the argument position relative to the number of vector registers.
 		static const inline xAddressReg& GetArgRegister(uint arg_number, uint gpr_number);
 
 		xAddressVoid operator+(const xAddressReg& right) const;
@@ -502,9 +416,6 @@ namespace x86Emitter
 		xAddressVoid operator<<(u32 shift) const;
 	};
 
-	// --------------------------------------------------------------------------------------
-	//  xRegisterEmpty
-	// --------------------------------------------------------------------------------------
 	struct xRegisterEmpty
 	{
 		operator xRegister8() const
@@ -592,7 +503,6 @@ namespace x86Emitter
     xmm8, xmm9, xmm10, xmm11,
     xmm12, xmm13, xmm14, xmm15;
 
-	// TODO: This needs to be _M_SSE >= 0x500'ed, but we can't do it atm because common doesn't have variants.
 	extern const xRegisterSSE
 	  ymm0, ymm1, ymm2, ymm3,
 	  ymm4, ymm5, ymm6, ymm7,
@@ -634,20 +544,17 @@ extern const xRegister32
     calleeSavedReg1d,
     calleeSavedReg2d;
 
-/// Holds a pointer to program text at all times so we don't need to be within 2GB of text
 static constexpr const xAddressReg& RTEXTPTR = rbx;
 
 	// clang-format on
 
-	extern const xRegisterCL cl; // I'm special!
+	extern const xRegisterCL cl;
 
 	bool xRegisterBase::IsCallerSaved(uint id)
 	{
 #ifdef _WIN32
-		// The x64 ABI considers the registers RAX, RCX, RDX, R8, R9, R10, R11, and XMM0-XMM5 volatile.
 		return (id <= 2 || (id >= 8 && id <= 11));
 #else
-		// rax, rdi, rsi, rdx, rcx, r8, r9, r10, r11 are scratch registers.
 		return (id <= 2 || id == 6 || id == 7 || (id >= 8 && id <= 11));
 #endif
 	}
@@ -683,10 +590,8 @@ static constexpr const xAddressReg& RTEXTPTR = rbx;
 	bool xRegisterSSE::IsCallerSaved(uint id)
 	{
 #ifdef _WIN32
-		// XMM6 through XMM15 are saved. Upper 128 bits is always volatile.
 		return (id < 6);
 #else
-		// All vector registers are volatile.
 		return true;
 #endif
 	}
@@ -720,10 +625,8 @@ static constexpr const xAddressReg& RTEXTPTR = rbx;
 	const xRegisterSSE& xRegisterSSE::GetArgRegister(uint arg_number, uint sse_number, bool ymm)
 	{
 #ifdef _WIN32
-		// Windows passes arguments according to their position from the left.
 		return ymm ? GetYMMInstance(arg_number) : GetInstance(arg_number);
 #else
-		// Linux counts the number of vector parameters.
 		return ymm ? GetYMMInstance(sse_number) : GetInstance(sse_number);
 #endif
 	}
@@ -731,28 +634,23 @@ static constexpr const xAddressReg& RTEXTPTR = rbx;
 	const xAddressReg& xAddressReg::GetArgRegister(uint arg_number, uint gpr_number)
 	{
 #ifdef _WIN32
-		// Windows passes arguments according to their position from the left.
 		static constexpr const xAddressReg* regs[] = {&rcx, &rdx, &r8, &r9};
 		pxAssert(arg_number < std::size(regs));
 		return *regs[arg_number];
 #else
-		// Linux counts the number of GPR parameters.
 		static constexpr const xAddressReg* regs[] = {&rdi, &rsi, &rdx, &rcx};
 		pxAssert(gpr_number < std::size(regs));
 		return *regs[gpr_number];
 #endif
 	}
 
-	// --------------------------------------------------------------------------------------
-	//  xAddressVoid
-	// --------------------------------------------------------------------------------------
 	class xAddressVoid
 	{
 	public:
-		xAddressReg Base; // base register (no scale)
-		xAddressReg Index; // index reg gets multiplied by the scale
-		int Factor; // scale applied to the index register, in factor form (not a shift!)
-		sptr Displacement; // address displacement // 4B max even on 64 bits but keep rest for assertions
+		xAddressReg Base;
+		xAddressReg Index;
+		int Factor;
+		sptr Displacement;
 
 	public:
 		xAddressVoid(const xAddressReg& base, const xAddressReg& index, int factor = 1, sptr displacement = 0);
@@ -794,17 +692,6 @@ static constexpr const xAddressReg& RTEXTPTR = rbx;
 		return right + addr;
 	}
 
-	// --------------------------------------------------------------------------------------
-	//  xImmReg< typename xRegType >
-	// --------------------------------------------------------------------------------------
-	// Used to represent an immediate value which can also be optimized to a register. Note
-	// that the immediate value represented by this structure is *always* legal.  The register
-	// assignment is an optional optimization which can be implemented in cases where an
-	// immediate is used enough times to merit allocating it to a register.
-	//
-	// Note: not all instructions support this operand type (yet).  You can always implement it
-	// manually by checking the status of IsReg() and generating the xOP conditionally.
-	//
 	template <typename xRegType>
 	class xImmReg
 	{
@@ -829,27 +716,13 @@ static constexpr const xAddressReg& RTEXTPTR = rbx;
 		bool IsReg() const { return !m_reg.IsEmpty(); }
 	};
 
-	// --------------------------------------------------------------------------------------
-	//  xIndirectVoid - Internal low-level representation of the ModRM/SIB information.
-	// --------------------------------------------------------------------------------------
-	// This class serves two purposes:  It houses 'reduced' ModRM/SIB info only, which means
-	// that the Base, Index, Scale, and Displacement values are all in the correct arrange-
-	// ments, and it serves as a type-safe layer between the xRegister's operators (which
-	// generate xAddressInfo types) and the emitter's ModSib instruction forms.  Without this,
-	// the xRegister would pass as a ModSib type implicitly, and that would cause ambiguity
-	// on a number of instructions.
-	//
-	// End users should always use xAddressInfo instead.
-	//
 	class xIndirectVoid : public OperandSizedObject
 	{
 	public:
-		xAddressReg Base; // base register (no scale)
-		xAddressReg Index; // index reg gets multiplied by the scale
-		uint Scale; // scale applied to the index register, in scale/shift form
-		sptr Displacement; // offset applied to the Base/Index registers.
-			// Displacement is 8/32 bits even on x86_64
-			// However we need the whole pointer to calculate rip-relative offsets
+		xAddressReg Base;
+		xAddressReg Index;
+		uint Scale;
+		sptr Displacement;
 
 	public:
 		explicit xIndirectVoid(sptr disp);
@@ -860,7 +733,7 @@ static constexpr const xAddressReg& RTEXTPTR = rbx;
 		bool IsByteSizeDisp() const { return is_s8(Displacement); }
 		bool IsMem() const { return true; }
 		bool IsReg() const { return false; }
-		bool IsExtended() const { return false; } // Non sense but ease template
+		bool IsExtended() const { return false; }
 		bool IsWide() const { return _operandSize == 8; }
 
 		operator xAddressVoid()
@@ -927,9 +800,6 @@ static constexpr const xAddressReg& RTEXTPTR = rbx;
 	typedef xIndirect<u8> xIndirect8;
 	typedef xIndirect<u64> xIndirectNative;
 
-	// --------------------------------------------------------------------------------------
-	//  xIndirect64orLess  -  base class 64, 32, 16, and 8 bit operand types
-	// --------------------------------------------------------------------------------------
 	class xIndirect64orLess : public xIndirectVoid
 	{
 		typedef xIndirectVoid _parent;
@@ -953,18 +823,10 @@ static constexpr const xAddressReg& RTEXTPTR = rbx;
 		}
 	};
 
-	// --------------------------------------------------------------------------------------
-	//  xAddressIndexer
-	// --------------------------------------------------------------------------------------
-	// This is a type-translation "interface class" which provisions our ptr[] syntax.
-	// xAddressReg types go in, and xIndirectVoid derived types come out.
-	//
 	template <typename xModSibType>
 	class xAddressIndexer
 	{
 	public:
-		// passthrough instruction, allows ModSib to pass silently through ptr translation
-		// without doing anything and without compiler error.
 		const xModSibType& operator[](const xModSibType& src) const { return src; }
 
 		xModSibType operator[](const xAddressReg& src) const
@@ -983,8 +845,6 @@ static constexpr const xAddressReg& RTEXTPTR = rbx;
 		}
 	};
 
-	// ptr[] - use this form for instructions which can resolve the address operand size from
-	// the other register operand sizes.
 	extern const xAddressIndexer<xIndirectVoid> ptr;
 	extern const xAddressIndexer<xIndirectNative> ptrNative;
 	extern const xAddressIndexer<xIndirect128> ptr128;
@@ -993,18 +853,9 @@ static constexpr const xAddressReg& RTEXTPTR = rbx;
 	extern const xAddressIndexer<xIndirect16> ptr16;
 	extern const xAddressIndexer<xIndirect8> ptr8;
 
-	// --------------------------------------------------------------------------------------
-	//  xForwardJump
-	// --------------------------------------------------------------------------------------
-	// Primary use of this class is through the various xForwardJA8/xForwardJLE32/etc. helpers
-	// defined later in this header. :)
-	//
-
 	class xForwardJumpBase
 	{
 	public:
-		// pointer to base of the instruction *Following* the jump.  The jump address will be
-		// relative to this address.
 		s8* BasePtr;
 
 	public:
@@ -1020,16 +871,11 @@ static constexpr const xAddressReg& RTEXTPTR = rbx;
 	public:
 		static const uint OperandSize = sizeof(OperandType);
 
-		// The jump instruction is emitted at the point of object construction.  The conditional
-		// type must be valid (Jcc_Unknown generates an assertion).
 		xForwardJump(JccComparisonType cctype = Jcc_Unconditional)
 			: xForwardJumpBase(OperandSize, cctype)
 		{
 		}
 
-		// Sets the jump target by writing back the current x86Ptr to the jump instruction.
-		// This method can be called multiple times, re-writing the jump instruction's target
-		// in each case. (the the last call is the one that takes effect).
 		void SetTarget() const
 		{
 			_setTarget(OperandSize);
@@ -1045,7 +891,7 @@ static constexpr const xAddressReg& RTEXTPTR = rbx;
 	{
 		return reg + (sptr)addr;
 	}
-} // namespace x86Emitter
+}
 
 #include "implement/helpers.h"
 
@@ -1058,8 +904,8 @@ static constexpr const xAddressReg& RTEXTPTR = rbx;
 #include "implement/group1.h"
 #include "implement/group2.h"
 #include "implement/group3.h"
-#include "implement/movs.h" // cmov and movsx/zx
-#include "implement/dwshift.h" // doubleword shifts!
+#include "implement/movs.h"
+#include "implement/dwshift.h"
 #include "implement/incdec.h"
 #include "implement/test.h"
 #include "implement/jmpcall.h"

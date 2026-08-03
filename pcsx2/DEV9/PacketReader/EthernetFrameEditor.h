@@ -13,7 +13,6 @@ namespace PacketReader
 	{
 	public:
 		int headerLength = 14;
-		//Length
 	private:
 		NetPacket* basePkt;
 		std::unique_ptr<PayloadPtrEditor> payload;
@@ -30,4 +29,4 @@ namespace PacketReader
 
 		PayloadPtrEditor* GetPayload() const;
 	};
-} // namespace PacketReader
+}

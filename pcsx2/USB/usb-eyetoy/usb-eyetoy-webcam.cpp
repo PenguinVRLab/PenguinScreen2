@@ -27,8 +27,8 @@ namespace usb_eyetoy
 
 		std::unique_ptr<VideoDevice> videodev;
 		USBDevice* mic;
-		u8 regs[0xFF]; //OV519
-		u8 i2c_regs[0xFF]; //OV764x
+		u8 regs[0xFF];
+		u8 i2c_regs[0xFF];
 
 		int hw_camera_running;
 		int frame_step;
@@ -125,12 +125,12 @@ namespace usb_eyetoy
 
 		switch (request)
 		{
-			case VendorDeviceRequest | 0x1: //Read register
+			case VendorDeviceRequest | 0x1:
 				data[0] = s->regs[index & 0xFF];
 				p->actual_length = 1;
 				break;
 
-			case VendorDeviceOutRequest | 0x1: //Write register
+			case VendorDeviceOutRequest | 0x1:
 				switch (index)
 				{
 					case OV519_RA0_FORMAT:
@@ -171,14 +171,13 @@ namespace usb_eyetoy
 					}
 					break;
 					case R518_I2C_CTL:
-						if (data[0] == 1) // Commit I2C write
+						if (data[0] == 1)
 						{
-							//u8 reg = s->regs[s->regs[R51x_I2C_W_SID]];
 							const u8 reg = s->regs[R51x_I2C_SADDR_3];
 							const u8 val = s->regs[R51x_I2C_DATA];
 							if ((reg == 0x12) && (val & 0x80))
 							{
-								s->i2c_regs[0x12] = val & ~0x80; //or skip?
+								s->i2c_regs[0x12] = val & ~0x80;
 								reset_sensor(s);
 							}
 							else if (reg < sizeof(s->i2c_regs))
@@ -194,7 +193,6 @@ namespace usb_eyetoy
 						}
 						else if (s->regs[R518_I2C_CTL] == 0x03 && data[0] == 0x05)
 						{
-							//s->regs[s->regs[R51x_I2C_R_SID]] but seems to default to 0x43 (R51x_I2C_SADDR_2)
 							const u8 i2c_reg = s->regs[R51x_I2C_SADDR_2];
 							s->regs[R51x_I2C_DATA] = 0;
 
@@ -208,7 +206,6 @@ namespace usb_eyetoy
 						break;
 				}
 
-				//Max 0xFFFF regs?
 				s->regs[index & 0xFF] = data[0];
 				p->actual_length = 1;
 
@@ -232,12 +229,12 @@ namespace usb_eyetoy
 
 		switch (request)
 		{
-			case VendorDeviceRequest | 0x3: //Read register
+			case VendorDeviceRequest | 0x3:
 				data[0] = s->regs[index & 0xFF];
 				p->actual_length = 1;
 				break;
 
-			case VendorDeviceOutRequest | 0x2: //Write register
+			case VendorDeviceOutRequest | 0x2:
 				switch (index)
 				{
 					case R511_I2C_CTL:
@@ -374,7 +371,7 @@ namespace usb_eyetoy
 						u8 data[max_ep_size];
 						pxAssert(p->buffer_size <= max_ep_size);
 
-						static constexpr const u8 header[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x28}; // 28 <> 29
+						static constexpr const u8 header[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x28};
 						std::memcpy(data, header, sizeof(header));
 
 						const u32 data_pk = std::min(p->buffer_size - 1 - static_cast<u32>(sizeof(header)), s->mpeg_frame_size);
@@ -514,7 +511,6 @@ namespace usb_eyetoy
 
 	void EyeToyWebCamDevice::UpdateSettings(USBDevice* dev, SettingsInterface& si) const
 	{
-		// TODO: Update device name
 	}
 
 	std::span<const char*> EyeToyWebCamDevice::SubTypes() const
@@ -558,4 +554,4 @@ namespace usb_eyetoy
 				return {};
 		}
 	}
-} // namespace usb_eyetoy
+}

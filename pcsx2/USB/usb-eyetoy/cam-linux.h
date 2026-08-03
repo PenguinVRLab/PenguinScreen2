@@ -26,5 +26,5 @@ namespace usb_eyetoy
 			void SetMirroring(bool state);
 			int Reset() { return 0; };
 		};
-	} // namespace linux_api
-} // namespace usb_eyetoy
+	}
+}

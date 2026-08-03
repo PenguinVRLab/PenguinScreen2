@@ -116,11 +116,9 @@ namespace SettingWidgetBinder
 		static void setBoolValue(QComboBox* widget, bool value) { widget->setCurrentIndex(value ? 1 : 0); }
 		static void makeNullableBool(QComboBox* widget, bool globalValue)
 		{
-			//: THIS STRING IS SHARED ACROSS MULTIPLE OPTIONS. Be wary about gender/number. Also, ignore Crowdin's warning regarding [Enabled]: the text must be translated.
 			widget->insertItem(0,
 				globalValue ?
 					qApp->translate("SettingsDialog", "Use Global Setting [Enabled]") :
-					//: THIS STRING IS SHARED ACROSS MULTIPLE OPTIONS. Be wary about gender/number. Also, ignore Crowdin's warning regarding [Disabled]: the text must be translated.
 					qApp->translate("SettingsDialog", "Use Global Setting [Disabled]"));
 		}
 
@@ -678,8 +676,6 @@ namespace SettingWidgetBinder
 		}
 	};
 
-	/// Binds a widget's value to a setting, updating it when the value changes.
-
 	template <typename WidgetType>
 	static inline void BindWidgetToBoolSetting(
 		SettingsInterface* sif, WidgetType* widget, std::string section, std::string key, bool default_value)
@@ -1175,7 +1171,6 @@ namespace SettingWidgetBinder
 		const QString value(QString::fromStdString(current_path));
 		Accessor::setStringValue(widget, value);
 
-		// if we're doing per-game settings, disable the widget, we only allow folder changes in the base config
 		if (sif)
 		{
 			widget->setEnabled(false);
@@ -1219,7 +1214,6 @@ namespace SettingWidgetBinder
 					qApp->translate("SettingWidgetBinder", "Folder path cannot be empty."));
 			}
 
-			// reset to old value
 			std::string current_path(Host::GetBaseStringSettingValue(section.c_str(), key.c_str(), default_value.c_str()));
 			if (current_path.empty())
 				current_path = default_value;
@@ -1233,7 +1227,6 @@ namespace SettingWidgetBinder
 		{
 			QObject::connect(browse_button, &QAbstractButton::clicked, browse_button, [widget, key, value_changed]() {
 				const QString path(QDir::toNativeSeparators(QFileDialog::getExistingDirectory(QtUtils::GetRootWidget(widget),
-					//It seems that the latter half should show the types of folders that can be selected within Settings -> Folders, but right now it's broken. It would be best for localization purposes to duplicate this into multiple lines, each per type of folder.
 					qApp->translate("SettingWidgetBinder", "Select folder for %1").arg(QString::fromStdString(key)))));
 				if (path.isEmpty())
 					return;
@@ -1369,7 +1362,6 @@ namespace SettingWidgetBinder
 		const int DEFAULT_MINUTE = 0;
 		const int DEFAULT_SECOND = 0;
 
-		// Fetch settings from .ini
 		const int year_value = Host::GetBaseIntSettingValue(section.c_str(), keys.year, DEFAULT_YEAR);
 		const int month_value = Host::GetBaseIntSettingValue(section.c_str(), keys.month, DEFAULT_MONTH);
 		const int day_value = Host::GetBaseIntSettingValue(section.c_str(), keys.day, DEFAULT_DAY);
@@ -1386,12 +1378,10 @@ namespace SettingWidgetBinder
 			int sif_minute_value = sif->GetIntValue(section.c_str(), keys.minute, DEFAULT_MINUTE);
 			int sif_second_value = sif->GetIntValue(section.c_str(), keys.second, DEFAULT_SECOND);
 
-			// No need to check for valid date since QDateTime resets to minimum upon becoming invalid
 			QDate date(sif_year_value + YEAR_OFFSET, sif_month_value, sif_day_value);
 			QTime time(sif_hour_value, sif_minute_value, sif_second_value);
 			Accessor::setDateTime(widget, date, time);
 
-			// Update the settings interface and reload the game settings when changed
 			Accessor::connectValueChanged(widget, [sif, widget, section = std::move(section), keys]() {
 				sif->SetIntValue(section.c_str(), keys.year, Accessor::getYear(widget) - YEAR_OFFSET);
 				sif->SetIntValue(section.c_str(), keys.month, Accessor::getMonth(widget));
@@ -1407,12 +1397,10 @@ namespace SettingWidgetBinder
 
 		else
 		{
-			// No need to check for valid date since QDateTime resets to minimum upon becoming invalid
 			QDate date(year_value + YEAR_OFFSET, month_value, day_value);
 			QTime time(hour_value, minute_value, second_value);
 			Accessor::setDateTime(widget, date, time);
 
-			// Update and apply base settings with values from widget when user changes it in UI
 			Accessor::connectValueChanged(widget, [widget, section = std::move(section), keys]() {
 				const int new_year_value = Accessor::getYear(widget);
 				const int new_month_value = Accessor::getMonth(widget);
@@ -1432,4 +1420,4 @@ namespace SettingWidgetBinder
 			});
 		}
 	}
-} // namespace SettingWidgetBinder
+}

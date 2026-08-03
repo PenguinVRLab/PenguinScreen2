@@ -14,7 +14,6 @@
 #include <cstddef>
 #include <utility>
 
-/// Managed Obj-C pointer
 template <typename T>
 class MRCOwned
 {
@@ -69,14 +68,12 @@ public:
 	}
 };
 
-/// Take ownership of an Obj-C pointer (equivalent to __bridge_transfer)
 template<typename T>
 static inline MRCOwned<T> MRCTransfer(T ptr)
 {
 	return MRCOwned<T>::Transfer(ptr);
 }
 
-/// Retain an Obj-C pointer (equivalent to __bridge)
 template<typename T>
 static inline MRCOwned<T> MRCRetain(T ptr)
 {

@@ -56,13 +56,11 @@ static HMODULE hpcap = nullptr;
 
 #include "pcap_io_win32_funcs.h"
 
-//
 bool load_pcap()
 {
 	if (hpcap != nullptr)
 		return true;
 
-	//Store old Search Dir
 	int len = GetDllDirectory(0, nullptr);
 	if (len == 0)
 		return false;
@@ -81,17 +79,13 @@ bool load_pcap()
 		}
 	}
 
-	//Set DllDirectory, to allow us to load Npcap
 	SetDllDirectory(L"C:\\Windows\\System32\\Npcap");
 
-	//Try to load npcap or pcap
 	hpcap = LoadLibrary(L"wpcap.dll");
 
-	//Reset DllDirectory
 	SetDllDirectory(oldDllDir);
 	delete[] oldDllDir;
 
-	//Did we succeed?
 	if (hpcap == nullptr)
 		return false;
 
@@ -105,7 +99,6 @@ bool load_pcap()
 		return false;                                        \
 	}
 
-		//Load all the functions we need
 #define FUNCTION_SHIM_ANY_ARG(retType, name, ...) LOAD_FUNCTION(name)
 
 #include "pcap_io_win32_funcs.h"

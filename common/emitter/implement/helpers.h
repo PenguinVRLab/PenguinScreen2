@@ -6,8 +6,6 @@
 namespace x86Emitter
 {
 
-// helpermess is currently broken >_<
-
 #if 0
 
 template< typename xImpl, typename T >
@@ -70,11 +68,8 @@ void _DoI_helpermess( const xImpl& helpme, const xDirectOrIndirect<T>& to, const
 
 	else
 
-		// One of the fields needs to be direct, or else we cannot complete the operation.
-		// (intel doesn't support indirects in both fields)
-
 		pxFailDev( "Invalid asm instruction: Both operands are indirect memory addresses." );
 }
 #endif
 
-} // End namespace x86Emitter
+}

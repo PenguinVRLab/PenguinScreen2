@@ -6,7 +6,6 @@
 #include "GS/MultiISA.h"
 #include "common/Assertions.h"
 
-// Xbyak pulls in windows.h, and breaks everything.
 #ifdef _WIN32
 #include "common/RedtapeWindows.h"
 #endif
@@ -17,8 +16,6 @@
 #include "xbyak/xbyak.h"
 #include "xbyak/xbyak_util.h"
 
-/// Code generator that automatically selects between SSE and AVX, x86 and x64 so you don't have to
-/// Should make combined SSE and AVX codegen much easier
 class GSNewCodeGenerator
 {
 public:
@@ -70,26 +67,6 @@ public:
 	size_t GetSize() const { return actual.getSize(); }
 	const u8* GetCode() const { return actual.getCode(); }
 
-
-// ------------ Forwarding instructions ------------
-// Note: Only instructions used by codegen were added here, so if you're modifying codegen, you may need to add instructions here
-
-// For instructions available in SSE and AVX, functions with the SSE name and arguments that forward to SSE or AVX depending on the target, as well as functions with the AVX name and arguments that forward to the AVX version or assert on SSE
-
-// ARGS_* macros are provided for shorter argument lists.  The following single-letter abbreviations are used: X=Xmm, Y=Ymm, O=Operand, A=Address, I=Immediate
-// FORWARD(argcount, category, instrname, argtypes...) forwards an instruction.  The following categories are available:
-//   BASE:    non-SSE
-//   SSE:     available on SSE and v-prefixed on AVX
-//   SSEONLY: available only on SSE (exception on AVX)
-//   AVX:     available only on AVX (exception on SSE)
-//   AVX2:    available only on AVX2 (exception on AVX/SSE)
-//   FMA:     available only with FMA
-// SFORWARD forwards an SSE-AVX pair where the AVX variant takes the same number of registers (e.g. pshufd dst, src + vpshufd dst, src)
-// AFORWARD forwards an SSE-AVX pair where the AVX variant takes an extra destination register (e.g. shufps dst, src + vshufps dst, src, src)
-
-// Implementation details:
-// ACTUAL_FORWARD_*: Actually forward the function of the given type
-// FORWARD#: First validates the arguments (e.g. make sure you're not passing registers over 7 on x86), then forwards to an ACTUAL_FORWARD_*
 
 #define ACTUAL_FORWARD_BASE(name, ...) \
 	actual.name(__VA_ARGS__);
@@ -149,7 +126,6 @@ public:
 	}
 
 #define FORWARD_(argcount, ...) FORWARD##argcount(__VA_ARGS__)
-// Gets the macro evaluator to evaluate in the right order
 #define FORWARD(...) FORWARD_(__VA_ARGS__)
 
 #define FORWARD_SSE_XMM0(name) \
@@ -174,7 +150,6 @@ public:
 #define AFORWARD_(argcount, name, arg1, ...) \
 	SFORWARD(argcount, name, arg1, __VA_ARGS__) \
 	FORWARD(ADD_ONE_##argcount, AVX, v##name, arg1, arg1, __VA_ARGS__)
-// Gets the macro evaluator to evaluate in the right order
 #define AFORWARD(...) AFORWARD_(__VA_ARGS__)
 
 #define FORWARD_OO_OI(name) \

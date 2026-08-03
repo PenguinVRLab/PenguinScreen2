@@ -42,7 +42,6 @@ struct FPControlRegister
 
 	__fi static constexpr FPControlRegister GetDefault()
 	{
-		// 0x1f80 - all exceptions masked, nearest rounding
 		return FPControlRegister{0x1f80};
 	}
 
@@ -65,7 +64,6 @@ struct FPControlRegister
 
 	__fi constexpr FPControlRegister& SetRoundMode(FPRoundMode mode)
 	{
-		// These bits match on x86.
 		bitmask = (bitmask & ~ROUNDING_CONTROL_BITS) | ((static_cast<u32>(mode) & ROUNDING_CONTROL_MASK) << ROUNDING_CONTROL_SHIFT);
 		return *this;
 	}
@@ -125,7 +123,6 @@ struct FPControlRegister
 
 	__fi static constexpr FPControlRegister GetDefault()
 	{
-		// 0x0 - all exceptions masked, nearest rounding
 		return FPControlRegister{0x0};
 	}
 
@@ -143,7 +140,6 @@ struct FPControlRegister
 
 	__fi constexpr FPRoundMode GetRoundMode() const
 	{
-		// Negative/Positive infinity rounding is flipped on A64.
 		const u64 RMode = (bitmask >> RMODE_SHIFT) & RMODE_MASK;
 		return static_cast<FPRoundMode>((RMode == 0b00 || RMode == 0b11) ? RMode : (RMode ^ 0b11));
 	}
@@ -157,9 +153,6 @@ struct FPControlRegister
 
 	__fi constexpr bool GetDenormalsAreZero() const
 	{
-		// Without FEAT_AFP, most ARM chips don't have separate DaZ/FtZ. This includes Apple Silicon, which
-		// implements x86-like behavior with a vendor-specific extension that we cannot access from usermode.
-		// The FZ bit causes both inputs and outputs to be flushed to zero.
 		return ((bitmask & FZ_BIT) != 0);
 	}
 
@@ -174,7 +167,6 @@ struct FPControlRegister
 
 	__fi constexpr bool GetFlushToZero() const
 	{
-		// See note in GetDenormalsAreZero().
 		return ((bitmask & FZ_BIT) != 0);
 	}
 
@@ -194,7 +186,6 @@ struct FPControlRegister
 #endif
 };
 
-/// Helper to back up/restore FPCR.
 class FPControlRegisterBackup
 {
 public:

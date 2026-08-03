@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2002-2026 PCSX2 Dev Team
 // SPDX-License-Identifier: GPL-3.0+
 
-#define _PC_ // disables MIPS opcode macros.
+#define _PC_
 
 #include "common/Assertions.h"
 #include "common/ByteSwap.h"
@@ -75,7 +75,7 @@ namespace Patch
 		static void gsaspectratio(PatchGroup* group, const std::string_view cmd, const std::string_view param);
 		static void gsinterlacemode(PatchGroup* group, const std::string_view cmd, const std::string_view param);
 		static void dpatch(PatchGroup* group, const std::string_view cmd, const std::string_view param);
-	} // namespace PatchFunc
+	}
 
 	static void TrimPatchLine(std::string& buffer);
 	static int PatchTableExecute(PatchGroup* group, const std::string_view lhs, const std::string_view rhs,
@@ -111,7 +111,6 @@ namespace Patch
 		requires std::is_base_of_v<MemoryInterface, Memory>
 	static void handle_extended_t(const PatchCommand* p, Memory& memory, ExtendedState& state);
 
-	// Name of patches which will be auto-enabled based on global options.
 	static constexpr std::string_view WS_PATCH_NAME = "Widescreen 16:9";
 	static constexpr std::string_view NI_PATCH_NAME = "No-Interlacing";
 	static constexpr std::string_view PATCHES_ZIP_NAME = "patches.zip";
@@ -148,18 +147,16 @@ namespace Patch
 		{0, "dpatch", &Patch::PatchFunc::dpatch},
 		{0, nullptr, nullptr},
 	};
-} // namespace Patch
+}
 
 void Patch::TrimPatchLine(std::string& buffer)
 {
 	StringUtil::StripWhitespace(&buffer);
 	if (std::strncmp(buffer.c_str(), "//", 2) == 0)
 	{
-		// comment
 		buffer.clear();
 	}
 
-	// check for comments at the end of a line
 	const std::string::size_type pos = buffer.find("//");
 	if (pos != std::string::npos)
 		buffer.erase(pos);
@@ -191,7 +188,6 @@ int Patch::PatchTableExecute(PatchGroup* group, const std::string_view lhs, cons
 	return Table[i].code;
 }
 
-// This routine is for executing the commands of the ini file.
 void Patch::LoadPatchLine(PatchGroup* group, const std::string_view line)
 {
 	std::string_view key, value;
@@ -208,7 +204,6 @@ u32 Patch::LoadPatchesFromString(std::vector<PatchGroup>* patch_list, const std:
 	const auto add_current_patch = [patch_list, &current_patch_group]() {
 		if (!current_patch_group.patches.empty())
 		{
-			// Ungrouped/legacy patches should merge with other ungrouped patches.
 			if (current_patch_group.name.empty())
 			{
 				const std::vector<PatchGroup>::iterator ungrouped_patch = std::find_if(patch_list->begin(), patch_list->end(),
@@ -224,7 +219,6 @@ u32 Patch::LoadPatchesFromString(std::vector<PatchGroup>* patch_list, const std:
 				}
 				else
 				{
-					// Always add ungrouped patches, no sense to compare empty names.
 					patch_list->push_back(std::move(current_patch_group));
 				}
 
@@ -235,7 +229,6 @@ u32 Patch::LoadPatchesFromString(std::vector<PatchGroup>* patch_list, const std:
 		if (current_patch_group.patches.empty() && current_patch_group.dpatches.empty())
 			return;
 
-		// Don't show patches with duplicate names, prefer the first loaded.
 		if (!ContainsPatchName(*patch_list, current_patch_group.name))
 		{
 			patch_list->push_back(std::move(current_patch_group));
@@ -307,7 +300,6 @@ bool Patch::OpenPatchesZip()
 			warning_shown = true;
 		}
 
-		// have to clean up source
 		Console.Error("Failed to open %s: %s", filename.c_str(), zip_error_strerror(&ze));
 		zip_source_free(zs);
 		return false;
@@ -343,7 +335,6 @@ std::vector<std::string> Patch::FindPatchFilesOnDisk(const std::string_view seri
 	for (FILESYSTEM_FIND_DATA& fd : files)
 		ret.push_back(std::move(fd.FileName));
 
-	// and patches without serials
 	FileSystem::FindFiles(cheats ? EmuFolders::Cheats.c_str() : EmuFolders::Patches.c_str(),
 		GetPnachTemplate(serial, crc, false, true, false).c_str(), FILESYSTEM_FIND_FILES | FILESYSTEM_FIND_HIDDEN_FILES,
 		&files);
@@ -364,7 +355,6 @@ bool Patch::ContainsPatchName(const std::vector<PatchInfo>& patches, const std::
 template <typename F>
 void Patch::EnumeratePnachFiles(const std::string_view serial, u32 crc, bool cheats, bool for_ui, const F& f)
 {
-	// Prefer files on disk over the zip.
 	std::vector<std::string> disk_patch_files;
 	if (for_ui || !Achievements::IsHardcoreModeActive())
 		disk_patch_files = FindPatchFilesOnDisk(serial, crc, cheats, for_ui);
@@ -377,7 +367,6 @@ void Patch::EnumeratePnachFiles(const std::string_view serial, u32 crc, bool che
 			std::optional<std::string> contents = FileSystem::ReadFileToString(file.c_str());
 			if (contents.has_value())
 			{
-				// Catch if unlabeled patches are being loaded so we can disable ZIP patches to prevent conflicts.
 				if (PatchStringHasUnlabelledPatch(contents.value()))
 				{
 					unlabeled_patch_found = true;
@@ -389,11 +378,9 @@ void Patch::EnumeratePnachFiles(const std::string_view serial, u32 crc, bool che
 		}
 	}
 
-	// Otherwise fall back to the zip.
 	if (cheats || unlabeled_patch_found || !OpenPatchesZip())
 		return;
 
-	// Prefer filename with serial.
 	std::string zip_filename = GetPnachTemplate(serial, crc, true, false, false);
 	std::optional<std::string> pnach_data(ReadFileInZipToString(s_patches_zip, zip_filename.c_str()));
 	if (!pnach_data.has_value())
@@ -462,7 +449,6 @@ void Patch::ExtractPatchInfo(std::vector<PatchInfo>* dst, const std::string& pna
 				if (std::none_of(dst->begin(), dst->end(),
 						[&current_patch](const PatchInfo& pi) { return (pi.name == current_patch.name); }))
 				{
-					// Don't show patches with duplicate names, prefer the first loaded.
 					if (!ContainsPatchName(*dst, current_patch.name))
 					{
 						dst->push_back(std::move(current_patch));
@@ -484,8 +470,6 @@ void Patch::ExtractPatchInfo(std::vector<PatchInfo>* dst, const std::string& pna
 		std::string_view key, value;
 		StringUtil::ParseAssignmentString(line, &key, &value);
 
-		// Just ignore other directives, who knows what rubbish people have in here.
-		// Use comment for description if it hasn't been otherwise specified.
 		if (key == "author")
 		{
 			current_patch.author = value;
@@ -503,9 +487,6 @@ void Patch::ExtractPatchInfo(std::vector<PatchInfo>* dst, const std::string& pna
 			if (!has_patch && num_unlabelled_patches)
 				(*num_unlabelled_patches)++;
 
-			// Try to extract the place value of the patch lines so we can
-			// display it in the GUI if they all match. TODO: Don't duplicate
-			// all this parsing logic twice.
 			if (unknown_place)
 				continue;
 
@@ -518,8 +499,6 @@ void Patch::ExtractPatchInfo(std::vector<PatchInfo>* dst, const std::string& pna
 				place_string, s_place_to_string);
 			if (!place.has_value() || (last_place.has_value() && place != last_place))
 			{
-				// This group contains patch lines with different or invalid
-				// place values.
 				current_patch.place = std::nullopt;
 				unknown_place = true;
 				continue;
@@ -535,7 +514,6 @@ void Patch::ExtractPatchInfo(std::vector<PatchInfo>* dst, const std::string& pna
 		}
 	}
 
-	// Last one.
 	if (!current_patch.name.empty() && std::none_of(dst->begin(), dst->end(), [&current_patch](const PatchInfo& pi) {
 			return (pi.name == current_patch.name);
 		}))
@@ -593,7 +571,6 @@ void Patch::ReloadEnabledLists()
 	const std::vector<std::string> prev_enabled_patches = std::exchange(s_enabled_patches, Host::GetStringListSetting(PATCHES_CONFIG_SECTION, PATCH_ENABLE_CONFIG_KEY));
 	const std::vector<std::string> disabled_patches = Host::GetStringListSetting(PATCHES_CONFIG_SECTION, PATCH_DISABLE_CONFIG_KEY);
 
-	// Name based matching for widescreen/NI settings.
 	if (EmuConfig.EnableWideScreenPatches)
 	{
 		if (std::none_of(s_enabled_patches.begin(), s_enabled_patches.end(),
@@ -646,21 +623,16 @@ u32 Patch::EnablePatches(const std::vector<PatchGroup>* patches, const std::vect
 	u32 count = 0;
 	for (const PatchGroup& p : *patches)
 	{
-		// For compatibility, we auto enable anything that's not labelled.
-		// Also for gamedb patches.
 		if (!p.name.empty() && std::find(enable_list.begin(), enable_list.end(), p.name) == enable_list.end())
 			continue;
 
 		Console.WriteLn(Color_Green, fmt::format("Enabled patch: {}",
 										 p.name.empty() ? std::string_view("<unknown>") : std::string_view(p.name)));
 
-		// Indicate that a new group has started so that extended code state
-		// such as the skip counter can be reset.
 		s_active_patches.emplace_back(nullptr);
 
 		for (const PatchCommand& ip : p.patches)
 		{
-			// print the actual patch lines only in verbose mode (even in devel)
 			if (Log::GetMaxLevel() >= LOGLEVEL_DEV)
 				DevCon.WriteLnFmt("  {}", ip.ToString());
 
@@ -677,15 +649,11 @@ u32 Patch::EnablePatches(const std::vector<PatchGroup>* patches, const std::vect
 		if (p.override_interlace_mode.has_value())
 			s_override_interlace_mode = p.override_interlace_mode;
 
-		// Count unlabelled patches once per command, or one patch per group.
 		count += p.name.empty() ? (static_cast<u32>(p.patches.size()) + static_cast<u32>(p.dpatches.size())) : 1;
 	}
 
-	// Apply PPT_ON_LOAD_OR_WHEN_ENABLED patches immediately.
 	if (enable_immediately_list && !enable_immediately_list->empty())
 	{
-		// Don't pass pointers to patch objects themselves here just in case the
-		// patches are reloaded twice in a row before this event makes it.
 		Host::RunOnCPUThread([patches, enable_immediately_list]() {
 			for (const PatchGroup& group : *patches)
 			{
@@ -795,8 +763,6 @@ void Patch::UpdateActivePatches(bool reload_enabled_list, bool verbose, bool ver
 		message.append_format("{}{}", message.empty() ? "" : "\n",
 			TRANSLATE_PLURAL_STR("Patch", "%n cheat patches are active.", "OSD Message", c_count));
 
-	// Display message on first boot when we load patches.
-	// Except when it's just GameDB.
 	const bool just_gamedb = (p_count == 0 && c_count == 0 && gp_count > 0);
 	if (verbose || (verbose_if_changed && prev_count != s_active_patches.size() && !just_gamedb))
 	{
@@ -819,7 +785,6 @@ void Patch::UpdateActivePatches(bool reload_enabled_list, bool verbose, bool ver
 
 void Patch::ApplyPatchSettingOverrides()
 {
-	// Switch to 16:9 (or any custom aspect ratio) if widescreen patches are enabled, and AR is auto.
 	if (s_override_aspect_ratio.has_value() && EmuConfig.GS.AspectRatio == AspectRatioType::RAuto4_3_3_2)
 	{
 		EmuConfig.CurrentCustomAspectRatio = s_override_aspect_ratio.value();
@@ -828,7 +793,6 @@ void Patch::ApplyPatchSettingOverrides()
 			fmt::format("Patch: Setting aspect ratio to {} by patch request.", s_override_aspect_ratio.value()));
 	}
 
-	// Disable interlacing in GS if active.
 	if (s_override_interlace_mode.has_value() && EmuConfig.GS.InterlaceMode == GSInterlaceMode::Automatic)
 	{
 		Console.WriteLn(Color_Gray, fmt::format("Patch: Setting deinterlace mode to {} by patch request.",
@@ -839,14 +803,11 @@ void Patch::ApplyPatchSettingOverrides()
 
 bool Patch::ReloadPatchAffectingOptions()
 {
-	// Restore the aspect ratio + interlacing setting the user had set before reloading the patch,
-	// as the custom patch settings only apply if the "Auto" settings are selected.
 
 	const AspectRatioType current_ar = EmuConfig.GS.AspectRatio;
 	const GSInterlaceMode current_interlace = EmuConfig.GS.InterlaceMode;
 	const float custom_aspect_ratio = EmuConfig.CurrentCustomAspectRatio;
 
-	// This is pretty gross, but we're not using a config layer, so...
 	AspectRatioType new_ar = Pcsx2Config::GSOptions::DEFAULT_ASPECT_RATIO;
 	const std::string ar_value = Host::GetStringSettingValue("EmuCore/GS", "AspectRatio",
 		Pcsx2Config::GSOptions::AspectRatioNames[static_cast<u8>(EmuConfig.GS.AspectRatio)]);
@@ -864,7 +825,6 @@ bool Patch::ReloadPatchAffectingOptions()
 
 	ApplyPatchSettingOverrides();
 
-	// Return true if any config setting changed
 	return current_ar != EmuConfig.GS.AspectRatio || custom_aspect_ratio != EmuConfig.CurrentCustomAspectRatio || current_interlace != EmuConfig.GS.InterlaceMode;
 }
 
@@ -883,13 +843,11 @@ void Patch::UnloadPatches()
 	decltype(s_gamedb_patches)().swap(s_gamedb_patches);
 }
 
-// PatchFunc Functions.
 void Patch::PatchFunc::patch(PatchGroup* group, const std::string_view cmd, const std::string_view param)
 {
 #define PATCH_ERROR(fstring, ...) \
 	Console.Error(fmt::format("(Patch) Error Parsing: {}={}: " fstring, cmd, param, __VA_ARGS__))
 
-	// [0]=PlaceToPatch,[1]=CpuType,[2]=MemAddr,[3]=OperandSize,[4]=WriteValue
 	const std::vector<std::string_view> pieces(StringUtil::SplitString(param, ',', false));
 	if (pieces.size() != 5)
 	{
@@ -935,7 +893,6 @@ void Patch::PatchFunc::patch(PatchGroup* group, const std::string_view cmd, cons
 	}
 	else
 	{
-		// bit crappy to copy it, but eh, saves writing a new routine
 		std::optional<std::vector<u8>> bytes = StringUtil::DecodeHex(pieces[4]);
 		if (!bytes.has_value() || bytes->empty())
 		{
@@ -1001,9 +958,6 @@ void Patch::PatchFunc::dpatch(PatchGroup* group, const std::string_view cmd, con
 #define PATCH_ERROR(fstring, ...) \
 	Console.Error(fmt::format("(dPatch) Error Parsing: {}={}: " fstring, cmd, param, __VA_ARGS__))
 
-	// [0]=version/type,[1]=number of patterns,[2]=number of replacements
-	// Each pattern or replacement is [3]=offset,[4]=hex
-
 	const std::vector<std::string_view> pieces(StringUtil::SplitString(param, ',', false));
 	if (pieces.size() < 3)
 	{
@@ -1014,7 +968,6 @@ void Patch::PatchFunc::dpatch(PatchGroup* group, const std::string_view cmd, con
 
 	std::string_view patterns_end, replacements_end;
 
-	// Implemented for possible future use so we don't have to break backcompat
 	std::optional<u32> dpatch_type = StringUtil::FromChars<u32>(pieces[0]);
 
 	std::optional<u32> num_patterns = StringUtil::FromChars<u32>(pieces[1], 16, &patterns_end);
@@ -1231,7 +1184,7 @@ void Patch::handle_extended_t(const PatchCommand* p, Memory& memory, ExtendedSta
 	else
 		switch (state.prev_cheat_type)
 		{
-			case 0x3040: // vvvvvvvv 00000000 Inc
+			case 0x3040:
 			{
 				u32 mem = memory.Read32(state.prev_cheat_addr);
 				memory.Write32(state.prev_cheat_addr, mem + (p->addr));
@@ -1239,7 +1192,7 @@ void Patch::handle_extended_t(const PatchCommand* p, Memory& memory, ExtendedSta
 				break;
 			}
 
-			case 0x3050: // vvvvvvvv 00000000 Dec
+			case 0x3050:
 			{
 				u32 mem = memory.Read32(state.prev_cheat_addr);
 				memory.Write32(state.prev_cheat_addr, mem - (p->addr));
@@ -1247,7 +1200,7 @@ void Patch::handle_extended_t(const PatchCommand* p, Memory& memory, ExtendedSta
 				break;
 			}
 
-			case 0x4000: // vvvvvvvv iiiiiiii
+			case 0x4000:
 				for (u32 i = 0; i < state.iteration_count; i++)
 				{
 					memory.IdempotentWrite32((u32)(state.prev_cheat_addr + (i * state.iteration_increment)), (u32)(p->addr + ((u32)p->data * i)));
@@ -1255,7 +1208,7 @@ void Patch::handle_extended_t(const PatchCommand* p, Memory& memory, ExtendedSta
 				state.prev_cheat_type = 0;
 				break;
 
-			case 0x5000: // bbbbbbbb 00000000
+			case 0x5000:
 				for (u32 i = 0; i < state.iteration_count; i++)
 				{
 					u8 mem = memory.Read8(state.prev_cheat_addr + i);
@@ -1264,17 +1217,15 @@ void Patch::handle_extended_t(const PatchCommand* p, Memory& memory, ExtendedSta
 				state.prev_cheat_type = 0;
 				break;
 
-			case 0x6000: // 000Xnnnn iiiiiiii
+			case 0x6000:
 			{
 				state.null_pointer_encountered = false;
 
-				// Get Number of pointers
 				if (((u32)p->addr & 0x0000FFFF) == 0)
 					state.iteration_count = 1;
 				else
 					state.iteration_count = (u32)p->addr & 0x0000FFFF;
 
-				// Read first pointer
 				state.last_type = ((u32)p->addr & 0x000F0000) >> 16;
 				u32 mem = memory.Read32(state.prev_cheat_addr);
 				if (((mem & 0x0FFFFFFF) & 0x3FFFFFFC) == 0)
@@ -1283,7 +1234,6 @@ void Patch::handle_extended_t(const PatchCommand* p, Memory& memory, ExtendedSta
 				state.prev_cheat_addr = mem + (u32)p->data;
 				state.iteration_count--;
 
-				// Check if needed to read another pointer
 				if (state.iteration_count == 0)
 				{
 					state.prev_cheat_type = 0;
@@ -1297,9 +1247,8 @@ void Patch::handle_extended_t(const PatchCommand* p, Memory& memory, ExtendedSta
 			}
 			break;
 
-			case 0x6001: // 000Xnnnn iiiiiiii
+			case 0x6001:
 			{
-				// Read first pointer
 				u32 mem = 0;
 				if (!state.null_pointer_encountered)
 				{
@@ -1311,7 +1260,6 @@ void Patch::handle_extended_t(const PatchCommand* p, Memory& memory, ExtendedSta
 				state.prev_cheat_addr = mem + (u32)p->addr;
 				state.iteration_count--;
 
-				// Check if needed to read another pointer
 				if (state.iteration_count == 0)
 				{
 					state.prev_cheat_type = 0;
@@ -1344,69 +1292,69 @@ void Patch::handle_extended_t(const PatchCommand* p, Memory& memory, ExtendedSta
 			break;
 
 			default:
-				if ((p->addr & 0xF0000000) == 0x00000000) // 0aaaaaaa 0000000vv
+				if ((p->addr & 0xF0000000) == 0x00000000)
 				{
 					memory.IdempotentWrite8(p->addr & 0x0FFFFFFF, (u8)p->data & 0x000000FF);
 					state.prev_cheat_type = 0;
 				}
-				else if ((p->addr & 0xF0000000) == 0x10000000) // 1aaaaaaa 0000vvvv
+				else if ((p->addr & 0xF0000000) == 0x10000000)
 				{
 					memory.IdempotentWrite16(p->addr & 0x0FFFFFFF, (u16)p->data & 0x0000FFFF);
 					state.prev_cheat_type = 0;
 				}
-				else if ((p->addr & 0xF0000000) == 0x20000000) // 2aaaaaaa vvvvvvvv
+				else if ((p->addr & 0xF0000000) == 0x20000000)
 				{
 					memory.IdempotentWrite32(p->addr & 0x0FFFFFFF, (u32)p->data);
 					state.prev_cheat_type = 0;
 				}
-				else if ((p->addr & 0xFFFF0000) == 0x30000000) // 300000vv 0aaaaaaa Inc
+				else if ((p->addr & 0xFFFF0000) == 0x30000000)
 				{
 					u8 mem = memory.Read8((u32)p->data);
 					memory.Write8((u32)p->data, mem + (p->addr & 0x000000FF));
 					state.prev_cheat_type = 0;
 				}
-				else if ((p->addr & 0xFFFF0000) == 0x30100000) // 301000vv 0aaaaaaa Dec
+				else if ((p->addr & 0xFFFF0000) == 0x30100000)
 				{
 					u8 mem = memory.Read8((u32)p->data);
 					memory.Write8((u32)p->data, mem - (p->addr & 0x000000FF));
 					state.prev_cheat_type = 0;
 				}
-				else if ((p->addr & 0xFFFF0000) == 0x30200000) // 3020vvvv 0aaaaaaa Inc
+				else if ((p->addr & 0xFFFF0000) == 0x30200000)
 				{
 					u16 mem = memory.Read16((u32)p->data);
 					memory.Write16((u32)p->data, mem + (p->addr & 0x0000FFFF));
 					state.prev_cheat_type = 0;
 				}
-				else if ((p->addr & 0xFFFF0000) == 0x30300000) // 3030vvvv 0aaaaaaa Dec
+				else if ((p->addr & 0xFFFF0000) == 0x30300000)
 				{
 					u16 mem = memory.Read16((u32)p->data);
 					memory.Write16((u32)p->data, mem - (p->addr & 0x0000FFFF));
 					state.prev_cheat_type = 0;
 				}
-				else if ((p->addr & 0xFFFF0000) == 0x30400000) // 30400000 0aaaaaaa Inc + Another line
+				else if ((p->addr & 0xFFFF0000) == 0x30400000)
 				{
 					state.prev_cheat_type = 0x3040;
 					state.prev_cheat_addr = (u32)p->data;
 				}
-				else if ((p->addr & 0xFFFF0000) == 0x30500000) // 30500000 0aaaaaaa Inc + Another line
+				else if ((p->addr & 0xFFFF0000) == 0x30500000)
 				{
 					state.prev_cheat_type = 0x3050;
 					state.prev_cheat_addr = (u32)p->data;
 				}
-				else if ((p->addr & 0xF0000000) == 0x40000000) // 4aaaaaaa nnnnssss + Another line
+				else if ((p->addr & 0xF0000000) == 0x40000000)
 				{
 					state.iteration_count = ((u32)p->data & 0xFFFF0000) >> 16;
 					state.iteration_increment = ((u32)p->data & 0x0000FFFF) * 4;
 					state.prev_cheat_addr = (u32)p->addr & 0x0FFFFFFF;
 					state.prev_cheat_type = 0x4000;
 				}
-				else if ((p->addr & 0xF0000000) == 0x50000000) // 5sssssss nnnnnnnn + Another line
+				else if ((p->addr & 0xF0000000) == 0x50000000)
 				{
 					state.prev_cheat_addr = (u32)p->addr & 0x0FFFFFFF;
 					state.iteration_count = ((u32)p->data);
 					state.prev_cheat_type = 0x5000;
 				}
-				else if ((p->addr & 0xF0000000) == 0x60000000) // 6aaaaaaa 000000vv + Another line/s
+				else if ((p->addr & 0xF0000000) == 0x60000000)
 				{
 					state.prev_cheat_addr = (u32)p->addr & 0x0FFFFFFF;
 					state.iteration_increment = ((u32)p->data);
@@ -1415,32 +1363,32 @@ void Patch::handle_extended_t(const PatchCommand* p, Memory& memory, ExtendedSta
 				}
 				else if ((p->addr & 0xF0000000) == 0x70000000)
 				{
-					if ((p->data & 0x00F00000) == 0x00000000) // 7aaaaaaa 000000vv
+					if ((p->data & 0x00F00000) == 0x00000000)
 					{
 						u8 mem = memory.Read8((u32)p->addr & 0x0FFFFFFF);
 						memory.Write8((u32)p->addr & 0x0FFFFFFF, (u8)(mem | (p->data & 0x000000FF)));
 					}
-					else if ((p->data & 0x00F00000) == 0x00100000) // 7aaaaaaa 0010vvvv
+					else if ((p->data & 0x00F00000) == 0x00100000)
 					{
 						u16 mem = memory.Read16((u32)p->addr & 0x0FFFFFFF);
 						memory.Write16((u32)p->addr & 0x0FFFFFFF, (u16)(mem | (p->data & 0x0000FFFF)));
 					}
-					else if ((p->data & 0x00F00000) == 0x00200000) // 7aaaaaaa 002000vv
+					else if ((p->data & 0x00F00000) == 0x00200000)
 					{
 						u8 mem = memory.Read8((u32)p->addr & 0x0FFFFFFF);
 						memory.Write8((u32)p->addr & 0x0FFFFFFF, (u8)(mem & (p->data & 0x000000FF)));
 					}
-					else if ((p->data & 0x00F00000) == 0x00300000) // 7aaaaaaa 0030vvvv
+					else if ((p->data & 0x00F00000) == 0x00300000)
 					{
 						u16 mem = memory.Read16((u32)p->addr & 0x0FFFFFFF);
 						memory.Write16((u32)p->addr & 0x0FFFFFFF, (u16)(mem & (p->data & 0x0000FFFF)));
 					}
-					else if ((p->data & 0x00F00000) == 0x00400000) // 7aaaaaaa 004000vv
+					else if ((p->data & 0x00F00000) == 0x00400000)
 					{
 						u8 mem = memory.Read8((u32)p->addr & 0x0FFFFFFF);
 						memory.Write8((u32)p->addr & 0x0FFFFFFF, (u8)(mem ^ (p->data & 0x000000FF)));
 					}
-					else if ((p->data & 0x00F00000) == 0x00500000) // 7aaaaaaa 0050vvvv
+					else if ((p->data & 0x00F00000) == 0x00500000)
 					{
 						u16 mem = memory.Read16((u32)p->addr & 0x0FFFFFFF);
 						memory.Write16((u32)p->addr & 0x0FFFFFFF, (u16)(mem ^ (p->data & 0x0000FFFF)));
@@ -1451,13 +1399,8 @@ void Patch::handle_extended_t(const PatchCommand* p, Memory& memory, ExtendedSta
 					u32 addr = (u32)p->addr;
 					u32 data = (u32)p->data;
 
-					// Since D-codes now have the additional functionality present in PS2rd which
-					// incorporates E-code-like functionality by making use of the unused bits in
-					// D-codes, the E-codes are now just converted to D-codes to reduce bloat.
-
 					if ((addr & 0xF0000000) == 0xE0000000)
 					{
-						// Ezyyvvvv taaaaaaa  ->  Daaaaaaa yytzvvvv
 						addr = 0xD0000000 | ((u32)p->data & 0x0FFFFFFF);
 						data = 0x00000000 | ((u32)p->addr & 0x0000FFFF);
 						data = data | ((u32)p->addr & 0x00FF0000) << 8;
@@ -1468,9 +1411,9 @@ void Patch::handle_extended_t(const PatchCommand* p, Memory& memory, ExtendedSta
 					const u8 type = (data & 0x000F0000) >> 16;
 					const u8 cond = (data & 0x00F00000) >> 20;
 
-					if (cond == 0) // Daaaaaaa yy0zvvvv
+					if (cond == 0)
 					{
-						if (type == 0) // Daaaaaaa yy00vvvv
+						if (type == 0)
 						{
 							u16 mem = memory.Read16(addr & 0x0FFFFFFF);
 							if (mem != (data & 0x0000FFFF))
@@ -1483,7 +1426,7 @@ void Patch::handle_extended_t(const PatchCommand* p, Memory& memory, ExtendedSta
 							}
 							state.prev_cheat_type = 0;
 						}
-						else if (type == 1) // Daaaaaaa yy0100vv
+						else if (type == 1)
 						{
 							u8 mem = memory.Read8(addr & 0x0FFFFFFF);
 							if (mem != (data & 0x000000FF))
@@ -1497,9 +1440,9 @@ void Patch::handle_extended_t(const PatchCommand* p, Memory& memory, ExtendedSta
 							state.prev_cheat_type = 0;
 						}
 					}
-					else if (cond == 1) // Daaaaaaa yy1zvvvv
+					else if (cond == 1)
 					{
-						if (type == 0) // Daaaaaaa yy10vvvv
+						if (type == 0)
 						{
 							u16 mem = memory.Read16(addr & 0x0FFFFFFF);
 							if (mem == (data & 0x0000FFFF))
@@ -1512,7 +1455,7 @@ void Patch::handle_extended_t(const PatchCommand* p, Memory& memory, ExtendedSta
 							}
 							state.prev_cheat_type = 0;
 						}
-						else if (type == 1) // Daaaaaaa yy1100vv
+						else if (type == 1)
 						{
 							u8 mem = memory.Read8(addr & 0x0FFFFFFF);
 							if (mem == (data & 0x000000FF))
@@ -1526,9 +1469,9 @@ void Patch::handle_extended_t(const PatchCommand* p, Memory& memory, ExtendedSta
 							state.prev_cheat_type = 0;
 						}
 					}
-					else if (cond == 2) // Daaaaaaa yy2zvvvv
+					else if (cond == 2)
 					{
-						if (type == 0) // Daaaaaaa yy20vvvv
+						if (type == 0)
 						{
 							u16 mem = memory.Read16(addr & 0x0FFFFFFF);
 							if (mem >= (data & 0x0000FFFF))
@@ -1541,7 +1484,7 @@ void Patch::handle_extended_t(const PatchCommand* p, Memory& memory, ExtendedSta
 							}
 							state.prev_cheat_type = 0;
 						}
-						else if (type == 1) // Daaaaaaa yy2100vv
+						else if (type == 1)
 						{
 							u8 mem = memory.Read8(addr & 0x0FFFFFFF);
 							if (mem >= (data & 0x000000FF))
@@ -1555,9 +1498,9 @@ void Patch::handle_extended_t(const PatchCommand* p, Memory& memory, ExtendedSta
 							state.prev_cheat_type = 0;
 						}
 					}
-					else if (cond == 3) // Daaaaaaa yy3zvvvv
+					else if (cond == 3)
 					{
-						if (type == 0) // Daaaaaaa yy30vvvv
+						if (type == 0)
 						{
 							u16 mem = memory.Read16(addr & 0x0FFFFFFF);
 							if (mem <= (data & 0x0000FFFF))
@@ -1570,7 +1513,7 @@ void Patch::handle_extended_t(const PatchCommand* p, Memory& memory, ExtendedSta
 							}
 							state.prev_cheat_type = 0;
 						}
-						else if (type == 1) // Daaaaaaa yy3100vv
+						else if (type == 1)
 						{
 							u8 mem = memory.Read8(addr & 0x0FFFFFFF);
 							if (mem <= (data & 0x000000FF))
@@ -1584,9 +1527,9 @@ void Patch::handle_extended_t(const PatchCommand* p, Memory& memory, ExtendedSta
 							state.prev_cheat_type = 0;
 						}
 					}
-					else if (cond == 4) // Daaaaaaa yy4zvvvv
+					else if (cond == 4)
 					{
-						if (type == 0) // Daaaaaaa yy40vvvv
+						if (type == 0)
 						{
 							u16 mem = memory.Read16(addr & 0x0FFFFFFF);
 							if (mem & (data & 0x0000FFFF))
@@ -1599,7 +1542,7 @@ void Patch::handle_extended_t(const PatchCommand* p, Memory& memory, ExtendedSta
 							}
 							state.prev_cheat_type = 0;
 						}
-						else if (type == 1) // Daaaaaaa yy4100vv
+						else if (type == 1)
 						{
 							u8 mem = memory.Read8(addr & 0x0FFFFFFF);
 							if (mem & (data & 0x000000FF))
@@ -1613,9 +1556,9 @@ void Patch::handle_extended_t(const PatchCommand* p, Memory& memory, ExtendedSta
 							state.prev_cheat_type = 0;
 						}
 					}
-					else if (cond == 5) // Daaaaaaa yy5zvvvv
+					else if (cond == 5)
 					{
-						if (type == 0) // Daaaaaaa yy50vvvv
+						if (type == 0)
 						{
 							u16 mem = memory.Read16(addr & 0x0FFFFFFF);
 							if (!(mem & (data & 0x0000FFFF)))
@@ -1628,7 +1571,7 @@ void Patch::handle_extended_t(const PatchCommand* p, Memory& memory, ExtendedSta
 							}
 							state.prev_cheat_type = 0;
 						}
-						else if (type == 1) // Daaaaaaa yy5100vv
+						else if (type == 1)
 						{
 							u8 mem = memory.Read8(addr & 0x0FFFFFFF);
 							if (!(mem & (data & 0x000000FF)))
@@ -1642,9 +1585,9 @@ void Patch::handle_extended_t(const PatchCommand* p, Memory& memory, ExtendedSta
 							state.prev_cheat_type = 0;
 						}
 					}
-					else if (cond == 6) // Daaaaaaa yy6zvvvv
+					else if (cond == 6)
 					{
-						if (type == 0) // Daaaaaaa yy60vvvv
+						if (type == 0)
 						{
 							u16 mem = memory.Read16(addr & 0x0FFFFFFF);
 							if (mem | (data & 0x0000FFFF))
@@ -1657,7 +1600,7 @@ void Patch::handle_extended_t(const PatchCommand* p, Memory& memory, ExtendedSta
 							}
 							state.prev_cheat_type = 0;
 						}
-						else if (type == 1) // Daaaaaaa yy6100vv
+						else if (type == 1)
 						{
 							u8 mem = memory.Read8(addr & 0x0FFFFFFF);
 							if (mem | (data & 0x000000FF))
@@ -1671,9 +1614,9 @@ void Patch::handle_extended_t(const PatchCommand* p, Memory& memory, ExtendedSta
 							state.prev_cheat_type = 0;
 						}
 					}
-					else if (cond == 7) // Daaaaaaa yy7zvvvv
+					else if (cond == 7)
 					{
-						if (type == 0) // Daaaaaaa yy70vvvv
+						if (type == 0)
 						{
 							u16 mem = memory.Read16(addr & 0x0FFFFFFF);
 							if (!(mem | (data & 0x0000FFFF)))
@@ -1686,7 +1629,7 @@ void Patch::handle_extended_t(const PatchCommand* p, Memory& memory, ExtendedSta
 							}
 							state.prev_cheat_type = 0;
 						}
-						else if (type == 1) // Daaaaaaa yy7100vv
+						else if (type == 1)
 						{
 							u8 mem = memory.Read8(addr & 0x0FFFFFFF);
 							if (!(mem | (data & 0x000000FF)))
@@ -1760,7 +1703,6 @@ void Patch::ApplyPatch(const PatchCommand* p, EEMemory& ee, IOPMemory& iop, Exte
 				}
 				case BYTES_T:
 				{
-					// We compare before writing so the rec doesn't get upset and invalidate when there's no change.
 					ee.IdempotentWriteBytes(p->addr, p->data_ptr, static_cast<u32>(p->data));
 					break;
 				}
@@ -1818,7 +1760,6 @@ void Patch::ApplyDynaPatch(const DynamicPatch& patch, u32 address)
 	}
 
 	Console.WriteLn("Applying Dynamic Patch to address 0x%08X", address);
-	// If everything passes, apply the patch.
 	for (const auto& replacement : patch.replacement)
 	{
 		memWrite32(address + replacement.offset, replacement.value);
@@ -1828,22 +1769,17 @@ void Patch::ApplyDynaPatch(const DynamicPatch& patch, u32 address)
 const char* Patch::PlaceToString(std::optional<patch_place_type> place)
 {
 	if (!place.has_value())
-		//: Time when a patch is applied.
 		return TRANSLATE("Patch", "Unknown");
 
 	switch (*place)
 	{
 		case Patch::PPT_ONCE_ON_LOAD:
-			//: Time when a patch is applied.
 			return TRANSLATE("Patch", "Only On Startup");
 		case Patch::PPT_CONTINUOUSLY:
-			//: Time when a patch is applied.
 			return TRANSLATE("Patch", "Every Frame");
 		case Patch::PPT_COMBINED_0_1:
-			//: Time when a patch is applied.
 			return TRANSLATE("Patch", "On Startup & Every Frame");
 		case Patch::PPT_ON_LOAD_OR_WHEN_ENABLED:
-			//: Time when a patch is applied.
 			return TRANSLATE("Patch", "On Startup & When Enabled");
 		default:
 		{

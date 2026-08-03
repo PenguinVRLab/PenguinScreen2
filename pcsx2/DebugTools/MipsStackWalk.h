@@ -10,13 +10,9 @@ class DebugInterface;
 
 namespace MipsStackWalk {
 	struct StackFrame {
-		// Beginning of function symbol (may be estimated.)
 		u32 entry;
-		// Next position within function.
 		u32 pc;
-		// Value of SP inside this function (assuming no alloca()...)
 		u32 sp;
-		// Size of stack frame in bytes.
 		int stackSize;
 	};
 

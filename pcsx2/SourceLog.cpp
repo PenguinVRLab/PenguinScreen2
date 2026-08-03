@@ -72,9 +72,6 @@ bool ConsoleLog::Write(ConsoleColors color, const char* fmt, ...) const
 	return false;
 }
 
-// --------------------------------------------------------------------------------------
-//  ConsoleLogPack  (descriptions)
-// --------------------------------------------------------------------------------------
 static const LogDescriptor
 
 	LD_ELF = {
@@ -107,15 +104,8 @@ ConsoleLogPack::ConsoleLogPack()
 {
 }
 
-// --------------------------------------------------------------------------------------
-//  TraceLogPack  (descriptions)
-// --------------------------------------------------------------------------------------
 static const LogDescriptor
 	LD_SIF = {"SIF", "SIF (EE <-> IOP)", ""};
-
-// ----------------------------
-//   EmotionEngine (EE/R5900)
-// ----------------------------
 
 static const LogDescriptor
 	LD_EE_Bios = {"Bios", "Bios", "SYSCALL and DECI2 activity."},
@@ -155,10 +145,6 @@ static const LogDescriptor
 	LD_EE_VIF = {"VIF", "VIF", "Dumps various VIF and VIFcode processing data."},
 
 	LD_EE_GIF = {"GIF", "GIF", "Dumps various GIF and GIFtag parsing data."};
-
-// ----------------------------------
-//   IOP - Input / Output Processor
-// ----------------------------------
 
 static const LogDescriptor
 	LD_IOP_Bios = {"Bios", "Bios", "SYSCALL and IRX activity."},

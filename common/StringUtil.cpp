@@ -41,7 +41,6 @@ namespace StringUtil
 
 		std::string ret;
 
-		// If an encoding error occurs, len is -1. Which we definitely don't want to resize to.
 		if (len > 0)
 		{
 			ret.resize(len);
@@ -51,7 +50,7 @@ namespace StringUtil
 		return ret;
 	}
 
-	bool WildcardMatch(const char* subject, const char* mask, bool case_sensitive /*= true*/)
+	bool WildcardMatch(const char* subject, const char* mask, bool case_sensitive )
 	{
 		if (case_sensitive)
 		{
@@ -277,7 +276,7 @@ namespace StringUtil
 		}
 	}
 
-	std::vector<std::string_view> SplitString(const std::string_view str, char delimiter, bool skip_empty /*= true*/)
+	std::vector<std::string_view> SplitString(const std::string_view str, char delimiter, bool skip_empty )
 	{
 		std::vector<std::string_view> res;
 		std::string_view::size_type last_pos = 0;
@@ -441,7 +440,7 @@ namespace StringUtil
 		return DecodeUTF8(str.data() + offset, str.length() - offset, ch);
 	}
 
-	std::string Ellipsise(const std::string_view str, u32 max_length, const char* ellipsis /*= "..."*/)
+	std::string Ellipsise(const std::string_view str, u32 max_length, const char* ellipsis )
 	{
 		std::string ret;
 		ret.reserve(max_length);
@@ -466,7 +465,7 @@ namespace StringUtil
 		return ret;
 	}
 
-	void EllipsiseInPlace(std::string& str, u32 max_length, const char* ellipsis /*= "..."*/)
+	void EllipsiseInPlace(std::string& str, u32 max_length, const char* ellipsis )
 	{
 		const u32 str_length = static_cast<u32>(str.length());
 		const u32 ellipsis_len = static_cast<u32>(std::strlen(ellipsis));
@@ -541,4 +540,4 @@ namespace StringUtil
 		fmt::format_to(std::back_inserter(s), "0x{:08X}.{:08X}.{:08X}.{:08X}", u._u32[0], u._u32[1], u._u32[2], u._u32[3]);
 		return s;
 	}
-} // namespace StringUtil
+}

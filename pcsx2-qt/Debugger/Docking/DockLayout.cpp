@@ -28,10 +28,8 @@
 
 const char* DEBUGGER_LAYOUT_FILE_FORMAT = "PCSX2 Debugger User Interface Layout";
 
-// Increment this whenever there is a breaking change to the JSON format.
 const u32 DEBUGGER_LAYOUT_FILE_VERSION_MAJOR = 2;
 
-// Increment this whenever there is a non-breaking change to the JSON format.
 const u32 DEBUGGER_LAYOUT_FILE_VERSION_MINOR = 0;
 
 DockLayout::DockLayout(
@@ -156,14 +154,11 @@ void DockLayout::freeze()
 	if (g_debugger_window)
 		m_toolbars = g_debugger_window->saveState();
 
-	// Store the geometry of all the dock widgets as JSON.
 	KDDockWidgets::LayoutSaver saver(KDDockWidgets::RestoreOption_RelativeToMainWindow);
 	m_geometry = saver.serializeLayout();
 
-	// Delete the dock widgets.
 	for (KDDockWidgets::Core::DockWidget* dock : KDDockWidgets::DockRegistry::self()->dockwidgets())
 	{
-		// Make sure the dock widget releases ownership of its content.
 		auto view = static_cast<KDDockWidgets::QtWidgets::DockWidget*>(dock->view());
 		view->setWidget(new QWidget());
 
@@ -179,7 +174,6 @@ void DockLayout::thaw()
 	if (!g_debugger_window)
 		return;
 
-	// Restore the state of the toolbars.
 	if (m_toolbars.isEmpty())
 	{
 		const DockTables::DefaultDockLayout* base_layout = DockTables::defaultLayout(m_base_layout);
@@ -197,20 +191,15 @@ void DockLayout::thaw()
 
 	if (m_geometry.isEmpty())
 	{
-		// This is a newly created layout with no geometry information.
 		setupDefaultLayout();
 	}
 	else
 	{
-		// Create all the dock widgets.
 		KDDockWidgets::LayoutSaver saver(KDDockWidgets::RestoreOption_RelativeToMainWindow);
 		if (!saver.restoreLayout(m_geometry))
 		{
-			// We've failed to restore the geometry, so just tear down whatever
-			// dock widgets may exist and then setup the default layout.
 			for (KDDockWidgets::Core::DockWidget* dock : KDDockWidgets::DockRegistry::self()->dockwidgets())
 			{
-				// Make sure the dock widget releases ownership of its content.
 				auto view = static_cast<KDDockWidgets::QtWidgets::DockWidget*>(dock->view());
 				view->setWidget(new QWidget());
 
@@ -221,7 +210,6 @@ void DockLayout::thaw()
 		}
 	}
 
-	// Check that all the dock widgets have been restored correctly.
 	std::vector<QString> orphaned_debugger_views;
 	for (auto& [unique_name, widget] : m_widgets)
 	{
@@ -233,7 +221,6 @@ void DockLayout::thaw()
 		}
 	}
 
-	// Delete any debugger views that haven't been restored correctly.
 	for (const QString& unique_name : orphaned_debugger_views)
 	{
 		auto widget_iterator = m_widgets.find(unique_name);
@@ -319,11 +306,9 @@ void DockLayout::updateDockWidgetTitles()
 	if (!m_is_active)
 		return;
 
-	// Translate default debugger view names.
 	for (auto& [unique_name, widget] : m_widgets)
 		widget->retranslateDisplayName();
 
-	// Determine if any widgets have duplicate display names.
 	std::map<QString, std::vector<DebuggerView*>> display_name_to_widgets;
 	for (auto& [unique_name, widget] : m_widgets)
 		display_name_to_widgets[widget->displayNameWithoutSuffix()].emplace_back(widget.get());
@@ -345,7 +330,6 @@ void DockLayout::updateDockWidgetTitles()
 		}
 	}
 
-	// Propagate the new names from the debugger views to the dock widgets.
 	for (auto& [unique_name, widget] : m_widgets)
 	{
 		auto [controller, view] = DockUtils::dockWidgetFromName(widget->uniqueName());
@@ -490,7 +474,6 @@ void DockLayout::setPrimaryDebuggerView(DebuggerView* widget, bool is_primary)
 
 	if (is_primary)
 	{
-		// Set the passed widget as the primary widget.
 		for (auto& [unique_name, test_widget] : m_widgets)
 		{
 			if (strcmp(test_widget->metaObject()->className(), widget->metaObject()->className()) == 0)
@@ -501,7 +484,6 @@ void DockLayout::setPrimaryDebuggerView(DebuggerView* widget, bool is_primary)
 	}
 	else if (widget->isPrimary())
 	{
-		// Set an arbitrary widget as the primary widget.
 		bool next = true;
 		for (auto& [unique_name, test_widget] : m_widgets)
 		{
@@ -513,8 +495,6 @@ void DockLayout::setPrimaryDebuggerView(DebuggerView* widget, bool is_primary)
 			}
 		}
 
-		// If we haven't set another widget as the primary one we can't make
-		// this one not the primary one.
 		if (!next)
 			widget->setPrimary(false);
 	}
@@ -538,12 +518,10 @@ bool DockLayout::save(DockLayout::Index layout_index)
 	{
 		m_toolbars = g_debugger_window->saveState();
 
-		// Store the geometry of all the dock widgets as JSON.
 		KDDockWidgets::LayoutSaver saver(KDDockWidgets::RestoreOption_RelativeToMainWindow);
 		m_geometry = saver.serializeLayout();
 	}
 
-	// Serialize the layout as JSON.
 	rapidjson::Document json(rapidjson::kObjectType);
 	rapidjson::Document geometry;
 
@@ -623,9 +601,6 @@ bool DockLayout::save(DockLayout::Index layout_index)
 
 	std::string safe_name = Path::SanitizeFileName(m_name.toStdString());
 
-	// Create a temporary file first so that we don't corrupt an existing file
-	// in the case that we succeed in opening the file but fail to write our
-	// data to it.
 	std::string temp_file_path = Path::Combine(EmuFolders::DebuggerLayouts, safe_name + ".tmp");
 
 	if (!FileSystem::WriteStringToFile(temp_file_path.c_str(), string_buffer.GetString()))
@@ -635,7 +610,6 @@ bool DockLayout::save(DockLayout::Index layout_index)
 		return false;
 	}
 
-	// Now move the layout to its final location.
 	std::string file_path = Path::Combine(EmuFolders::DebuggerLayouts, safe_name + ".json");
 
 	if (!FileSystem::RenamePath(temp_file_path.c_str(), file_path.c_str()))
@@ -645,7 +619,6 @@ bool DockLayout::save(DockLayout::Index layout_index)
 		return false;
 	}
 
-	// If the layout has been renamed we need to delete the old file.
 	if (file_path != m_layout_file_path)
 		deleteFile();
 
@@ -838,7 +811,6 @@ void DockLayout::validatePrimaryDebuggerViews()
 	{
 		u32 primary_widgets = 0;
 
-		// Make sure at most one widget is marked as primary.
 		for (DebuggerView* widget : widgets)
 		{
 			if (widget->isPrimary())
@@ -850,8 +822,6 @@ void DockLayout::validatePrimaryDebuggerViews()
 			}
 		}
 
-		// If none of the widgets were marked as primary, just set the first one
-		// as the primary one.
 		if (primary_widgets == 0)
 			widgets[0]->setPrimary(true);
 	}

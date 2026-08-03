@@ -34,7 +34,6 @@ namespace usb_pad
 		u8 state = 0;
 		u32 key = 0;
 
-		// Settings
 		bool invert_x_axis = false;
 		bool invert_y_axis = false;
 		bool invert_z_axis = false;
@@ -84,4 +83,4 @@ namespace usb_pad
 		USBDevice* CreateDevice(SettingsInterface& si, u32 port, u32 subtype) const override;
 	};
 
-} // namespace usb_pad
+}

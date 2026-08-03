@@ -36,8 +36,6 @@ void GetValidDrive(std::string& drive)
 
 	printf(" * CDVD: Opening drive '%s'...\n", drive.data());
 
-	// The drive string has the form "X:\", but to open the drive, the string
-	// has to be in the form "\\.\X:"
 	drive.pop_back();
 	drive.insert(0, "\\\\.\\");
 }

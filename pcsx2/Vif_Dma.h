@@ -65,19 +65,18 @@ struct tVIF_CTRL {
    u32 value;
 };
 
-// NOTE, if debugging vif stalls, use sega classics, spyro, gt4, and taito
 struct vifStruct {
 	alignas(16) u128 MaskRow;
 	alignas(16) u128 MaskCol;
 
-	struct { // These must be together for MTVU
+	struct {
 		vifCode tag;
 		int cmd;
 		int pass;
 		int cl;
 		u8  usn;
 		u8 start_aligned;
-		u8  StructEnd; // Address of this is used to calculate end of struct
+		u8  StructEnd;
 	};
 
 	int irq;
@@ -87,8 +86,6 @@ struct vifStruct {
 	bool stallontag;
 	bool waitforvu;
 	int unpackcalls;
-	// GS registers used for calculating the size of the last local->host transfer initiated on the GS
-	// Transfer size calculation should be restricted to GS emulation in the future
 	union
 	{
 		struct
@@ -102,7 +99,7 @@ struct vifStruct {
 
 	u32        GSLastDownloadSize;
 
-	tVIF_CTRL  irqoffset; // 32bit offset where next vif code is
+	tVIF_CTRL  irqoffset;
 	u32 vifpacketsize;
 	u8  inprogress;
 	u8  dmamode;
@@ -141,7 +138,6 @@ enum VifModes
 	VIF_CHAIN_MODE = 2
 };
 
-// Generic constants
 static const unsigned int VIF0intc = 4;
 static const unsigned int VIF1intc = 5;
 

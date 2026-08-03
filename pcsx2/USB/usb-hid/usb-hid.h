@@ -33,4 +33,4 @@ namespace usb_hid
 		USBDevice* CreateDevice(SettingsInterface& si, u32 port, u32 subtype) const override;
 		bool Freeze(USBDevice* dev, StateWrapper& sw) const override;
 	};
-} // namespace usb_hid
+}

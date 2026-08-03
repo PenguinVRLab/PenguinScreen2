@@ -16,24 +16,17 @@
 class VKSwapChain
 {
 public:
-	// We don't actually need +1 semaphores, or, more than one really.
-	// But, the validation layer gets cranky if we don't fence wait before the next image acquire.
-	// So, add an additional semaphore to ensure that we're never acquiring before fence waiting.
-	static constexpr u32 NUM_SEMAPHORES = 4; // Should be command buffers + 1
+	static constexpr u32 NUM_SEMAPHORES = 4;
 
 	~VKSwapChain();
 
-	// Creates a vulkan-renderable surface for the specified window handle.
 	static VkSurfaceKHR CreateVulkanSurface(VkInstance instance, VkPhysicalDevice physical_device, WindowInfo* wi);
 
-	// Destroys a previously-created surface.
 	static void DestroyVulkanSurface(VkInstance instance, WindowInfo* wi, VkSurfaceKHR surface);
 
-	// Create a new swap chain from a pre-existing surface.
 	static std::unique_ptr<VKSwapChain> Create(const WindowInfo& wi, VkSurfaceKHR surface, VkPresentModeKHR present_mode,
 		std::optional<bool> exclusive_fullscreen_control);
 
-	/// Returns the Vulkan present mode for a given vsync mode that is compatible with this device.
 	static bool SelectPresentMode(VkSurfaceKHR surface, GSVSyncMode* vsync_mode, VkPresentModeKHR* present_mode);
 
 	__fi VkSurfaceKHR GetSurface() const { return m_surface; }
@@ -73,7 +66,6 @@ public:
 	bool RecreateSurface(const WindowInfo& new_wi);
 	bool ResizeSwapChain(u32 new_width = 0, u32 new_height = 0, float new_scale = 1.0f);
 
-	// Change vsync enabled state. This may fail as it causes a swapchain recreation.
 	bool SetPresentMode(VkPresentModeKHR present_mode);
 
 private:

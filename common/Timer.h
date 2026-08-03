@@ -42,4 +42,4 @@ namespace Common
 	private:
 		Value m_tvStartValue;
 	};
-} // namespace Common
+}

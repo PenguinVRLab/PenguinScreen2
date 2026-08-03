@@ -17,7 +17,6 @@ struct PS1MemoryCardState
 	std::array<u8, 128> buf = {0};
 };
 
-// A global class which contains the behavior of each memory card command.
 class MemoryCardProtocol
 {
 private:

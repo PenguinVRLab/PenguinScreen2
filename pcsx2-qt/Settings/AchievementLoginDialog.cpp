@@ -21,12 +21,11 @@ AchievementLoginDialog::AchievementLoginDialog(QWidget* parent, Achievements::Lo
 	QtUtils::SetScalableIcon(m_ui.loginIcon, QIcon(QStringLiteral("%1/icons/ra-icon.svg").arg(base_path)), QSize(50, 50));
 	setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
 
-	// Adjust text if needed based on reason.
 	if (reason == Achievements::LoginRequestReason::TokenInvalid)
 	{
 		m_ui.instructionText->setText(
 			tr("<strong>Your RetroAchievements login token is no longer valid.</strong> You must re-enter your "
-			   "credentials for achievements to be tracked. Your password will not be saved in PCSX2, an access token "
+			   "credentials for achievements to be tracked. Your password will not be saved in PenguinScreen2, an access token "
 			   "will be generated and used instead."));
 	}
 
@@ -42,7 +41,6 @@ void AchievementLoginDialog::loginClicked()
 	std::string username(m_ui.userName->text().toStdString());
 	std::string password(m_ui.password->text().toStdString());
 
-	// TODO: Make cancellable.
 	m_ui.status->setText(tr("Logging in..."));
 	enableUI(false);
 
@@ -65,7 +63,6 @@ void AchievementLoginDialog::loginClicked()
 
 void AchievementLoginDialog::cancelClicked()
 {
-	// Disable hardcore mode if we cancelled reauthentication.
 	if (m_reason == Achievements::LoginRequestReason::TokenInvalid && QtHost::IsVMValid())
 	{
 		Host::RunOnCPUThread([]() {
@@ -130,7 +127,6 @@ void AchievementLoginDialog::processLoginResult(bool result, const QString& mess
 		}
 	}
 
-	// Show success messagebox
 	const std::string username = Host::GetBaseStringSettingValue("Achievements", "Username");
 	QMessageBox::information(
 		this, tr("Login Successful"),

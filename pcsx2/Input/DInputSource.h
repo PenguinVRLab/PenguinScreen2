@@ -61,7 +61,6 @@ private:
 		std::vector<u32> axis_offsets;
 		u32 num_buttons = 0;
 
-		// NOTE: We expose hats as num_buttons + (hat_index * 4) + direction.
 		u32 num_hats = 0;
 
 		bool needs_poll = true;
@@ -76,7 +75,6 @@ private:
 
 	void CheckForStateChanges(size_t index, const DIJOYSTATE2& new_state);
 
-	// Those must go first in the class so they are destroyed last
 	wil::unique_hmodule m_dinput_module;
 	wil::com_ptr_nothrow<IDirectInput8W> m_dinput;
 	HWND m_toplevel_window = nullptr;

@@ -104,20 +104,16 @@ namespace Sessions
 
 	std::unique_ptr<TCP_Packet> TCP_Session::CreateBasePacket(PayloadData* data)
 	{
-		//DevCon.WriteLn("Creating base packet");
 		if (data == nullptr)
 			data = new PayloadData(0);
 
 		std::unique_ptr<TCP_Packet> ret = std::make_unique<TCP_Packet>(data);
 
-		// Setup common packet infomation
 		ret->sourcePort = destPort;
 		ret->destinationPort = srcPort;
 
 		ret->sequenceNumber = GetMyNumber();
-		//DevCon.WriteLn("With MySeq: %u", ret->sequenceNumber);
 		ret->acknowledgementNumber = expectedSeqNumber;
-		//DevCon.WriteLn("With MyAck: %u", ret->acknowledgementNumber);
 
 		ret->windowSize = 2 * maxSegmentSize;
 
@@ -156,7 +152,6 @@ namespace Sessions
 	{
 		CloseSocket();
 
-		// Clear out _recvBuff
 		while (!_recvBuff.IsQueueEmpty())
 		{
 			ReceivedPayload retPay;
@@ -168,4 +163,4 @@ namespace Sessions
 			}
 		}
 	}
-} // namespace Sessions
+}

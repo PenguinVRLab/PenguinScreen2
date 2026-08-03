@@ -15,8 +15,6 @@
 #include <Cocoa/Cocoa.h>
 #include <QuartzCore/QuartzCore.h>
 
-// MARK: - Metal Layers
-
 static NSString*_Nonnull NSStringFromStringView(std::string_view sv)
 {
 	return [[NSString alloc] initWithBytes:sv.data() length:sv.size() encoding:NSUTF8StringEncoding];
@@ -42,7 +40,6 @@ bool CocoaTools::CreateMetalLayer(WindowInfo* wi)
 	[view setWantsLayer:YES];
 	[view setLayer:layer];
 	[layer setContentsScale:[[[view window] screen] backingScaleFactor]];
-	// Store the layer pointer, that way MoltenVK doesn't call [NSView layer] outside the main thread.
 	wi->surface_handle = (__bridge_retained void*)layer;
 	return true;
 }
@@ -85,14 +82,10 @@ std::optional<float> CocoaTools::GetViewRefreshRate(const WindowInfo& wi)
 	return ret;
 }
 
-// MARK: - Help menu
-
 void CocoaTools::MarkHelpMenu(void* menu)
 {
 	[NSApp setHelpMenu:(__bridge NSMenu*)menu];
 }
-
-// MARK: - Sound playback
 
 bool Common::PlaySoundAsync(const char* path)
 {
@@ -100,8 +93,6 @@ bool Common::PlaySoundAsync(const char* path)
 	NSSound* sound = [[NSSound alloc] initWithContentsOfFile:nspath byReference:YES];
 	return [sound play];
 }
-
-// MARK: - Updater
 
 std::optional<std::string> CocoaTools::GetBundlePath()
 {
@@ -116,7 +107,6 @@ std::optional<std::string> CocoaTools::GetBundlePath()
 
 std::optional<std::string> CocoaTools::GetNonTranslocatedBundlePath()
 {
-	// See https://objective-see.com/blog/blog_0x15.html
 
 	NSURL* url = [NSURL fileURLWithPath:[[NSBundle mainBundle] bundlePath]];
 	if (!url)
@@ -163,8 +153,6 @@ bool CocoaTools::DelayedLaunch(std::string_view file)
 	}
 }
 
-// MARK: - Directory Services
-
 bool CocoaTools::ShowInFinder(std::string_view file)
 {
 	return [[NSWorkspace sharedWorkspace] selectFile:NSStringFromStringView(file)
@@ -184,8 +172,6 @@ std::optional<std::string> CocoaTools::GetResourcePath()
 	return std::nullopt;
 }}
 
-// MARK: - GSRunner
-
 void* CocoaTools::CreateWindow(std::string_view title, u32 width, u32 height)
 {
 	if (!NSApp)
@@ -196,7 +182,6 @@ void* CocoaTools::CreateWindow(std::string_view title, u32 width, u32 height)
 	}
 	constexpr NSWindowStyleMask style = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable;
 	NSScreen* mainScreen = [NSScreen mainScreen];
-	// Center the window on the screen, because why not
 	NSRect screenFrame = [mainScreen frame];
 	NSRect viewFrame = screenFrame;
 	viewFrame.size = NSMakeSize(width, height);
@@ -242,7 +227,7 @@ static constexpr short STOP_EVENT_LOOP = 0x100;
 void CocoaTools::RunCocoaEventLoop(bool forever)
 {
 	NSDate* end = forever ? [NSDate distantFuture] : [NSDate distantPast];
-	[NSApplication sharedApplication]; // Ensure NSApp is initialized
+	[NSApplication sharedApplication];
 	while (true)
 	{ @autoreleasepool {
 		NSEvent* ev = [NSApp nextEventMatchingMask:NSEventMaskAny

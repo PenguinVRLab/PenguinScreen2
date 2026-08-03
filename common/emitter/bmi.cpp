@@ -19,4 +19,4 @@ namespace x86Emitter
 	{
 		xOpWriteC4(Prefix, MbPrefix, Opcode, to, from1, from2);
 	}
-} // namespace x86Emitter
+}

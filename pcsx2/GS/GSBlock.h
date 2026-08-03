@@ -31,9 +31,6 @@ class GSBlock
 	static const GSVector4i m_uw8hmask3;
 
 #if _M_SSE >= 0x501
-	// Equvialent of `a = *s0; b = *s1; sw128(a, b);`
-	// Loads in two halves instead to reduce shuffle instructions
-	// Especially good for Zen/Zen+, as it's replacing a very expensive vperm2i128
 	template <bool Aligned = true>
 	static void LoadSW128(GSVector8i& a, GSVector8i& b, const void* s0, const void* s1)
 	{
@@ -113,8 +110,6 @@ public:
 		const u8* RESTRICT s0 = &src[srcpitch * 0];
 		const u8* RESTRICT s1 = &src[srcpitch * 1];
 
-		// for(int j = 0; j < 16; j++) {((u16*)s0)[j] = columnTable16[0][j]; ((u16*)s1)[j] = columnTable16[1][j];}
-
 #if _M_SSE >= 0x501
 
 		GSVector8i v0, v1;
@@ -177,7 +172,6 @@ public:
 	template <int i, int alignment>
 	__forceinline static void WriteColumn8(u8* RESTRICT dst, const u8* RESTRICT src, int srcpitch)
 	{
-		// TODO: read unaligned as WriteColumn32 does and try saving a few shuffles
 
 #if _M_SSE >= 0x501
 
@@ -236,11 +230,6 @@ public:
 	template <int i, int alignment>
 	__forceinline static void WriteColumn4(u8* RESTRICT dst, const u8* RESTRICT src, int srcpitch)
 	{
-		//printf("WriteColumn4\n");
-
-		// TODO: read unaligned as WriteColumn32 does and try saving a few shuffles
-
-		// TODO: pshufb
 
 #if _M_SSE >= 0x501
 
@@ -478,8 +467,6 @@ public:
 	__forceinline static void ReadColumn8(const u8* RESTRICT src, u8* RESTRICT dst, int dstpitch)
 	{
 
-		//for(int j = 0; j < 64; j++) ((u8*)src)[j] = (u8)j;
-
 #if _M_SSE >= 0x501
 
 		const GSVector8i* s = (const GSVector8i*)src;
@@ -548,7 +535,6 @@ public:
 	template <int i>
 	__forceinline static void ReadColumn4(const u8* RESTRICT src, u8* RESTRICT dst, int dstpitch)
 	{
-		//printf("ReadColumn4\n");
 
 #if _M_SSE >= 0x501
 
@@ -714,7 +700,6 @@ public:
 
 	__forceinline static void ReadBlock4P(const u8* RESTRICT src, u8* RESTRICT dst, int dstpitch)
 	{
-		//printf("ReadBlock4P\n");
 
 #if _M_SSE >= 0x501
 
@@ -727,7 +712,6 @@ public:
 
 		for (int i = 0; i < 2; i++)
 		{
-			// col 0, 2
 
 			v0 = s[i * 4 + 0];
 			v1 = s[i * 4 + 1];
@@ -742,8 +726,6 @@ public:
 			GSVector8i::store<true>(dst + dstpitch * 3, (v1.yxwz() >> 4) & mask);
 
 			dst += dstpitch * 4;
-
-			// col 1, 3
 
 			v0 = s[i * 4 + 2];
 			v1 = s[i * 4 + 3];
@@ -770,7 +752,6 @@ public:
 
 		for (int i = 0; i < 2; i++)
 		{
-			// col 0, 2
 
 			v0 = s[i * 8 + 0];
 			v1 = s[i * 8 + 1];
@@ -794,8 +775,6 @@ public:
 			GSVector4i::store<true>(&dst[dstpitch * 1 + 16], (v3.andnot(mask)).yxwz() >> 4);
 
 			dst += dstpitch * 2;
-
-			// col 1, 3
 
 			v0 = s[i * 8 + 4];
 			v1 = s[i * 8 + 5];
@@ -911,10 +890,9 @@ public:
 	template <bool AEM, class V>
 	__forceinline static V Expand24to32(const V& c, const V& TA0)
 	{
-		return c | (AEM ? TA0.andnot(c == V::zero()) : TA0); // TA0 & (c != GSVector4i::zero())
+		return c | (AEM ? TA0.andnot(c == V::zero()) : TA0);
 	}
 
-	/// Expands the 16bpp pixel duplicated across both halves of each dword to a 32bpp pixel
 	template <bool AEM, class V>
 	__forceinline static V Expand16to32(const V& c, const V& TA0, const V& TA1)
 	{
@@ -924,7 +902,6 @@ public:
 		return ((c << 3) & rmask) | ((c << 6) & gmask) | ((c << 9) & bmask) | (AEM ? TA0.blend8(TA1, c).andnot(c == V::zero()) : TA0.blend8(TA1, c));
 	}
 
-	/// Expands the 16bpp pixel in the low half of each dword to a 32bpp pixel
 	template <bool AEM, class V>
 	__forceinline static V Expand16Lto32(const V& c, const V& TA0, const V& TA1)
 	{
@@ -936,7 +913,6 @@ public:
 		return o | ta0.blend8(TA1, c << 16);
 	}
 
-	/// Expands the 16bpp pixel in the high half of each dword to a 32bpp pixel
 	template <bool AEM, class V>
 	__forceinline static V Expand16Hto32(const V& c, const V& TA0, const V& TA1)
 	{
@@ -997,7 +973,7 @@ public:
 	}
 
 	template <bool AEM>
-	static void ExpandBlock16(const u16* RESTRICT src, u8* RESTRICT dst, int dstpitch, const GIFRegTEXA& TEXA) // do not inline, uses too many xmm regs
+	static void ExpandBlock16(const u16* RESTRICT src, u8* RESTRICT dst, int dstpitch, const GIFRegTEXA& TEXA)
 	{
 #if _M_SSE >= 0x501
 
@@ -1361,7 +1337,6 @@ public:
 
 	__forceinline static void UnpackAndWriteBlock4HL(const u8* RESTRICT src, int srcpitch, u8* RESTRICT dst)
 	{
-		//printf("4HL\n");
 
 		if (0)
 		{
@@ -1516,8 +1491,6 @@ public:
 #endif
 	}
 
-	/// ReadAndExpandBlock8 for AVX2 platforms with slow VPGATHERDD (Haswell, Zen, Zen2, Zen3, Zen4)
-	/// This is faster than the one in ReadAndExpandBlock8_32 on HSW+ due to a port 5 traffic jam, should be about the same on Zen
 	__forceinline static void ReadAndExpandBlock8_32HSW(const u8* RESTRICT src, u8* RESTRICT dst, int dstpitch, const u32* RESTRICT pal)
 	{
 		alignas(32) u8 block[16 * 16];
@@ -1527,7 +1500,6 @@ public:
 
 	__forceinline static void ReadAndExpandBlock8_32(const u8* RESTRICT src, u8* RESTRICT dst, int dstpitch, const u32* RESTRICT pal)
 	{
-		//printf("ReadAndExpandBlock8_32\n");
 
 #if _M_SSE >= 0x501
 
@@ -1628,9 +1600,6 @@ public:
 #endif
 	}
 
-	// TODO: ReadAndExpandBlock8_16
-
-	/// Load 16-element palette into four vectors, with each u32 split across the four vectors
 	template <typename V>
 	__forceinline static void LoadPalVecs(const u32* RESTRICT pal, V& p0, V& p1, V& p2, V& p3)
 	{
@@ -1669,7 +1638,6 @@ public:
 
 	__forceinline static void ReadAndExpandBlock4_32(const u8* RESTRICT src, u8* RESTRICT dst, int dstpitch, const u32* RESTRICT pal)
 	{
-		//printf("ReadAndExpandBlock4_32\n");
 
 #if _M_SSE >= 0x501
 
@@ -1797,10 +1765,6 @@ public:
 #endif
 	}
 
-	// TODO: ReadAndExpandBlock4_16
-
-	// ReadAndExpandBlock8H for AVX2 platforms with slow VPGATHERDD (Haswell, Zen, Zen2, Zen3, Zen4)
-	// Also serves as the implementation for AVX / SSE
 	__forceinline static void ReadAndExpandBlock8H_32HSW(const u8* RESTRICT src, u8* RESTRICT dst, int dstpitch, const u32* RESTRICT pal)
 	{
 		for (int i = 0; i < 4; i++)
@@ -1820,7 +1784,6 @@ public:
 
 	__forceinline static void ReadAndExpandBlock8H_32(const u8* RESTRICT src, u8* RESTRICT dst, int dstpitch, const u32* RESTRICT pal)
 	{
-		//printf("ReadAndExpandBlock8H_32\n");
 
 #if _M_SSE >= 0x501
 
@@ -1845,8 +1808,6 @@ public:
 
 #endif
 	}
-
-	// TODO: ReadAndExpandBlock8H_16
 
 	template <u32 shift, u32 mask>
 	__forceinline static void ReadAndExpandBlock4H_32(const u8* RESTRICT src, u8* RESTRICT dst, int dstpitch, const u32* RESTRICT pal)
@@ -1917,19 +1878,14 @@ public:
 
 	__forceinline static void ReadAndExpandBlock4HL_32(const u8* RESTRICT src, u8* RESTRICT dst, int dstpitch, const u32* RESTRICT pal)
 	{
-		//printf("ReadAndExpandBlock4HL_32\n");
 		ReadAndExpandBlock4H_32<24, 0x0f0f0f0f>(src, dst, dstpitch, pal);
 	}
 
-	// TODO: ReadAndExpandBlock4HL_16
-
 	__forceinline static void ReadAndExpandBlock4HH_32(const u8* RESTRICT src, u8* RESTRICT dst, int dstpitch, const u32* RESTRICT pal)
 	{
-		//printf("ReadAndExpandBlock4HH_32\n");
 		ReadAndExpandBlock4H_32<28, 0xffffffff>(src, dst, dstpitch, pal);
 	}
 
-	// TODO: ReadAndExpandBlock4HH_16
 };
 
 MULTI_ISA_UNSHARED_END

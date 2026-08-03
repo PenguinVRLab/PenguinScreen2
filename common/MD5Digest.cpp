@@ -6,22 +6,13 @@
 
 // mostly based on this implementation (public domain): http://www.fourmilab.ch/md5/
 
-/* The four core functions - F1 is optimized somewhat */
-
-/* #define F1(x, y, z) (x & y | ~x & z) */
 #define F1(x, y, z) (z ^ (x & (y ^ z)))
 #define F2(x, y, z) F1(z, x, y)
 #define F3(x, y, z) (x ^ y ^ z)
 #define F4(x, y, z) (y ^ (x | ~z))
 
-/* This is the central step in the MD5 algorithm. */
 #define MD5STEP(f, w, x, y, z, data, s) (w += f(x, y, z) + data, w = w << s | w >> (32 - s), w += x)
 
-/*
- * The core of the MD5 algorithm, this alters an existing MD5 hash to
- * reflect the addition of 16 longwords of new data.  MD5Update blocks
- * the data and converts bytes into longwords for this routine.
- */
 static void MD5Transform(u32 buf[4], u32 in[16])
 {
   u32 a, b, c, d;
@@ -128,16 +119,12 @@ void MD5Digest::Update(const void* pData, u32 cbData)
   u32 t;
   const u8* pByteData = reinterpret_cast<const u8*>(pData);
 
-  /* Update bitcount */
-
   t = this->bits[0];
   if ((this->bits[0] = t + ((u32)cbData << 3)) < t)
-    this->bits[1]++; /* Carry from low to high */
+    this->bits[1]++;
   this->bits[1] += cbData >> 29;
 
-  t = (t >> 3) & 0x3f; /* Bytes already in shsInfo->data */
-
-  /* Handle any leading odd-sized chunks */
+  t = (t >> 3) & 0x3f;
 
   if (t)
   {
@@ -154,7 +141,6 @@ void MD5Digest::Update(const void* pData, u32 cbData)
     pByteData += t;
     cbData -= t;
   }
-  /* Process data in 64-byte chunks */
 
   while (cbData >= 64)
   {
@@ -164,8 +150,6 @@ void MD5Digest::Update(const void* pData, u32 cbData)
     cbData -= 64;
   }
 
-  /* Handle any remaining bytes of data. */
-
   std::memcpy(this->in, pByteData, cbData);
 }
 
@@ -174,34 +158,25 @@ void MD5Digest::Final(u8 Digest[16])
   u32 count;
   u8* p;
 
-  /* Compute number of bytes mod 64 */
   count = (this->bits[0] >> 3) & 0x3F;
 
-  /* Set the first char of padding to 0x80.  This is safe since there is
-     always at least one byte free */
   p = this->in + count;
   *p++ = 0x80;
 
-  /* Bytes of padding needed to make 64 bytes */
   count = 64 - 1 - count;
 
-  /* Pad out to 56 mod 64 */
   if (count < 8)
   {
-    /* Two lots of padding:  Pad the first block to 64 bytes */
     std::memset(p, 0, count);
     MD5Transform(this->buf, (u32*)this->in);
 
-    /* Now fill the next block with 56 bytes */
     std::memset(this->in, 0, 56);
   }
   else
   {
-    /* Pad block to 56 bytes */
     std::memset(p, 0, count - 8);
   }
 
-  /* Append length in bits and transform */
   ((u32*)this->in)[14] = this->bits[0];
   ((u32*)this->in)[15] = this->bits[1];
 

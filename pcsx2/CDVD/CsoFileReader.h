@@ -38,12 +38,11 @@ private:
 	u32 m_frameSize = 0;
 	u8 m_frameShift = 0;
 	u8 m_indexShift = 0;
-	bool m_uselz4 = false; // flag to enable LZ4 decompression (ZSO files)
+	bool m_uselz4 = false;
 	std::unique_ptr<u8[]> m_readBuffer;
 
 	std::unique_ptr<u32[]> m_index;
 	u64 m_totalSize = 0;
-	// The actual source cso file handle.
 	std::FILE* m_src = nullptr;
 	std::unique_ptr<u8[]> m_file_cache;
 	size_t m_file_cache_size = 0;

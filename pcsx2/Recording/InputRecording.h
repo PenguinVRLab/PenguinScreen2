@@ -54,12 +54,10 @@ private:
 	bool m_is_active = false;
 	bool m_watching_for_rerecords = false;
 
-	// A consistent way to run actions at the end of the each frame (ie. stop the recording)
 	std::queue<std::function<void()>> m_recordingQueue;
 
 	u32 m_frame_counter = 0;
 	u32 m_frame_counter_stateless = 0;
-	// Either 0 for a power-on movie, or the g_FrameCount that is stored on the starting frame
 	u32 m_starting_frame = 0;
 
 	void initializeState();

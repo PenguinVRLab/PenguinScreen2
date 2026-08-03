@@ -1550,11 +1550,6 @@ Posició en classificacions: {1} de {2}</translation>
       <translation>Fes servir el selector de l'estat desat</translation>
     </message>
     <message>
-      <location filename="../Settings/AdvancedSettingsWidget.ui" line="505"/>
-      <source>PINE Settings</source>
-      <translation>Configuració PINE</translation>
-    </message>
-    <message>
       <location filename="../Settings/AdvancedSettingsWidget.ui" line="527"/>
       <source>Slot:</source>
       <translation>Ranura:</translation>

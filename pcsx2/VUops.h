@@ -6,7 +6,7 @@
 #include "VUflags.h"
 
 struct _VURegsNum {
-	u8 pipe; // if 0xff, COP2
+	u8 pipe;
 	u8 VFwrite;
 	u8 VFwxyzw;
 	u8 VFr0xyzw;

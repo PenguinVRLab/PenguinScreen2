@@ -39,10 +39,7 @@
 
 #define BUFFER_FRAMES 200
 
-/*
- * A Basic Audio Device uses these specific values
- */
-#define USBAUDIO_PACKET_SIZE 200 //192
+#define USBAUDIO_PACKET_SIZE 200
 #define USBAUDIO_SAMPLE_RATE 48000
 #define USBAUDIO_PACKET_INTERVAL 1
 
@@ -62,7 +59,6 @@ namespace usb_mic
 			int intf;
 			MicMode mode;
 
-			/* state */
 			struct
 			{
 				bool mute;
@@ -81,8 +77,8 @@ namespace usb_mic
 			{
 				bool mute;
 				uint8_t vol[2];
-			} mixer; //TODO
-		} f; //freezable
+			} mixer;
+		} f;
 
 		std::vector<int16_t> in_buffer;
 		std::vector<int16_t> out_buffer;
@@ -92,371 +88,334 @@ namespace usb_mic
 	} HeadsetState;
 
 	static const uint8_t headset_dev_descriptor[] = {
-		/* bLength             */ 0x12, //(18)
-		/* bDescriptorType     */ 0x01, //(1)
-		/* bcdUSB              */ WBVAL(0x0110), //(272)
-		/* bDeviceClass        */ 0x00, //(0)
-		/* bDeviceSubClass     */ 0x00, //(0)
-		/* bDeviceProtocol     */ 0x00, //(0)
-		/* bMaxPacketSize0     */ 0x40, //(64)
-		/* idVendor            */ WBVAL(0x046d), //Logitech
-		/* idProduct           */ WBVAL(0x0a01), //"USB headset" from usb.ids
-		/* bcdDevice           */ WBVAL(0x1012), //(10.12)
-		/* iManufacturer       */ 0x01, //(1)
-		/* iProduct            */ 0x02, //(2)
-		/* iSerialNumber       */ 0x00, //(0) unused
-		/* bNumConfigurations  */ 0x01, //(1)
+ 0x12,
+ 0x01,
+ WBVAL(0x0110),
+ 0x00,
+ 0x00,
+ 0x00,
+ 0x40,
+ WBVAL(0x046d),
+ WBVAL(0x0a01),
+ WBVAL(0x1012),
+ 0x01,
+ 0x02,
+ 0x00,
+ 0x01,
 	};
 
 	static const uint8_t headset_config_descriptor[] = {
 
-		/* Configuration 1 */
-		USB_CONFIGURATION_DESC_SIZE, /* bLength */
-		USB_CONFIGURATION_DESCRIPTOR_TYPE, /* bDescriptorType */
-		WBVAL(318), /* wTotalLength */
-		0x03, /* bNumInterfaces */
-		0x01, /* bConfigurationValue */
-		0x00, /* iConfiguration */
-		USB_CONFIG_BUS_POWERED, /* bmAttributes */
-		USB_CONFIG_POWER_MA(100), /* bMaxPower */
+		USB_CONFIGURATION_DESC_SIZE,
+		USB_CONFIGURATION_DESCRIPTOR_TYPE,
+		WBVAL(318),
+		0x03,
+		0x01,
+		0x00,
+		USB_CONFIG_BUS_POWERED,
+		USB_CONFIG_POWER_MA(100),
 
-		/* Interface 0, Alternate Setting 0, Audio Control */
-		USB_INTERFACE_DESC_SIZE, /* bLength : 9 */
-		USB_INTERFACE_DESCRIPTOR_TYPE, /* bDescriptorType */
-		0x00, /* bInterfaceNumber */
-		0x00, /* bAlternateSetting */
-		0x00, /* bNumEndpoints */
-		USB_CLASS_AUDIO, /* bInterfaceClass */
-		AUDIO_SUBCLASS_AUDIOCONTROL, /* bInterfaceSubClass */
-		AUDIO_PROTOCOL_UNDEFINED, /* bInterfaceProtocol */
-		0x00, /* iInterface */
+		USB_INTERFACE_DESC_SIZE,
+		USB_INTERFACE_DESCRIPTOR_TYPE,
+		0x00,
+		0x00,
+		0x00,
+		USB_CLASS_AUDIO,
+		AUDIO_SUBCLASS_AUDIOCONTROL,
+		AUDIO_PROTOCOL_UNDEFINED,
+		0x00,
 
-		/* Audio Control Interface */
-		AUDIO_CONTROL_INTERFACE_DESC_SZ(2), /* bLength : 8+n */
-		AUDIO_INTERFACE_DESCRIPTOR_TYPE, /* bDescriptorType */
-		AUDIO_CONTROL_HEADER, /* bDescriptorSubtype */
-		WBVAL(0x0100), /* 1.00 */ /* bcdADC */
-		WBVAL(0x0075), /* wTotalLength : this + following unit/terminal sizes */
-		0x02, /* bInCollection */
-		0x01, /* baInterfaceNr(0) */
-		0x02, /* baInterfaceNr(1) */
+		AUDIO_CONTROL_INTERFACE_DESC_SZ(2),
+		AUDIO_INTERFACE_DESCRIPTOR_TYPE,
+		AUDIO_CONTROL_HEADER,
+		WBVAL(0x0100),
+		WBVAL(0x0075),
+		0x02,
+		0x01,
+		0x02,
 
-		/* Audio Input Terminal */
-		AUDIO_INPUT_TERMINAL_DESC_SIZE, /* bLength : 12 */
-		AUDIO_INTERFACE_DESCRIPTOR_TYPE, /* bDescriptorType */
-		AUDIO_CONTROL_INPUT_TERMINAL, /* bDescriptorSubtype */
-		0x0d, /* bTerminalID */
-		WBVAL(AUDIO_TERMINAL_MICROPHONE), /* wTerminalType */
-		0x00, /* bAssocTerminal */
-		0x01, /* bNrChannels */
-		WBVAL(AUDIO_CHANNEL_L), /* wChannelConfig */
-		0x00, /* iChannelNames */
-		0x00, /* iTerminal */
+		AUDIO_INPUT_TERMINAL_DESC_SIZE,
+		AUDIO_INTERFACE_DESCRIPTOR_TYPE,
+		AUDIO_CONTROL_INPUT_TERMINAL,
+		0x0d,
+		WBVAL(AUDIO_TERMINAL_MICROPHONE),
+		0x00,
+		0x01,
+		WBVAL(AUDIO_CHANNEL_L),
+		0x00,
+		0x00,
 
-		/* Audio Feature Unit 6 */
-		AUDIO_FEATURE_UNIT_DESC_SZ(1, 1), /* bLength : f(ch,n) = 7 + (ch+1)*n */
-		AUDIO_INTERFACE_DESCRIPTOR_TYPE, /* bDescriptorType */
-		AUDIO_CONTROL_FEATURE_UNIT, /* bDescriptorSubtype */
-		0x06, /* bUnitID */
-		0x0d, /* bSourceID */
-		0x01, /* bControlSize */
-		0x03, /* bmaControls(0) */ /* mute / volume */
-		0x00, /* bmaControls(1) */
-		0x00, /* iFeature */
+		AUDIO_FEATURE_UNIT_DESC_SZ(1, 1),
+		AUDIO_INTERFACE_DESCRIPTOR_TYPE,
+		AUDIO_CONTROL_FEATURE_UNIT,
+		0x06,
+		0x0d,
+		0x01,
+		0x03,
+		0x00,
+		0x00,
 
-		/* Audio Input Terminal */
-		AUDIO_INPUT_TERMINAL_DESC_SIZE, /* bLength : 12 */
-		AUDIO_INTERFACE_DESCRIPTOR_TYPE, /* bDescriptorType */
-		AUDIO_CONTROL_INPUT_TERMINAL, /* bDescriptorSubtype */
-		0x0c, /* bTerminalID */
-		WBVAL(AUDIO_TERMINAL_USB_STREAMING), /* wTerminalType */
-		0x00, /* bAssocTerminal */
-		0x02, /* bNrChannels */
-		WBVAL((AUDIO_CHANNEL_L | AUDIO_CHANNEL_R)), /* wChannelConfig */
-		0x00, /* iChannelNames */
-		0x00, /* iTerminal */
+		AUDIO_INPUT_TERMINAL_DESC_SIZE,
+		AUDIO_INTERFACE_DESCRIPTOR_TYPE,
+		AUDIO_CONTROL_INPUT_TERMINAL,
+		0x0c,
+		WBVAL(AUDIO_TERMINAL_USB_STREAMING),
+		0x00,
+		0x02,
+		WBVAL((AUDIO_CHANNEL_L | AUDIO_CHANNEL_R)),
+		0x00,
+		0x00,
 
-		AUDIO_MIXER_UNIT_DESC_SZ(2, 1), //0x0A+p+n //0x0d
-		AUDIO_INTERFACE_DESCRIPTOR_TYPE, AUDIO_CONTROL_MIXER_UNIT, 0x09, /* bUnitID */
-		0x02, /* bNrInPins */
-		0x0c, /* baSourceID( 0) */
-		0x06, /* baSourceID( 1) */
-		0x02, /* bNrChannels */
-		WBVAL((AUDIO_CHANNEL_L | AUDIO_CHANNEL_R)), /* wChannelConfig */
-		0, /* iChannelNames */
-		0x00, /* bmControls */
-		0, /* iMixer */
+		AUDIO_MIXER_UNIT_DESC_SZ(2, 1),
+		AUDIO_INTERFACE_DESCRIPTOR_TYPE, AUDIO_CONTROL_MIXER_UNIT, 0x09,
+		0x02,
+		0x0c,
+		0x06,
+		0x02,
+		WBVAL((AUDIO_CHANNEL_L | AUDIO_CHANNEL_R)),
+		0,
+		0x00,
+		0,
 
-		/* Audio Feature Unit 1 */
-		AUDIO_FEATURE_UNIT_DESC_SZ(2, 1), /* bLength : f(ch,n) = 7 + (ch+1)*n */
-		AUDIO_INTERFACE_DESCRIPTOR_TYPE, /* bDescriptorType */
-		AUDIO_CONTROL_FEATURE_UNIT, /* bDescriptorSubtype */
-		0x01, /* bUnitID */
-		0x09, /* bSourceID */
-		0x01, /* bControlSize */
-		0x01, /* bmaControls(0) */ /* mute */
-		0x02, /* bmaControls(1) */ /* volume */
-		0x02, /* bmaControls(2) */ /* volume */
-		0x00, /* iFeature */
+		AUDIO_FEATURE_UNIT_DESC_SZ(2, 1),
+		AUDIO_INTERFACE_DESCRIPTOR_TYPE,
+		AUDIO_CONTROL_FEATURE_UNIT,
+		0x01,
+		0x09,
+		0x01,
+		0x01,
+		0x02,
+		0x02,
+		0x00,
 
-		/* Audio Output Terminal */
-		AUDIO_OUTPUT_TERMINAL_DESC_SIZE, /* bLength : 9 */
-		AUDIO_INTERFACE_DESCRIPTOR_TYPE, /* bDescriptorType */
-		AUDIO_CONTROL_OUTPUT_TERMINAL, /* bDescriptorSubtype */
-		0x0e, /* bTerminalID */
-		WBVAL(AUDIO_TERMINAL_SPEAKER), /* wTerminalType */
-		0x00, /* bAssocTerminal */
-		0x01, /* bSourceID */
-		0x00, /* iTerminal */
+		AUDIO_OUTPUT_TERMINAL_DESC_SIZE,
+		AUDIO_INTERFACE_DESCRIPTOR_TYPE,
+		AUDIO_CONTROL_OUTPUT_TERMINAL,
+		0x0e,
+		WBVAL(AUDIO_TERMINAL_SPEAKER),
+		0x00,
+		0x01,
+		0x00,
 
-		/* Audio Input Terminal */
-		AUDIO_INPUT_TERMINAL_DESC_SIZE, /* bLength : 12 */
-		AUDIO_INTERFACE_DESCRIPTOR_TYPE, /* bDescriptorType */
-		AUDIO_CONTROL_INPUT_TERMINAL, /* bDescriptorSubtype */
-		0x0b, /* bTerminalID */
-		WBVAL(AUDIO_TERMINAL_MICROPHONE), /* wTerminalType */
-		0x00, /* bAssocTerminal */
-		0x01, /* bNrChannels */
-		WBVAL(AUDIO_CHANNEL_L), /* wChannelConfig */
-		0x00, /* iChannelNames */
-		0x00, /* iTerminal */
+		AUDIO_INPUT_TERMINAL_DESC_SIZE,
+		AUDIO_INTERFACE_DESCRIPTOR_TYPE,
+		AUDIO_CONTROL_INPUT_TERMINAL,
+		0x0b,
+		WBVAL(AUDIO_TERMINAL_MICROPHONE),
+		0x00,
+		0x01,
+		WBVAL(AUDIO_CHANNEL_L),
+		0x00,
+		0x00,
 
-		/* Audio Feature Unit 2 */
-		AUDIO_FEATURE_UNIT_DESC_SZ(1, 1), /* bLength : f(ch,n) = 7 + (ch+1)*n */
-		AUDIO_INTERFACE_DESCRIPTOR_TYPE, /* bDescriptorType */
-		AUDIO_CONTROL_FEATURE_UNIT, /* bDescriptorSubtype */
-		0x02, /* bUnitID */
-		0x0b, /* bSourceID */
-		0x01, /* bControlSize */
-		0x03, /* bmaControls(0) */ /* mute, volume */
-		0x00, /* bmaControls(1) */
-		0x00, /* iFeature */
+		AUDIO_FEATURE_UNIT_DESC_SZ(1, 1),
+		AUDIO_INTERFACE_DESCRIPTOR_TYPE,
+		AUDIO_CONTROL_FEATURE_UNIT,
+		0x02,
+		0x0b,
+		0x01,
+		0x03,
+		0x00,
+		0x00,
 
-		AUDIO_MIXER_UNIT_DESC_SZ(1, 1), AUDIO_INTERFACE_DESCRIPTOR_TYPE, AUDIO_CONTROL_MIXER_UNIT, 0x07, /* bUnitID */
-		0x01, /* bNrInPins */
-		0x02, /* baSourceID( 0) */
-		0x01, /* bNrChannels */
-		WBVAL(AUDIO_CHANNEL_L), /* wChannelConfig */
-		0, /* iChannelNames */
-		0x00, /* bmControls */
-		0, /* iMixer */
+		AUDIO_MIXER_UNIT_DESC_SZ(1, 1), AUDIO_INTERFACE_DESCRIPTOR_TYPE, AUDIO_CONTROL_MIXER_UNIT, 0x07,
+		0x01,
+		0x02,
+		0x01,
+		WBVAL(AUDIO_CHANNEL_L),
+		0,
+		0x00,
+		0,
 
-		/* Audio Output Terminal */
-		AUDIO_OUTPUT_TERMINAL_DESC_SIZE, /* bLength : 9 */
-		AUDIO_INTERFACE_DESCRIPTOR_TYPE, /* bDescriptorType */
-		AUDIO_CONTROL_OUTPUT_TERMINAL, /* bDescriptorSubtype */
-		0x0a, /* bTerminalID */
-		WBVAL(AUDIO_TERMINAL_USB_STREAMING), /* wTerminalType */
-		0x00, /* bAssocTerminal */
-		0x07, /* bSourceID */
-		0x00, /* iTerminal */
+		AUDIO_OUTPUT_TERMINAL_DESC_SIZE,
+		AUDIO_INTERFACE_DESCRIPTOR_TYPE,
+		AUDIO_CONTROL_OUTPUT_TERMINAL,
+		0x0a,
+		WBVAL(AUDIO_TERMINAL_USB_STREAMING),
+		0x00,
+		0x07,
+		0x00,
 
-		/* Interface 1, Alternate Setting 0, Audio Streaming - Zero Bandwith */
-		USB_INTERFACE_DESC_SIZE, /* bLength : 9 */
-		USB_INTERFACE_DESCRIPTOR_TYPE, /* bDescriptorType */
-		0x01, /* bInterfaceNumber */
-		0x00, /* bAlternateSetting */
-		0x00, /* bNumEndpoints */
-		USB_CLASS_AUDIO, /* bInterfaceClass */
-		AUDIO_SUBCLASS_AUDIOSTREAMING, /* bInterfaceSubClass */
-		AUDIO_PROTOCOL_UNDEFINED, /* bInterfaceProtocol */
-		0x00, /* iInterface */
+		USB_INTERFACE_DESC_SIZE,
+		USB_INTERFACE_DESCRIPTOR_TYPE,
+		0x01,
+		0x00,
+		0x00,
+		USB_CLASS_AUDIO,
+		AUDIO_SUBCLASS_AUDIOSTREAMING,
+		AUDIO_PROTOCOL_UNDEFINED,
+		0x00,
 
-		/* Interface 1, Alternate Setting 1, Audio Streaming - Operational */
-		USB_INTERFACE_DESC_SIZE, /* bLength : 9 */
-		USB_INTERFACE_DESCRIPTOR_TYPE, /* bDescriptorType */
-		0x01, /* bInterfaceNumber */
-		0x01, /* bAlternateSetting */
-		0x01, /* bNumEndpoints */
-		USB_CLASS_AUDIO, /* bInterfaceClass */
-		AUDIO_SUBCLASS_AUDIOSTREAMING, /* bInterfaceSubClass */
-		AUDIO_PROTOCOL_UNDEFINED, /* bInterfaceProtocol */
-		0x00, /* iInterface */
+		USB_INTERFACE_DESC_SIZE,
+		USB_INTERFACE_DESCRIPTOR_TYPE,
+		0x01,
+		0x01,
+		0x01,
+		USB_CLASS_AUDIO,
+		AUDIO_SUBCLASS_AUDIOSTREAMING,
+		AUDIO_PROTOCOL_UNDEFINED,
+		0x00,
 
-		/* Audio Streaming Interface */
-		AUDIO_STREAMING_INTERFACE_DESC_SIZE, /* bLength : 7 */
-		AUDIO_INTERFACE_DESCRIPTOR_TYPE, /* bDescriptorType */
-		AUDIO_STREAMING_GENERAL, /* bDescriptorSubtype */
-		0x0c, /* bTerminalLink */
-		0x01, /* bDelay */
-		WBVAL(AUDIO_FORMAT_PCM), /* wFormatTag */
+		AUDIO_STREAMING_INTERFACE_DESC_SIZE,
+		AUDIO_INTERFACE_DESCRIPTOR_TYPE,
+		AUDIO_STREAMING_GENERAL,
+		0x0c,
+		0x01,
+		WBVAL(AUDIO_FORMAT_PCM),
 
-		/* Audio Type I Format */
-		AUDIO_FORMAT_TYPE_I_DESC_SZ(5), /* bLength : 8 + (n*3) */
-		AUDIO_INTERFACE_DESCRIPTOR_TYPE, /* bDescriptorType */
-		AUDIO_STREAMING_FORMAT_TYPE, /* bDescriptorSubtype */
-		AUDIO_FORMAT_TYPE_I, /* bFormatType */
-		0x02, /* bNrChannels */
-		0x02, /* bSubFrameSize */
-		0x10, /* bBitResolution */
-		0x05, /* bSamFreqType */
-		B3VAL(8000), /* tSamFreq 1 */
-		B3VAL(11025), /* tSamFreq 2 */
-		B3VAL(22050), /* tSamFreq 3 */
-		B3VAL(44100), /* tSamFreq 4 */
-		B3VAL(48000), /* tSamFreq 5 */
+		AUDIO_FORMAT_TYPE_I_DESC_SZ(5),
+		AUDIO_INTERFACE_DESCRIPTOR_TYPE,
+		AUDIO_STREAMING_FORMAT_TYPE,
+		AUDIO_FORMAT_TYPE_I,
+		0x02,
+		0x02,
+		0x10,
+		0x05,
+		B3VAL(8000),
+		B3VAL(11025),
+		B3VAL(22050),
+		B3VAL(44100),
+		B3VAL(48000),
 
-		/* Endpoint - Standard Descriptor */
-		AUDIO_STANDARD_ENDPOINT_DESC_SIZE, /* bLength : 9 */
-		USB_ENDPOINT_DESCRIPTOR_TYPE, /* bDescriptorType */
-		USB_ENDPOINT_OUT(1), /* bEndpointAddress */
-		USB_ENDPOINT_TYPE_ISOCHRONOUS | USB_ENDPOINT_SYNC_ADAPTIVE, /* bmAttributes */
-		WBVAL(0x00c0), /* wMaxPacketSize */
-		0x01, /* bInterval */
-		0x00, /* bRefresh */
-		0x00, /* bSynchAddress */
+		AUDIO_STANDARD_ENDPOINT_DESC_SIZE,
+		USB_ENDPOINT_DESCRIPTOR_TYPE,
+		USB_ENDPOINT_OUT(1),
+		USB_ENDPOINT_TYPE_ISOCHRONOUS | USB_ENDPOINT_SYNC_ADAPTIVE,
+		WBVAL(0x00c0),
+		0x01,
+		0x00,
+		0x00,
 
-		/* Endpoint - Audio Streaming */
-		AUDIO_STREAMING_ENDPOINT_DESC_SIZE, /* bLength : 7 */
-		AUDIO_ENDPOINT_DESCRIPTOR_TYPE, /* bDescriptorType */
-		AUDIO_ENDPOINT_GENERAL, /* bDescriptor */
-		0x01, /* bmAttributes */
-		0x00, /* bLockDelayUnits */
-		WBVAL(0x0000), /* wLockDelay */
+		AUDIO_STREAMING_ENDPOINT_DESC_SIZE,
+		AUDIO_ENDPOINT_DESCRIPTOR_TYPE,
+		AUDIO_ENDPOINT_GENERAL,
+		0x01,
+		0x00,
+		WBVAL(0x0000),
 
-		/* Interface 1, Alternate Setting 2, Audio Streaming - Operational */
-		USB_INTERFACE_DESC_SIZE, /* bLength : 9 */
-		USB_INTERFACE_DESCRIPTOR_TYPE, /* bDescriptorType */
-		0x01, /* bInterfaceNumber */
-		0x02, /* bAlternateSetting */
-		0x01, /* bNumEndpoints */
-		USB_CLASS_AUDIO, /* bInterfaceClass */
-		AUDIO_SUBCLASS_AUDIOSTREAMING, /* bInterfaceSubClass */
-		AUDIO_PROTOCOL_UNDEFINED, /* bInterfaceProtocol */
-		0x00, /* iInterface */
+		USB_INTERFACE_DESC_SIZE,
+		USB_INTERFACE_DESCRIPTOR_TYPE,
+		0x01,
+		0x02,
+		0x01,
+		USB_CLASS_AUDIO,
+		AUDIO_SUBCLASS_AUDIOSTREAMING,
+		AUDIO_PROTOCOL_UNDEFINED,
+		0x00,
 
-		/* Audio Streaming Interface */
-		AUDIO_STREAMING_INTERFACE_DESC_SIZE, /* bLength : 7 */
-		AUDIO_INTERFACE_DESCRIPTOR_TYPE, /* bDescriptorType */
-		AUDIO_STREAMING_GENERAL, /* bDescriptorSubtype */
-		0x0c, /* bTerminalLink */
-		0x01, /* bDelay */
-		WBVAL(AUDIO_FORMAT_PCM), /* wFormatTag */
+		AUDIO_STREAMING_INTERFACE_DESC_SIZE,
+		AUDIO_INTERFACE_DESCRIPTOR_TYPE,
+		AUDIO_STREAMING_GENERAL,
+		0x0c,
+		0x01,
+		WBVAL(AUDIO_FORMAT_PCM),
 
-		/* Audio Type I Format */
-		AUDIO_FORMAT_TYPE_I_DESC_SZ(5), /* bLength : 8 + (n*3) */
-		AUDIO_INTERFACE_DESCRIPTOR_TYPE, /* bDescriptorType */
-		AUDIO_STREAMING_FORMAT_TYPE, /* bDescriptorSubtype */
-		AUDIO_FORMAT_TYPE_I, /* bFormatType */
-		0x01, /* bNrChannels */
-		0x02, /* bSubFrameSize */
-		0x10, /* bBitResolution */
-		0x05, /* bSamFreqType */
-		B3VAL(8000), /* tSamFreq 1 */
-		B3VAL(11025), /* tSamFreq 2 */
-		B3VAL(22050), /* tSamFreq 3 */
-		B3VAL(44100), /* tSamFreq 4 */
-		B3VAL(48000), /* tSamFreq 5 */
+		AUDIO_FORMAT_TYPE_I_DESC_SZ(5),
+		AUDIO_INTERFACE_DESCRIPTOR_TYPE,
+		AUDIO_STREAMING_FORMAT_TYPE,
+		AUDIO_FORMAT_TYPE_I,
+		0x01,
+		0x02,
+		0x10,
+		0x05,
+		B3VAL(8000),
+		B3VAL(11025),
+		B3VAL(22050),
+		B3VAL(44100),
+		B3VAL(48000),
 
-		/* Endpoint - Standard Descriptor */
-		AUDIO_STANDARD_ENDPOINT_DESC_SIZE, /* bLength : 9 */
-		USB_ENDPOINT_DESCRIPTOR_TYPE, /* bDescriptorType */
-		USB_ENDPOINT_OUT(1), /* bEndpointAddress */
-		USB_ENDPOINT_TYPE_ISOCHRONOUS | USB_ENDPOINT_SYNC_ADAPTIVE, /* bmAttributes */
-		WBVAL(0x0060), /* wMaxPacketSize */
-		0x01, /* bInterval */
-		0x00, /* bRefresh */
-		0x00, /* bSynchAddress */
+		AUDIO_STANDARD_ENDPOINT_DESC_SIZE,
+		USB_ENDPOINT_DESCRIPTOR_TYPE,
+		USB_ENDPOINT_OUT(1),
+		USB_ENDPOINT_TYPE_ISOCHRONOUS | USB_ENDPOINT_SYNC_ADAPTIVE,
+		WBVAL(0x0060),
+		0x01,
+		0x00,
+		0x00,
 
-		/* Endpoint - Audio Streaming */
-		AUDIO_STREAMING_ENDPOINT_DESC_SIZE, /* bLength : 7 */
-		AUDIO_ENDPOINT_DESCRIPTOR_TYPE, /* bDescriptorType */
-		AUDIO_ENDPOINT_GENERAL, /* bDescriptor */
-		0x01, /* bmAttributes */
-		0x00, /* bLockDelayUnits */
-		WBVAL(0x0000), /* wLockDelay */
+		AUDIO_STREAMING_ENDPOINT_DESC_SIZE,
+		AUDIO_ENDPOINT_DESCRIPTOR_TYPE,
+		AUDIO_ENDPOINT_GENERAL,
+		0x01,
+		0x00,
+		WBVAL(0x0000),
 
-		/* Interface 2, Alternate Setting 0 */
-		USB_INTERFACE_DESC_SIZE, /* bLength : 9 */
-		USB_INTERFACE_DESCRIPTOR_TYPE, /* bDescriptorType */
-		0x02, /* bInterfaceNumber */
-		0x00, /* bAlternateSetting */
-		0x00, /* bNumEndpoints */
-		USB_CLASS_AUDIO, /* bInterfaceClass */
-		AUDIO_SUBCLASS_AUDIOSTREAMING, /* bInterfaceSubClass */
-		AUDIO_PROTOCOL_UNDEFINED, /* bInterfaceProtocol */
-		0x00, /* iInterface */
+		USB_INTERFACE_DESC_SIZE,
+		USB_INTERFACE_DESCRIPTOR_TYPE,
+		0x02,
+		0x00,
+		0x00,
+		USB_CLASS_AUDIO,
+		AUDIO_SUBCLASS_AUDIOSTREAMING,
+		AUDIO_PROTOCOL_UNDEFINED,
+		0x00,
 
-		/* Interface 2, Alternate Setting 1 */
-		USB_INTERFACE_DESC_SIZE, /* bLength : 9 */
-		USB_INTERFACE_DESCRIPTOR_TYPE, /* bDescriptorType */
-		0x02, /* bInterfaceNumber */
-		0x01, /* bAlternateSetting */
-		0x01, /* bNumEndpoints */
-		USB_CLASS_AUDIO, /* bInterfaceClass */
-		AUDIO_SUBCLASS_AUDIOSTREAMING, /* bInterfaceSubClass */
-		AUDIO_PROTOCOL_UNDEFINED, /* bInterfaceProtocol */
-		0x00, /* iInterface */
+		USB_INTERFACE_DESC_SIZE,
+		USB_INTERFACE_DESCRIPTOR_TYPE,
+		0x02,
+		0x01,
+		0x01,
+		USB_CLASS_AUDIO,
+		AUDIO_SUBCLASS_AUDIOSTREAMING,
+		AUDIO_PROTOCOL_UNDEFINED,
+		0x00,
 
-		/* Audio Streaming Interface */
-		AUDIO_STREAMING_INTERFACE_DESC_SIZE, /* bLength : 7 */
-		AUDIO_INTERFACE_DESCRIPTOR_TYPE, /* bDescriptorType */
-		AUDIO_STREAMING_GENERAL, /* bDescriptorSubtype */
-		0x0a, /* bTerminalLink */
-		0x00, /* bDelay */
-		WBVAL(AUDIO_FORMAT_PCM), /* wFormatTag */
+		AUDIO_STREAMING_INTERFACE_DESC_SIZE,
+		AUDIO_INTERFACE_DESCRIPTOR_TYPE,
+		AUDIO_STREAMING_GENERAL,
+		0x0a,
+		0x00,
+		WBVAL(AUDIO_FORMAT_PCM),
 
-		/* Audio Type I Format */
-		AUDIO_FORMAT_TYPE_I_DESC_SZ(5), /* bLength : 8+(n*3) */
-		AUDIO_INTERFACE_DESCRIPTOR_TYPE, /* bDescriptorType */
-		AUDIO_STREAMING_FORMAT_TYPE, /* bDescriptorSubtype */
-		AUDIO_FORMAT_TYPE_I, /* bFormatType */
-		0x01, /* bNrChannels */
-		0x02, /* bSubFrameSize */
-		0x10, /* bBitResolution */
-		0x05, /* bSamFreqType */
-		B3VAL(8000), /* tSamFreq 1 */
-		B3VAL(11025), /* tSamFreq 2 */
-		B3VAL(22050), /* tSamFreq 3 */
-		B3VAL(44100), /* tSamFreq 4 */
-		B3VAL(48000), /* tSamFreq 5 */
+		AUDIO_FORMAT_TYPE_I_DESC_SZ(5),
+		AUDIO_INTERFACE_DESCRIPTOR_TYPE,
+		AUDIO_STREAMING_FORMAT_TYPE,
+		AUDIO_FORMAT_TYPE_I,
+		0x01,
+		0x02,
+		0x10,
+		0x05,
+		B3VAL(8000),
+		B3VAL(11025),
+		B3VAL(22050),
+		B3VAL(44100),
+		B3VAL(48000),
 
-		/* Endpoint - Standard Descriptor */
-		AUDIO_STANDARD_ENDPOINT_DESC_SIZE, /* bLength : 9 */
-		USB_ENDPOINT_DESCRIPTOR_TYPE, /* bDescriptorType */
-		USB_ENDPOINT_IN(4), /* bEndpointAddress */
-		USB_ENDPOINT_TYPE_ISOCHRONOUS | USB_ENDPOINT_SYNC_ADAPTIVE, /* bmAttributes */
-		WBVAL(0x0060), /* wMaxPacketSize */
-		0x01, /* bInterval */
-		0x00, /* bRefresh */
-		0x00, /* bSynchAddress */
+		AUDIO_STANDARD_ENDPOINT_DESC_SIZE,
+		USB_ENDPOINT_DESCRIPTOR_TYPE,
+		USB_ENDPOINT_IN(4),
+		USB_ENDPOINT_TYPE_ISOCHRONOUS | USB_ENDPOINT_SYNC_ADAPTIVE,
+		WBVAL(0x0060),
+		0x01,
+		0x00,
+		0x00,
 
-		/* Endpoint - Audio Streaming */
-		AUDIO_STREAMING_ENDPOINT_DESC_SIZE, /* bLength : 7 */
-		AUDIO_ENDPOINT_DESCRIPTOR_TYPE, /* bDescriptorType */
-		AUDIO_ENDPOINT_GENERAL, /* bDescriptor */
-		0x01, /* bmAttributes */
-		0x02, /* bLockDelayUnits (PCM samples) */
-		WBVAL(0x0001), /* wLockDelay */
+		AUDIO_STREAMING_ENDPOINT_DESC_SIZE,
+		AUDIO_ENDPOINT_DESCRIPTOR_TYPE,
+		AUDIO_ENDPOINT_GENERAL,
+		0x01,
+		0x02,
+		WBVAL(0x0001),
 
-		/* Terminator */
-		0 /* bLength */
+		0
 	};
 
 	static const USBDescStrings desc_strings = {"",
-		"Logitech", // Atleast SOCOM II checks this (liblgaud?)
+		"Logitech",
 		"Logitech USB Headset", "00000000"};
 
 	static void headset_handle_reset(USBDevice* dev)
 	{
-		/* XXX: do it */
 		return;
 	}
 
-/*
- * Note: we arbitrarily map the volume control range onto -inf..+8 dB
- */
 #define ATTRIB_ID(cs, attrib, idif) (((cs) << 24) | ((attrib) << 16) | (idif))
 
-
-	// With current descriptor, if I'm not mistaken,
-	// feature unit 2 (0x0100): headphones
-	// feature unit 5 (0x0600): microphone
 
 	static int usb_audio_get_control(HeadsetState* s, uint8_t attrib, uint16_t cscn, uint16_t idif, int length, uint8_t* data)
 	{
 		uint8_t cs = cscn >> 8;
-		const uint8_t cn = cscn - 1; /* -1 for the non-present master control */
+		const uint8_t cn = cscn - 1;
 		uint32_t aid = ATTRIB_ID(cs, attrib, idif);
 		int ret = USB_RET_STALL;
 
@@ -469,7 +428,6 @@ namespace usb_mic
 				break;
 			case ATTRIB_ID(AUDIO_VOLUME_CONTROL, AUDIO_REQUEST_GET_CUR, 0x0600):
 			case ATTRIB_ID(AUDIO_VOLUME_CONTROL, AUDIO_REQUEST_GET_CUR, 0x0200):
-				//if (cn < 2) //TODO
 				{
 					uint16_t vol = (s->f.in.vol * 0x8800 + 127) / 255 + 0x8000;
 					data[0] = (uint8_t)(vol & 0xFF);
@@ -479,34 +437,25 @@ namespace usb_mic
 				break;
 			case ATTRIB_ID(AUDIO_VOLUME_CONTROL, AUDIO_REQUEST_GET_MIN, 0x0600):
 			case ATTRIB_ID(AUDIO_VOLUME_CONTROL, AUDIO_REQUEST_GET_MIN, 0x0200):
-				//if (cn < 2)
 				{
 					data[0] = 0x01;
 					data[1] = 0x80;
-					//data[0] = 0x00;
-					//data[1] = 0xE1; //0xE100 -31dB
 					ret = 2;
 				}
 				break;
 			case ATTRIB_ID(AUDIO_VOLUME_CONTROL, AUDIO_REQUEST_GET_MAX, 0x0600):
 			case ATTRIB_ID(AUDIO_VOLUME_CONTROL, AUDIO_REQUEST_GET_MAX, 0x0200):
-				//if (cn < 2)
 				{
 					data[0] = 0x00;
 					data[1] = 0x08;
-					//data[0] = 0x00;
-					//data[1] = 0x18; //0x1800 +24dB
 					ret = 2;
 				}
 				break;
 			case ATTRIB_ID(AUDIO_VOLUME_CONTROL, AUDIO_REQUEST_GET_RES, 0x0600):
 			case ATTRIB_ID(AUDIO_VOLUME_CONTROL, AUDIO_REQUEST_GET_RES, 0x0200):
-				//if (cn < 2)
 				{
 					data[0] = 0x88;
 					data[1] = 0x00;
-					//data[0] = 0x00;
-					//data[1] = 0x01; //0x0100 1.0 dB
 					ret = 2;
 				}
 				break;
@@ -516,7 +465,7 @@ namespace usb_mic
 				ret = 1;
 				break;
 			case ATTRIB_ID(AUDIO_VOLUME_CONTROL, AUDIO_REQUEST_GET_CUR, 0x0100):
-				if (cn < 2) //TODO
+				if (cn < 2)
 				{
 					uint16_t vol = (s->f.out.vol[cn] * 0x8800 + 127) / 255 + 0x8000;
 					data[0] = (uint8_t)(vol & 0xFF);
@@ -525,41 +474,30 @@ namespace usb_mic
 				}
 				break;
 			case ATTRIB_ID(AUDIO_VOLUME_CONTROL, AUDIO_REQUEST_GET_MIN, 0x0100):
-				//if (cn < 2)
 				{
 					data[0] = 0x01;
 					data[1] = 0x80;
-					//data[0] = 0x00;
-					//data[1] = 0xE1; //0xE100 -31dB
 					ret = 2;
 				}
 				break;
 			case ATTRIB_ID(AUDIO_VOLUME_CONTROL, AUDIO_REQUEST_GET_MAX, 0x0100):
-				//if (cn < 2)
 				{
 					data[0] = 0x00;
 					data[1] = 0x08;
-					//data[0] = 0x00;
-					//data[1] = 0x18; //0x1800 +24dB
 					ret = 2;
 				}
 				break;
 			case ATTRIB_ID(AUDIO_VOLUME_CONTROL, AUDIO_REQUEST_GET_RES, 0x0100):
-				//if (cn < 2)
 				{
 					data[0] = 0x88;
 					data[1] = 0x00;
-					//data[0] = 0x00;
-					//data[1] = 0x01; //0x0100 1.0 dB
 					ret = 2;
 				}
 				break;
 			case ATTRIB_ID(AUDIO_BASS_BOOST_CONTROL, AUDIO_REQUEST_GET_CUR,
-				0x0100): //??? SOCOM II when in stereo, but there is no bass control defined in descriptor...
-				//if (cn < 2) { //asks with cn == 2, meaning both channels? -1 is 'master'
-				data[0] = 0; //bool
+				0x0100):
+				data[0] = 0;
 				ret = 1;
-				//}
 				break;
 		}
 
@@ -569,7 +507,7 @@ namespace usb_mic
 	static int usb_audio_set_control(HeadsetState* s, uint8_t attrib, uint16_t cscn, uint16_t idif, int length, uint8_t* data)
 	{
 		uint8_t cs = cscn >> 8;
-		const uint8_t cn = cscn - 1; /* -1 for the non-present master control */
+		const uint8_t cn = cscn - 1;
 		uint32_t aid = ATTRIB_ID(cs, attrib, idif);
 		uint16_t vol;
 		int ret = USB_RET_STALL;
@@ -586,7 +524,6 @@ namespace usb_mic
 			case ATTRIB_ID(AUDIO_VOLUME_CONTROL, AUDIO_REQUEST_SET_CUR, 0x0600):
 			case ATTRIB_ID(AUDIO_VOLUME_CONTROL, AUDIO_REQUEST_SET_CUR, 0x0200):
 				vol = data[0] + (data[1] << 8);
-				//qemu usb audiocard formula
 				vol -= 0x8000;
 				vol = (vol * 255 + 0x4400) / 0x8800;
 				if (vol > 255)
@@ -611,7 +548,6 @@ namespace usb_mic
 				if (cn < 2)
 				{
 
-					//qemu usb audiocard formula
 					vol -= 0x8000;
 					vol = (vol * 255 + 0x4400) / 0x8800;
 					if (vol > 255)
@@ -631,8 +567,6 @@ namespace usb_mic
 
 		if (set_vol)
 		{
-			//if (s->f.debug) {
-			//}
 		}
 
 		return ret;
@@ -641,14 +575,9 @@ namespace usb_mic
 	static int usb_audio_ep_control(HeadsetState* s, uint8_t attrib, uint16_t cscn, uint16_t ep, int length, uint8_t* data)
 	{
 		uint8_t cs = cscn >> 8;
-		[[maybe_unused]] const uint8_t cn = cscn - 1; /* -1 for the non-present master control */
+		[[maybe_unused]] const uint8_t cn = cscn - 1;
 		uint32_t aid = ATTRIB_ID(cs, attrib, ep);
 		int ret = USB_RET_STALL;
-
-		//cs 1 cn 0xFF, ep 0x81 attrib 1
-		/*for(int i=0; i<length; i++)
-        Console.Warning("%02X ", data[i]);
-    Console.Warning("\n");*/
 
 		switch (aid)
 		{
@@ -696,9 +625,6 @@ namespace usb_mic
 
 		switch (request)
 		{
-			/*
-    * Audio device specific request
-    */
 			case ClassInterfaceRequest | AUDIO_REQUEST_GET_CUR:
 			case ClassInterfaceRequest | AUDIO_REQUEST_GET_MIN:
 			case ClassInterfaceRequest | AUDIO_REQUEST_GET_MAX:
@@ -706,9 +632,7 @@ namespace usb_mic
 				ret = usb_audio_get_control(s, request & 0xff, value, index, length, data);
 				if (ret < 0)
 				{
-					//if (s->debug) {
 					Console.Warning("headset: fail: get control\n");
-					//}
 					goto fail;
 				}
 				p->actual_length = ret;
@@ -721,9 +645,7 @@ namespace usb_mic
 				ret = usb_audio_set_control(s, request & 0xff, value, index, length, data);
 				if (ret < 0)
 				{
-					//if (s->debug) {
 					Console.Warning("headset: fail: set control\n data:");
-					//}
 					goto fail;
 				}
 				break;
@@ -747,10 +669,8 @@ namespace usb_mic
 		}
 	}
 
-	//naive, needs interpolation and stuff
 	inline static int16_t SetVolume(int16_t sample, int vol)
 	{
-		//return (int16_t)(((uint16_t)(0x7FFF + sample) * vol / 0xFF) - 0x7FFF );
 		return (int16_t)((int32_t)sample * vol / 0xFF);
 	}
 
@@ -763,15 +683,13 @@ namespace usb_mic
 		switch (p->pid)
 		{
 			case USB_TOKEN_IN:
-				//Console.Warning("token in ep: %d len: %zd\n", devep, p->iov.size);
 				if (devep == 4 && s->dev.altsetting[2] && s->audsrc)
 				{
 
-					uint32_t outChns = 1; //s->dev.altsetting[2] == 1 ? 2 : 1;
+					uint32_t outChns = 1;
 					uint32_t inChns = s->audsrc->GetChannels();
 					int16_t* dst = (int16_t*)p->buffer_ptr;
 					size_t len = p->buffer_size;
-					//Divide 'len' bytes between n channels of 16 bits
 					uint32_t maxFrames = len / (outChns * sizeof(int16_t)), frames = 0;
 
 					if (s->audsrc->GetFrames(&frames))
@@ -785,15 +703,11 @@ namespace usb_mic
 					for (; i < frames; i++)
 					{
 						dst[i * outChns] = SetVolume(s->in_buffer[i * inChns], s->f.in.vol);
-						//if (outChns > 1 && inChns > 1)
-						//    dst[i * outChns + 1] = SetVolume(s->in_buffer[i * inChns + 1], s->f.in.vol);
-						//else if (outChns > 1)
-						//    dst[i * outChns + 1] = 0;
 					}
 
 					ret = i;
 
-#if 0 //defined(_DEBUG) && _MSC_VER > 1800
+#if 0
             if (!file)
             {
                 char name[1024] = { 0 };
@@ -819,10 +733,9 @@ namespace usb_mic
 					uint32_t outChns = s->audsink->GetChannels();
 					int16_t* src = (int16_t*)p->buffer_ptr;
 					size_t len = p->buffer_size;
-					//Divide 'len' bytes between n channels of 16 bits
 					uint32_t frames = len / (inChns * sizeof(int16_t));
 
-					s->out_buffer.resize(frames * outChns); //TODO move to AudioDevice for less data copying
+					s->out_buffer.resize(frames * outChns);
 
 					uint32_t i = 0;
 					for (; i < frames; i++)
@@ -935,10 +848,9 @@ namespace usb_mic
 		s->dev.klass.usb_desc = &s->desc;
 		s->dev.klass.product_desc = desc_strings[2];
 
-		// set defaults
-		s->f.out.vol[0] = 240; /* 0 dB */
-		s->f.out.vol[1] = 240; /* 0 dB */
-		s->f.in.vol = 240; /* 0 dB */
+		s->f.out.vol[0] = 240;
+		s->f.out.vol[1] = 240;
+		s->f.in.vol = 240;
 		s->f.out.srate = 48000;
 		s->f.in.srate = 48000;
 
@@ -998,7 +910,6 @@ namespace usb_mic
 
 	void HeadsetDevice::UpdateSettings(USBDevice* dev, SettingsInterface& si) const
 	{
-		// TODO: Update device
 	}
 
 	std::span<const SettingInfo> HeadsetDevice::Settings(u32 subtype) const
@@ -1019,4 +930,4 @@ namespace usb_mic
 		};
 		return info;
 	}
-} // namespace usb_mic
+}

@@ -34,12 +34,10 @@ public:
 private:
 	static constexpr float SSR_UV_TOLERANCE = 1.0f;
 
-	using GSC_Ptr = bool(*)(GSRendererHW& r, int& skip);	// GSC - Get Skip Count
-	using OI_Ptr = bool(*)(GSRendererHW& r, GSTexture* rt, GSTexture* ds, GSTextureCache::Source* t); // OI - Before draw
-	using MV_Ptr = bool(*)(GSRendererHW& r); // MV - Move
+	using GSC_Ptr = bool(*)(GSRendererHW& r, int& skip);
+	using OI_Ptr = bool(*)(GSRendererHW& r, GSTexture* rt, GSTexture* ds, GSTextureCache::Source* t);
+	using MV_Ptr = bool(*)(GSRendererHW& r);
 
-	// We modify some of the context registers to optimize away unnecessary operations.
-	// Instead of messing with the real context, we copy them and use those instead.
 	struct HWCachedCtx
 	{
 		GIFRegTEX0 TEX0;
@@ -53,23 +51,20 @@ private:
 
 		__ri bool DepthWrite() const
 		{
-			// Alpha test, all pixels fail, z buffer is not updated.
 			if (TEST.ATE && TEST.ATST == ATST_NEVER && TEST.AFAIL != AFAIL_ZB_ONLY)
 			{
 				return false;
 			}
 
-			// Depth test enabled, all pixels fail.
 			if (TEST.ZTE && TEST.ZTST == ZTST_NEVER)
 			{
 				return false;
 			}
 
-			return ZBUF.ZMSK == 0 && TEST.ZTE != 0; // ZTE == 0 is bug on the real hardware, write is blocked then
+			return ZBUF.ZMSK == 0 && TEST.ZTE != 0;
 		}
 	};
 
-	// Require special argument
 	bool OI_BlitFMV(GSTextureCache::Target* _rt, GSTextureCache::Source* t, const GSVector4i& r_draw);
 	bool TryGSMemClear(bool no_rt, bool preserve_rt, bool invalidate_rt, u32 rt_end_bp, bool no_ds,
 		bool preserve_z, bool invalidate_z, u32 ds_end_bp);
@@ -114,7 +109,6 @@ private:
 		SHUFFLE_READWRITE,
 	};
 
-	// Intermediate struct for determining DATE config.
 	struct DATEOptions
 	{
 		bool enabled;
@@ -123,7 +117,6 @@ private:
 		bool stencil_one;
 	};
 
-	// Internal enum for classifying texture shuffles.
 	enum class TextureShuffleType
 	{
 		None,
@@ -139,7 +132,6 @@ private:
 		HackShuffle,
 	};
 
-	// Enum for determining which channels to read/write in a texture shuffle.
 	enum TextureShuffleChannels : u32
 	{
 		TextureShuffleChannels_None = 0x0,
@@ -175,12 +167,9 @@ private:
 		                                       TextureShuffleChannels_BlueToRed | TextureShuffleChannels_AlphaToGreen |
 		                                       TextureShuffleChannels_BlueToAlpha,
 
-		// It's not actually possible to do a C16->C16 texture shuffle of B to A as they are the same group
-		// However you can do it by using C32 and offsetting the target vertices to point to B A, then mask as appropriate.
 		TextureShuffleChannels_SameGroup = TextureShuffleChannels_BlueToAlpha,
 	};
 
-	// Intermediate struct for texture shuffle detection.
 	struct TextureShuffleInfo
 	{
 		TextureShuffleType type = TextureShuffleType::None;
@@ -253,11 +242,11 @@ private:
 		const GSVector2i& unscaled_size, float& vs_scale_x, float& vs_scale_y);
 	void DetermineBarriers(GSTextureCache::Target* rt, GSTextureCache::Source* tex);
 
-	void GetForcedROVUsage(bool& color_cov, bool& depth_rov); // Whether having color or depth with the current config forces the other.
-	void DetermineROVUsage(GSTextureCache::Target* rt, GSTextureCache::Target* ds); // Heuristics to determine whether to enable/disable ROV
-	void ConfigureROV(bool color_rov, bool depth_rov); // Actual config for ROV
-	void ConvertTextureTypeROV(GSTextureCache::Target* rt, GSTextureCache::Target* ds); // Convert to RW capable textures if needed.
-	void ConvertTextureTypeROVSingle(GSTextureCache::Target* tgt, bool shader_write); // Helper to do the above.
+	void GetForcedROVUsage(bool& color_cov, bool& depth_rov);
+	void DetermineROVUsage(GSTextureCache::Target* rt, GSTextureCache::Target* ds);
+	void ConfigureROV(bool color_rov, bool depth_rov);
+	void ConvertTextureTypeROV(GSTextureCache::Target* rt, GSTextureCache::Target* ds);
+	void ConvertTextureTypeROVSingle(GSTextureCache::Target* tgt, bool shader_write);
 
 	void SetTCOffset();
 	bool NextDrawColClip() const;
@@ -265,7 +254,6 @@ private:
 	bool IsPageCopy() const;
 	bool NextDrawMatchesShuffle() const;
 
-	// Texture shuffle functions.
 	bool IsSplitTextureShuffle(GIFRegTEX0& rt_TEX0, GSVector4i& valid_area);
 	void FixSplitTextureShuffleState();
 	GSVector4i GetSplitTextureShuffleDrawRect() const;
@@ -296,7 +284,6 @@ private:
 	bool IsUsingCsInBlend();
 	bool IsUsingAsInBlend();
 
-	// CRC Hacks
 	bool IsBadFrame();
 	GSC_Ptr m_gsc = nullptr;
 	OI_Ptr m_oi = nullptr;
@@ -327,21 +314,20 @@ private:
 
 	GIFRegFRAME m_split_clear_start = {};
 	GIFRegZBUF m_split_clear_start_Z = {};
-	u32 m_split_clear_pages = 0; // if zero, inactive
+	u32 m_split_clear_pages = 0;
 	u32 m_split_clear_color = 0;
 
 	bool m_userhacks_tcoffset = false;
 	float m_userhacks_tcoffset_x = 0.0f;
 	float m_userhacks_tcoffset_y = 0.0f;
 
-	GSVector2i m_lod = {}; // Min & Max level of detail
+	GSVector2i m_lod = {};
 
-	GIFRegALPHA m_optimized_blend = {}; // Save for ROV setup
+	GIFRegALPHA m_optimized_blend = {};
 
 	GSHWDrawConfig m_conf = {};
 	HWCachedCtx m_cached_ctx;
 
-	// software sprite renderer state
 	std::vector<GSVertexSW> m_sw_vertex_buffer;
 	std::unique_ptr<GSTextureCacheSW::Texture> m_sw_texture[7 + 1];
 	std::unique_ptr<GSVirtualAlignedClass<32>> m_sw_rasterizer;
@@ -386,36 +372,26 @@ public:
 
 	GSTexture* LookupPaletteSource(u32 CBP, u32 CPSM, u32 CBW, GSVector2i& offset, float* scale, const GSVector2i& size) override;
 
-	/// Called by the texture cache to know for certain whether there is a channel shuffle.
 	bool TestChannelShuffle(GSTextureCache::Target* src);
 
-	/// Returns true if the Frame and TEX0 are sharing channels
 	bool ChannelsSharedTEX0FRAME();
 
-	/// Returns true if the specified texture address matches the frame or Z buffer.
 	bool IsTBPFrameOrZ(u32 tbp, bool frame_only = false);
 
-	/// Returns true if the draws appear to be a manual deswizzle.
 	void HandleManualDeswizzle();
 
-	/// Offsets the current draw, used for RT-in-RT. Offsets are relative to the *current* FBP, not the new FBP.
 	void OffsetDraw(s32 fbp_offset, s32 zbp_offset, s32 xoffset, s32 yoffset);
 
-	/// Replaces vertices with the specified fullscreen quad.
 	void ReplaceVerticesWithSprite(const GSVector4i& unscaled_rect, const GSVector4i& unscaled_uv_rect,
 		const GSVector2i& unscaled_size, const GSVector4i& scissor);
 	void ReplaceVerticesWithSprite(const GSVector4i& unscaled_rect, const GSVector2i& unscaled_size);
 
-	/// Starts a HLE'ed hardware draw, which can be further customized by the caller.
 	GSHWDrawConfig& BeginHLEHardwareDraw(
 		GSTexture* rt, GSTexture* ds, float rt_scale, GSTexture* tex, float tex_scale, const GSVector4i& unscaled_rect);
 
-	/// Submits a previously set up HLE hardware draw, copying any textures as needed if there's hazards.
 	void EndHLEHardwareDraw(bool force_copy_on_hazard = false);
 
-	/// Compute the drawlist (if not already present) and bounding boxes for the current draw.
 	std::size_t ComputeDrawlistGetSize(float scale);
 
-	/// Does the current draw allow using AA1 coverage (if AA1 is enabled).
 	bool IsCoverageAlphaSupported() override;
 };

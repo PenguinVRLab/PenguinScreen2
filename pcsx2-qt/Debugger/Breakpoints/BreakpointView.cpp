@@ -64,7 +64,6 @@ void BreakpointView::openContextMenu(QPoint pos)
 	{
 		QAction* actionExport = menu->addAction(tr("Copy all as CSV"));
 		connect(actionExport, &QAction::triggered, [this]() {
-			// It's important to use the Export Role here to allow pasting to be translation agnostic
 			QGuiApplication::clipboard()->setText(
 				QtUtils::AbstractItemModelToCSV(m_model, BreakpointModel::ExportRole, true));
 		});
@@ -146,15 +145,11 @@ void BreakpointView::contextEdit()
 void BreakpointView::contextPasteCSV()
 {
 	QString csv = QGuiApplication::clipboard()->text();
-	// Skip header
 	csv = csv.mid(csv.indexOf('\n') + 1);
 
 	for (const QString& line : csv.split('\n'))
 	{
 		QStringList fields;
-		// In order to handle text with commas in them we must wrap values in quotes to mark
-		// where a value starts and end so that text commas aren't identified as delimiters.
-		// So matches each quote pair, parse it out, and removes the quotes to get the value.
 		QRegularExpression eachQuotePair(R"("([^"]|\\.)*")");
 		QRegularExpressionMatchIterator it = eachQuotePair.globalMatch(line);
 		while (it.hasNext())

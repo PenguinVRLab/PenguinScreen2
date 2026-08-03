@@ -24,7 +24,6 @@ void CURRENT_ISA::GSRendererHWPopulateFunctions(GSRendererHW& renderer)
 	GSRendererHWFunctions::Populate(renderer);
 }
 
-// since there's no overlapping draws, we can just keep this intact
 static GSVector4i s_dimx_storage[8];
 static GIFRegDIMX s_last_dimx;
 
@@ -49,16 +48,11 @@ bool GSRendererHWFunctions::SwPrimRender(GSRendererHW& hw, bool invalidate_tc, b
 	data.index_count = hw.m_index->tail;
 	data.scanmsk_value = env.SCANMSK.MSK;
 
-	// Skip per pixel division if q is constant.
-	// Optimize the division by 1 with a nop. It also means that GS_SPRITE_CLASS must be processed when !vt.m_eq.q.
-	// If you have both GS_SPRITE_CLASS && vt.m_eq.q, it will depends on the first part of the 'OR'.
 	const u32 q_div = !hw.IsMipMapActive() && ((vt.m_eq.q && vt.m_min.t.z != 1.0f) || (!vt.m_eq.q && vt.m_primclass == GS_SPRITE_CLASS));
 	GSVertexSW::s_cvb[vt.m_primclass][PRIM->TME][PRIM->FST][q_div](context, data.vertex, hw.m_vertex->buff, hw.m_vertex->next);
 
 	GSVector4i scissor = context->scissor.in;
 	GSVector4i bbox = GSVector4i(vt.m_min.p.floor().xyxy(vt.m_max.p.ceil())).rintersect(scissor);
-
-	// Points and lines may have zero area bbox (single line: 0, 0 - 256, 0)
 
 	if (vt.m_primclass == GS_POINT_CLASS || vt.m_primclass == GS_LINE_CLASS)
 	{
@@ -92,12 +86,8 @@ bool GSRendererHWFunctions::SwPrimRender(GSRendererHW& hw, bool invalidate_tc, b
 	u32 zm = context->ZBUF.ZMSK || context->TEST.ZTE == 0 ? 0xffffffff : 0;
 	const u32 fm_mask = GSLocalMemory::m_psm[context->FRAME.PSM].fmsk;
 
-	// When the format is 24bit (Z or C), DATE ceases to function.
-	// It was believed that in 24bit mode all pixels pass because alpha doesn't exist
-	// however after testing this on a PS2 it turns out nothing passes, it ignores the draw.
 	if ((context->FRAME.PSM & 0xF) == PSMCT24 && context->TEST.DATE)
 	{
-		//DevCon.Warning("DATE on a 24bit format, Frame PSM %x", context->FRAME.PSM);
 		return false;
 	}
 
@@ -177,7 +167,6 @@ bool GSRendererHWFunctions::SwPrimRender(GSRendererHW& hw, bool invalidate_tc, b
 
 			if (gd.sel.tfx == TFX_MODULATE && gd.sel.tcc && vt.m_eq.rgba == 0xffff && vt.m_min.c.eq(GSVector4i(128)))
 			{
-				// modulate does not do anything when vertex color is 0x80
 
 				gd.sel.tfx = TFX_DECAL;
 			}
@@ -202,13 +191,6 @@ bool GSRendererHWFunctions::SwPrimRender(GSRendererHW& hw, bool invalidate_tc, b
 
 			if (mipmap)
 			{
-				// TEX1.MMIN
-				// 000 p
-				// 001 l
-				// 010 p round
-				// 011 p tri
-				// 100 l round
-				// 101 l tri
 
 				if (vt.m_lod.x > 0)
 				{
@@ -216,10 +198,9 @@ bool GSRendererHWFunctions::SwPrimRender(GSRendererHW& hw, bool invalidate_tc, b
 				}
 				else
 				{
-					// TODO: isbilinear(mmag) != isbilinear(mmin) && vt.m_lod.x <= 0 && vt.m_lod.y > 0
 				}
 
-				gd.sel.mmin = (context->TEX1.MMIN & 1) + 1; // 1: round, 2: tri
+				gd.sel.mmin = (context->TEX1.MMIN & 1) + 1;
 				gd.sel.lcm = context->TEX1.LCM;
 
 				int mxl = std::min<int>((int)context->TEX1.MXL, 6) << 16;
@@ -227,21 +208,20 @@ bool GSRendererHWFunctions::SwPrimRender(GSRendererHW& hw, bool invalidate_tc, b
 
 				if ((int)vt.m_lod.x >= (int)context->TEX1.MXL)
 				{
-					k = (int)vt.m_lod.x << 16; // set lod to max level
+					k = (int)vt.m_lod.x << 16;
 
-					gd.sel.lcm = 1; // lod is constant
-					gd.sel.mmin = 1; // tri-linear is meaningless
+					gd.sel.lcm = 1;
+					gd.sel.mmin = 1;
 				}
 
 				if (gd.sel.mmin == 2)
 				{
-					mxl--; // don't sample beyond the last level (TODO: add a dummy level instead?)
+					mxl--;
 				}
 
 				if (gd.sel.fst)
 				{
 					pxAssert(gd.sel.lcm == 1);
-					//pxAssert(((vt.m_min.t.uph(vt.m_max.t) == GSVector4::zero()).mask() & 3) == 3); // ratchet and clank (menu)
 
 					gd.sel.lcm = 1;
 				}
@@ -252,13 +232,12 @@ bool GSRendererHWFunctions::SwPrimRender(GSRendererHW& hw, bool invalidate_tc, b
 
 					if (gd.sel.mmin == 1)
 					{
-						lod = (lod + 0x8000) & 0xffff0000; // rounding
+						lod = (lod + 0x8000) & 0xffff0000;
 					}
 
 					gd.lod.i = GSVector4i(lod >> 16);
 					gd.lod.f = GSVector4i(lod & 0xffff).xxxxl().xxzz();
 
-					// TODO: lot to optimize when lod is constant
 				}
 				else
 				{
@@ -299,16 +278,10 @@ bool GSRendererHWFunctions::SwPrimRender(GSRendererHW& hw, bool invalidate_tc, b
 			}
 			else
 			{
-				// skip per pixel division if q is constant. Sprite uses flat
-				// q, so it's always constant by primitive.
-				// Note: the 'q' division was done in GSRendererSW::ConvertVertexBuffer
 				gd.sel.fst |= (vt.m_eq.q || primclass == GS_SPRITE_CLASS);
 
 				if (gd.sel.ltf && gd.sel.fst)
 				{
-					// if q is constant we can do the half pel shift for bilinear sampling on the vertices
-
-					// TODO: but not when mipmapping is used!!!
 
 					const GSVector4 half(0x8000, 0x8000);
 
@@ -343,13 +316,11 @@ bool GSRendererHWFunctions::SwPrimRender(GSRendererHW& hw, bool invalidate_tc, b
 					gd.t.mask.U32[0] = 0;
 					break;
 				case CLAMP_REGION_CLAMP:
-					// REGION_CLAMP ignores the actual texture size
 					gd.t.min.U16[0] = gd.t.minmax.U16[0] = context->CLAMP.MINU;
 					gd.t.max.U16[0] = gd.t.minmax.U16[2] = context->CLAMP.MAXU;
 					gd.t.mask.U32[0] = 0;
 					break;
 				case CLAMP_REGION_REPEAT:
-					// MINU is restricted to MINU or texture size, whichever is smaller, MAXU is an offset in the texture.
 					gd.t.min.U16[0] = gd.t.minmax.U16[0] = context->CLAMP.MINU & (tw - 1);
 					gd.t.max.U16[0] = gd.t.minmax.U16[2] = context->CLAMP.MAXU;
 					gd.t.mask.U32[0] = 0xffffffff;
@@ -371,14 +342,12 @@ bool GSRendererHWFunctions::SwPrimRender(GSRendererHW& hw, bool invalidate_tc, b
 					gd.t.mask.U32[2] = 0;
 					break;
 				case CLAMP_REGION_CLAMP:
-					// REGION_CLAMP ignores the actual texture size
 					gd.t.min.U16[4] = gd.t.minmax.U16[1] = context->CLAMP.MINV;
-					gd.t.max.U16[4] = gd.t.minmax.U16[3] = context->CLAMP.MAXV; // ffx anima summon scene, when the anchor appears (th = 256, maxv > 256)
+					gd.t.max.U16[4] = gd.t.minmax.U16[3] = context->CLAMP.MAXV;
 					gd.t.mask.U32[2] = 0;
 					break;
 				case CLAMP_REGION_REPEAT:
-					// MINV is restricted to MINV or texture size, whichever is smaller, MAXV is an offset in the texture.
-					gd.t.min.U16[4] = gd.t.minmax.U16[1] = context->CLAMP.MINV & (th - 1); // skygunner main menu water texture 64x64, MINV = 127
+					gd.t.min.U16[4] = gd.t.minmax.U16[1] = context->CLAMP.MINV & (th - 1);
 					gd.t.max.U16[4] = gd.t.minmax.U16[3] = context->CLAMP.MAXV;
 					gd.t.mask.U32[2] = 0xffffffff;
 					break;
@@ -518,7 +487,7 @@ bool GSRendererHWFunctions::SwPrimRender(GSRendererHW& hw, bool invalidate_tc, b
 
 #endif
 
-	if (gd.sel.prim == GS_SPRITE_CLASS && !gd.sel.ftest && !gd.sel.ztest && data.bbox.eq(data.bbox.rintersect(data.scissor))) // TODO: check scissor horizontally only
+	if (gd.sel.prim == GS_SPRITE_CLASS && !gd.sel.ftest && !gd.sel.ztest && data.bbox.eq(data.bbox.rintersect(data.scissor)))
 	{
 		gd.sel.notest = 1;
 
@@ -527,9 +496,9 @@ bool GSRendererHWFunctions::SwPrimRender(GSRendererHW& hw, bool invalidate_tc, b
 		for (int i = 0, j = hw.m_vertex->tail; i < j; i++)
 		{
 #if _M_SSE >= 0x501
-			if ((((hw.m_vertex->buff[i].XYZ.X - ofx) + 15) >> 4) & 7) // aligned to 8
+			if ((((hw.m_vertex->buff[i].XYZ.X - ofx) + 15) >> 4) & 7)
 #else
-			if ((((hw.m_vertex->buff[i].XYZ.X - ofx) + 15) >> 4) & 3) // aligned to 4
+			if ((((hw.m_vertex->buff[i].XYZ.X - ofx) + 15) >> 4) & 3)
 #endif
 			{
 				gd.sel.notest = 0;
@@ -547,7 +516,6 @@ bool GSRendererHWFunctions::SwPrimRender(GSRendererHW& hw, bool invalidate_tc, b
 	if (invalidate_tc)
 		g_texture_cache->InvalidateVideoMem(context->offset.fb, bbox);
 
-	// Jak does sw prim render, then draws to the same target, and it needs to be uploaded.
 	if (add_ee_transfer)
 	{
 		GSRendererHW::GSUploadQueue uq;

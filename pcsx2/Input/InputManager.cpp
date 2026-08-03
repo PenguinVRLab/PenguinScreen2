@@ -28,10 +28,6 @@
 #include <variant>
 #include <vector>
 
-// ------------------------------------------------------------------------
-// Constants
-// ------------------------------------------------------------------------
-
 enum : u32
 {
 	MAX_KEYS_PER_BINDING = 4,
@@ -40,21 +36,7 @@ enum : u32
 	LAST_EXTERNAL_INPUT_SOURCE = static_cast<u32>(InputSourceType::Count),
 };
 
-// ------------------------------------------------------------------------
-// Event Handler Type
-// ------------------------------------------------------------------------
-// This class acts as an adapter to convert from normalized values to
-// binary values when the callback is a binary/button handler. That way
-// you don't need to convert float->bool in your callbacks.
 using InputEventHandler = std::variant<InputAxisEventHandler, InputButtonEventHandler>;
-
-// ------------------------------------------------------------------------
-// Binding Type
-// ------------------------------------------------------------------------
-// This class tracks both the keys which make it up (for chords), as well
-// as the state of all buttons. For button callbacks, it's fired when
-// all keys go active, and for axis callbacks, when all are active and
-// the value changes.
 
 struct InputBinding
 {
@@ -78,16 +60,11 @@ struct PadVibrationBinding
 	u32 pad_index = 0;
 	Motor motors[MAX_MOTORS_PER_PAD] = {};
 
-	/// Returns true if the two motors are bound to the same host motor.
 	__fi bool AreMotorsCombined() const { return motors[0].binding == motors[1].binding; }
 
-	/// Returns the intensity when both motors are combined.
 	__fi float GetCombinedIntensity() const { return std::max(motors[0].last_intensity, motors[1].last_intensity); }
 };
 
-// ------------------------------------------------------------------------
-// Forward Declarations (for static qualifier)
-// ------------------------------------------------------------------------
 namespace InputManager
 {
 	static std::optional<InputBindingKey> ParseHostKeyboardKey(const std::string_view source, const std::string_view sub_binding);
@@ -99,7 +76,6 @@ namespace InputManager
 	static bool SplitBinding(const std::string_view binding, std::string_view* source, std::string_view* sub_binding);
 	static void PrettifyInputBindingPart(const std::string_view binding, SmallString& ret, bool& changed, bool use_icons);
 	static std::shared_ptr<InputBinding> AddBinding(const std::string_view binding, const InputEventHandler& handler);
-	// Will also apply SDL2-SDL3 migrations and update the provided section & key
 	static void AddBindings(const std::vector<std::string>& bindings, const InputEventHandler& handler,
 		InputBindingInfo::Type binding_type, SettingsInterface& si, const char* section, const char* key, bool is_profile);
 	static bool ParseBindingAndGetSource(const std::string_view binding, InputBindingKey* key, InputSource** source);
@@ -120,45 +96,29 @@ namespace InputManager
 
 	template <typename T>
 	static void UpdateInputSourceState(SettingsInterface& si, std::unique_lock<std::mutex>& settings_lock, InputSourceType type);
-} // namespace InputManager
+}
 
-// ------------------------------------------------------------------------
-// Local Variables
-// ------------------------------------------------------------------------
-
-// This is a multimap containing any binds related to the specified key.
 using BindingMap = std::unordered_multimap<InputBindingKey, std::shared_ptr<InputBinding>, InputBindingKeyHash>;
 using VibrationBindingArray = std::vector<PadVibrationBinding>;
 static BindingMap s_binding_map;
 static VibrationBindingArray s_pad_vibration_array;
 static std::mutex s_binding_map_write_lock;
 
-// Reverse lookups for controller navigation; user bindings take priority over static defaults.
 using ControllerButtonGenericMap = std::unordered_map<InputBindingKey, GenericInputBinding, InputBindingKeyHash>;
 static ControllerButtonGenericMap s_controller_button_generic_map;
 
 using ControllerAxisGenericMap = std::unordered_map<InputBindingKey, std::array<GenericInputBinding, 2>, InputBindingKeyHash>;
 static ControllerAxisGenericMap s_controller_axis_generic_map;
 
-// Hooks/intercepting (for setting bindings)
 static std::mutex m_event_intercept_mutex;
 static InputInterceptHook::Callback m_event_intercept_callback;
 
-// Input sources. Keyboard/mouse don't exist here.
 static std::array<std::unique_ptr<InputSource>, static_cast<u32>(InputSourceType::Count)> s_input_sources;
 
-// Layout preference for gamepad controller glyphs.
 static std::atomic<InputLayout> s_gamepad_icon_preference = InputLayout::Unknown;
 
-// ------------------------------------------------------------------------
-// Hotkeys
-// ------------------------------------------------------------------------
 static const HotkeyInfo* const s_hotkey_list[] = {g_common_hotkeys, g_gs_hotkeys, g_host_hotkeys};
 
-// ------------------------------------------------------------------------
-// Tracking host mouse movement and turning into relative events
-// 4 axes: pointer left/right, wheel vertical/horizontal. Last/Next/Normalized.
-// ------------------------------------------------------------------------
 static constexpr const std::array<const char*, static_cast<u8>(InputPointerAxis::Count)> s_pointer_axis_setting_names = {
 	{"X", "Y", "WheelX", "WheelY"}};
 static constexpr const std::array<const char*, static_cast<u8>(InputPointerAxis::Count)> s_pointer_axis_names = {
@@ -185,15 +145,10 @@ using KeyboardEventCallback = std::function<void(InputBindingKey key, float valu
 static std::vector<KeyboardEventCallback> s_keyboard_event_callbacks;
 static std::vector<std::pair<u32, PointerMoveCallback>> s_pointer_move_callbacks;
 
-// ------------------------------------------------------------------------
-// Binding Parsing
-// ------------------------------------------------------------------------
-
 std::vector<std::string_view> InputManager::SplitChord(const std::string_view binding)
 {
 	std::vector<std::string_view> parts;
 
-	// under an if for RVO
 	if (!binding.empty())
 	{
 		std::string_view::size_type last = 0;
@@ -239,7 +194,6 @@ std::optional<InputBindingKey> InputManager::ParseInputBindingKey(const std::str
 	if (!SplitBinding(binding, &source, &sub_binding))
 		return std::nullopt;
 
-	// lameee, string matching
 	if (source.starts_with("Keyboard"))
 	{
 		return ParseHostKeyboardKey(source, sub_binding);
@@ -297,7 +251,6 @@ TinyString InputManager::ConvertKeyboardKeyToString(InputBindingKey key, bool di
 		if (str.has_value() && !str->empty())
 		{
 			if (display)
-				// Keyboard keys arn't spaced out for display yet
 				ret.format("Keyboard {}", str->c_str());
 			else
 				ret.format("Keyboard/{}", str->c_str());
@@ -348,7 +301,6 @@ std::string InputManager::ConvertInputBindingKeyToString(InputBindingInfo::Type 
 {
 	if (binding_type == InputBindingInfo::Type::Pointer || binding_type == InputBindingInfo::Type::Device)
 	{
-		// pointer and device bindings don't have a data part
 		if (key.source_type == InputSourceType::Keyboard)
 		{
 			return "Keyboard";
@@ -359,7 +311,6 @@ std::string InputManager::ConvertInputBindingKeyToString(InputBindingInfo::Type 
 		}
 		else if (key.source_type < InputSourceType::Count && s_input_sources[static_cast<u32>(key.source_type)])
 		{
-			// This assumes that it always follows the Type/Binding form.
 			std::string keystr(s_input_sources[static_cast<u32>(key.source_type)]->ConvertKeyToString(key));
 			std::string::size_type pos = keystr.find('/');
 			if (pos != std::string::npos)
@@ -388,10 +339,8 @@ std::string InputManager::ConvertInputBindingKeyToString(InputBindingInfo::Type 
 
 std::string InputManager::ConvertInputBindingKeysToString(InputBindingInfo::Type binding_type, const InputBindingKey* keys, size_t num_keys, bool migration)
 {
-	// can't have a chord of devices/pointers
 	if (binding_type == InputBindingInfo::Type::Pointer || binding_type == InputBindingInfo::Type::Device)
 	{
-		// so only take the first
 		if (num_keys > 0)
 			return ConvertInputBindingKeyToString(binding_type, keys[0], migration);
 	}
@@ -471,7 +420,6 @@ void InputManager::PrettifyInputBindingPart(const std::string_view binding, Smal
 	if (!SplitBinding(binding, &source, &sub_binding))
 		return;
 
-	// lameee, string matching
 	if (source.starts_with("Keyboard"))
 	{
 		std::optional<InputBindingKey> key = ParseHostKeyboardKey(source, sub_binding);
@@ -531,8 +479,6 @@ void InputManager::PrettifyInputBindingPart(const std::string_view binding, Smal
 	{
 		for (u32 i = FIRST_EXTERNAL_INPUT_SOURCE; i < LAST_EXTERNAL_INPUT_SOURCE; i++)
 		{
-			// We call ConvertKeyToIcon/String() even on disabled sources
-			// This ensures consistant appearance between enabled and disabled sources
 			if (s_input_sources[i])
 			{
 				std::optional<InputBindingKey> key = s_input_sources[i]->ParseKeyString(source, sub_binding);
@@ -596,7 +542,6 @@ std::shared_ptr<InputBinding> InputManager::AddBinding(const std::string_view bi
 	if (!ibinding)
 		return nullptr;
 
-	// plop it in the input map for all the keys
 	for (u32 i = 0; i < ibinding->num_keys; i++)
 		s_binding_map.emplace(ibinding->keys[i].MaskDirection(), ibinding);
 
@@ -616,7 +561,6 @@ void InputManager::AddBindings(const std::vector<std::string>& bindings, const I
 
 		if (ibinding)
 		{
-			// Check for SDL2-3 migrations
 			for (u32 i = 0; i < ibinding->num_keys; i++)
 			{
 				if (ibinding->keys[i].needs_migration)
@@ -625,7 +569,6 @@ void InputManager::AddBindings(const std::vector<std::string>& bindings, const I
 		}
 	}
 
-	// Save migrations
 	if (migrate)
 	{
 		std::vector<std::string> new_bindings;
@@ -636,26 +579,22 @@ void InputManager::AddBindings(const std::vector<std::string>& bindings, const I
 			if (ibindings[i])
 				new_bindings.push_back(ConvertInputBindingKeysToString(binding_type, ibindings[i]->keys, ibindings[i]->num_keys, true));
 			else
-				// Retain invalid bindings as is
 				new_bindings.push_back(bindings[i]);
 		}
 
 		if (is_profile)
 		{
-			// INISettingsInterface, can just update directly
 			si.SetStringList(section, key, new_bindings);
 			si.Save();
 		}
 		else
 		{
-			// LayeredSettingsInterface, Need to find which layer our binding came from
 			LayeredSettingsInterface& lsi = static_cast<LayeredSettingsInterface&>(si);
 			for (u32 i = 0; i < LayeredSettingsInterface::NUM_LAYERS; i++)
 			{
 				SettingsInterface* layer = lsi.GetLayer(static_cast<LayeredSettingsInterface::Layer>(i));
 				if (layer && layer->GetStringList(section, key) == bindings)
 				{
-					// Layer found, update settings
 					layer->SetStringList(section, key, new_bindings);
 					layer->Save();
 				}
@@ -663,10 +602,6 @@ void InputManager::AddBindings(const std::vector<std::string>& bindings, const I
 		}
 	}
 }
-
-// ------------------------------------------------------------------------
-// Key Decoders
-// ------------------------------------------------------------------------
 
 InputBindingKey InputManager::MakeHostKeyboardKey(u32 key_code)
 {
@@ -695,10 +630,6 @@ InputBindingKey InputManager::MakePointerAxisKey(u32 index, InputPointerAxis axi
 	key.source_subtype = InputSubclass::PointerAxis;
 	return key;
 }
-
-// ------------------------------------------------------------------------
-// Bind Encoders
-// ------------------------------------------------------------------------
 
 static std::array<const char*, static_cast<u32>(InputSourceType::Count)> s_input_class_names = {{
 	"Keyboard",
@@ -838,10 +769,6 @@ std::string InputManager::GetPointerDeviceName(u32 pointer_index)
 	return fmt::format("Pointer-{}", pointer_index);
 }
 
-// ------------------------------------------------------------------------
-// Binding Enumeration
-// ------------------------------------------------------------------------
-
 float InputManager::ApplySingleBindingScale(float scale, float deadzone, float value)
 {
 	const float svalue = std::clamp(value * scale, 0.0f, 1.0f);
@@ -878,11 +805,9 @@ void InputManager::AddPadBindings(SettingsInterface& si, u32 pad_index, bool is_
 {
 	const Pad::ControllerType type = EmuConfig.Pad.Ports[pad_index].Type;
 
-	// Don't bother checking macros/vibration if it's not a connected type.
 	if (type == Pad::ControllerType::NotConnected)
 		return;
 
-	// Or if it's a multitap port, and this multitap isn't enabled.
 	if (sioPadIsMultitapSlot(pad_index))
 	{
 		const auto& [mt_port, mt_slot] = sioConvertPadToPortAndSlot(pad_index);
@@ -905,7 +830,6 @@ void InputManager::AddPadBindings(SettingsInterface& si, u32 pad_index, bool is_
 				const std::vector<std::string> bindings(si.GetStringList(section.c_str(), bi.name));
 				if (!bindings.empty())
 				{
-					// we use axes for all pad bindings to simplify things, and because they are pressure sensitive
 					const float sensitivity = si.GetFloatValue(section.c_str(), fmt::format("{}Scale", bi.name).c_str(), 1.0f);
 					const float deadzone = si.GetFloatValue(section.c_str(), fmt::format("{}Deadzone", bi.name).c_str(), 0.0f);
 					AddBindings(
@@ -914,7 +838,6 @@ void InputManager::AddPadBindings(SettingsInterface& si, u32 pad_index, bool is_
 						}},
 						bi.bind_type, si, section.c_str(), bi.name, is_profile);
 
-					// Build reverse maps for controller navigation; user bindings take priority over static defaults.
 					if (bi.generic_mapping != GenericInputBinding::Unknown)
 					{
 						for (const std::string& binding_str : bindings)
@@ -931,7 +854,6 @@ void InputManager::AddPadBindings(SettingsInterface& si, u32 pad_index, bool is_
 							else if (bkey.source_subtype == InputSubclass::ControllerAxis)
 							{
 								auto& entry = s_controller_axis_generic_map[bkey.MaskDirection()];
-								// Negate modifier = negative half of axis (e.g. "-Axis0" → LeftStickLeft)
 								if (bkey.modifier == InputModifier::Negate)
 									entry[0] = bi.generic_mapping;
 								else
@@ -942,8 +864,6 @@ void InputManager::AddPadBindings(SettingsInterface& si, u32 pad_index, bool is_
 				}
 			}
 			break;
-
-				// TODO: Move vibration motors in here.
 
 			default:
 				break;
@@ -1016,7 +936,6 @@ void InputManager::AddUSBBindings(SettingsInterface& si, u32 port, bool is_profi
 			case InputBindingInfo::Type::Axis:
 			case InputBindingInfo::Type::HalfAxis:
 			{
-				// normal bindings
 				const std::vector<std::string> bindings(si.GetStringList(section.c_str(), bind_name.c_str()));
 				if (!bindings.empty())
 				{
@@ -1033,7 +952,6 @@ void InputManager::AddUSBBindings(SettingsInterface& si, u32 port, bool is_profi
 
 			case InputBindingInfo::Type::Keyboard:
 			{
-				// set up to receive keyboard events
 				s_keyboard_event_callbacks.push_back([port, base = static_cast<u32>(bi.bind_index)](InputBindingKey key, float value) {
 					USB::SetDeviceBindValue(port, base + key.data, value);
 				});
@@ -1075,10 +993,6 @@ void InputManager::AddUSBBindings(SettingsInterface& si, u32 port, bool is_profi
 	}
 }
 
-// ------------------------------------------------------------------------
-// Event Handling
-// ------------------------------------------------------------------------
-
 bool InputManager::HasAnyBindingsForKey(InputBindingKey key)
 {
 	std::unique_lock lock(s_binding_map_write_lock);
@@ -1111,26 +1025,22 @@ bool InputManager::InvokeEvents(InputBindingKey key, float value, GenericInputBi
 	if (DoEventHook(key, value))
 		return true;
 
-	// If imgui ate the event, don't fire our handlers.
 	const bool skip_button_handlers = PreprocessEvent(key, value, generic_key, axis_neg_key, axis_pos_key);
 	return ProcessEvent(key, value, skip_button_handlers);
 }
 
 bool InputManager::ProcessEvent(InputBindingKey key, float value, bool skip_button_handlers)
 {
-	// find all the bindings associated with this key
 	const InputBindingKey masked_key = key.MaskDirection();
 	const auto range = s_binding_map.equal_range(masked_key);
 	if (range.first == s_binding_map.end())
 		return false;
 
-	// Now we can actually fire/activate bindings.
 	u32 min_num_keys = 0;
 	for (auto it = range.first; it != range.second; ++it)
 	{
 		InputBinding* binding = it->second.get();
 
-		// find the key which matches us
 		for (u32 i = 0; i < binding->num_keys; i++)
 		{
 			if (binding->keys[i].MaskDirection() != masked_key)
@@ -1156,13 +1066,8 @@ bool InputManager::ProcessEvent(InputBindingKey key, float value, bool skip_butt
 					break;
 			}
 
-			// handle inverting, needed for some wheels.
 			value_to_pass = binding->keys[i].invert ? (1.0f - value_to_pass) : value_to_pass;
 
-			// axes are fired regardless of a state change, unless they're zero
-			// (but going from not-zero to zero will still fire, because of the full state)
-			// for buttons, we can use the state of the last chord key, because it'll be 1 on press,
-			// and 0 on release (when the full state changes).
 			if (IsAxisHandler(binding->handler))
 			{
 				if (value_to_pass >= 0.0f && (!skip_button_handlers || value_to_pass == 0.0f))
@@ -1170,25 +1075,15 @@ bool InputManager::ProcessEvent(InputBindingKey key, float value, bool skip_butt
 			}
 			else if (binding->num_keys >= min_num_keys)
 			{
-				// update state based on whether the whole chord was activated
 				const u8 new_mask = (new_state ? (binding->current_mask | bit) : (binding->current_mask & ~bit));
 				const bool prev_full_state = (binding->current_mask == binding->full_mask);
 				const bool new_full_state = (new_mask == binding->full_mask);
 				binding->current_mask = new_mask;
 
-				// Workaround for multi-key bindings that share the same keys.
 				if (binding->num_keys > 1 && new_full_state && prev_full_state != new_full_state && range.first != range.second)
 				{
-					// Because the binding map isn't ordered, we could iterate in the order of Shift+F1 and then
-					// F1, which would mean that F1 wouldn't get cancelled and still activate. So, to handle this
-					// case, we skip activating any future bindings with a fewer number of keys.
 					min_num_keys = std::max<u32>(min_num_keys, binding->num_keys);
 
-					// Basically, if we bind say, F1 and Shift+F1, and press shift and then F1, we'll fire bindings
-					// for both F1 and Shift+F1, when we really only want to fire the binding for Shift+F1. So,
-					// when we activate a multi-key chord (key press), we go through the binding map for all the
-					// other keys in the chord, and cancel them if they have a shorter chord. If they're longer,
-					// they could still activate and take precedence over us, so we leave them alone.
 					for (u32 i = 0; i < binding->num_keys; i++)
 					{
 						const auto range = s_binding_map.equal_range(binding->keys[i].MaskDirection());
@@ -1201,13 +1096,9 @@ bool InputManager::ProcessEvent(InputBindingKey key, float value, bool skip_butt
 								continue;
 							}
 
-							// We only need to cancel the binding if it was fully active before. Which in the above
-							// case of Shift+F1 / F1, it will be.
 							if (other_binding->current_mask == other_binding->full_mask)
 								std::get<InputButtonEventHandler>(other_binding->handler)(-1);
 
-							// Zero out the current bits so that we don't release this binding, if the other part
-							// of the chord releases first.
 							other_binding->current_mask = 0;
 						}
 					}
@@ -1220,7 +1111,6 @@ bool InputManager::ProcessEvent(InputBindingKey key, float value, bool skip_butt
 				}
 			}
 
-			// bail out, since we shouldn't have the same key twice in the chord
 			break;
 		}
 	}
@@ -1230,8 +1120,6 @@ bool InputManager::ProcessEvent(InputBindingKey key, float value, bool skip_butt
 
 void InputManager::ClearBindStateFromSource(InputBindingKey key)
 {
-	// Why are we doing it this way? Because any of the bindings could cause a reload and invalidate our iterators :(.
-	// Axis handlers should be fine, so we'll do those as a first pass.
 	for (const auto& [match_key, binding] : s_binding_map)
 	{
 		if (key.source_type != match_key.source_type || key.source_subtype != match_key.source_subtype ||
@@ -1250,7 +1138,6 @@ void InputManager::ClearBindStateFromSource(InputBindingKey key)
 		}
 	}
 
-	// Now go through the button handlers, and pick them off.
 	bool matched;
 	do
 	{
@@ -1269,12 +1156,10 @@ void InputManager::ClearBindStateFromSource(InputBindingKey key)
 				if (binding->keys[i].MaskDirection() != match_key)
 					continue;
 
-				// Skip if we weren't pressed.
 				const u8 bit = static_cast<u8>(1) << i;
 				if ((binding->current_mask & bit) == 0)
 					continue;
 
-				// Only fire handler if we're changing from active state.
 				const u8 current_mask = binding->current_mask;
 				binding->current_mask &= ~bit;
 
@@ -1286,7 +1171,6 @@ void InputManager::ClearBindStateFromSource(InputBindingKey key)
 				}
 			}
 
-			// Need to start again, might've reloaded.
 			if (matched)
 				break;
 		}
@@ -1296,7 +1180,6 @@ void InputManager::ClearBindStateFromSource(InputBindingKey key)
 bool InputManager::PreprocessEvent(InputBindingKey key, float value, GenericInputBinding generic_key,
 	GenericInputBinding axis_neg_key, GenericInputBinding axis_pos_key)
 {
-	// does imgui want the event?
 	if (key.source_type == InputSourceType::Keyboard)
 	{
 		if (ImGuiManager::ProcessHostKeyEvent(key, value))
@@ -1312,7 +1195,6 @@ bool InputManager::PreprocessEvent(InputBindingKey key, float value, GenericInpu
 	}
 	else if (key.source_subtype == InputSubclass::ControllerButton)
 	{
-		// User binding takes priority; fall back to the generic_key passed by the source (static table).
 		const auto it = s_controller_button_generic_map.find(key.MaskDirection());
 		const GenericInputBinding resolved = (it != s_controller_button_generic_map.end()) ? it->second : generic_key;
 		if (resolved != GenericInputBinding::Unknown)
@@ -1325,7 +1207,6 @@ bool InputManager::PreprocessEvent(InputBindingKey key, float value, GenericInpu
 	}
 	else if (key.source_subtype == InputSubclass::ControllerAxis)
 	{
-		// User binding takes priority; fall back to the neg/pos keys passed by the source (static table).
 		const auto it = s_controller_axis_generic_map.find(key.MaskDirection());
 		const GenericInputBinding neg = (it != s_controller_axis_generic_map.end()) ? it->second[0] : axis_neg_key;
 		const GenericInputBinding pos = (it != s_controller_axis_generic_map.end()) ? it->second[1] : axis_pos_key;
@@ -1367,7 +1248,6 @@ void InputManager::GenerateRelativeMouseEvents()
 			}
 			else
 			{
-				// ImGui can consume mouse wheel events when the mouse is over a UI element.
 				if (delta != 0.0f && ImGuiManager::ProcessPointerAxisEvent(key, delta))
 					continue;
 
@@ -1439,10 +1319,6 @@ void InputManager::OnInputDeviceDisconnected(const InputBindingKey key, const st
 	Host::OnInputDeviceDisconnected(key, identifier);
 }
 
-// ------------------------------------------------------------------------
-// Vibration
-// ------------------------------------------------------------------------
-
 void InputManager::SetUSBVibrationIntensity(u32 port, float large_or_single_motor_intensity, float small_motor_intensity)
 {
 	SetPadVibrationIntensity(Pad::NUM_CONTROLLER_PORTS + port, large_or_single_motor_intensity, small_motor_intensity);
@@ -1462,7 +1338,6 @@ void InputManager::SetPadVibrationIntensity(u32 pad_index, float large_or_single
 
 		if (pad.AreMotorsCombined())
 		{
-			// if the motors are combined, we need to adjust to the maximum of both
 			const float report_intensity = std::max(large_or_single_motor_intensity, small_motor_intensity);
 			if (large_motor.source)
 			{
@@ -1472,14 +1347,12 @@ void InputManager::SetPadVibrationIntensity(u32 pad_index, float large_or_single
 		}
 		else if (large_motor.source == small_motor.source)
 		{
-			// both motors are bound to the same source, do an optimal update
 			large_motor.last_update_time = Common::Timer::GetCurrentValue();
 			large_motor.source->UpdateMotorState(
 				large_motor.binding, small_motor.binding, large_or_single_motor_intensity, small_motor_intensity);
 		}
 		else
 		{
-			// update motors independently
 			if (large_motor.source && large_motor.last_intensity != large_or_single_motor_intensity)
 			{
 				large_motor.last_update_time = Common::Timer::GetCurrentValue();
@@ -1507,7 +1380,6 @@ void InputManager::PauseVibration()
 			if (!motor.source || motor.last_intensity == 0.0f)
 				continue;
 
-			// we deliberately don't zero the intensity here, so it can resume later
 			motor.last_update_time = 0;
 			motor.source->UpdateMotorState(motor.binding, 0.0f);
 		}
@@ -1516,23 +1388,19 @@ void InputManager::PauseVibration()
 
 void InputManager::UpdateContinuedVibration()
 {
-	// update vibration intensities, so if the game does a long effect, it continues
 	const u64 current_time = Common::Timer::GetCurrentValue();
 	for (PadVibrationBinding& pad : s_pad_vibration_array)
 	{
 		if (pad.AreMotorsCombined())
 		{
-			// motors are combined
 			PadVibrationBinding::Motor& large_motor = pad.motors[0];
 			if (!large_motor.source)
 				continue;
 
-			// so only check the first one
 			const double dt = Common::Timer::ConvertValueToSeconds(current_time - large_motor.last_update_time);
 			if (dt < VIBRATION_UPDATE_INTERVAL_SECONDS)
 				continue;
 
-			// but take max of both motors for the intensity
 			const float intensity = pad.GetCombinedIntensity();
 			if (intensity == 0.0f)
 				continue;
@@ -1542,7 +1410,6 @@ void InputManager::UpdateContinuedVibration()
 		}
 		else
 		{
-			// independent motor control
 			for (u32 i = 0; i < MAX_MOTORS_PER_PAD; i++)
 			{
 				PadVibrationBinding::Motor& motor = pad.motors[i];
@@ -1553,17 +1420,12 @@ void InputManager::UpdateContinuedVibration()
 				if (dt < VIBRATION_UPDATE_INTERVAL_SECONDS)
 					continue;
 
-				// re-notify the source of the continued effect
 				motor.last_update_time = current_time;
 				motor.source->UpdateMotorState(motor.binding, motor.last_intensity);
 			}
 		}
 	}
 }
-
-// ------------------------------------------------------------------------
-// Hooks/Event Intercepting
-// ------------------------------------------------------------------------
 
 void InputManager::SetHook(InputInterceptHook::Callback callback)
 {
@@ -1599,10 +1461,6 @@ bool InputManager::DoEventHook(InputBindingKey key, float value)
 			action == InputInterceptHook::CallbackResult::StopProcessingEvent);
 }
 
-// ------------------------------------------------------------------------
-// Binding Updater
-// ------------------------------------------------------------------------
-
 void InputManager::ReloadBindings(SettingsInterface& si, SettingsInterface& binding_si, SettingsInterface& hotkey_binding_si, bool is_binding_profile, bool is_hotkey_profile)
 {
 	PauseVibration();
@@ -1616,11 +1474,8 @@ void InputManager::ReloadBindings(SettingsInterface& si, SettingsInterface& bind
 	s_controller_button_generic_map.clear();
 	s_controller_axis_generic_map.clear();
 
-	// Hotkeys use the base configuration, except if the custom hotkeys option is enabled.
 	AddHotkeyBindings(hotkey_binding_si, is_hotkey_profile);
 
-	// If there's an input profile, we load pad bindings from it alone, rather than
-	// falling back to the base configuration.
 	for (u32 pad = 0; pad < Pad::NUM_CONTROLLER_PORTS; pad++)
 		AddPadBindings(binding_si, pad, is_binding_profile);
 
@@ -1645,7 +1500,6 @@ void InputManager::ReloadBindings(SettingsInterface& si, SettingsInterface& bind
 
 void InputManager::UpdateHostMouseMode()
 {
-	// Check for relative mode bindings, and enable if there's anything using it.
 	bool has_relative_mode_bindings = !s_pointer_move_callbacks.empty();
 	if (!has_relative_mode_bindings)
 	{
@@ -1664,10 +1518,6 @@ void InputManager::UpdateHostMouseMode()
 	const bool has_software_cursor = ImGuiManager::HasSoftwareCursor(0);
 	Host::SetMouseMode(has_relative_mode_bindings, has_relative_mode_bindings || has_software_cursor);
 }
-
-// ------------------------------------------------------------------------
-// Source Management
-// ------------------------------------------------------------------------
 
 bool InputManager::ReloadDevices()
 {

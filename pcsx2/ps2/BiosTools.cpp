@@ -17,10 +17,6 @@ static constexpr u32 MIN_BIOS_SIZE = 4 * _1mb;
 static constexpr u32 MAX_BIOS_SIZE = 8 * _1mb;
 static constexpr u32 DIRENTRY_SIZE = 16;
 
-// --------------------------------------------------------------------------------------
-// romdir structure (packing required!)
-// --------------------------------------------------------------------------------------
-//
 #pragma pack(push, 1)
 
 struct romdir
@@ -60,19 +56,17 @@ void ReadOSDConfigParames()
 	u8 params[16];
 	cdvdReadLanguageParams(params);
 
-	configParams1.UC[0] = params[1] & 0x1F; // SPDIF, Screen mode, RGB/Comp, Jap/Eng Switch (Early bios).
-	configParams1.ps1drvConfig = params[0]; // PS1 Mode Settings.
-	configParams1.version = (params[2] & 0xE0) >> 5; // OSD Ver (Not sure but best guess).
-	configParams1.language = params[2] & 0x1F; // Language.
-	configParams1.timezoneOffset = params[4] | ((u32)(params[3] & 0x7) << 8);  // Timezone offset in minutes.
-	configParams1.timeZoneID = params[6]; // ID for time zone selection
+	configParams1.UC[0] = params[1] & 0x1F;
+	configParams1.ps1drvConfig = params[0];
+	configParams1.version = (params[2] & 0xE0) >> 5;
+	configParams1.language = params[2] & 0x1F;
+	configParams1.timezoneOffset = params[4] | ((u32)(params[3] & 0x7) << 8);
+	configParams1.timeZoneID = params[6];
 	
-	// Region settings for time/date and extended language
-	configParams2.UC[1] = ((u32)params[3] & 0x78) << 1; // Daylight Savings, 24hr clock, Date format
+	configParams2.UC[1] = ((u32)params[3] & 0x78) << 1;
 	configParams2.daylightSavings = configParams2.UC[1] & 0x10 ? 1 : 0;
 	configParams2.timeFormat = configParams2.UC[1] & 0x20 ? 1 : 0;
 	configParams2.dateFormat = configParams2.UC[1] & 0x80 ? 2 : (configParams2.UC[1] & 0x40 ? 1 : 0);
-	// FIXME: format, version and language are set manually by the bios. Not sure if any game needs them, but it seems to set version to 2 and duplicate the language value.
 	configParams2.version = 2;
 	configParams2.language = configParams1.language;
 }
@@ -86,16 +80,15 @@ static bool LoadBiosVersion(std::FILE* fp, u32& version, std::string& descriptio
 			return false;
 
 		if (std::strncmp(rd.fileName, "RESET", sizeof(rd.fileName)) == 0)
-			break; /* found romdir */
+			break;
 	}
 
 	s64 fileOffset = 0;
 	s64 fileSize = FileSystem::FSize64(fp);
 	bool foundRomVer = false;
-	char romver[14 + 1] = {}; // ascii version loaded from disk.
-	char extinfo[15 + 1] = {}; // ascii version loaded from disk.
+	char romver[14 + 1] = {};
+	char extinfo[15 + 1] = {};
 
-	// ensure it's a null-terminated and not zero-length string
 	while (rd.fileName[0] != '\0' && strnlen(rd.fileName, sizeof(rd.fileName)) != sizeof(rd.fileName))
 	{
 		if (std::strncmp(rd.fileName, "EXTINFO", sizeof(rd.fileName)) == 0)
@@ -141,11 +134,8 @@ static bool LoadBiosVersion(std::FILE* fp, u32& version, std::string& descriptio
 			case 'J': zone = "Japan";  region = 0;  break;
 			case 'A': zone = "USA";    region = 1;  break;
 			case 'E': zone = "Europe"; region = 2;  break;
-			// case 'E': zone = "Oceania";region = 3;  break; // Not implemented
 			case 'H': zone = "Asia";   region = 4;  break;
-			// case 'E': zone = "Russia"; region = 3;  break; // Not implemented
 			case 'C': zone = "China";  region = 6;  break;
-			// case 'A': zone = "Mexico"; region = 7;  break; // Not implemented
 			case 'T': zone = (romver[5]=='Z') ? "COH-H" : "T10K";   region = 8;  break;
 			case 'X': zone = "Test";   region = 9;  break;
 			case 'P': zone = "Free";   region = 10; break;
@@ -156,24 +146,15 @@ static bool LoadBiosVersion(std::FILE* fp, u32& version, std::string& descriptio
 				region = 0;
 				break;
 		}
-		// TODO: some regions can be detected only from rom1
-		/* switch (rom1:DVDID[4])
-		{
-			// clang-format off
-			case 'O': zone = "Oceania";region = 3;  break;
-			case 'R': zone = "Russia"; region = 5;  break;
-			case 'M': zone = "Mexico"; region = 7;  break;
-			// clang-format on
-		} */
 
 		char vermaj[3] = {romver[0], romver[1], 0};
 		char vermin[3] = {romver[2], romver[3], 0};
 		description = StringUtil::StdStringFromFormat("%-7s v%s.%s(%c%c/%c%c/%c%c%c%c)  %s %s",
 			zone.c_str(),
 			vermaj, vermin,
-			romver[12], romver[13], // day
-			romver[10], romver[11], // month
-			romver[6], romver[7], romver[8], romver[9], // year!
+			romver[12], romver[13],
+			romver[10], romver[11],
+			romver[6], romver[7], romver[8], romver[9],
 			(romver[5] == 'C') ? "Console" : (romver[5] == 'D') ? "Devel" :
 																  "",
 			serial.c_str());
@@ -189,8 +170,6 @@ static bool LoadBiosVersion(std::FILE* fp, u32& version, std::string& descriptio
 	if (fileSize < (int)fileOffset)
 	{
 		description += StringUtil::StdStringFromFormat(" %d%%", (((int)fileSize * 100) / (int)fileOffset));
-		// we force users to have correct bioses,
-		// not that lame scph10000 of 513KB ;-)
 	}
 
 	return true;
@@ -204,22 +183,13 @@ static void ChecksumIt(u32& result, u32 offset, u32 size)
 		result ^= reinterpret_cast<const u32*>(srcdata)[i];
 }
 
-// Attempts to load a BIOS rom sub-component, by trying multiple combinations of base
-// filename and extension.  The bios specified in the user's configuration is used as
-// the base.
-//
-// Parameters:
-//   ext - extension of the sub-component to load. Valid options are rom1 and rom2.
-//
 static void LoadExtraRom(const char* ext, u32 offset, u32 size)
 {
-	// Try first a basic extension concatenation (normally results in something like name.bin.rom1)
 	std::string Bios1(StringUtil::StdStringFromFormat("%s.%s", BiosPath.c_str(), ext));
 
 	s64 filesize;
 	if ((filesize = FileSystem::GetPathFileSize(Bios1.c_str())) <= 0)
 	{
-		// Try the name properly extensioned next (name.rom1)
 		Bios1 = Path::ReplaceExtension(BiosPath, ext);
 		if ((filesize = FileSystem::GetPathFileSize(Bios1.c_str())) <= 0)
 		{
@@ -236,8 +206,6 @@ static void LoadExtraRom(const char* ext, u32 offset, u32 size)
 		Console.Warning("BIOS Warning: %s could not be read (permission denied?)", ext);
 		return;
 	}
-	// Checksum for ROM1, ROM2?  Rama says no, Gigaherz says yes.  I'm not sure either way.  --air
-	//ChecksumIt( BiosChecksum, dest );
 }
 
 static void LoadIrx(const std::string& filename, u8* dest, size_t maxSize)
@@ -288,32 +256,18 @@ bool IsBIOS(const char* filename, u32& version, std::string& description, u32& r
 	if (!fp)
 		return false;
 
-	// FPS2BIOS is smaller and of variable size
-	//if (inway.Length() < 512*1024) return false;
 	return LoadBiosVersion(fp.get(), version, description, region, zone, serial);
 }
 
 bool IsBIOSAvailable(const std::string& full_path)
 {
-	// We can't use EmuConfig here since it may not be loaded yet.
 	if (!full_path.empty() && FileSystem::FileExists(full_path.c_str()))
 		return true;
 
-	// No bios configured or the configured name is missing, check for one in the BIOS directory.
 	const std::string auto_path(FindBiosImage());
 	return !auto_path.empty() && FileSystem::FileExists(auto_path.c_str());
 }
 
-// Loads the configured bios rom file into PS2 memory.  PS2 memory must be allocated prior to
-// this method being called.
-//
-// Remarks:
-//   This function does not fail if rom1 or rom2 files are missing, since none are
-//   explicitly required for most emulation tasks.
-//
-// Exceptions:
-//   BadStream - Thrown if the primary bios file (usually .bin) is not found, corrupted, etc.
-//
 bool LoadBIOS()
 {
 	pxAssertMsg(eeMem->ROM, "PS2 system memory has not been initialized yet.");
@@ -350,8 +304,6 @@ bool LoadBIOS()
 		return false;
 	}
 
-	// If file is less than 2mb it doesn't have an OSD (Devel consoles)
-	// So skip HLEing OSDSys Param stuff
 	if (filesize < 2465792)
 		NoOSD = true;
 	else
@@ -360,8 +312,6 @@ bool LoadBIOS()
 	BiosChecksum = 0;
 	ChecksumIt(BiosChecksum, 0, Ps2MemSize::Rom);
 	BiosPath = std::move(path);
-
-	//injectIRX("host.irx");	//not fully tested; still buggy
 
 	LoadExtraRom("rom1", Ps2MemSize::Rom, Ps2MemSize::Rom1);
 	LoadExtraRom("rom2", Ps2MemSize::Rom + Ps2MemSize::Rom1, Ps2MemSize::Rom2);

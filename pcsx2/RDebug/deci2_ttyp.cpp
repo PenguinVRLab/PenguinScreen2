@@ -5,10 +5,9 @@
 #include "deci2.h"
 
 struct DECI2_TTYP_HEADER{
-	DECI2_HEADER	h;		//+00
-	u32		flushreq;	//+08
-	//u8	data[0];	//+0C // Not used, so commented out (cottonvibes)
-};			//=0C
+	DECI2_HEADER	h;
+	u32		flushreq;
+};
 
 void sendTTYP(u16 protocol, u8 source, char *data){
 	static char tmp[2048];
@@ -22,5 +21,4 @@ void sendTTYP(u16 protocol, u8 source, char *data){
 		Msgbox::Alert(L"TTYP: Buffer overflow");
 	else
 		memcpy(&tmp[sizeof(DECI2_TTYP_HEADER)], data, strlen(data));
-	//writeData(tmp);
 }

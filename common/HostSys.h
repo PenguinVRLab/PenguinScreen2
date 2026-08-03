@@ -13,9 +13,6 @@
 
 class Error;
 
-// --------------------------------------------------------------------------------------
-//  PageProtectionMode
-// --------------------------------------------------------------------------------------
 class PageProtectionMode
 {
 protected:
@@ -86,9 +83,6 @@ static __fi PageProtectionMode PageAccess_Any()
 	return PageProtectionMode().All();
 }
 
-// --------------------------------------------------------------------------------------
-//  HostSys
-// --------------------------------------------------------------------------------------
 namespace HostSys
 {
 	extern void MemProtect(void* baseaddr, size_t size, const PageProtectionMode& mode);
@@ -97,9 +91,7 @@ namespace HostSys
 	extern void* CreateSharedMemory(const char* name, size_t size);
 	extern void DestroySharedMemory(void* ptr);
 
-	/// JIT write protect for Apple Silicon. Needs to be called prior to writing to any RWX pages.
 #if !defined(__APPLE__) || !defined(ARCH_ARM64)
-	// clang-format -off
 	[[maybe_unused]] __fi static void BeginCodeWrite() {}
 	[[maybe_unused]] __fi static void EndCodeWrite() {}
 	// clang-format on
@@ -108,20 +100,16 @@ namespace HostSys
 	void EndCodeWrite();
 #endif
 
-	/// Flushes the instruction cache on the host for the specified range.
-	/// Only needed on ARM64, X86 has coherent D/I cache.
 #ifdef ARCH_X86
 	[[maybe_unused]] __fi static void FlushInstructionCache(void* address, u32 size) {}
 #else
 	void FlushInstructionCache(void* address, u32 size);
 #endif
 
-	/// Returns the size of pages for the current host.
 	size_t GetRuntimePageSize();
 
-	/// Returns the size of a cache line for the current host.
 	size_t GetRuntimeCacheLineSize();
-} // namespace HostSys
+}
 
 namespace PageFaultHandler
 {
@@ -134,7 +122,7 @@ namespace PageFaultHandler
 	HandlerResult HandlePageFault(void* exception_pc, void* fault_address, bool is_write);
 	bool Install(Error* error = nullptr);
 	bool InstallSecondaryThread();
-} // namespace PageFaultHandler
+}
 
 class SharedMemoryMappingArea
 {
@@ -174,12 +162,8 @@ extern u64 GetTickFrequency();
 extern u64 GetCPUTicks();
 extern u64 GetPhysicalMemory();
 extern u64 GetAvailablePhysicalMemory();
-/// Spin for a short period of time (call while spinning waiting for a lock)
-/// Returns the approximate number of ns that passed
 extern u32 ShortSpin();
-/// Number of ns to spin for before sleeping a thread
 extern const u32 SPIN_TIME_NS;
-/// Like C abort() but adds the given message to the crashlog
 [[noreturn]] void AbortWithMessage(const char* msg);
 
 extern std::string GetOSVersionString();
@@ -196,14 +180,11 @@ const CPUInfo& GetCPUInfo();
 
 namespace Common
 {
-	/// Enables or disables the screen saver from starting.
 	bool InhibitScreensaver(bool inhibit);
 
-	/// Abstracts platform-specific code for asynchronously playing a sound.
-	/// On Windows, this will use PlaySound(). On Linux, it will shell out to aplay. On MacOS, it uses NSSound.
 	bool PlaySoundAsync(const char* path);
 
 	void SetMousePosition(int x, int y);
 	bool AttachMousePositionCb(std::function<void(int,int)> cb);
 	void DetachMousePositionCb();
-} // namespace Common
+}

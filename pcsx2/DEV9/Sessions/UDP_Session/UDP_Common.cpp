@@ -53,7 +53,7 @@ namespace Sessions::UDP_Common
 			return INVALID_SOCKET;
 		}
 
-		constexpr int reuseAddress = true; // BOOL on Windows
+		constexpr int reuseAddress = true;
 		ret = setsockopt(client, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&reuseAddress), sizeof(reuseAddress));
 
 		if (ret == SOCKET_ERROR)
@@ -95,7 +95,6 @@ namespace Sessions::UDP_Common
 		fd_set sReady;
 		fd_set sExcept;
 
-		// not const Linux
 		timeval nowait{};
 		FD_ZERO(&sReady);
 		FD_ZERO(&sExcept);
@@ -129,7 +128,6 @@ namespace Sessions::UDP_Common
 			else
 				Console.Error("DEV9: UDP: Socket error: %d", ret);
 
-			// All socket errors assumed fatal.
 			return {std::nullopt, false};
 		}
 		else if (FD_ISSET(client, &sReady))
@@ -139,8 +137,6 @@ namespace Sessions::UDP_Common
 			std::unique_ptr<u8[]> buffer;
 			sockaddr_in endpoint{};
 
-			// FIONREAD returns total size of all available messages
-			// however, we only read one message at a time
 #ifdef _WIN32
 			ret = ioctlsocket(client, FIONREAD, &available);
 #elif defined(__POSIX__)
@@ -167,10 +163,6 @@ namespace Sessions::UDP_Common
 #endif
 				Console.Error("DEV9: UDP: recvfrom error: %d", ret);
 
-				/*
-				 * We can receive an ICMP Port Unreacable error as a WSAECONNRESET/ECONNREFUSED error
-				 * Ignore the error, recv will be retried next loop
-				 */
 				return {std::nullopt,
 #ifdef _WIN32
 					ret == WSAECONNRESET};
@@ -190,4 +182,4 @@ namespace Sessions::UDP_Common
 		}
 		return {std::nullopt, true};
 	}
-} // namespace Sessions::UDP_Common
+}

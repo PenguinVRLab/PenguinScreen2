@@ -45,5 +45,5 @@ namespace usb_eyetoy
 			FrameFormat m_frame_format = format_mpeg;
 			int m_mirroring_enabled = true;
 		};
-	} // namespace macos_api
-} // namespace usb_eyetoy
+	}
+}

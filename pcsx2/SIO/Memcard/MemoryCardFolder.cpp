@@ -24,7 +24,6 @@
 #include <optional>
 #include <chrono>
 
-// A helper function to parse the YAML file
 static std::optional<ryml::Tree> loadYamlFile(const char* filePath)
 {
 	const std::optional<std::string> buffer = FileSystem::ReadFileToString(filePath);
@@ -43,8 +42,6 @@ static std::optional<ryml::Tree> loadYamlFile(const char* filePath)
 		return std::nullopt;
 	}
 
-	// Repair damaged memory card entries - file names were saved to the YAML file with trailing \0's
-	// due to a possible rapidyaml bug: https://github.com/biojppm/rapidyaml/issues/531
 	for (ryml::NodeRef node : tree->rootref().children())
 	{
 		node.set_key(node.key().trimr('\0'));
@@ -53,7 +50,6 @@ static std::optional<ryml::Tree> loadYamlFile(const char* filePath)
 	return tree;
 }
 
-/// A helper function to write a YAML file
 static void SaveYAMLToFile(const char* filename, const ryml::NodeRef& node)
 {
 	auto file = FileSystem::OpenCFile(filename, "w");
@@ -132,7 +128,6 @@ void FolderMemoryCard::InitializeInternalData()
 
 bool FolderMemoryCard::IsFormatted() const
 {
-	// this should be a good enough arbitrary check, if someone can think of a case where this doesn't work feel free to change
 	return m_superBlock.raw[0x16] == 0x6F;
 }
 
@@ -163,7 +158,6 @@ void FolderMemoryCard::Open(std::string fullPath, const Pcsx2Config::McdOptions&
 			disabled = true;
 		}
 
-		// if nothing exists at a valid location, create a directory for the memory card
 		if (!disabled && m_performFileWrites && !FileSystem::DirectoryExists(fullPath.c_str()))
 		{
 			if (!FileSystem::CreateDirectoryPath(fullPath.c_str(), false))
@@ -175,7 +169,6 @@ void FolderMemoryCard::Open(std::string fullPath, const Pcsx2Config::McdOptions&
 	}
 	else
 	{
-		// if the user has disabled this slot or is using a different memory card type, just return without a console log
 		return;
 	}
 
@@ -233,7 +226,6 @@ void FolderMemoryCard::LoadMemoryCardData(const u32 sizeInClusters, const bool e
 {
 	bool formatted = false;
 
-	// read superblock if it exists
 	const std::string superBlockFileName(Path::Combine(m_folderName, "_pcsx2_superblock"));
 	if (FileSystem::FileExists(superBlockFileName.c_str()))
 	{
@@ -250,7 +242,6 @@ void FolderMemoryCard::LoadMemoryCardData(const u32 sizeInClusters, const bool e
 		FlushBlock(0);
 	}
 
-	// if superblock was valid, load folders and files
 	if (formatted)
 	{
 		if (enableFiltering)
@@ -282,13 +273,11 @@ void FolderMemoryCard::CreateFat()
 	const u32 countFatClusters = (totalClusters % fatEntriesPerCluster) != 0 ? (totalClusters / fatEntriesPerCluster + 1) : (totalClusters / fatEntriesPerCluster);
 	const u32 countDataClusters = m_superBlock.data.alloc_end;
 
-	// create indirect FAT
 	for (unsigned int i = 0; i < countFatClusters; ++i)
 	{
 		m_indirectFat.data[0][i] = GetFreeSystemCluster();
 	}
 
-	// fill FAT with default values
 	for (unsigned int i = 0; i < countDataClusters; ++i)
 	{
 		m_fat.data[0][0][i] = 0x7FFFFFFFu;
@@ -308,22 +297,18 @@ void FolderMemoryCard::CreateRootDir()
 	rootCluster->entries[1].entry.data.name[0] = '.';
 	rootCluster->entries[1].entry.data.name[1] = '.';
 
-	// mark root dir cluster as used
 	m_fat.data[0][0][m_superBlock.data.rootdir_cluster] = LastDataCluster | DataClusterInUseMask;
 }
 
 u32 FolderMemoryCard::GetFreeSystemCluster() const
 {
-	// first block is reserved for superblock
 	u32 highestUsedCluster = (m_superBlock.data.pages_per_block / m_superBlock.data.pages_per_cluster) - 1;
 
-	// can't use any of the indirect fat clusters
 	for (int i = 0; i < IndirectFatClusterCount; ++i)
 	{
 		highestUsedCluster = std::max(highestUsedCluster, m_superBlock.data.ifc_list[i]);
 	}
 
-	// or fat clusters
 	for (int i = 0; i < IndirectFatClusterCount; ++i)
 	{
 		for (int j = 0; j < ClusterSize / 4; ++j)
@@ -340,11 +325,6 @@ u32 FolderMemoryCard::GetFreeSystemCluster() const
 
 u32 FolderMemoryCard::GetAmountDataClusters() const
 {
-	// BIOS reports different cluster values than what the memory card actually has, match that when adding files
-	//  8mb card -> BIOS:  7999 clusters / Superblock:  8135 clusters
-	// 16mb card -> BIOS: 15999 clusters / Superblock: 16295 clusters
-	// 32mb card -> BIOS: 31999 clusters / Superblock: 32615 clusters
-	// 64mb card -> BIOS: 64999 clusters / Superblock: 65255 clusters
 	return (m_superBlock.data.alloc_end / 1000) * 1000 - 1;
 }
 
@@ -402,7 +382,6 @@ MemoryCardFileEntry* FolderMemoryCard::AppendFileEntryToDir(const MemoryCardFile
 	MemoryCardFileEntry* newFileEntry;
 	if (dirEntry->entry.data.length % 2 == 0)
 	{
-		// need new cluster
 		u32 newCluster = GetFreeDataCluster();
 		if (newCluster == 0xFFFFFFFFu)
 		{
@@ -414,7 +393,6 @@ MemoryCardFileEntry* FolderMemoryCard::AppendFileEntryToDir(const MemoryCardFile
 	}
 	else
 	{
-		// can use last page of existing clusters
 		newFileEntry = &m_fileEntryDict[entryCluster].entries[1];
 	}
 
@@ -445,7 +423,7 @@ static bool FilterMatches(const std::string_view fileName, const std::string_vie
 	return false;
 }
 
-bool FolderMemoryCard::AddFolder(MemoryCardFileEntry* const dirEntry, const std::string& dirPath, MemoryCardFileMetadataReference* parent /* = nullptr */, const bool enableFiltering /* = false */, const std::string_view filter /* = "" */)
+bool FolderMemoryCard::AddFolder(MemoryCardFileEntry* const dirEntry, const std::string& dirPath, MemoryCardFileMetadataReference* parent , const bool enableFiltering , const std::string_view filter )
 {
 	if (FileSystem::DirectoryExists(dirPath.c_str()))
 	{
@@ -463,12 +441,11 @@ bool FolderMemoryCard::AddFolder(MemoryCardFileEntry* const dirEntry, const std:
 			}
 		}
 
-		int entryNumber = 2; // include . and ..
+		int entryNumber = 2;
 		for (const auto& file : GetOrderedFiles(dirPath))
 		{
 			if (file.m_isFile)
 			{
-				// don't load files in the root dir if we're filtering; no official software stores files there
 				if (parent == nullptr)
 				{
 					continue;
@@ -480,18 +457,13 @@ bool FolderMemoryCard::AddFolder(MemoryCardFileEntry* const dirEntry, const std:
 			}
 			else
 			{
-				// if possible filter added directories by game serial
-				// this has the effective result of only files relevant to the current game being loaded into the memory card
-				// which means every game essentially sees the memory card as if no other files exist
 				if (enableFiltering && !FilterMatches(file.m_fileName, localFilter))
 				{
 					continue;
 				}
 
-				// is a subdirectory
 				const std::string filePath(Path::Combine(dirPath, file.m_fileName));
 
-				// make sure we have enough space on the memcard for the directory
 				const u32 newNeededClusters = CalculateRequiredClustersOfDirectory(filePath) + ((dirEntry->entry.data.length % 2) == 0 ? 1 : 0);
 				if (newNeededClusters > GetAmountFreeDataClusters())
 				{
@@ -499,11 +471,9 @@ bool FolderMemoryCard::AddFolder(MemoryCardFileEntry* const dirEntry, const std:
 					continue;
 				}
 
-				// add entry for subdir in parent dir
 				MemoryCardFileEntry* newDirEntry = AppendFileEntryToDir(dirEntry);
 				dirEntry->entry.data.length++;
 
-				// set metadata
 				const std::string metaFileName(Path::Combine(Path::Combine(dirPath, file.m_fileName), "_pcsx2_meta_directory"));
 				if (auto metaFile = FileSystem::OpenManagedCFile(metaFileName.c_str(), "rb"); metaFile)
 				{
@@ -520,7 +490,6 @@ bool FolderMemoryCard::AddFolder(MemoryCardFileEntry* const dirEntry, const std:
 					StringUtil::Strlcpy(reinterpret_cast<char*>(newDirEntry->entry.data.name), file.m_fileName.c_str(), sizeof(newDirEntry->entry.data.name));
 				}
 
-				// create new cluster for . and .. entries
 				newDirEntry->entry.data.length = 2;
 				u32 newCluster = GetFreeDataCluster();
 				m_fat.data[0][0][newCluster] = LastDataCluster | DataClusterInUseMask;
@@ -541,7 +510,6 @@ bool FolderMemoryCard::AddFolder(MemoryCardFileEntry* const dirEntry, const std:
 
 				++entryNumber;
 
-				// and add all files in subdir
 				AddFolder(newDirEntry, filePath, dirRef);
 			}
 		}
@@ -560,7 +528,6 @@ bool FolderMemoryCard::AddFile(MemoryCardFileEntry* const dirEntry, const std::s
 
 	if (auto file = FileSystem::OpenManagedCFile(filePath.c_str(), "rb"); file)
 	{
-		// make sure we have enough space on the memcard to hold the data
 		const u32 clusterSize = m_superBlock.data.pages_per_cluster * m_superBlock.data.page_len;
 		const u32 filesize = static_cast<u32>(std::clamp<s64>(FileSystem::FSize64(file.get()), 0, std::numeric_limits<u32>::max()));
 		const u32 countClusters = (filesize % clusterSize) != 0 ? (filesize / clusterSize + 1) : (filesize / clusterSize);
@@ -573,7 +540,6 @@ bool FolderMemoryCard::AddFile(MemoryCardFileEntry* const dirEntry, const std::s
 
 		MemoryCardFileEntry* newFileEntry = AppendFileEntryToDir(dirEntry);
 
-		// set file entry metadata
 		memset(newFileEntry->entry.raw, 0x00, sizeof(newFileEntry->entry.raw));
 
 		std::string metaFileName(Path::Combine(Path::Combine(dirPath, "_pcsx2_meta"), fileEntry.m_fileName));
@@ -599,7 +565,6 @@ bool FolderMemoryCard::AddFile(MemoryCardFileEntry* const dirEntry, const std::s
 			u32 fileDataStartingCluster = GetFreeDataCluster();
 			newFileEntry->entry.data.cluster = fileDataStartingCluster;
 
-			// mark the appropriate amount of clusters as used
 			u32 dataCluster = fileDataStartingCluster;
 			m_fat.data[0][0][dataCluster] = LastDataCluster | DataClusterInUseMask;
 			for (unsigned int i = 0; i < countClusters - 1; ++i)
@@ -620,11 +585,9 @@ bool FolderMemoryCard::AddFile(MemoryCardFileEntry* const dirEntry, const std::s
 		MemoryCardFileMetadataReference* fileRef = AddFileEntryToMetadataQuickAccess(newFileEntry, parent);
 		if (fileRef != nullptr)
 		{
-			// acquire a handle on the file so nothing else can change the file contents while the memory card is open
 			m_lastAccessedFile.ReOpen(m_folderName, fileRef);
 		}
 
-		// and finally, increase file count in the directory entry
 		dirEntry->entry.data.length++;
 
 		return true;
@@ -642,7 +605,6 @@ u32 FolderMemoryCard::CalculateRequiredClustersOfDirectory(const std::string& di
 	u32 requiredFileEntryPages = 2;
 	u32 requiredClusters = 0;
 
-	// No need to read the index file as we are only counting space required; order of files is irrelevant.
 	FileSystem::FindResultsArray files;
 	FileSystem::FindFiles(dirPath.c_str(), "*", FILESYSTEM_FIND_FILES | FILESYSTEM_FIND_FOLDERS | FILESYSTEM_FIND_HIDDEN_FILES | FILESYSTEM_FIND_RELATIVE_PATHS, &files);
 	for (const FILESYSTEM_FIND_DATA& fd : files)
@@ -681,7 +643,6 @@ MemoryCardFileMetadataReference* FolderMemoryCard::AddFileEntryToMetadataQuickAc
 	const u32 firstFileCluster = entry->entry.data.cluster;
 	u32 fileCluster = firstFileCluster;
 
-	// zero-length files have no file clusters
 	if (fileCluster == 0xFFFFFFFFu)
 	{
 		return nullptr;
@@ -732,9 +693,7 @@ u8* FolderMemoryCard::GetSystemBlockPointer(const u32 adr)
 	const u32 endDataCluster = startDataCluster + m_superBlock.data.alloc_end;
 	if (cluster >= startDataCluster && cluster < endDataCluster)
 	{
-		// trying to access a file entry?
 		const u32 fatCluster = cluster - m_superBlock.data.alloc_offset;
-		// if this cluster is unused according to FAT, we can assume we won't find anything
 		if ((m_fat.data[0][0][fatCluster] & DataClusterInUseMask) == 0)
 		{
 			return nullptr;
@@ -756,7 +715,6 @@ u8* FolderMemoryCard::GetSystemBlockPointer(const u32 adr)
 	}
 	else
 	{
-		// trying to access indirect FAT?
 		for (int i = 0; i < IndirectFatClusterCount; ++i)
 		{
 			if (cluster == m_superBlock.data.ifc_list[i])
@@ -764,7 +722,6 @@ u8* FolderMemoryCard::GetSystemBlockPointer(const u32 adr)
 				return &m_indirectFat.raw[i][(page % 2) * PageSize + offset];
 			}
 		}
-		// trying to access FAT?
 		for (int i = 0; i < IndirectFatClusterCount; ++i)
 		{
 			for (int j = 0; j < ClusterSize / 4; ++j)
@@ -795,13 +752,11 @@ u8* FolderMemoryCard::GetFileEntryPointer(const u32 searchCluster, const u32 ent
 
 MemoryCardFileEntryCluster* FolderMemoryCard::GetFileEntryCluster(const u32 currentCluster, const u32 searchCluster, const u32 fileCount)
 {
-	// we found the correct cluster, return pointer to it
 	if (currentCluster == searchCluster)
 	{
 		return &m_fileEntryDict[currentCluster];
 	}
 
-	// check other clusters of this directory
 	const u32 nextCluster = m_fat.data[0][0][currentCluster] & NextDataClusterMask;
 	if (nextCluster != LastDataCluster)
 	{
@@ -812,7 +767,6 @@ MemoryCardFileEntryCluster* FolderMemoryCard::GetFileEntryCluster(const u32 curr
 		}
 	}
 
-	// check subdirectories
 	auto it = m_fileEntryDict.find(currentCluster);
 	if (it != m_fileEntryDict.end())
 	{
@@ -835,11 +789,8 @@ MemoryCardFileEntryCluster* FolderMemoryCard::GetFileEntryCluster(const u32 curr
 	return nullptr;
 }
 
-// This method is actually unused since the introduction of m_fileMetadataQuickAccess.
-// I'll leave it here anyway though to show how you traverse the file system.
 MemoryCardFileEntry* FolderMemoryCard::GetFileEntryFromFileDataCluster(const u32 currentCluster, const u32 searchCluster, std::string* fileName, const size_t originalDirCount, u32* outClusterNumber)
 {
-	// check both entries of the current cluster if they're the file we're searching for, and if yes return it
 	for (int i = 0; i < 2; ++i)
 	{
 		MemoryCardFileEntry* const entry = &m_fileEntryDict[currentCluster].entries[i];
@@ -860,8 +811,6 @@ MemoryCardFileEntry* FolderMemoryCard::GetFileEntryFromFileDataCluster(const u32
 		}
 	}
 
-	// check other clusters of this directory
-	// this can probably be solved more efficiently by looping through nextClusters instead of recursively calling
 	const u32 nextCluster = m_fat.data[0][0][currentCluster] & NextDataClusterMask;
 	if (nextCluster != LastDataCluster)
 	{
@@ -872,7 +821,6 @@ MemoryCardFileEntry* FolderMemoryCard::GetFileEntryFromFileDataCluster(const u32
 		}
 	}
 
-	// check subdirectories
 	for (int i = 0; i < 2; ++i)
 	{
 		MemoryCardFileEntry* const entry = &m_fileEntryDict[currentCluster].entries[i];
@@ -899,13 +847,11 @@ bool FolderMemoryCard::ReadFromFile(u8* dest, u32 adr, u32 dataLength)
 	const u32 cluster = adr / ClusterSizeRaw;
 	const u32 fatCluster = cluster - m_superBlock.data.alloc_offset;
 
-	// if the cluster is unused according to FAT, just return
 	if ((m_fat.data[0][0][fatCluster] & DataClusterInUseMask) == 0)
 	{
 		return false;
 	}
 
-	// figure out which file to read from
 	auto it = m_fileMetadataQuickAccess.find(fatCluster);
 	if (it != m_fileMetadataQuickAccess.end())
 	{
@@ -920,7 +866,6 @@ bool FolderMemoryCard::ReadFromFile(u8* dest, u32 adr, u32 dataLength)
 			if (fileOffset == FileSystem::FTell64(file) || FileSystem::FSeek64(file, fileOffset, SEEK_SET) == 0)
 				bytesRead = std::fread(dest, 1, dataLength, file);
 
-			// if more bytes were requested than actually exist, fill the rest with 0xFF
 			if (bytesRead < dataLength)
 			{
 				memset(&dest[bytesRead], 0xFF, dataLength - bytesRead);
@@ -935,16 +880,12 @@ bool FolderMemoryCard::ReadFromFile(u8* dest, u32 adr, u32 dataLength)
 
 s32 FolderMemoryCard::Read(u8* dest, u32 adr, int size)
 {
-	//const u32 block = adr / BlockSizeRaw;
 	const u32 page = adr / PageSizeRaw;
 	const u32 offset = adr % PageSizeRaw;
-	//const u32 cluster = adr / ClusterSizeRaw;
 	const u32 end = offset + size;
 
 	if (end > PageSizeRaw)
 	{
-		// is trying to read more than one page at a time
-		// do this recursively so that each function call only has to care about one page
 		const u32 toNextPage = PageSizeRaw - offset;
 		Read(dest + toNextPage, adr + toNextPage, size - toNextPage);
 		size = toNextPage;
@@ -952,10 +893,8 @@ s32 FolderMemoryCard::Read(u8* dest, u32 adr, int size)
 
 	if (offset < PageSize)
 	{
-		// is trying to read (part of) an actual data block
 		const u32 dataLength = std::min((u32)size, (u32)(PageSize - offset));
 
-		// if we have a cache for this page, just load from that
 		auto it = m_cache.find(page);
 		if (it != m_cache.end())
 		{
@@ -969,7 +908,6 @@ s32 FolderMemoryCard::Read(u8* dest, u32 adr, int size)
 
 	if (end > PageSize)
 	{
-		// is trying to (partially) read the ECC
 		const u32 eccOffset = PageSize - offset;
 		const u32 eccLength = std::min((u32)(size - offset), (u32)EccSize);
 		const u32 adrStart = page * PageSizeRaw;
@@ -992,7 +930,6 @@ s32 FolderMemoryCard::Read(u8* dest, u32 adr, int size)
 
 	SetTimeLastReadToNow();
 
-	// return 0 on fail, 1 on success?
 	return 1;
 }
 
@@ -1014,16 +951,12 @@ void FolderMemoryCard::ReadDataWithoutCache(u8* const dest, const u32 adr, const
 
 s32 FolderMemoryCard::Save(const u8* src, u32 adr, int size)
 {
-	//const u32 block = adr / BlockSizeRaw;
-	//const u32 cluster = adr / ClusterSizeRaw;
 	const u32 page = adr / PageSizeRaw;
 	const u32 offset = adr % PageSizeRaw;
 	const u32 end = offset + size;
 
 	if (end > PageSizeRaw)
 	{
-		// is trying to store more than one page at a time
-		// do this recursively so that each function call only has to care about one page
 		const u32 toNextPage = PageSizeRaw - offset;
 		Save(src + toNextPage, adr + toNextPage, size - toNextPage);
 		size = toNextPage;
@@ -1031,10 +964,8 @@ s32 FolderMemoryCard::Save(const u8* src, u32 adr, int size)
 
 	if (offset < PageSize)
 	{
-		// is trying to store (part of) an actual data block
 		const u32 dataLength = std::min((u32)size, PageSize - offset);
 
-		// if cache page has not yet been touched, fill it with the data from our memory card
 		auto it = m_cache.find(page);
 		MemoryCardPage* cachePage;
 		if (it == m_cache.end())
@@ -1049,7 +980,6 @@ s32 FolderMemoryCard::Save(const u8* src, u32 adr, int size)
 			cachePage = &it->second;
 		}
 
-		// then just write to the cache
 		memcpy(&cachePage->raw[offset], src, dataLength);
 
 		SetTimeLastWrittenToNow();
@@ -1080,21 +1010,18 @@ void FolderMemoryCard::Flush()
 	Console.WriteLn("FolderMcd: Writing data for slot %u to file system...", m_slot);
 	Common::Timer timeFlushStart;
 
-	// Keep a copy of the old file entries so we can figure out which files and directories, if any, have been deleted from the memory card.
 	std::vector<MemoryCardFileEntryTreeNode> oldFileEntryTree;
 	if (IsFormatted())
 	{
 		CopyEntryDictIntoTree(&oldFileEntryTree, m_superBlock.data.rootdir_cluster, m_fileEntryDict[m_superBlock.data.rootdir_cluster].entries[0].entry.data.length);
 	}
 
-	// first write the superblock if necessary
 	FlushSuperBlock();
 	if (!IsFormatted())
 	{
 		return;
 	}
 
-	// check if we were interrupted in the middle of a save operation, if yes abort
 	FlushBlock(m_superBlock.data.backup_block1);
 	FlushBlock(m_superBlock.data.backup_block2);
 	if (m_backupBlock2.programmedBlock != 0xFFFFFFFFu)
@@ -1106,7 +1033,6 @@ void FolderMemoryCard::Flush()
 	const u32 clusterCount = GetSizeInClusters();
 	const u32 pageCount = clusterCount * 2;
 
-	// then write the indirect FAT
 	for (int i = 0; i < IndirectFatClusterCount; ++i)
 	{
 		const u32 cluster = m_superBlock.data.ifc_list[i];
@@ -1116,7 +1042,6 @@ void FolderMemoryCard::Flush()
 		}
 	}
 
-	// and the FAT
 	for (int i = 0; i < IndirectFatClusterCount; ++i)
 	{
 		for (int j = 0; j < ClusterSize / 4; ++j)
@@ -1129,13 +1054,10 @@ void FolderMemoryCard::Flush()
 		}
 	}
 
-	// then all directory and file entries
 	FlushFileEntries();
 
-	// Now we have the new file system, compare it to the old one and "delete" any files that were in it before but aren't anymore.
 	FlushDeletedFilesAndRemoveUnchangedDataFromCache(oldFileEntryTree);
 
-	// and finally, flush everything that hasn't been flushed yet
 	for (uint i = 0; i < pageCount; ++i)
 	{
 		FlushPage(i);
@@ -1207,7 +1129,6 @@ void FolderMemoryCard::FlushSuperBlock()
 
 void FolderMemoryCard::FlushFileEntries()
 {
-	// Flush all file entry data from the cache into m_fileEntryDict.
 	const u32 rootDirCluster = m_superBlock.data.rootdir_cluster;
 	FlushCluster(rootDirCluster + m_superBlock.data.alloc_offset);
 	MemoryCardFileEntryCluster* rootEntries = &m_fileEntryDict[rootDirCluster];
@@ -1219,10 +1140,8 @@ void FolderMemoryCard::FlushFileEntries()
 
 void FolderMemoryCard::FlushFileEntries(const u32 dirCluster, const u32 remainingFiles, const std::string& dirPath, MemoryCardFileMetadataReference* parent)
 {
-	// flush the current cluster
 	FlushCluster(dirCluster + m_superBlock.data.alloc_offset);
 
-	// if either of the current entries is a subdir, flush that too
 	MemoryCardFileEntryCluster* entries = &m_fileEntryDict[dirCluster];
 	const u32 filesInThisCluster = std::min(remainingFiles, 2u);
 	for (unsigned int i = 0; i < filesInThisCluster; ++i)
@@ -1241,7 +1160,6 @@ void FolderMemoryCard::FlushFileEntries(const u32 dirCluster, const u32 remainin
 
 					if (m_performFileWrites)
 					{
-						// if this directory has nonstandard metadata, write that to the file system
 						const std::string fullSubDirPath(Path::Combine(m_folderName, subDirPath));
 						std::string metaFileName(Path::Combine(fullSubDirPath, "_pcsx2_meta_directory"));
 						if (!FileSystem::DirectoryExists(fullSubDirPath.c_str()))
@@ -1249,7 +1167,6 @@ void FolderMemoryCard::FlushFileEntries(const u32 dirCluster, const u32 remainin
 							FileSystem::CreateDirectoryPath(fullSubDirPath.c_str(), false);
 						}
 
-						// TODO: This logic doesn't make sense. If it's not a directory, create it, then open it as a file?!
 						if (filenameCleaned || entry->entry.data.mode != MemoryCardFileEntry::DefaultDirMode || entry->entry.data.attr != 0)
 						{
 							if (auto metaFile = FileSystem::OpenManagedCFile(metaFileName.c_str(), "wb"); metaFile)
@@ -1259,18 +1176,15 @@ void FolderMemoryCard::FlushFileEntries(const u32 dirCluster, const u32 remainin
 						}
 						else
 						{
-							// if metadata is standard make sure to remove a possibly existing metadata file
 							if (FileSystem::FileExists(metaFileName.c_str()))
 							{
 								FileSystem::DeleteFilePath(metaFileName.c_str());
 							}
 						}
 
-						// write the directory index
 						metaFileName = Path::Combine(fullSubDirPath, "_pcsx2_index");
 						std::optional<ryml::Tree> yaml = loadYamlFile(metaFileName.c_str());
 
-						// if _pcsx2_index hasn't been made yet, start a new file
 						if (!yaml.has_value())
 						{
 							const char initialData[] = "{$ROOT: {timeCreated: 0, timeModified: 0}}";
@@ -1284,7 +1198,6 @@ void FolderMemoryCard::FlushFileEntries(const u32 dirCluster, const u32 remainin
 						{
 							ryml::NodeRef index = yaml.value().rootref();
 
-							// Detect broken index files, every index file should have atleast ONE child ('[$%]ROOT')
 							if (!index.has_children())
 							{
 								AttemptToRecreateIndexFile(fullSubDirPath);
@@ -1295,10 +1208,6 @@ void FolderMemoryCard::FlushFileEntries(const u32 dirCluster, const u32 remainin
 							ryml::NodeRef entryNode;
 							if (index.has_child("%ROOT"))
 							{
-								// NOTE - working around a rapidyaml issue that needs to get resolved upstream
-								// '%' is a directive in YAML and it's not being quoted, this makes the memcards backwards compatible
-								// switched from '%' to '$'
-								// NOTE - this issue has now been resolved, but should be preserved for backwards compatibility
 								entryNode = index["%ROOT"];
 								entryNode.set_key("$ROOT");
 							}
@@ -1308,7 +1217,6 @@ void FolderMemoryCard::FlushFileEntries(const u32 dirCluster, const u32 remainin
 								entryNode["timeCreated"] << entry->entry.data.timeCreated.ToTime();
 								entryNode["timeModified"] << entry->entry.data.timeModified.ToTime();
 
-								// Write out the changes
 								SaveYAMLToFile(metaFileName.c_str(), index);
 							}
 						}
@@ -1325,7 +1233,6 @@ void FolderMemoryCard::FlushFileEntries(const u32 dirCluster, const u32 remainin
 
 				if (entry->entry.data.length == 0)
 				{
-					// empty files need to be explicitly created, as there will be no data cluster referencing it later
 					if (m_performFileWrites)
 					{
 						char cleanName[sizeof(entry->entry.data.name)];
@@ -1354,7 +1261,6 @@ void FolderMemoryCard::FlushFileEntries(const u32 dirCluster, const u32 remainin
 		}
 	}
 
-	// continue to the next cluster of this directory
 	const u32 nextCluster = m_fat.data[0][0][dirCluster];
 	if (nextCluster != (LastDataCluster | DataClusterInUseMask))
 	{
@@ -1371,17 +1277,14 @@ void FolderMemoryCard::FlushDeletedFilesAndRemoveUnchangedDataFromCache(const st
 
 void FolderMemoryCard::FlushDeletedFilesAndRemoveUnchangedDataFromCache(const std::vector<MemoryCardFileEntryTreeNode>& oldFileEntries, const u32 newCluster, const u32 newFileCount, const std::string& dirPath)
 {
-	// go through all file entires of the current directory of the old data
 	for (auto it = oldFileEntries.cbegin(); it != oldFileEntries.cend(); ++it)
 	{
 		const MemoryCardFileEntry* entry = &it->entry;
 		if (entry->IsValid() && entry->IsUsed() && !entry->IsDotDir())
 		{
-			// check if an equivalent entry exists in m_fileEntryDict
 			const MemoryCardFileEntry* newEntry = FindEquivalent(entry, newCluster, newFileCount);
 			if (newEntry == nullptr)
 			{
-				// file/dir doesn't exist anymore, remove!
 				char cleanName[sizeof(entry->entry.data.name)];
 				memcpy(cleanName, (const char*)entry->entry.data.name, sizeof(cleanName));
 				FileAccessHelper::CleanMemcardFilename(cleanName);
@@ -1391,7 +1294,6 @@ void FolderMemoryCard::FlushDeletedFilesAndRemoveUnchangedDataFromCache(const st
 				const std::string newFilePath(Path::Combine(Path::Combine(m_folderName, dirPath), fmt::format("_pcsx2_deleted_{}", cleanName)));
 				if (FileSystem::DirectoryExists(newFilePath.c_str()))
 				{
-					// wxRenameFile doesn't overwrite directories, so we have to remove the old one first
 					FileSystem::RecursiveDeleteDirectory(newFilePath.c_str());
 				}
 				FileSystem::RenamePath(filePath.c_str(), newFilePath.c_str());
@@ -1399,7 +1301,6 @@ void FolderMemoryCard::FlushDeletedFilesAndRemoveUnchangedDataFromCache(const st
 			}
 			else if (entry->IsDir())
 			{
-				// still exists and is a directory, recursive call for subdir
 				char cleanName[sizeof(entry->entry.data.name)];
 				memcpy(cleanName, (const char*)entry->entry.data.name, sizeof(cleanName));
 				FileAccessHelper::CleanMemcardFilename(cleanName);
@@ -1408,7 +1309,6 @@ void FolderMemoryCard::FlushDeletedFilesAndRemoveUnchangedDataFromCache(const st
 			}
 			else if (entry->IsFile())
 			{
-				// still exists and is a file, see if we can remove unchanged data from m_cache
 				RemoveUnchangedDataFromCache(entry, newEntry);
 			}
 		}
@@ -1417,11 +1317,6 @@ void FolderMemoryCard::FlushDeletedFilesAndRemoveUnchangedDataFromCache(const st
 
 void FolderMemoryCard::RemoveUnchangedDataFromCache(const MemoryCardFileEntry* const oldEntry, const MemoryCardFileEntry* const newEntry)
 {
-	// Disclaimer: Technically, to actually prove that file data has not changed and still belongs to the same file, we'd need to keep a copy
-	// of the old FAT cluster chain and compare that as well, and only acknowledge the file as unchanged if none of those have changed. However,
-	// the chain of events that leads to a file having the exact same file contents as a deleted old file while also being placed in the same
-	// data clusters as the deleted file AND matching this condition here, in a quick enough succession that no flush has occurred yet since the
-	// deletion of that old file is incredibly unlikely, so I'm not sure if it's actually worth coding for.
 	if (oldEntry->entry.data.timeModified != newEntry->entry.data.timeModified || oldEntry->entry.data.timeCreated != newEntry->entry.data.timeCreated || oldEntry->entry.data.length != newEntry->entry.data.length || oldEntry->entry.data.cluster != newEntry->entry.data.cluster)
 	{
 		return;
@@ -1457,16 +1352,11 @@ void FolderMemoryCard::RemoveUnchangedDataFromCache(const MemoryCardFileEntry* c
 
 s32 FolderMemoryCard::WriteWithoutCache(const u8* src, u32 adr, int size)
 {
-	//const u32 block = adr / BlockSizeRaw;
-	//const u32 cluster = adr / ClusterSizeRaw;
-	//const u32 page = adr / PageSizeRaw;
 	const u32 offset = adr % PageSizeRaw;
 	const u32 end = offset + size;
 
 	if (end > PageSizeRaw)
 	{
-		// is trying to store more than one page at a time
-		// do this recursively so that each function call only has to care about one page
 		const u32 toNextPage = PageSizeRaw - offset;
 		Save(src + toNextPage, adr + toNextPage, size - toNextPage);
 		size = toNextPage;
@@ -1474,7 +1364,6 @@ s32 FolderMemoryCard::WriteWithoutCache(const u8* src, u32 adr, int size)
 
 	if (offset < PageSize)
 	{
-		// is trying to store (part of) an actual data block
 		const u32 dataLength = std::min((u32)size, PageSize - offset);
 
 		u8* dest = GetSystemBlockPointer(adr);
@@ -1490,11 +1379,8 @@ s32 FolderMemoryCard::WriteWithoutCache(const u8* src, u32 adr, int size)
 
 	if (end > PageSize)
 	{
-		// is trying to store ECC
-		// simply ignore this, is automatically generated when reading
 	}
 
-	// return 0 on fail, 1 on success?
 	return 1;
 }
 
@@ -1505,13 +1391,11 @@ bool FolderMemoryCard::WriteToFile(const u8* src, u32 adr, u32 dataLength)
 	const u32 offset = adr % PageSizeRaw;
 	const u32 fatCluster = cluster - m_superBlock.data.alloc_offset;
 
-	// if the cluster is unused according to FAT, just skip all this, we're not gonna find anything anyway
 	if ((m_fat.data[0][0][fatCluster] & DataClusterInUseMask) == 0)
 	{
 		return false;
 	}
 
-	// figure out which file to write to
 	auto it = m_fileMetadataQuickAccess.find(fatCluster);
 	if (it != m_fileMetadataQuickAccess.end())
 	{
@@ -1641,14 +1525,11 @@ s32 FolderMemoryCard::EraseBlock(u32 adr)
 		Save(eraseData, adr, PageSize);
 	}
 
-	// return 0 on fail, 1 on success?
 	return 1;
 }
 
 u64 FolderMemoryCard::GetCRC() const
 {
-	// Since this is just used as integrity check for savestate loading,
-	// give a timestamp of the last time the memory card was written to
 	return m_timeLastWritten;
 }
 
@@ -1704,22 +1585,18 @@ void FolderMemoryCard::SetTimeLastReadToNow()
 
 void FolderMemoryCard::SetTimeLastWrittenToNow()
 {
-	// CHANGE: this was local time milliseconds, which might be problematic...
-	m_timeLastWritten = std::time(nullptr); // wxGetLocalTimeMillis().GetValue();
+	m_timeLastWritten = std::time(nullptr);
 	m_framesUntilFlush = FramesAfterWriteUntilFlush;
 }
 
 void FolderMemoryCard::AttemptToRecreateIndexFile(const std::string& directory) const
 {
-	// Attempt to fix broken index files (potentially broken in v1.7.2115, fixed in 1.7.2307
 	Console.Error(fmt::format("[Memcard] Folder memory card index file is malformed, backing up and attempting to re-create.  This may not work for all games (ie. GTA), so backing up the current index file!. '{}'",
 		directory));
 
-	// This isn't full-proof, so we backup the broken index file
 	FileSystem::CopyFilePath(Path::Combine(directory, "_pcsx2_index").c_str(),
 		Path::Combine(directory, "_pcsx2_index.invalid.bak").c_str(), true);
 
-	// Create everything relative to a point in time, with an artifical delay to minimize edge-cases
 	auto currTime = std::time(nullptr) - 1000;
 	auto currOrder = 1;
 	ryml::Tree tree;
@@ -1753,7 +1630,7 @@ void FolderMemoryCard::AttemptToRecreateIndexFile(const std::string& directory) 
 
 std::string FolderMemoryCard::GetDisabledMessage(uint slot) const
 {
-	return fmt::format("The PS2-slot {} has been automatically disabled.  You can correct the problem\nand re-enable it at any time using Config:Memory Cards from the main menu.", slot); //TODO: translate internal slot index to human-readable slot description
+	return fmt::format("The PS2-slot {} has been automatically disabled.  You can correct the problem\nand re-enable it at any time using Config:Memory Cards from the main menu.", slot);
 }
 
 std::string FolderMemoryCard::GetCardFullMessage(const std::string& filePath) const
@@ -1769,13 +1646,6 @@ std::vector<FolderMemoryCard::EnumeratedFileEntry> FolderMemoryCard::GetOrderedF
 	FileSystem::FindFiles(dirPath.c_str(), "*", FILESYSTEM_FIND_FILES | FILESYSTEM_FIND_FOLDERS | FILESYSTEM_FIND_RELATIVE_PATHS | FILESYSTEM_FIND_HIDDEN_FILES, &results);
 	if (!results.empty())
 	{
-		// We must be able to support legacy folder memcards without the index file, so for those
-		// track an order variable and make it negative - this way new files get their order preserved
-		// and old files are listed first.
-		// In the YAML File order is stored as an unsigned int, so use a signed int64_t to accommodate for
-		// all possible values without cutting them off
-		// Also exploit the fact pairs sort lexicographically to ensure directories are listed first
-		// (since they don't carry their own order in the index file)
 		std::map<std::pair<bool, int64_t>, EnumeratedFileEntry> sortContainer;
 		int64_t orderForDirectories = 1;
 		int64_t orderForLegacyFiles = -1;
@@ -1817,7 +1687,6 @@ std::vector<FolderMemoryCard::EnumeratedFileEntry> FolderMemoryCard::GetOrderedF
 					}
 				}
 
-				// orderForLegacyFiles will decrement even if it ends up being unused, but that's fine
 				auto key = std::make_pair(true, newOrder);
 				sortContainer.try_emplace(std::move(key), std::move(entry));
 			}
@@ -1833,7 +1702,6 @@ std::vector<FolderMemoryCard::EnumeratedFileEntry> FolderMemoryCard::GetOrderedF
 				{
 					ryml::NodeRef indexForDirectory = yaml.value().rootref();
 
-					// Detect broken index files, every index file should have atleast ONE child ('[$%]ROOT')
 					if (!indexForDirectory.has_children())
 					{
 						AttemptToRecreateIndexFile(subDirPath);
@@ -1844,9 +1712,6 @@ std::vector<FolderMemoryCard::EnumeratedFileEntry> FolderMemoryCard::GetOrderedF
 					const ryml::NodeRef entryNode;
 					if (indexForDirectory.has_child("%ROOT"))
 					{
-						// NOTE - working around a rapidyaml issue that needs to get resolved upstream
-						// '%' is a directive in YAML and it's not being quoted, this makes the memcards backwards compatible
-						// switched from '%' to '$'
 						const auto& node = indexForDirectory["%ROOT"];
 						if (node.has_child("timeCreated"))
 						{
@@ -1871,13 +1736,11 @@ std::vector<FolderMemoryCard::EnumeratedFileEntry> FolderMemoryCard::GetOrderedF
 					}
 				}
 
-				// orderForDirectories will increment even if it ends up being unused, but that's fine
 				auto key = std::make_pair(false, orderForDirectories++);
 				sortContainer.try_emplace(std::move(key), std::move(entry));
 			}
 		}
 
-		// Move items from the intermediate map to a final vector
 		result.reserve(sortContainer.size());
 		for (auto& e : sortContainer)
 		{
@@ -1900,13 +1763,11 @@ void FolderMemoryCard::DeleteFromIndex(const std::string& filePath, const std::s
 		if (index.has_child(ryml::csubstr(entry.data(), entry.length())))
 		{
 			index.remove_child(ryml::csubstr(entry.data(), entry.length()));
-			// Write out the changes
 			SaveYAMLToFile(indexName.c_str(), index);
 		}
 	}
 }
 
-// from http://www.oocities.org/siliconvalley/station/8269/sma02/sma02.html#ECC
 void FolderMemoryCard::CalculateECC(u8* ecc, const u8* data)
 {
 	static const u8 Table[] = {
@@ -1981,7 +1842,7 @@ FileAccessHelper::~FileAccessHelper()
 	this->CloseAll();
 }
 
-std::FILE* FileAccessHelper::Open(const std::string_view folderName, MemoryCardFileMetadataReference* fileRef, bool writeMetadata /* = false */)
+std::FILE* FileAccessHelper::Open(const std::string_view folderName, MemoryCardFileMetadataReference* fileRef, bool writeMetadata )
 {
 	std::string filename(folderName);
 	fileRef->GetPath(&filename);
@@ -2025,7 +1886,6 @@ void FileAccessHelper::WriteMetadata(const std::string_view folderName, const Me
 
 	if (metadataIsNonstandard)
 	{
-		// write metadata of file if it's nonstandard
 		if (!FileSystem::DirectoryExists(metaDirName.c_str()))
 		{
 			FileSystem::CreateDirectoryPath(metaDirName.c_str(), false);
@@ -2037,12 +1897,10 @@ void FileAccessHelper::WriteMetadata(const std::string_view folderName, const Me
 	}
 	else
 	{
-		// if metadata is standard remove metadata file if it exists
 		if (FileSystem::DirectoryExists(metaDirName.c_str()))
 		{
 			FileSystem::DeleteFilePath(metaFileName.c_str());
 
-			// and remove the metadata dir if it's now empty
 			if (FileSystem::DirectoryIsEmpty(metaDirName.c_str()))
 				FileSystem::DeleteDirectory(metaDirName.c_str());
 		}
@@ -2051,7 +1909,6 @@ void FileAccessHelper::WriteMetadata(const std::string_view folderName, const Me
 
 void FileAccessHelper::WriteIndex(const std::string& baseFolderName, MemoryCardFileEntry* const entry, MemoryCardFileMetadataReference* const parent)
 {
-	// Not called for directories atm.
 	pxAssert(entry->IsFile());
 
 	std::string folderName(baseFolderName);
@@ -2070,8 +1927,6 @@ void FileAccessHelper::WriteIndex(const std::string& baseFolderName, MemoryCardF
 
 	const std::string indexFileName(Path::Combine(folderName, "_pcsx2_index"));
 
-	// When length isn't passed explicitly, ryml::to_csubstr spans the entire array, incl. the trailing \0's
-	// due to a possible rapidyaml bug: https://github.com/biojppm/rapidyaml/issues/531
 	const ryml::csubstr key = ryml::csubstr(cleanName, std::strlen(cleanName));
 	std::optional<ryml::Tree> yaml = loadYamlFile(indexFileName.c_str());
 
@@ -2081,13 +1936,12 @@ void FileAccessHelper::WriteIndex(const std::string& baseFolderName, MemoryCardF
 
 		if (!index.has_child(key))
 		{
-			// Newly added file - figure out the sort order as the entry should be added to the end of the list
 			ryml::NodeRef newNode = index[key];
 			newNode |= ryml::MAP;
 			unsigned int maxOrder = 0;
 			for (const auto& n : index.children())
 			{
-				unsigned int currOrder = 0; // NOTE - this limits the usefulness of making the order an int64
+				unsigned int currOrder = 0;
 				if (n.is_map() && n.has_child("order"))
 				{
 					n["order"] >> currOrder;
@@ -2098,26 +1952,22 @@ void FileAccessHelper::WriteIndex(const std::string& baseFolderName, MemoryCardF
 		}
 		ryml::NodeRef entryNode = index[key];
 
-		// Update timestamps basing on internal data
 		const auto* e = &entry->entry.data;
 		entryNode["timeCreated"] << e->timeCreated.ToTime();
 		entryNode["timeModified"] << e->timeModified.ToTime();
 
-		// Write out the changes
 		SaveYAMLToFile(indexFileName.c_str(), index);
 	}
 }
 
-std::FILE* FileAccessHelper::ReOpen(const std::string_view folderName, MemoryCardFileMetadataReference* fileRef, bool writeMetadata /* = false */)
+std::FILE* FileAccessHelper::ReOpen(const std::string_view folderName, MemoryCardFileMetadataReference* fileRef, bool writeMetadata )
 {
 	std::string internalPath;
 	fileRef->GetInternalPath(&internalPath);
 	auto it = m_files.find(internalPath);
 	if (it != m_files.end())
 	{
-		// we already have a handle to this file
 
-		// if the caller wants to write metadata and we haven't done this recently, do so and remember that we did
 		if (writeMetadata)
 		{
 			if (m_lastWrittenFileRef != fileRef)
@@ -2134,7 +1984,6 @@ std::FILE* FileAccessHelper::ReOpen(const std::string_view folderName, MemoryCar
 			}
 		}
 
-		// update the fileRef in the map since it might have been modified or deleted
 		it->second.fileRef = fileRef;
 
 		return it->second.fileHandle;
@@ -2145,7 +1994,7 @@ std::FILE* FileAccessHelper::ReOpen(const std::string_view folderName, MemoryCar
 	}
 }
 
-void FileAccessHelper::CloseFileHandle(std::FILE*& file, const MemoryCardFileEntry* entry /* = nullptr */)
+void FileAccessHelper::CloseFileHandle(std::FILE*& file, const MemoryCardFileEntry* entry )
 {
 	if (file)
 	{
@@ -2194,9 +2043,6 @@ void FileAccessHelper::ClearMetadataWriteState()
 
 bool FileAccessHelper::CleanMemcardFilename(char* name)
 {
-	// invalid characters for filenames in the PS2 file system: { '/', '?', '*' }
-	// the following characters are valid in a PS2 memcard file system but invalid in Windows
-	// there's less restrictions on Linux but by cleaning them always we keep the folders cross-compatible
 	const char illegalChars[] = {'\\', '%', ':', '|', '"', '<', '>'};
 	bool cleaned = false;
 
@@ -2220,7 +2066,6 @@ bool FileAccessHelper::CleanMemcardFilename(char* name)
 
 bool FileAccessHelper::CleanMemcardFilenameEndDotOrSpace(char* name, size_t length)
 {
-	// Windows truncates dots and spaces at the end of filenames, so make sure that doesn't happen
 	bool cleaned = false;
 	for (size_t j = length; j > 0; --j)
 	{
@@ -2277,8 +2122,6 @@ void MemoryCardFileMetadataReference::GetInternalPath(std::string* fileName) con
 FolderMemoryCardAggregator::FolderMemoryCardAggregator()
 {
 #ifdef _WIN32
-	// Override Windows' default allowance for open files. Folder memory cards with more than 32 MB of content are likely to contain more than 512 individual files.
-	// Unix platforms seem to use 1024 by default.
 	_setmaxstdio(1024);
 #endif
 

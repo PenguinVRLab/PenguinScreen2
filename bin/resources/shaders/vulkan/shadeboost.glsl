@@ -38,7 +38,6 @@ layout(set = 0, binding = 0) uniform sampler2D samp0;
 layout(location = 0) in vec2 v_tex;
 layout(location = 0) out vec4 o_col0;
 
-// For all settings: 1.0 = 100% 0.5=50% 1.5 = 150%
 vec4 ContrastSaturationBrightness(vec4 color)
 {
     float brt = params.x;
@@ -46,7 +45,6 @@ vec4 ContrastSaturationBrightness(vec4 color)
     float sat = params.z;
     float gam = params.w;
 
-    // Increase or decrease these values to adjust r, g and b color channels separately
     const float AvgLumR = 0.5;
     const float AvgLumG = 0.5;
     const float AvgLumB = 0.5;

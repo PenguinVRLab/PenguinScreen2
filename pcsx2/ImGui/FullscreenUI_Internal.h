@@ -200,9 +200,6 @@ namespace FullscreenUI
 		Other
 	};
 
-	//////////////////////////////////////////////////////////////////////////
-	// Main
-	//////////////////////////////////////////////////////////////////////////
 	void UpdateGameDetails(std::string path, std::string serial, std::string title, u32 disc_crc, u32 crc);
 	bool AreAnyDialogsOpen();
 	void PauseForMenuOpen(bool set_pause_menu_open);
@@ -237,7 +234,6 @@ namespace FullscreenUI
 	inline bool s_was_paused_on_quick_menu_open = false;
 	inline bool s_about_window_open = false;
 
-	// achievements login dialog state
 	inline bool s_achievements_login_open = false;
 	inline bool s_achievements_login_logging_in = false;
 	inline bool s_achievements_login_show_dismiss = false;
@@ -245,7 +241,6 @@ namespace FullscreenUI
 	inline char s_achievements_login_password[256] = {};
 	inline Achievements::LoginRequestReason s_achievements_login_reason = Achievements::LoginRequestReason::UserInitiated;
 
-	// cover downloader dialog state
 	inline bool s_cover_downloader_open = false;
 	inline std::array<char, 4096> s_cover_downloader_urls_buffer = {};
 	inline bool s_cover_downloader_use_title_filenames = false;
@@ -257,16 +252,12 @@ namespace FullscreenUI
 	inline s32 s_cover_downloader_progress_max = 0;
 	inline s32 s_cover_downloader_progress_value = 0;
 
-	// local copies of the currently-running game
 	inline std::string s_current_game_title;
 	inline std::string s_current_game_subtitle;
 	inline std::string s_current_disc_serial;
 	inline std::string s_current_disc_path;
 	inline u32 s_current_disc_crc;
 
-	//////////////////////////////////////////////////////////////////////////
-	// Resources
-	//////////////////////////////////////////////////////////////////////////
 	bool LoadResources();
 	bool LoadSvgResources();
 	void DestroyResources();
@@ -276,9 +267,6 @@ namespace FullscreenUI
 	inline std::shared_ptr<GSTexture> s_banner_texture;
 	inline std::vector<std::unique_ptr<GSTexture>> s_cleanup_textures;
 
-	//////////////////////////////////////////////////////////////////////////
-	// Landing
-	//////////////////////////////////////////////////////////////////////////
 	void SwitchToLanding();
 	ImGuiFullscreen::FileSelectorFilters GetOpenFileFilters();
 	ImGuiFullscreen::FileSelectorFilters GetDiscImageFilters();
@@ -307,9 +295,6 @@ namespace FullscreenUI
 
 	bool ShouldDefaultToGameList();
 
-	//////////////////////////////////////////////////////////////////////////
-	// Save State List
-	//////////////////////////////////////////////////////////////////////////
 	struct SaveStateListEntry
 	{
 		std::string title;
@@ -341,9 +326,6 @@ namespace FullscreenUI
 	inline bool s_save_state_selector_loading = true;
 	inline bool s_save_state_selector_resuming = false;
 
-	//////////////////////////////////////////////////////////////////////////
-	// Game List
-	//////////////////////////////////////////////////////////////////////////
 	void DrawGameListWindow();
 	void DrawGameList(const ImVec2& heading_size);
 	void DrawGameGrid(const ImVec2& heading_size);
@@ -356,22 +338,16 @@ namespace FullscreenUI
 	GSTexture* GetGameListCover(const GameList::Entry* entry);
 	void DrawGameCover(const GameList::Entry* entry, const ImVec2& size);
 	void DrawGameCover(const GameList::Entry* entry, ImDrawList* draw_list, const ImVec2& min, const ImVec2& max);
-	// For when we have no GameList entry
 	void DrawFallbackCover(const ImVec2& size);
 	void DrawFallbackCover(ImDrawList* draw_list, const ImVec2& min, const ImVec2& max);
 
-	// Trim a string to fit in the given space
 	std::string_view TrimString(const std::pair<ImFont*, float>& font, std::string_view str, float available_space);
 	static constexpr const char* g_ellipsis = "\xe2\x80\xa6";
 
-	// Lazily populated cover images.
 	inline std::unordered_map<std::string, std::string> s_cover_image_map;
 	inline std::vector<const GameList::Entry*> s_game_list_sorted_entries;
 	inline GameListView s_game_list_view = GameListView::Grid;
 
-	//////////////////////////////////////////////////////////////////////////
-	// Background
-	//////////////////////////////////////////////////////////////////////////
 	void LoadCustomBackground();
 	void DrawCustomBackground();
 
@@ -379,17 +355,11 @@ namespace FullscreenUI
 	inline std::string s_custom_background_path;
 	inline bool s_custom_background_enabled = false;
 
-	//////////////////////////////////////////////////////////////////////////
-	// Achievements
-	//////////////////////////////////////////////////////////////////////////
 	void SwitchToAchievementsWindow();
 	void SwitchToLeaderboardsWindow();
 	void DrawAchievementsLoginWindow();
 
 
-	//////////////////////////////////////////////////////////////////////////
-	// Settings
-	//////////////////////////////////////////////////////////////////////////
 	static constexpr double INPUT_BINDING_TIMEOUT_SECONDS = 5.0;
 	static constexpr u32 NUM_MEMORY_CARD_PORTS = 2;
 
@@ -522,4 +492,4 @@ namespace FullscreenUI
 	inline Common::Timer s_input_binding_timer;
 	inline bool s_prefer_english_titles;
 
-} // namespace FullscreenUI
+}

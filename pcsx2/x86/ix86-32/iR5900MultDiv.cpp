@@ -12,10 +12,6 @@ namespace Interp = R5900::Interpreter::OpcodeImpl;
 namespace R5900::Dynarec::OpcodeImpl
 {
 
-/*********************************************************
-* Register mult/div & Register trap logic                *
-* Format:  OP rs, rt                                     *
-*********************************************************/
 #ifndef MULTDIV_RECOMPILE
 
 REC_FUNC_DEL(MULT, _Rd_);
@@ -37,14 +33,7 @@ REC_FUNC_DEL(MADDU1, _Rd_);
 
 static void recWritebackHILO(int info, bool writed, bool upper)
 {
-	// writeback low 32 bits, sign extended to 64 bits
 	bool eax_sign_extended = false;
-
-	// case 1: LO is already in an XMM - use the xmm
-	// case 2: LO is used as an XMM later in the block - use or allocate the XMM
-	// case 3: LO is used as a GPR later in the block - use XMM if upper, otherwise use GPR, so it can be renamed
-	// case 4: LO is already in a GPR - write to the GPR, or write to memory if upper
-	// case 4: LO is not used - writeback to memory
 
 	if (EEINST_LIVETEST(XMMGPR_LO))
 	{
@@ -53,7 +42,6 @@ static void recWritebackHILO(int info, bool writed, bool upper)
 		const int xmmlo = lousedxmm ? _allocGPRtoXMMreg(XMMGPR_LO, MODE_READ | MODE_WRITE) : _checkXMMreg(XMMTYPE_GPRREG, XMMGPR_LO, MODE_WRITE);
 		if (xmmlo >= 0)
 		{
-			// we use CDQE over MOVSX because it's shorter.
 			xCDQE();
 			xPINSR.Q(xRegisterSSE(xmmlo), rax, static_cast<u8>(upper));
 		}
@@ -98,11 +86,8 @@ static void recWritebackHILO(int info, bool writed, bool upper)
 		}
 	}
 
-	// writeback lo to Rd if present
 	if (writed && _Rd_ && EEINST_LIVETEST(_Rd_))
 	{
-		// TODO: This can be made optimal by keeping it in an xmm.
-		// But currently the templates aren't hooked up for that - we'd need a "allow xmm" flag.
 		if (info & PROCESS_EE_D)
 		{
 			if (eax_sign_extended)
@@ -122,9 +107,6 @@ static void recWritebackHILO(int info, bool writed, bool upper)
 
 static void recWritebackConstHILO(u64 res, bool writed, int upper)
 {
-	// It's not often that MULT/DIV are entirely constant. So while the MOV64s here are not optimal
-	// by any means, it's not something that's going to be hit often enough to worry about a cache.
-	// Except for apparently when it's getting set to all-zeros, but that'll be fine with immediates.
 	const s64 loval = static_cast<s64>(static_cast<s32>(static_cast<u32>(res)));
 	const s64 hival = static_cast<s64>(static_cast<s32>(static_cast<u32>(res >> 32)));
 
@@ -168,7 +150,6 @@ static void recWritebackConstHILO(u64 res, bool writed, int upper)
 		}
 	}
 
-	// writeback lo to Rd if present
 	if (writed && _Rd_ && EEINST_LIVETEST(_Rd_))
 	{
 		_eeOnWriteReg(_Rd_, 0);
@@ -181,7 +162,6 @@ static void recWritebackConstHILO(u64 res, bool writed, int upper)
 	}
 }
 
-//// MULT
 static void recMULT_const()
 {
 	s64 res = (s64)g_cpuConstRegs[_Rs_].SL[0] * (s64)g_cpuConstRegs[_Rt_].SL[0];
@@ -191,7 +171,6 @@ static void recMULT_const()
 
 static void recMULTsuper(int info, bool sign, bool upper, int process)
 {
-	// TODO(Stenzek): Use MULX where available.
 	if (process & PROCESS_CONSTS)
 	{
 		xMOV(eax, g_cpuConstRegs[_Rs_].UL[0]);
@@ -210,7 +189,6 @@ static void recMULTsuper(int info, bool sign, bool upper, int process)
 	}
 	else
 	{
-		// S is more likely to be in a register than T (so put T in eax).
 		if (info & PROCESS_EE_T)
 			xMOV(eax, xRegister32(EEREC_T));
 		else
@@ -240,10 +218,8 @@ static void recMULT_constt(int info)
 	recMULTsuper(info, true, false, PROCESS_CONSTT);
 }
 
-// lo/hi allocation are taken care of in recWritebackHILO().
 EERECOMPILE_CODERC0(MULT, XMMINFO_READS | XMMINFO_READT | (_Rd_ ? XMMINFO_WRITED : 0));
 
-//// MULTU
 static void recMULTU_const()
 {
 	const u64 res = (u64)g_cpuConstRegs[_Rs_].UL[0] * (u64)g_cpuConstRegs[_Rt_].UL[0];
@@ -266,10 +242,8 @@ static void recMULTU_constt(int info)
 	recMULTsuper(info, false, false, PROCESS_CONSTT);
 }
 
-// don't specify XMMINFO_WRITELO or XMMINFO_WRITEHI, that is taken care of
 EERECOMPILE_CODERC0(MULTU, XMMINFO_READS | XMMINFO_READT | (_Rd_ ? XMMINFO_WRITED : 0));
 
-////////////////////////////////////////////////////
 static void recMULT1_const()
 {
 	s64 res = (s64)g_cpuConstRegs[_Rs_].SL[0] * (s64)g_cpuConstRegs[_Rt_].SL[0];
@@ -294,7 +268,6 @@ static void recMULT1_constt(int info)
 
 EERECOMPILE_CODERC0(MULT1, XMMINFO_READS | XMMINFO_READT | (_Rd_ ? XMMINFO_WRITED : 0));
 
-////////////////////////////////////////////////////
 static void recMULTU1_const()
 {
 	u64 res = (u64)g_cpuConstRegs[_Rs_].UL[0] * (u64)g_cpuConstRegs[_Rt_].UL[0];
@@ -318,8 +291,6 @@ static void recMULTU1_constt(int info)
 }
 
 EERECOMPILE_CODERC0(MULTU1, XMMINFO_READS | XMMINFO_READT | (_Rd_ ? XMMINFO_WRITED : 0));
-
-//// DIV
 
 static void recDIVconst(int upper)
 {
@@ -358,7 +329,6 @@ static void recDIVsuper(int info, bool sign, bool upper, int process)
 			xMOV(divisor, ptr[&cpuRegs.GPR.r[_Rt_].UL[0]]);
 	}
 
-	// can't use edx, it's part of the dividend
 	pxAssert(divisor.GetId() != edx.GetId());
 
 	if (process & PROCESS_CONSTS)
@@ -367,14 +337,13 @@ static void recDIVsuper(int info, bool sign, bool upper, int process)
 		_eeMoveGPRtoR(rax, _Rs_);
 
 	u8* end1;
-	if (sign) //test for overflow (x86 will just throw an exception)
+	if (sign)
 	{
 		xCMP(eax, 0x80000000);
 		u8* cont1 = JNE8(0);
 		xCMP(divisor, 0xffffffff);
 		u8* cont2 = JNE8(0);
-		//overflow case:
-		xXOR(edx, edx); //EAX remains 0x80000000
+		xXOR(edx, edx);
 		end1 = JMP8(0);
 
 		x86SetJ8(cont1);
@@ -383,13 +352,12 @@ static void recDIVsuper(int info, bool sign, bool upper, int process)
 
 	xCMP(divisor, 0);
 	u8* cont3 = JNE8(0);
-	//divide by zero
 	xMOV(edx, eax);
-	if (sign) //set EAX to (EAX < 0)?1:-1
+	if (sign)
 	{
-		xSAR(eax, 31); //(EAX < 0)?-1:0
-		xSHL(eax, 1); //(EAX < 0)?-2:0
-		xNOT(eax); //(EAX < 0)?1:-1
+		xSAR(eax, 31);
+		xSHL(eax, 1);
+		xNOT(eax);
 	}
 	else
 		xMOV(eax, 0xffffffff);
@@ -411,7 +379,6 @@ static void recDIVsuper(int info, bool sign, bool upper, int process)
 		x86SetJ8(end1);
 	x86SetJ8(end2);
 
-	// need to execute regardless of bad divide
 	recWritebackHILO(info, false, upper);
 }
 
@@ -430,10 +397,8 @@ static void recDIV_constt(int info)
 	recDIVsuper(info, 1, 0, PROCESS_CONSTT);
 }
 
-// We handle S reading in the routine itself, since it needs to go into eax.
-EERECOMPILE_CODERC0(DIV, /*XMMINFO_READS |*/ XMMINFO_READT);
+EERECOMPILE_CODERC0(DIV, XMMINFO_READT);
 
-//// DIVU
 static void recDIVUconst(int upper)
 {
 	u32 quot, rem;
@@ -471,7 +436,7 @@ static void recDIVU_constt(int info)
 	recDIVsuper(info, false, false, PROCESS_CONSTT);
 }
 
-EERECOMPILE_CODERC0(DIVU, /*XMMINFO_READS |*/ XMMINFO_READT);
+EERECOMPILE_CODERC0(DIVU, XMMINFO_READT);
 
 static void recDIV1_const()
 {
@@ -493,7 +458,7 @@ static void recDIV1_constt(int info)
 	recDIVsuper(info, true, true, PROCESS_CONSTT);
 }
 
-EERECOMPILE_CODERC0(DIV1, /*XMMINFO_READS |*/ XMMINFO_READT);
+EERECOMPILE_CODERC0(DIV1, XMMINFO_READT);
 
 static void recDIVU1_const()
 {
@@ -515,13 +480,10 @@ static void recDIVU1_constt(int info)
 	recDIVsuper(info, false, true, PROCESS_CONSTT);
 }
 
-EERECOMPILE_CODERC0(DIVU1, /*XMMINFO_READS |*/ XMMINFO_READT);
-
-// TODO(Stenzek): All of these :(
+EERECOMPILE_CODERC0(DIVU1, XMMINFO_READT);
 
 static void writeBackMAddToHiLoRd(int hiloID)
 {
-	// eax -> LO, edx -> HI
 	xCDQE();
 	if (_Rd_)
 	{
@@ -700,4 +662,4 @@ void recMADDU1()
 
 #endif
 
-} // namespace R5900::Dynarec::OpcodeImpl
+}

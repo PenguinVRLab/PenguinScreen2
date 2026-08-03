@@ -30,7 +30,7 @@ namespace PacketReader::IP::TCP
 		u16 maxSegmentSize;
 
 		TCPopMSS(u16 mss);
-		TCPopMSS(const u8* data, int offset); //Offset will include Kind and Len
+		TCPopMSS(const u8* data, int offset);
 
 		virtual u8 GetLength() const { return 4; }
 		virtual u8 GetCode() const { return 2; }
@@ -49,7 +49,7 @@ namespace PacketReader::IP::TCP
 		u8 windowScale;
 
 		TCPopWS(u8 ws);
-		TCPopWS(const u8* data, int offset); //Offset will include Kind and Len
+		TCPopWS(const u8* data, int offset);
 
 		virtual u8 GetLength() const { return 3; }
 		virtual u8 GetCode() const { return 3; }
@@ -69,7 +69,7 @@ namespace PacketReader::IP::TCP
 		u32 echoTimeStamp;
 
 		TCPopTS(u32 senderTS, u32 echoTS);
-		TCPopTS(const u8* data, int offset); //Offset will include Kind and Len
+		TCPopTS(const u8* data, int offset);
 
 		virtual u8 GetLength() const { return 10; }
 		virtual u8 GetCode() const { return 8; }
@@ -81,4 +81,4 @@ namespace PacketReader::IP::TCP
 			return new TCPopTS(*this);
 		}
 	};
-} // namespace PacketReader::IP::TCP
+}

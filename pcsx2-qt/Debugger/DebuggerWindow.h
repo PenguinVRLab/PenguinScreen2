@@ -55,8 +55,6 @@ public slots:
 	void onStepOut();
 
 Q_SIGNALS:
-	// Only emitted if the pause wasn't a temporary one triggered by the
-	// breakpoint code.
 	void onVMActuallyPaused();
 
 protected:

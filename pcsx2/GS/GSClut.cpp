@@ -14,13 +14,12 @@
 GSClut::GSClut(GSLocalMemory* mem)
 	: m_mem(mem)
 {
-	// 1k + 1k for mirrored area simulating wrapping memory
 	m_clut = static_cast<u16*>(_aligned_malloc(CLUT_ALLOC_SIZE, VECTOR_ALIGNMENT));
 	if (!m_clut)
 		pxFailRel("Failed to allocate CLUT storage.");
 
-	m_buff32 = reinterpret_cast<u32*>(reinterpret_cast<u8*>(m_clut) + 2048); // 1k
-	m_buff64 = reinterpret_cast<u64*>(reinterpret_cast<u8*>(m_clut) + 4096); // 2k
+	m_buff32 = reinterpret_cast<u32*>(reinterpret_cast<u8*>(m_clut) + 2048);
+	m_buff64 = reinterpret_cast<u64*>(reinterpret_cast<u8*>(m_clut) + 4096);
 	m_write.dirty = 1;
 	m_read.dirty = true;
 
@@ -28,15 +27,13 @@ GSClut::GSClut(GSLocalMemory* mem)
 	{
 		for (int j = 0; j < 64; j++)
 		{
-			// The GS seems to check the lower 3 bits to tell if the format is 8/4bit
-			// for the reload.
 			const bool eight_bit = (j & 0x7) == 0x3;
 			const bool four_bit = (j & 0x7) == 0x4;
 
 			switch (i)
 			{
 				case PSMCT32:
-				case PSMCT24: // undocumented (KH?)
+				case PSMCT24:
 					if (eight_bit)
 						m_wc[0][i][j] = &GSClut::WriteCLUT32_I8_CSM1;
 					else if (four_bit)
@@ -64,7 +61,6 @@ GSClut::GSClut(GSLocalMemory* mem)
 					m_wc[0][i][j] = &GSClut::WriteCLUT_NULL;
 			}
 
-			// TODO: test this
 			m_wc[1][i][j] = &GSClut::WriteCLUT_NULL;
 		}
 	}
@@ -145,7 +141,6 @@ bool GSClut::InvalidateRange(u32 start_block, u32 end_block, bool is_draw)
 	GIFRegTEX0 next_cbp;
 	next_cbp.U64 = m_write.next_tex0;
 
-	// Handle wrapping writes. Star Wars Battlefront 2 does this.
 	if ((end_block & 0xFFE0) < (start_block & 0xFFE0))
 	{
 		if ((next_cbp.CBP + 3U) <= end_block)
@@ -170,8 +165,8 @@ bool GSClut::CanLoadCLUT(const GIFRegTEX0& TEX0, const bool update_CBP)
 	switch (TEX0.CLD)
 	{
 		case 0:
-		case 6: // FFX2 menu.
-		case 7: // Ford Mustang Racing, Bouken Jidai Katsugeki Goemon.
+		case 6:
+		case 7:
 			return false;
 		case 1:
 			break;
@@ -204,15 +199,12 @@ bool GSClut::CanLoadCLUT(const GIFRegTEX0& TEX0, const bool update_CBP)
 
 bool GSClut::WriteTest(const GIFRegTEX0& TEX0, const GIFRegTEXCLUT& TEXCLUT)
 {
-	// Check if PSM is an indexed format BEFORE the load condition, updating CBP0/1 on an invalid format is not allowed
-	// and can break games. Corvette (NTSC) is a good example of this.
 	if ((TEX0.PSM & 0x7) < 3)
 		return false;
 
 	if (!CanLoadCLUT(TEX0, true))
 		return false;
 
-	// CLUT only reloads if PSM is a valid index type, avoid unnecessary flushes.
 	return m_write.IsDirty(TEX0, TEXCLUT);
 }
 
@@ -309,7 +301,6 @@ void GSClut::WriteCLUT16S_CSM2(const GIFRegTEX0& TEX0, const GIFRegTEXCLUT& TEXC
 
 void GSClut::WriteCLUT_NULL(const GIFRegTEX0& TEX0, const GIFRegTEXCLUT& TEXCLUT)
 {
-	// xenosaga3, bios
 	GL_INS("[WARNING] CLUT write ignored (psm: %d, cpsm: %d)", TEX0.PSM, TEX0.CPSM);
 }
 
@@ -384,9 +375,8 @@ void GSClut::Read32(const GIFRegTEX0& TEX0, const GIFRegTEXA& TEXA)
 				case PSMT4HL:
 				case PSMT4HH:
 					clut += (TEX0.CSA & 15) << 4;
-					// TODO: merge these functions
 					ReadCLUT_T32_I4(clut, m_buff32);
-					ExpandCLUT64_T32_I8(m_buff32, (u64*)m_buff64); // sw renderer does not need m_buff64 anymore
+					ExpandCLUT64_T32_I8(m_buff32, (u64*)m_buff64);
 					break;
 			}
 		}
@@ -403,9 +393,8 @@ void GSClut::Read32(const GIFRegTEX0& TEX0, const GIFRegTEXA& TEXA)
 				case PSMT4HL:
 				case PSMT4HH:
 					clut += TEX0.CSA << 4;
-					// TODO: merge these functions
 					Expand16(clut, m_buff32, 16, TEXA);
-					ExpandCLUT64_T32_I8(m_buff32, (u64*)m_buff64); // sw renderer does not need m_buff64 anymore
+					ExpandCLUT64_T32_I8(m_buff32, (u64*)m_buff64);
 					break;
 			}
 		}
@@ -420,7 +409,7 @@ void GSClut::Read32(const GIFRegTEX0& TEX0, const GIFRegTEXA& TEXA)
 			float scale;
 			if (!TEX0.CSM)
 			{
-				CBW = 0; // don't care
+				CBW = 0;
 				offset = {};
 				size.x = is_4bit ? 8 : 16;
 				size.y = is_4bit ? 2 : 16;
@@ -446,7 +435,6 @@ void GSClut::Read32(const GIFRegTEX0& TEX0, const GIFRegTEXA& TEXA)
 
 				if (!dst)
 				{
-					// allocate texture lazily
 					dst = g_gs_device->CreateFeedbackTarget(dst_size, 1, GSTexture::Format::Color, false);
 					is_4bit ? (m_gpu_clut4 = dst) : (m_gpu_clut8 = dst);
 					m_gpu_clut_dirty = true;
@@ -475,7 +463,6 @@ void GSClut::Read32(const GIFRegTEX0& TEX0, const GIFRegTEXA& TEXA)
 
 void GSClut::GetAlphaMinMax32(int& amin_out, int& amax_out)
 {
-	// call only after Read32
 
 	if (m_read.dirty)
 		GL_INS("GSClut: GetAlphaMinMax32 m_read.dirty");
@@ -541,15 +528,11 @@ void GSClut::GetAlphaMinMax32(int& amin_out, int& amax_out)
 	amax_out = m_read.amax;
 }
 
-//
-
 void GSClut::WriteCLUT_T32_I8_CSM1(const u32* RESTRICT src, u16* RESTRICT clut, u16 offset)
 {
-	// This is required when CSA is offset from the base of the CLUT so we point to the right data
 	for (int i = offset; i < 16; i++)
 	{
-		const int off = i << 4; // WriteCLUT_T32_I4_CSM1 loads 16 at a time
-		// Source column
+		const int off = i << 4;
 		const int s = clutTableT32I8[off & 0x70] | (off & 0x80);
 
 		WriteCLUT_T32_I4_CSM1(&src[s], &clut[off]);
@@ -558,7 +541,6 @@ void GSClut::WriteCLUT_T32_I8_CSM1(const u32* RESTRICT src, u16* RESTRICT clut, 
 
 __forceinline void GSClut::WriteCLUT_T32_I4_CSM1(const u32* RESTRICT src, u16* RESTRICT clut)
 {
-	// 1 block
 
 #if _M_SSE >= 0x501
 
@@ -599,7 +581,6 @@ __forceinline void GSClut::WriteCLUT_T32_I4_CSM1(const u32* RESTRICT src, u16* R
 
 void GSClut::WriteCLUT_T16_I8_CSM1(const u16* RESTRICT src, u16* RESTRICT clut)
 {
-	// 2 blocks
 
 	GSVector4i* s = (GSVector4i*)src;
 	GSVector4i* d = (GSVector4i*)clut;
@@ -624,7 +605,6 @@ void GSClut::WriteCLUT_T16_I8_CSM1(const u16* RESTRICT src, u16* RESTRICT clut)
 
 __forceinline void GSClut::WriteCLUT_T16_I4_CSM1(const u16* RESTRICT src, u16* RESTRICT clut)
 {
-	// 1 block (half)
 
 	for (int i = 0; i < 16; i++)
 	{
@@ -634,15 +614,8 @@ __forceinline void GSClut::WriteCLUT_T16_I4_CSM1(const u16* RESTRICT src, u16* R
 
 void GSClut::ReadCLUT_T32_I8(const u16* RESTRICT clut, u32* RESTRICT dst, int offset)
 {
-	// Okay this deserves a small explanation
-	// T32 I8 can address up to 256 colors however the offset can be "more than zero" when reading
-	// Previously I assumed that it would wrap around the end of the buffer to the beginning
-	// but it turns out this is incorrect, the address doesn't mirror, it clamps to to the last offset,
-	// probably though some sort of addressing mechanism then picks the color from the lower 0xF of the requested CLUT entry.
-	// if we don't do this, the dirt on GTA SA goes transparent and actually cleans the car driving through dirt.
 	for (int i = 0; i < 256; i += 16)
 	{
-		// Min value + offet or Last CSA * 16 (240)
 		ReadCLUT_T32_I4(&clut[std::min((i + offset), 240)], &dst[i]);
 	}
 }
@@ -830,8 +803,6 @@ __forceinline void GSClut::ExpandCLUT64_T16(const GSVector4i& hi, const GSVector
 	dst[1] = lo.uph16(hi);
 }
 
-// TODO
-
 constinit const GSVector4i GSClut::m_bm = GSVector4i::cxpr(0x00007c00);
 constinit const GSVector4i GSClut::m_gm = GSVector4i::cxpr(0x000003e0);
 constinit const GSVector4i GSClut::m_rm = GSVector4i::cxpr(0x0000001f);
@@ -878,7 +849,7 @@ void GSClut::Expand16(const u16* RESTRICT src, u32* RESTRICT dst, int w, const G
 
 bool GSClut::WriteState::IsDirty(const GIFRegTEX0& TEX0, const GIFRegTEXCLUT& TEXCLUT)
 {
-	constexpr u64 mask = 0x1FFFFFE000000000ull; // CSA CSM CPSM CBP
+	constexpr u64 mask = 0x1FFFFFE000000000ull;
 
 	bool is_dirty = dirty;
 
@@ -898,7 +869,7 @@ bool GSClut::WriteState::IsDirty(const GIFRegTEX0& TEX0, const GIFRegTEXCLUT& TE
 
 bool GSClut::ReadState::IsDirty(const GIFRegTEX0& TEX0)
 {
-	constexpr u64 mask = 0x1FFFFFE000000000ull; // CSA CSM CPSM CBP
+	constexpr u64 mask = 0x1FFFFFE000000000ull;
 
 	bool is_dirty = dirty;
 
@@ -915,20 +886,18 @@ bool GSClut::ReadState::IsDirty(const GIFRegTEX0& TEX0)
 
 bool GSClut::ReadState::IsDirty(const GIFRegTEX0& TEX0, const GIFRegTEXA& TEXA)
 {
-	constexpr u64 tex0_mask = 0x1FFFFFE000000000ull; // CSA CSM CPSM CBP
-	constexpr u64 texa24_mask = 0x80FFull; // AEM TA0
-	constexpr u64 texa16_mask = 0xFF000080FFull; // TA1 AEM TA0
+	constexpr u64 tex0_mask = 0x1FFFFFE000000000ull;
+	constexpr u64 texa24_mask = 0x80FFull;
+	constexpr u64 texa16_mask = 0xFF000080FFull;
 
 	bool is_dirty = dirty;
 
 	if (((this->TEX0.U64 ^ TEX0.U64) & tex0_mask) || (GSLocalMemory::m_psm[this->TEX0.PSM].pal != GSLocalMemory::m_psm[TEX0.PSM].pal))
 		is_dirty |= true;
-	else // Just to optimise the checks.
+	else
 	{
-		// Check TA0 and AEM in 24bit mode.
 		if (TEX0.CPSM == PSMCT24 && ((this->TEXA.U64 ^ TEXA.U64) & texa24_mask))
 			is_dirty |= true;
-		// Check all fields in 16bit mode.
 		else if (TEX0.CPSM >= PSMCT16 && ((this->TEXA.U64 ^ TEXA.U64) & texa16_mask))
 			is_dirty |= true;
 	}

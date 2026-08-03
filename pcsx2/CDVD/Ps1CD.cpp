@@ -11,8 +11,6 @@
 
 #include "common/Threading.h"
 
-//THIS ALL IS FOR THE CDROM REGISTERS HANDLING
-
 enum cdrom_registers
 {
 	CdlSync = 0,
@@ -49,7 +47,6 @@ enum cdrom_registers
 	REPPLAY_ACK = 252,
 	REPPLAY = 253,
 	ASYNC = 254
-	/* don't set 255, it's reserved */
 };
 
 const char* CmdName[0x100] = {
@@ -71,8 +68,6 @@ u8 Test20[] = {0x98, 0x06, 0x10, 0xC3};
 u8 Test22[] = {0x66, 0x6F, 0x72, 0x20, 0x45, 0x75, 0x72, 0x6F};
 u8 Test23[] = {0x43, 0x58, 0x44, 0x32, 0x39, 0x34, 0x30, 0x51};
 
-//backported from PCSXR
-// cdr.Stat:
 #define NoIntr 0
 #define DataReady 1
 #define Complete 2
@@ -80,48 +75,41 @@ u8 Test23[] = {0x43, 0x58, 0x44, 0x32, 0x39, 0x34, 0x30, 0x51};
 #define DataEnd 4
 #define DiskError 5
 
-/* Modes flags */
-#define MODE_INIT (0 << 0)      // Init sets mode 00h or not all bits cleared
-#define MODE_SPEED (1 << 7)     // 0x80
-#define MODE_STRSND (1 << 6)    // 0x40 ADPCM on/off
-#define MODE_SIZE_2340 (1 << 5) // 0x20
-#define MODE_SIZE_2328 (1 << 4) // 0x10
-#define MODE_SIZE_2048 (0 << 4) // 0x00
-#define MODE_SF (1 << 3)        // 0x08 channel on/off
-#define MODE_REPORT (1 << 2)    // 0x04
-#define MODE_AUTOPAUSE (1 << 1) // 0x02
-#define MODE_CDDA (1 << 0)      // 0x01
+#define MODE_INIT (0 << 0)
+#define MODE_SPEED (1 << 7)
+#define MODE_STRSND (1 << 6)
+#define MODE_SIZE_2340 (1 << 5)
+#define MODE_SIZE_2328 (1 << 4)
+#define MODE_SIZE_2048 (0 << 4)
+#define MODE_SF (1 << 3)
+#define MODE_REPORT (1 << 2)
+#define MODE_AUTOPAUSE (1 << 1)
+#define MODE_CDDA (1 << 0)
 
-/* Status flags, to go on cdr.StatP */
-#define STATUS_PLAY (1 << 7)      // 0x80
-#define STATUS_SEEK (1 << 6)      // 0x40
-#define STATUS_READ (1 << 5)      // 0x20
-#define STATUS_SHELLOPEN (1 << 4) // 0x10
-#define STATUS_IDERROR (1 << 3)  // 0x08
-#define STATUS_SEEKERROR (1 << 2)  // 0x04
-#define STATUS_ROTATING (1 << 1)  // 0x02
-#define STATUS_ERROR (1 << 0)     // 0x01
+#define STATUS_PLAY (1 << 7)
+#define STATUS_SEEK (1 << 6)
+#define STATUS_READ (1 << 5)
+#define STATUS_SHELLOPEN (1 << 4)
+#define STATUS_IDERROR (1 << 3)
+#define STATUS_SEEKERROR (1 << 2)
+#define STATUS_ROTATING (1 << 1)
+#define STATUS_ERROR (1 << 0)
 
-/* Errors */
-#define ERROR_NOTREADY (1 << 7)   // 0x80
-#define ERROR_INVALIDCMD (1 << 6) // 0x40
-#define ERROR_INVALIDARG (1 << 5) // 0x20
+#define ERROR_NOTREADY (1 << 7)
+#define ERROR_INVALIDCMD (1 << 6)
+#define ERROR_INVALIDARG (1 << 5)
 
-// 1x = 75 sectors per second
-// PSXCLK = 1 sec in the ps
-// so (PSXCLK / 75) / BIAS = cdr read time (linuzappz)
-u32 cdReadTime; // = ((PSXCLK / 75) / BIAS);
+u32 cdReadTime;
 
 #define CDR_INT(eCycle) PSX_INT(IopEvt_Cdrom, eCycle)
 #define CDREAD_INT(eCycle) PSX_INT(IopEvt_CdromRead, eCycle)
 
-const uint shortSectorSeekReadDelay = 1000; // delay for reads/seeks that may or may not have a seek action preceeding it
-uint sectorSeekReadDelay = 0x800;           // for calculated seek delays
+const uint shortSectorSeekReadDelay = 1000;
+uint sectorSeekReadDelay = 0x800;
 
 static void AddIrqQueue(u8 irq, u32 ecycle);
 
 #if 0
-// Unused
 static __fi int GetCDSpeed()
 {
 	return 1 + ((cdr.Mode >> 7) & 0x1);
@@ -131,11 +119,9 @@ static __fi int GetCDSpeed()
 static __fi void StartReading(u32 type)
 {
 	cdr.Reading = type;
-	// Read's retry. If there's a status error clear and try, try again
 	cdr.StatP &= ~STATUS_ERROR;
 	cdr.FirstSector = 1;
 	cdr.Readed = 0xff;
-	//DevCon.Warning("ReadN/ReadS delay: %d", sectorSeekReadDelay);
 	AddIrqQueue(READ_ACK, sectorSeekReadDelay);
 	sectorSeekReadDelay = shortSectorSeekReadDelay;
 }
@@ -274,7 +260,6 @@ void cdrInterrupt()
 			cdr.StatP &= ~STATUS_ROTATING;
 			cdr.Result[0] = cdr.StatP;
 			cdr.Stat = Complete;
-			// cdr.Stat = Acknowledge;
 			break;
 
 		case CdlPause:
@@ -441,7 +426,7 @@ void cdrInterrupt()
 			cdr.Stat = Acknowledge;
 			switch (cdr.Param[0])
 			{
-				case 0x20: // System Controller ROM Version
+				case 0x20:
 					SetResultSize(4);
 					*(int*)cdr.Result = *(int*)Test20;
 					break;
@@ -469,8 +454,8 @@ void cdrInterrupt()
 
 		case CdlID + 0x20:
 			SetResultSize(8);
-			cdr.Result[0] = 0x00; // 0x08 and cdr.Result[1]|0x10 : audio cd, enters cd player
-			cdr.Result[1] = 0x00; // 0x80 leads to the menu in the bios, else loads CD
+			cdr.Result[0] = 0x00;
+			cdr.Result[1] = 0x00;
 
 			if (!LoadCdBios)
 				cdr.Result[1] |= 0x80;
@@ -530,7 +515,6 @@ void cdrInterrupt()
 			break;
 
 		case REPPLAY:
-			//if ((cdr.Mode & 5) != 5) break;
 			break;
 
 		case 0xff:
@@ -554,8 +538,8 @@ void cdrReadInterrupt()
 		return;
 
 	if (cdr.Stat)
-	{                          // CDR_LOG_I("cdrom: read stat hack %02x %x\n", cdr.Irq, cdr.Stat);
-		CDREAD_INT(0x800 * 4); // * 4 reduces dma3 errors lots here
+	{
+		CDREAD_INT(0x800 * 4);
 		return;
 	}
 
@@ -571,7 +555,6 @@ void cdrReadInterrupt()
 	{
 		while ((cdr.RErr = DoCDVDgetBuffer(cdr.Transfer)), cdr.RErr == -2)
 		{
-			// not finished yet ... block on the read until it finishes.
 			Threading::Sleep(0);
 			Threading::SpinWait();
 		}
@@ -609,32 +592,19 @@ void cdrReadInterrupt()
 	cdr.Readed = 0;
 
 	if ((cdr.Transfer[4 + 2] & 0x80) && (cdr.Mode & 0x2))
-	{ // EOF
+	{
 		DevCon.Warning("CD AutoPausing Read");
 		AddIrqQueue(CdlPause, 0x800);
 	}
 	else
 	{
 		ReadTrack();
-		//DevCon.Warning("normal: %d",cdReadTime);
 		CDREAD_INT((cdr.Mode & 0x80) ? (cdReadTime / 2) : cdReadTime);
 	}
 
 	psxHu32(HW_ISTAT) |= 0x4;
 	return;
 }
-
-/*
-cdrRead0:
-	bit 0 - 0 REG1 command send / 1 REG1 data read
-	bit 1 - 0 data transfer finish / 1 data transfer ready/in progress
-	bit 2 - unknown
-	bit 3 - unknown
-	bit 4 - unknown
-	bit 5 - 1 result ready
-	bit 6 - 1 dma ready
-	bit 7 - 1 command being processed
-*/
 
 u8 cdrRead0(void)
 {
@@ -648,17 +618,11 @@ u8 cdrRead0(void)
 	else
 		cdr.Ctrl &= ~0x40;
 
-	// what means the 0x10 and the 0x08 bits? i only saw it used by the bios
 	cdr.Ctrl |= 0x18;
 
 	CDVD_LOG("CD0 Read: %x", cdr.Ctrl);
 	return psxHu8(0x1800) = cdr.Ctrl;
 }
-
-/*
-cdrWrite0:
-	0 - to send a command / 1 - to get the result
-*/
 
 void cdrWrite0(u8 rt)
 {
@@ -676,9 +640,7 @@ void cdrWrite0(u8 rt)
 
 void setPs1CDVDSpeed(int speed)
 {
-	//Console.Warning(L"SPEED: %dX", speed);
 	cdReadTime = (PSXCLK / (75 * speed));
-	//Console.Warning(L"cdReadTime: %d", unsigned(cdReadTime));
 }
 
 u8 cdrRead1(void)
@@ -704,7 +666,6 @@ void cdrWrite1(u8 rt)
 	cdr.Cmd = rt;
 	cdr.OCUP = 0;
 
-//#define CDRCMD_DEBUG
 #ifdef CDRCMD_DEBUG
 	DevCon.Warning("CD1 write: %x (%s)", rt, CmdName[rt]);
 	if (cdr.ParamC)
@@ -737,10 +698,6 @@ void cdrWrite1(u8 rt)
 
 		case CdlSetloc:
 		{
-			//StopReading();
-			// Setloc is memorizing the wanted target, and marks it as unprocessed, and has no other effect
-			// (it doesn't start reading or seeking, and doesn't interrupt or redirect any active reads).
-			// But it does set the seek target. This is used to set the target then seperately start the seek after setloc
 			int oldSector = msf_to_lsn(cdr.SetSector);
 			for (i = 0; i < 3; i++)
 				cdr.SetSector[i] = btoi(cdr.Param[i]);
@@ -751,16 +708,14 @@ void cdrWrite1(u8 rt)
 			}
 			int newSector = msf_to_lsn(cdr.SetSector);
 
-			// sectorSeekReadDelay should lead to sensible random seek results in QA (Aging Disk) test
 			sectorSeekReadDelay = abs(newSector - oldSector) * 100;
 			if (sectorSeekReadDelay < shortSectorSeekReadDelay)
 				sectorSeekReadDelay = shortSectorSeekReadDelay;
-			//DevCon.Warning("CdlSetloc sectorSeekReadDelay: %d", sectorSeekReadDelay);
 
 			cdr.Ctrl |= 0x80;
 			cdr.Stat = NoIntr;
 			cdr.SetlocPending = 1;
-			AddIrqQueue(cdr.Cmd, 0x800); // the seek delay occurs on the next read / seek command (CdlReadS, CdlSeekL, etc)
+			AddIrqQueue(cdr.Cmd, 0x800);
 		}
 		break;
 		case CdlPlay:
@@ -772,7 +727,6 @@ void cdrWrite1(u8 rt)
 			cdr.Play = 1;
 			cdr.Ctrl |= 0x80;
 			cdr.Stat = NoIntr;
-			// Play is almost identical to CdlReadS, believe it or not. The main difference is that this does not trigger a completed read IRQ
 			StartReading(2);
 			AddIrqQueue(cdr.Cmd, 0x800);
 			break;
@@ -904,7 +858,6 @@ void cdrWrite1(u8 rt)
 			cdr.Ctrl |= 0x80;
 			cdr.Stat = NoIntr;
 
-			//DevCon.Warning("CdlSeekL delay: %d", sectorSeekReadDelay);
 			AddIrqQueue(cdr.Cmd, sectorSeekReadDelay);
 			sectorSeekReadDelay = shortSectorSeekReadDelay;
 			break;
@@ -914,7 +867,6 @@ void cdrWrite1(u8 rt)
 			cdr.Ctrl |= 0x80;
 			cdr.Stat = NoIntr;
 
-			//DevCon.Warning("CdlSeekP delay: %d", sectorSeekReadDelay);
 			AddIrqQueue(cdr.Cmd, sectorSeekReadDelay);
 			sectorSeekReadDelay = shortSectorSeekReadDelay;
 			break;
@@ -1081,9 +1033,8 @@ void psxDma3(u32 madr, u32 bcr, u32 chcr)
 
 			if (cdvd.WaitingDMA)
 			{
-				PSX_INT(IopEvt_CdvdRead, (cdvd.BlockSize / 4) * 12); //Data should be already buffered so simulate DMA time
+				PSX_INT(IopEvt_CdvdRead, (cdvd.BlockSize / 4) * 12);
 			}
-			//SysPrintf("unhandled cdrom dma3: madr: %x, bcr: %x, chcr %x\n", madr, bcr, chcr);
 			return;
 
 		default:

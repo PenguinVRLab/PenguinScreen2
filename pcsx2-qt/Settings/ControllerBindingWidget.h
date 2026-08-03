@@ -70,8 +70,6 @@ private:
 };
 
 
-//////////////////////////////////////////////////////////////////////////
-
 class ControllerMacroWidget : public QWidget
 {
 	Q_OBJECT
@@ -91,8 +89,6 @@ private:
 	ControllerSettingsWindow* m_dialog;
 	std::array<ControllerMacroEditWidget*, NUM_MACROS> m_macros;
 };
-
-//////////////////////////////////////////////////////////////////////////
 
 class ControllerMacroEditWidget : public QWidget
 {
@@ -125,8 +121,6 @@ private:
 	u32 m_frequency = 0;
 };
 
-//////////////////////////////////////////////////////////////////////////
-
 class ControllerCustomSettingsWidget : public QWidget
 {
 	Q_OBJECT
@@ -147,9 +141,6 @@ private:
 	std::string m_config_prefix;
 	ControllerSettingsWindow* m_dialog;
 };
-
-//////////////////////////////////////////////////////////////////////////
-
 
 class ControllerBindingWidget_Base : public QWidget
 {
@@ -249,8 +240,6 @@ public:
 private:
 	Ui::ControllerBindingWidget_Popn m_ui;
 };
-
-//////////////////////////////////////////////////////////////////////////
 
 class USBDeviceWidget final : public QWidget
 {

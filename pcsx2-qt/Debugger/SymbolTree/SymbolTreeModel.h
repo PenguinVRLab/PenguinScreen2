@@ -12,8 +12,6 @@
 #include "DebugTools/DebugInterface.h"
 #include "SymbolTreeNode.h"
 
-// Model for the symbol trees. It will dynamically grow itself as the user
-// chooses to expand different nodes.
 class SymbolTreeModel : public QAbstractItemModel
 {
 	Q_OBJECT
@@ -53,10 +51,8 @@ public:
 	QModelIndex indexFromNode(const SymbolTreeNode& node) const;
 	SymbolTreeNode* nodeFromIndex(const QModelIndex& index) const;
 
-	// Reset the whole model.
 	void reset(std::unique_ptr<SymbolTreeNode> new_root);
 
-	// Remove all the children of a given node, and allow fetching again.
 	void resetChildren(QModelIndex index);
 	void resetChildrenRecursive(SymbolTreeNode& node);
 

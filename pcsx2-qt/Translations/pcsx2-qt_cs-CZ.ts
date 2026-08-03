@@ -1560,11 +1560,6 @@ Pozice v žebříčku: {1} z {2}</translation>
       <translation>Použít výběr stavu Uložit</translation>
     </message>
     <message>
-      <location filename="../Settings/AdvancedSettingsWidget.ui" line="505"/>
-      <source>PINE Settings</source>
-      <translation>Nastavení PINE</translation>
-    </message>
-    <message>
       <location filename="../Settings/AdvancedSettingsWidget.ui" line="527"/>
       <source>Slot:</source>
       <translation>Sloty:</translation>

@@ -3,10 +3,6 @@
 
 #pragma once
 
-/*********************************************************
-* Arithmetic with immediate operand                      *
-* Format:  OP rt, rs, immediate                          *
-*********************************************************/
 namespace R5900 {
 namespace Dynarec {
 namespace OpcodeImpl {
@@ -22,6 +18,6 @@ namespace OpcodeImpl {
 	void recSLTI();
 	void recSLTIU();
 
-} // namespace OpcodeImpl
-} // namespace Dynarec
-} // namespace R5900
+}
+}
+}

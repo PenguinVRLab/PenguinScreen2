@@ -7,7 +7,7 @@
 #include "R5900OpcodeTables.h"
 #include "Debug.h"
 #include "VU.h"
-#include "GS.h" // Required for gsNonMirroredRead()
+#include "GS.h"
 #include "Counters.h"
 
 #include "Host.h"
@@ -36,10 +36,6 @@ enum ReferenceIndexType
 	REF_INDEX_VFPU_INT = 0x20000,
 	REF_INDEX_IS_FLOAT = REF_INDEX_FPU | REF_INDEX_VFPU,
 };
-
-//
-// DebugInterface
-//
 
 bool DebugInterface::m_pause_on_entry = false;
 
@@ -86,10 +82,6 @@ std::optional<u32> DebugInterface::getStackFrameSize(const ccc::Function& functi
 
 	if (stack_frame_size < 0)
 	{
-		// The stack frame size isn't stored in the symbol table, so we try
-		// to extract it from the code by checking for an instruction at the
-		// start of the current function that is in the form of
-		// "addiu $sp, $sp, frame_size" instead.
 
 		u32 instruction = Read32(function.address().value);
 
@@ -178,8 +170,6 @@ const char* DebugInterface::longCpuName(BreakPointCpu cpu)
 	pxFailRel("DebugInterface::longCpuName called with invalid cpu enum.");
 	return "";
 }
-
-// *****************************************************************************
 
 BreakPointCpu R5900DebugInterface::getCpuType()
 {
@@ -367,14 +357,14 @@ int R5900DebugInterface::getRegisterCount(int cat)
 	switch (cat)
 	{
 		case EECAT_GPR:
-			return 35; // 32 + pc + hi + lo
+			return 35;
 		case EECAT_CP0:
 		case EECAT_FPR:
 		case EECAT_FCR:
 		case EECAT_VU0I:
 			return 32;
 		case EECAT_VU0F:
-			return 33; // 32 + ACC
+			return 33;
 		case EECAT_GSPRIV:
 			return 19;
 		default:
@@ -406,11 +396,11 @@ const char* R5900DebugInterface::getRegisterName(int cat, int num)
 		case EECAT_GPR:
 			switch (num)
 			{
-				case 32: // pc
+				case 32:
 					return "pc";
-				case 33: // hi
+				case 33:
 					return "hi";
-				case 34: // lo
+				case 34:
 					return "lo";
 				default:
 					return R5900::GPR_REG[num];
@@ -424,7 +414,7 @@ const char* R5900DebugInterface::getRegisterName(int cat, int num)
 		case EECAT_VU0F:
 			switch (num)
 			{
-				case 32: // ACC
+				case 32:
 					return "ACC";
 				default:
 					return R5900::COP2_REG_FP[num];
@@ -446,13 +436,13 @@ u128 R5900DebugInterface::getRegister(int cat, int num)
 		case EECAT_GPR:
 			switch (num)
 			{
-				case 32: // pc
+				case 32:
 					result = u128::From32(cpuRegs.pc);
 					break;
-				case 33: // hi
+				case 33:
 					result = cpuRegs.HI.UQ;
 					break;
-				case 34: // lo
+				case 34:
 					result = cpuRegs.LO.UQ;
 					break;
 				default:
@@ -472,7 +462,7 @@ u128 R5900DebugInterface::getRegister(int cat, int num)
 		case EECAT_VU0F:
 			switch (num)
 			{
-				case 32: // ACC
+				case 32:
 					result = VU0.ACC.UQ;
 					break;
 				default:
@@ -526,7 +516,6 @@ u32 R5900DebugInterface::getPC()
 	return cpuRegs.pc;
 }
 
-// Taken from COP0.cpp
 bool R5900DebugInterface::getCPCOND0()
 {
 	return (((dmacRegs.stat.CIS | ~dmacRegs.pcr.CPC) & 0x3FF) == 0x3ff);
@@ -544,13 +533,13 @@ void R5900DebugInterface::setRegister(int cat, int num, u128 newValue)
 		case EECAT_GPR:
 			switch (num)
 			{
-				case 32: // pc
+				case 32:
 					cpuRegs.pc = newValue._u32[0];
 					break;
-				case 33: // hi
+				case 33:
 					cpuRegs.HI.UQ = newValue;
 					break;
-				case 34: // lo
+				case 34:
 					cpuRegs.LO.UQ = newValue;
 					break;
 				default:
@@ -570,7 +559,7 @@ void R5900DebugInterface::setRegister(int cat, int num, u128 newValue)
 		case EECAT_VU0F:
 			switch (num)
 			{
-				case 32: // ACC
+				case 32:
 					VU0.ACC.UQ = newValue;
 					break;
 				default:
@@ -602,37 +591,25 @@ bool R5900DebugInterface::isValidAddress(u32 addr)
 {
 	u32 lopart = addr & 0xfFFffFF;
 
-	// get rid of ee ram mirrors
 	switch (addr >> 28)
 	{
 		case 0:
 		case 2:
-			// case 3: throw exception (not mapped ?)
-			// [ 0000_8000 - 01FF_FFFF ] RAM
-			// [ 2000_8000 - 21FF_FFFF ] RAM MIRROR
-			// [ 3000_8000 - 31FF_FFFF ] RAM MIRROR
 			if (lopart >= 0x80000 && lopart < Ps2MemSize::ExposedRam)
 				return !!vtlb_GetPhyPtr(lopart);
 			break;
 		case 1:
-			// [ 1000_0000 - 1000_CFFF ] EE register
 			if (lopart <= 0xcfff)
 				return true;
 
-			// [ 1100_0000 - 1100_FFFF ] VU mem
 			if (lopart >= 0x1000000 && lopart <= 0x100FFff)
 				return true;
 
-			// [ 1200_0000 - 1200_FFFF ] GS regs
 			if (lopart >= 0x2000000 && lopart <= 0x20010ff)
 				return true;
 
-			// [ 1E00_0000 - 1FFF_FFFF ] ROM
-			// if (lopart >= 0xe000000)
-			// 	return true; throw exception (not mapped ?)
 			break;
 		case 7:
-			// [ 7000_0000 - 7000_3FFF ] Scratchpad
 			if (lopart <= 0x3fff)
 				return true;
 			break;
@@ -643,12 +620,10 @@ bool R5900DebugInterface::isValidAddress(u32 addr)
 			break;
 		case 9:
 		case 0xB:
-			// [ 8000_0000 - BFFF_FFFF ] kernel
 			if (lopart >= 0xFC00000)
 				return true;
 			break;
 		case 0xF:
-			// [ 8000_0000 - BFFF_FFFF ] IOP or kernel stack
 			if (lopart >= 0xfff8000)
 				return true;
 			break;
@@ -687,7 +662,6 @@ std::vector<MipsStackWalk::StackFrame> R5900DebugInterface::StackTrace(const Bio
 
 	EEInternalCtx* ctx = static_cast<EEInternalCtx*>(PSM(thread.RegCtx()));
 	u32 pc = thread.PC();
-	// $zero is not in the array so subtract 1
 	u32 ra = ctx->gpr[31 - 1]._u32[0];
 	u32 sp = ctx->gpr[29 - 1]._u32[0];
 
@@ -698,10 +672,6 @@ std::vector<IopMod> R5900DebugInterface::GetModuleList() const
 {
 	return {};
 }
-
-//
-// R3000DebugInterface
-//
 
 BreakPointCpu R3000DebugInterface::getCpuType()
 {
@@ -850,7 +820,7 @@ int R3000DebugInterface::getRegisterCount(int cat)
 	switch (cat)
 	{
 		case IOPCAT_GPR:
-			return 35; // 32 + pc + hi + lo
+			return 35;
 		default:
 			return 0;
 	}
@@ -873,11 +843,11 @@ const char* R3000DebugInterface::getRegisterName(int cat, int num)
 		case IOPCAT_GPR:
 			switch (num)
 			{
-				case 32: // pc
+				case 32:
 					return "pc";
-				case 33: // hi
+				case 33:
 					return "hi";
-				case 34: // lo
+				case 34:
 					return "lo";
 				default:
 					return R5900::GPR_REG[num];
@@ -896,13 +866,13 @@ u128 R3000DebugInterface::getRegister(int cat, int num)
 		case IOPCAT_GPR:
 			switch (num)
 			{
-				case 32: // pc
+				case 32:
 					value = psxRegs.pc;
 					break;
-				case 33: // hi
+				case 33:
 					value = psxRegs.GPR.n.hi;
 					break;
-				case 34: // lo
+				case 34:
 					value = psxRegs.GPR.n.lo;
 					break;
 				default:
@@ -961,13 +931,13 @@ void R3000DebugInterface::setRegister(int cat, int num, u128 newValue)
 		case IOPCAT_GPR:
 			switch (num)
 			{
-				case 32: // pc
+				case 32:
 					psxRegs.pc = newValue._u32[0];
 					break;
-				case 33: // hi
+				case 33:
 					psxRegs.GPR.n.hi = newValue._u32[0];
 					break;
-				case 34: // lo
+				case 34:
 					psxRegs.GPR.n.lo = newValue._u32[0];
 					break;
 				default:
@@ -1055,8 +1025,6 @@ std::vector<IopMod> R3000DebugInterface::GetModuleList() const
 {
 	return getIOPModules();
 }
-
-// *****************************************************************************
 
 ElfMemoryReader::ElfMemoryReader(const ccc::ElfFile& elf)
 	: m_elf(elf)
@@ -1168,8 +1136,6 @@ bool ElfMemoryReader::CompareBytes(u32 address, const void* src, u32 size)
 	return std::memcmp(src, bytes->data(), size) == 0;
 }
 
-// *****************************************************************************
-
 MipsExpressionFunctions::MipsExpressionFunctions(
 	DebugInterface* cpu, const ccc::SymbolDatabase* symbolDatabase, bool shouldEnumerateSymbols)
 	: m_cpu(cpu)
@@ -1192,7 +1158,6 @@ MipsExpressionFunctions::MipsExpressionFunctions(
 
 void MipsExpressionFunctions::enumerateSymbols(const ccc::SymbolDatabase& database)
 {
-	// TODO: Add mangled symbol name maps to CCC and remove this.
 
 	for (const ccc::Function& function : database.functions)
 		m_mangled_function_names_to_handles.emplace(function.mangled_name(), function.handle());
@@ -1275,7 +1240,6 @@ bool MipsExpressionFunctions::parseSymbol(char* str, u64& symbolValue, const ccc
 {
 	std::string name = str;
 
-	// Check for mangled function names.
 	auto function_iterator = m_mangled_function_names_to_handles.find(name);
 	if (function_iterator != m_mangled_function_names_to_handles.end())
 	{
@@ -1287,7 +1251,6 @@ bool MipsExpressionFunctions::parseSymbol(char* str, u64& symbolValue, const ccc
 		}
 	}
 
-	// Check for mangled global variable names.
 	auto global_iterator = m_mangled_global_names_to_handles.find(name);
 	if (global_iterator != m_mangled_global_names_to_handles.end())
 	{
@@ -1299,7 +1262,6 @@ bool MipsExpressionFunctions::parseSymbol(char* str, u64& symbolValue, const ccc
 		}
 	}
 
-	// Check for regular unmangled names.
 	const ccc::Symbol* symbol = database.symbol_with_name(name);
 	if (symbol && symbol->address().valid())
 	{
@@ -1326,9 +1288,7 @@ u64 MipsExpressionFunctions::getReferenceValue(u64 referenceIndex)
 		const R5900::OPCODE& opcode = R5900::GetInstruction(OP);
 		if (opcode.flags & IS_MEMORY)
 		{
-			// Fetch the address in the base register
 			u32 target = cpuRegs.GPR.r[(OP >> 21) & 0x1F].UD[0];
-			// Add the offset (lower 16 bits)
 			target += static_cast<u16>(OP);
 
 			if (referenceIndex & REF_INDEX_OPTARGET)

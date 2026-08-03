@@ -11,12 +11,10 @@ class BlockdumpFileReader final : public ThreadedFileReader
 
 	std::FILE* m_file = nullptr;
 
-	// total number of blocks in the ISO image (including all parts)
 	u32 m_dblocksize = 0;
 	u32 m_blocks = 0;
 	s32 m_blockofs = 0;
 
-	// index table
 	std::unique_ptr<u32[]> m_dtable;
 	int m_dtablesize = 0;
 

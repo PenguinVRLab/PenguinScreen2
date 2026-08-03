@@ -117,20 +117,15 @@ namespace MIPSAnalyst
 
 	static u32 ScanAheadForJumpback(u32 fromAddr, u32 knownStart, u32 knownEnd, MemoryInterface& reader) {
 		static const u32 MAX_AHEAD_SCAN = 0x1000;
-		// Maybe a bit high... just to make sure we don't get confused by recursive tail recursion.
 		static const u32 MAX_FUNC_SIZE = 0x20000;
 
 		if (fromAddr > knownEnd + MAX_FUNC_SIZE) {
 			return INVALIDTARGET;
 		}
 
-		// Code might jump halfway up to before fromAddr, but after knownEnd.
-		// In that area, there could be another jump up to the valid range.
-		// So we track that for a second scan.
 		u32 closestJumpbackAddr = INVALIDTARGET;
 		u32 closestJumpbackTarget = fromAddr;
 
-		// We assume the furthest jumpback is within the func.
 		u32 furthestJumpbackAddr = INVALIDTARGET;
 
 		for (u32 ahead = fromAddr; ahead < fromAddr + MAX_AHEAD_SCAN; ahead += 4) {
@@ -141,11 +136,9 @@ namespace MIPSAnalyst
 			}
 
 			if (target != INVALIDTARGET) {
-				// Only if it comes back up to known code within this func.
 				if (target >= knownStart && target <= knownEnd) {
 					furthestJumpbackAddr = ahead;
 				}
-				// But if it jumps above fromAddr, we should scan that area too...
 				if (target < closestJumpbackTarget && target < fromAddr && target > knownEnd) {
 					closestJumpbackAddr = ahead;
 					closestJumpbackTarget = target;
@@ -187,7 +180,6 @@ namespace MIPSAnalyst
 
 		u32 addr;
 		for (addr = startAddr; addr < endAddr; addr += 4) {
-			// Use pre-existing symbol map info if available. May be more reliable.
 			ccc::FunctionHandle existing_symbol_handle = database.functions.first_handle_from_starting_address(addr);
 			const ccc::Function* existing_symbol = database.functions.symbol_from_handle(existing_symbol_handle);
 			
@@ -209,10 +201,8 @@ namespace MIPSAnalyst
 					furthestBranch = target;
 				}
 
-				// beq $zero, $zero, xyz
 				if ((op >> 16) == 0x1000)
 				{
-					// If it's backwards, and there's no other branch passing it, treat as noreturn
 					if(target < addr && furthestBranch < addr)
 					{
 						end = suspectedNoReturn = true;
@@ -220,7 +210,6 @@ namespace MIPSAnalyst
 				}
 			} else if ((op & 0xFC000000) == 0x08000000) {
 				u32 sureTarget = GetJumpTarget(addr, reader);
-				// Check for a tail call.  Might not even have a jr ra.
 				if (sureTarget != INVALIDTARGET && sureTarget < currentFunction.start) {
 					if (furthestBranch > addr) {
 						looking = true;
@@ -229,7 +218,6 @@ namespace MIPSAnalyst
 						end = true;
 					}
 				} else if (sureTarget != INVALIDTARGET && sureTarget > addr && sureTarget > furthestBranch) {
-					// A jump later.  Probably tail, but let's check if it jumps back.
 					u32 knownEnd = furthestBranch == 0 ? addr : furthestBranch;
 					u32 jumpback = ScanAheadForJumpback(sureTarget, currentFunction.start, knownEnd, reader);
 					if (jumpback != INVALIDTARGET && jumpback > addr && jumpback > knownEnd) {
@@ -246,7 +234,6 @@ namespace MIPSAnalyst
 			}
 
 			if (op == MIPS_MAKE_JR_RA()) {
-				// If a branch goes to the jr ra, it's still ending here.
 				if (furthestBranch > addr) {
 					looking = true;
 					addr += 4;
@@ -258,7 +245,6 @@ namespace MIPSAnalyst
 			if (looking) {
 				if (addr >= furthestBranch) {
 					u32 sureTarget = GetSureBranchTarget(addr, reader);
-					// Regular j only, jals are to new funcs.
 					if (sureTarget == INVALIDTARGET && ((op & 0xFC000000) == 0x08000000)) {
 						sureTarget = GetJumpTarget(addr, reader);
 					}
@@ -266,8 +252,6 @@ namespace MIPSAnalyst
 					if (sureTarget != INVALIDTARGET && sureTarget < addr) {
 						end = true;
 					} else if (sureTarget != INVALIDTARGET) {
-						// Okay, we have a downward jump.  Might be an else or a tail call...
-						// If there's a jump back upward in spitting distance of it, it's an else.
 						u32 knownEnd = furthestBranch == 0 ? addr : furthestBranch;
 						u32 jumpback = ScanAheadForJumpback(sureTarget, currentFunction.start, knownEnd, reader);
 						if (jumpback != INVALIDTARGET && jumpback > addr && jumpback > knownEnd) {
@@ -277,17 +261,11 @@ namespace MIPSAnalyst
 				}
 			}
 
-			// Prevent functions from being generated that overlap with existing
-			// symbols. This is mainly a problem with symbols from SNDLL symbol
-			// tables as they will have a size of zero.
 			ccc::FunctionHandle next_symbol_handle = database.functions.first_handle_from_starting_address(addr+8);
 			const ccc::Function* next_symbol = database.functions.symbol_from_handle(next_symbol_handle);
 			end |= next_symbol != nullptr;
 
 			if (end) {
-				// Most functions are aligned to 8 or 16 bytes, so add padding
-				// to this one unless a symbol exists implying a new function
-				// follows immediately.
 				while (next_symbol == nullptr && ((addr+8) % 16) && reader.Read32(addr+8) == 0)
 					addr += 4;
 
@@ -323,9 +301,6 @@ namespace MIPSAnalyst
 			if (!symbol) {
 				std::string name;
 
-				// The SNDLL importer may create label symbols for functions if
-				// they're not in a section named ".text" since it can't
-				// otherwise distinguish between functions and globals.
 				for (auto [address, handle] : database.labels.handles_from_starting_address(function.start)) {
 					ccc::Label* label = database.labels.symbol_from_handle(handle);
 					if (label && !label->is_junk) {
@@ -377,7 +352,6 @@ namespace MIPSAnalyst
 		u32 op = info.encodedOpcode;
 		const R5900::OPCODE& opcode = R5900::GetInstruction(op);
 
-		// extract all the branch related information
 		info.isBranch = (opcode.flags & IS_BRANCH) != 0;
 		if (info.isBranch)
 		{
@@ -396,7 +370,6 @@ namespace MIPSAnalyst
 				info.isConditional = true;
 				info.branchTarget = info.opcodeAddress + 4 + ((s16)(op&0xFFFF)<<2);
 
-				// Sign extend from 32bit for IOP regs
 				if (info.cpu->getRegisterSize(0) == 32) {
 					rs = (s32)info.cpu->getRegister(0,MIPS_GET_RS(op))._u32[0];
 					rt = (s32)info.cpu->getRegister(0,MIPS_GET_RT(op))._u32[0];
@@ -409,12 +382,12 @@ namespace MIPSAnalyst
 				{
 				case CONDTYPE_EQ:
 					info.conditionMet = (rt == rs);
-					if (MIPS_GET_RT(op) == MIPS_GET_RS(op))	// always true
+					if (MIPS_GET_RT(op) == MIPS_GET_RS(op))
 						info.isConditional = false;
 					break;
 				case CONDTYPE_NE:
 					info.conditionMet = (rt != rs);
-					if (MIPS_GET_RT(op) == MIPS_GET_RS(op))	// always false
+					if (MIPS_GET_RT(op) == MIPS_GET_RS(op))
 						info.isConditional = false;
 					break;
 				case CONDTYPE_LEZ:
@@ -445,7 +418,6 @@ namespace MIPSAnalyst
 				break;
 			case BRANCHTYPE_ERET:
 				info.isConditional = false;
-				// probably shouldn't be hard coded like this...
 				if (cpuRegs.CP0.n.Status.b.ERL)
 				{
 					info.branchTarget = cpuRegs.CP0.n.ErrorEPC;
@@ -485,7 +457,6 @@ namespace MIPSAnalyst
 			}
 		}
 
-		// extract the accessed memory address
 		info.isDataAccess = (opcode.flags & IS_MEMORY) != 0;
 		if (info.isDataAccess)
 		{
@@ -525,7 +496,6 @@ namespace MIPSAnalyst
 			info.releventAddress = info.dataAddress;
 		}
 
-		// gather relevant address for alu operations
 		if (opcode.flags & IS_ALU)
 		{
 			u64 rs,rt;

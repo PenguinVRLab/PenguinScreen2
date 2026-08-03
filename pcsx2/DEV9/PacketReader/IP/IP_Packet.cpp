@@ -70,7 +70,6 @@ namespace PacketReader::IP
 	{
 		int offset = 0;
 
-		//Bits 0-31
 		u8 v_hl;
 		NetLib::ReadByte08(buffer, &offset, &v_hl);
 		headerLength = ((v_hl & 0xF) << 2);
@@ -85,23 +84,18 @@ namespace PacketReader::IP
 			length = (u16)bufferSize;
 		}
 
-		//Bits 32-63
-		NetLib::ReadUInt16(buffer, &offset, &id); //Send packets with unique IDs
+		NetLib::ReadUInt16(buffer, &offset, &id);
 		NetLib::ReadByte08(buffer, &offset, &fragmentFlags1);
 		NetLib::ReadByte08(buffer, &offset, &fragmentFlags2);
 
-		//Bits 64-95
 		NetLib::ReadByte08(buffer, &offset, &timeToLive);
 		NetLib::ReadByte08(buffer, &offset, &protocol);
 		NetLib::ReadUInt16(buffer, &offset, &checksum);
 
-		//Bits 96-127
 		NetLib::ReadIPAddress(buffer, &offset, &sourceIP);
-		//Bits 128-159
 		NetLib::ReadIPAddress(buffer, &offset, &destinationIP);
 
-		//Bits 160+
-		if (headerLength > 20) //IP options (if any)
+		if (headerLength > 20)
 		{
 			bool opReadFin = false;
 			do
@@ -148,7 +142,6 @@ namespace PacketReader::IP
 		, destinationIP{original.destinationIP}
 		, payload{original.payload->Clone()}
 	{
-		//Clone options
 		options.reserve(original.options.size());
 		for (size_t i = 0; i < options.size(); i++)
 			options.push_back(original.options[i]->Clone());
@@ -168,11 +161,11 @@ namespace PacketReader::IP
 	void IP_Packet::WriteBytes(u8* buffer, int* offset)
 	{
 		const int startOff = *offset;
-		CalculateChecksum(); //ReComputeHeaderLen called in CalculateChecksum
+		CalculateChecksum();
 		payload->CalculateChecksum(sourceIP, destinationIP);
 
 		NetLib::WriteByte08(buffer, offset, (_verHi + (headerLength >> 2)));
-		NetLib::WriteByte08(buffer, offset, dscp); //DSCP/ECN
+		NetLib::WriteByte08(buffer, offset, dscp);
 		NetLib::WriteUInt16(buffer, offset, GetLength());
 
 		NetLib::WriteUInt16(buffer, offset, id);
@@ -181,16 +174,14 @@ namespace PacketReader::IP
 
 		NetLib::WriteByte08(buffer, offset, timeToLive);
 		NetLib::WriteByte08(buffer, offset, protocol);
-		NetLib::WriteUInt16(buffer, offset, checksum); //header csum
+		NetLib::WriteUInt16(buffer, offset, checksum);
 
 		NetLib::WriteIPAddress(buffer, offset, sourceIP);
 		NetLib::WriteIPAddress(buffer, offset, destinationIP);
 
-		//options
 		for (size_t i = 0; i < options.size(); i++)
 			options[i]->WriteBytes(buffer, offset);
 
-		//Zero alignment bytes
 		if (*offset != startOff + headerLength)
 			memset(&buffer[*offset], 0, startOff + headerLength - *offset);
 
@@ -210,18 +201,16 @@ namespace PacketReader::IP
 		for (size_t i = 0; i < options.size(); i++)
 			opOffset += options[i]->GetLength();
 
-		//needs to be a whole number of 32bits
 		headerLength = Common::AlignUpPow2(opOffset, 4);
 	}
 
 	void IP_Packet::CalculateChecksum()
 	{
-		//if (!(i == 5)) //checksum field is 10-11th byte (5th short), which is skipped
 		ReComputeHeaderLen();
 		u8* headerSegment = new u8[headerLength];
 		int counter = 0;
 		NetLib::WriteByte08(headerSegment, &counter, (_verHi + (headerLength >> 2)));
-		NetLib::WriteByte08(headerSegment, &counter, dscp); //DSCP/ECN
+		NetLib::WriteByte08(headerSegment, &counter, dscp);
 		NetLib::WriteUInt16(headerSegment, &counter, GetLength());
 
 		NetLib::WriteUInt16(headerSegment, &counter, id);
@@ -230,16 +219,14 @@ namespace PacketReader::IP
 
 		NetLib::WriteByte08(headerSegment, &counter, timeToLive);
 		NetLib::WriteByte08(headerSegment, &counter, protocol);
-		NetLib::WriteUInt16(headerSegment, &counter, 0); //header csum
+		NetLib::WriteUInt16(headerSegment, &counter, 0);
 
 		NetLib::WriteIPAddress(headerSegment, &counter, sourceIP);
 		NetLib::WriteIPAddress(headerSegment, &counter, destinationIP);
 
-		//options
 		for (size_t i = 0; i < options.size(); i++)
 			options[i]->WriteBytes(headerSegment, &counter);
 
-		//Zero alignment bytes
 		if (counter != headerLength)
 			memset(&headerSegment[counter], 0, headerLength - counter);
 
@@ -254,7 +241,7 @@ namespace PacketReader::IP
 		u8* headerSegment = new u8[headerLength];
 		int counter = 0;
 		NetLib::WriteByte08(headerSegment, &counter, (_verHi + (headerLength >> 2)));
-		NetLib::WriteByte08(headerSegment, &counter, dscp); //DSCP/ECN
+		NetLib::WriteByte08(headerSegment, &counter, dscp);
 		NetLib::WriteUInt16(headerSegment, &counter, GetLength());
 
 		NetLib::WriteUInt16(headerSegment, &counter, id);
@@ -263,16 +250,14 @@ namespace PacketReader::IP
 
 		NetLib::WriteByte08(headerSegment, &counter, timeToLive);
 		NetLib::WriteByte08(headerSegment, &counter, protocol);
-		NetLib::WriteUInt16(headerSegment, &counter, checksum); //header csum
+		NetLib::WriteUInt16(headerSegment, &counter, checksum);
 
 		NetLib::WriteIPAddress(headerSegment, &counter, sourceIP);
 		NetLib::WriteIPAddress(headerSegment, &counter, destinationIP);
 
-		//options
 		for (size_t i = 0; i < options.size(); i++)
 			options[i]->WriteBytes(headerSegment, &counter);
 
-		//Zero alignment bytes
 		if (counter != headerLength)
 			memset(&headerSegment[counter], 0, headerLength - counter);
 
@@ -323,4 +308,4 @@ namespace PacketReader::IP
 		sum = sum & 0xFFFF;
 		return (u16)sum;
 	}
-} // namespace PacketReader::IP
+}

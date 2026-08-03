@@ -29,15 +29,11 @@ namespace PacketReader::IP
 		int headerLength = 20;
 
 		u8 dscp = 0;
-		//Flags
 
-		//u16 length;
-
-		u16 id = 0; //used during reassembly fragmented packets
+		u16 id = 0;
 	private:
 		u8 fragmentFlags1 = 0;
 		u8 fragmentFlags2 = 0;
-		//Fragment Flags
 	public:
 		u8 timeToLive = 0;
 		u8 protocol;
@@ -56,52 +52,11 @@ namespace PacketReader::IP
 	public:
 		int GetHeaderLength() const;
 
-		//DSCP/TOS Flags
-
-		/* Upper 3 Bits
-		 * DSCP Class is equal to TOS precedence
-		 * DSCP vs TOS
-         * Default (xxx000), Low Effort (xxx010)
-         * 0 = Routine				Class 0
-         * Assured Forwarding (xxx000, xxx010, xxx100, xxx110)
-         * 1 = Priority				Class 1
-         * 2 = Immediate			Class 2
-         * 3 = Flash				Class 3
-         * 4 = Flash Override		Class 4
-         * Expedited Forwarding (xxx110, xxx100)
-         * 5 = Critical				Class 5
-         * Not Defined (xxx000)
-         * 6 = Internetwork Control	Class 6
-         * 7 = Network Control		Class 7
-		 *
-		 * Lower 3 Bits
-		 * In TOS, defined as follows
-		 * bit 0: Reliability
-		 * bit 1: Throughput
-		 * bit 2: Low Delay
-		 * In DSCP, defined as following (bits 1-2)
-		 * Class 0,   Low Effort, 1
-		 * Class 1-4, Assured Forwarding drop probability, Low = 1, Mid = 2, High = 3
-		 * Class 5,   Expedited Forwarding, 3
-		 * bit0: Set to zero
-		 */
 		u8 GetDscpValue() const;
 		void SetDscpValue(u8 value);
 
-		/* 2 bits
-		 * In TOS, defined as follows
-		 * Bit 0: Unused
-		 * Bit 1: Low Cost
-		 * In DSCP, defined as follows
-		 * 0 = ECN not supported
-		 * 1,2 ECN Supported
-		 * 3 = Congestion Encountered
-		 */
 		u8 GetDscpECN() const;
 		void SetDscpECN(u8 value);
-
-		//Fragment Flags
-		//bit 0, reserverd
 
 		bool GetDoNotFragment() const;
 		void SetDoNotFragment(bool value);
@@ -109,10 +64,8 @@ namespace PacketReader::IP
 		bool GetMoreFragments() const;
 		void SetMoreFragments(bool value);
 
-		//Untested
 		u16 GetFragmentOffset() const;
 
-		//Takes ownership of payload
 		IP_Packet(IP_Payload* data);
 		IP_Packet(const u8* buffer, int bufferSize, bool fromICMP = false);
 		IP_Packet(const IP_Packet&);
@@ -132,4 +85,4 @@ namespace PacketReader::IP
 		void ReComputeHeaderLen();
 		void CalculateChecksum();
 	};
-} // namespace PacketReader::IP
+}

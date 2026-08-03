@@ -9,14 +9,6 @@ typedef struct
 	unsigned char den;
 } s_coef;
 
-/*
- * \brief Get the spring or damper force coefficient, normalized to [0..1].
- *
- * \param caps the capabilities of the wheel (bitfield of FF_LG_CAPS)
- * \param k    the constant selector
- *
- * \return the force coefficient
- */
 static s_coef ff_lg_get_force_coefficient(uint8_t caps, unsigned char k)
 {
 
@@ -43,7 +35,7 @@ static s_coef ff_lg_get_force_coefficient(uint8_t caps, unsigned char k)
 	return coef;
 }
 
-int16_t ff_lg_get_condition_coef(uint8_t caps, unsigned char k, unsigned char s, int16_t max /*= SHRT_MAX*/)
+int16_t ff_lg_get_condition_coef(uint8_t caps, unsigned char k, unsigned char s, int16_t max )
 {
 
 	s_coef coef = ff_lg_get_force_coefficient(caps, k);
@@ -51,7 +43,7 @@ int16_t ff_lg_get_condition_coef(uint8_t caps, unsigned char k, unsigned char s,
 	return value;
 }
 
-uint16_t ff_lg_get_spring_deadband(uint8_t caps, unsigned char d, unsigned char dL, uint16_t max /*= USHRT_MAX*/)
+uint16_t ff_lg_get_spring_deadband(uint8_t caps, unsigned char d, unsigned char dL, uint16_t max )
 {
 
 	uint16_t deadband;

@@ -15,13 +15,11 @@ namespace PacketReader::IP::UDP
 	UDP_Packet::UDP_Packet(const u8* buffer, int bufferSize)
 	{
 		int offset = 0;
-		//Bits 0-31
 		NetLib::ReadUInt16(buffer, &offset, &sourcePort);
 		NetLib::ReadUInt16(buffer, &offset, &destinationPort);
 
-		//Bits 32-63
 		u16 length;
-		NetLib::ReadUInt16(buffer, &offset, &length); //includes header length
+		NetLib::ReadUInt16(buffer, &offset, &length);
 		NetLib::ReadUInt16(buffer, &offset, &checksum);
 
 		if (length > bufferSize)
@@ -30,9 +28,7 @@ namespace PacketReader::IP::UDP
 			length = (u16)bufferSize;
 		}
 
-		//Bits 64+
 		payload = std::make_unique<PayloadPtr>(&buffer[offset], length - offset);
-		//AllDone
 	}
 	UDP_Packet::UDP_Packet(const UDP_Packet& original)
 		: sourcePort{original.sourcePort}
@@ -87,12 +83,9 @@ namespace PacketReader::IP::UDP
 		NetLib::WriteByte08(headerSegment, &counter, (u8)protocol);
 		NetLib::WriteUInt16(headerSegment, &counter, GetLength());
 
-		//Pseudo Header added
-		//Rest of data is normal Header+data (with zerored checksum feild)
 		checksum = 0;
 		WriteBytes(headerSegment, &counter);
 
-		//Zero alignment byte
 		if (counter != pHeaderLen)
 			NetLib::WriteByte08(headerSegment, &counter, 0);
 
@@ -114,11 +107,8 @@ namespace PacketReader::IP::UDP
 		NetLib::WriteByte08(headerSegment, &counter, (u8)protocol);
 		NetLib::WriteUInt16(headerSegment, &counter, GetLength());
 
-		//Pseudo Header added
-		//Rest of data is normal Header+data
 		WriteBytes(headerSegment, &counter);
 
-		//Zero alignment byte
 		if (counter != pHeaderLen)
 			NetLib::WriteByte08(headerSegment, &counter, 0);
 
@@ -127,4 +117,4 @@ namespace PacketReader::IP::UDP
 
 		return (csumCal == 0);
 	}
-} // namespace PacketReader::IP::UDP
+}

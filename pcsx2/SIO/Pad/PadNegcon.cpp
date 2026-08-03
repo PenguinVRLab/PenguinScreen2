@@ -48,8 +48,6 @@ void PadNegcon::ConfigLog()
 {
 	const auto [port, slot] = sioConvertPadToPortAndSlot(unifiedSlot);
 
-	// AL: Analog Light (is it turned on right now)
-	// AB: Analog Button (is it useable or is it locked in its current state)
 	Console.WriteLn(fmt::format("Pad: NeGcon Config Finished - P{0}/S{1} - AL: {2} - AB: {3}",
 		port + 1,
 		slot + 1,
@@ -100,7 +98,6 @@ u8 PadNegcon::Poll(u8 commandByte)
 		case 4:
 			this->vibrationMotors[1] = commandByte;
 
-			// Apply the vibration mapping to the motors
 			switch (this->largeMotorLastConfig)
 			{
 				case 0x00:
@@ -113,9 +110,6 @@ u8 PadNegcon::Poll(u8 commandByte)
 					break;
 			}
 
-			// Small motor on the controller is only controlled by the LSB.
-			// Any value can be sent by the software, but only odd numbers
-			// (LSB set) will turn on the motor.
 			switch (this->smallMotorLastConfig)
 			{
 				case 0x00:
@@ -128,11 +122,8 @@ u8 PadNegcon::Poll(u8 commandByte)
 					break;
 			}
 
-			// Order is reversed here - SetPadVibrationIntensity takes large motor first, then small. PS2 orders small motor first, large motor second.
 			InputManager::SetPadVibrationIntensity(this->unifiedSlot,
 				std::min(static_cast<float>(largeMotor) * GetVibrationScale(1) * (1.0f / 255.0f), 1.0f),
-				// Small motor on the PS2 is either on full power or zero power, it has no variable speed. If the game supplies any value here at all,
-				// the pad in turn supplies full power to the motor, or no power at all if zero.
 				std::min(static_cast<float>((smallMotor ? 0xff : 0)) * GetVibrationScale(0) * (1.0f / 255.0f), 1.0f));
 
 			return buttons & 0xff;
@@ -182,7 +173,6 @@ u8 PadNegcon::Config(u8 commandByte)
 	return 0x00;
 }
 
-// Changes the mode of the controller between digital and analog, and adjusts the analog LED accordingly.
 u8 PadNegcon::ModeSwitch(u8 commandByte)
 {
 	switch (this->commandBytesReceived)
@@ -473,7 +463,6 @@ bool PadNegcon::Freeze(StateWrapper& sw)
 	if (!PadBase::Freeze(sw) || !sw.DoMarker("PadNegcon"))
 		return false;
 
-	// Private PadNegcon members
 	sw.Do(&analogLight);
 	sw.Do(&analogLocked);
 	sw.Do(&commandStage);

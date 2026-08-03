@@ -75,8 +75,6 @@ bool SymbolTreeModel::hasChildren(const QModelIndex& parent) const
 	if (!parent_node)
 		return true;
 
-	// If a node doesn't have a type, it can't generate any children, so all the
-	// children that will exist must already be there.
 	if (!parent_node->type.valid())
 		return !parent_node->children().empty();
 
@@ -105,11 +103,9 @@ QVariant SymbolTreeModel::data(const QModelIndex& index, int role) const
 	{
 		bool active = true;
 
-		// Gray out the names of symbols that have been overwritten in memory.
 		if (index.column() == NAME)
 			active = node->matchesMemory();
 
-		// Gray out the values of variables that are dead.
 		if (index.column() == VALUE && node->liveness().has_value())
 			active = *node->liveness();
 
@@ -414,8 +410,6 @@ std::vector<std::unique_ptr<SymbolTreeNode>> SymbolTreeModel::populateChildren(
 {
 	auto [physical_type, symbol] = logical_type.physical_type(database);
 
-	// If we went through a type name, we need to make the node handles for the
-	// children point to the new symbol instead of the original one.
 	if (symbol)
 		parent_handle = ccc::NodeHandle(*symbol, nullptr);
 

@@ -20,16 +20,12 @@ namespace QtHost
 {
 	static void SetStyleFromSettings();
 	static void SetColorScheme(Qt::ColorScheme color_scheme);
-} // namespace QtHost
+}
 
 static QString s_unthemed_style_name;
 static QPalette s_unthemed_palette;
 static bool s_unthemed_style_name_set;
 
-// This is different than the result of qApp->styleHints()->colorScheme() since
-// if we set that to Qt::ColorScheme::Unknown it would return what the Qt
-// platform code thinks is the correct color scheme instead (it can still return
-// Qt::ColorScheme::Unknown if it doesn't know).
 static Qt::ColorScheme s_color_scheme = Qt::ColorScheme::Unknown;
 
 const char* QtHost::GetDefaultThemeName()
@@ -53,25 +49,14 @@ void QtHost::UpdateApplicationTheme()
 	SetStyleFromSettings();
 	SetIconThemeFromStyle();
 
-	// Qt generates tinted versions of icons and stores them in QPixmapCache
-	// The key used does not seem to include the theme (or tint colour).
-	// This can cause icons tinted for wrong theme to be used for selected/disabled.
-	// As a workaround, reset the pixmap cache to clear icons tinted for the old theme.
 	QPixmapCache::clear();
 }
 
 bool QtHost::IsDarkApplicationTheme()
 {
-	// If the current theme uses a fixed color scheme just return that.
 	if (s_color_scheme != Qt::ColorScheme::Unknown)
 		return s_color_scheme == Qt::ColorScheme::Dark;
 
-	// Otherwise, fallback to using the palette heuristic. We don't bother
-	// asking the Qt platform code because it sometimes returns the wrong
-	// result. In particular, if the Windows Classic (windowsvista) theme is
-	// applied, and dark mode is enabled in the OS, it will return
-	// Qt::ColorScheme::Dark even though it's a light theme. We also can't treat
-	// it as a fixed color theme because of high contrast mode.
 	QPalette palette = qApp->palette();
 	return palette.windowText().color().value() > palette.window().color().value();
 }
@@ -100,8 +85,6 @@ void QtHost::SetStyleFromSettings()
 		qApp->setPalette(s_unthemed_palette);
 		qApp->setStyleSheet(QString());
 
-		// We can't set this to Qt::ColorScheme::Light because that breaks high
-		// contrast themes on Windows.
 		SetColorScheme(Qt::ColorScheme::Unknown);
 	}
 #endif
@@ -179,9 +162,6 @@ void QtHost::SetStyleFromSettings()
 	}
 	else if (theme == "GreyMatter")
 	{
-		// Custom palette by KamFretoZ, A sleek and stylish gray
-		// that are meant to be easy on the eyes as the main color.
-		// Alternative dark theme.
 		qApp->setStyle(QStyleFactory::create("Fusion"));
 
 		const QColor darkGray(46, 52, 64);
@@ -216,8 +196,6 @@ void QtHost::SetStyleFromSettings()
 	}
 	else if (theme == "UntouchedLagoon")
 	{
-		// Custom palette by RedDevilus, Tame (Light/Washed out) Green as main color and Grayish Blue as complimentary.
-		// Alternative white theme.
 		qApp->setStyle(QStyleFactory::create("Fusion"));
 
 		const QColor black(25, 25, 25);
@@ -252,8 +230,6 @@ void QtHost::SetStyleFromSettings()
 	}
 	else if (theme == "BabyPastel")
 	{
-		// Custom palette by RedDevilus, Blue as main color and blue as complimentary.
-		// Alternative light theme.
 		qApp->setStyle(QStyleFactory::create("Fusion"));
 
 		const QColor gray(150, 150, 150);
@@ -290,10 +266,6 @@ void QtHost::SetStyleFromSettings()
 	}
 	else if (theme == "PizzaBrown")
 	{
-		// Custom palette by KamFretoZ, a Pizza Tower Reference!
-		// With a mixtures of Light Brown, Peachy/Creamy White, Latte-like Color.
-		// Thanks to Jordan for the idea :P
-		// Alternative light theme.
 		qApp->setStyle(QStyleFactory::create("Fusion"));
 
 		const QColor gray(128, 128, 128);
@@ -328,8 +300,6 @@ void QtHost::SetStyleFromSettings()
 	}
 	else if (theme == "PCSX2Blue")
 	{
-		// Custom palette by RedDevilus, White as main color and Blue as complimentary.
-		// Alternative light theme.
 		qApp->setStyle(QStyleFactory::create("Fusion"));
 
 		const QColor blackish(35, 35, 35);
@@ -364,8 +334,6 @@ void QtHost::SetStyleFromSettings()
 	}
 	else if (theme == "ScarletDevilRed")
 	{
-		// Custom palette by RedDevilus, Red as main color and Purple as complimentary.
-		// Alternative dark theme.
 		qApp->setStyle(QStyleFactory::create("Fusion"));
 
 		const QColor darkRed(80, 45, 69);
@@ -398,8 +366,6 @@ void QtHost::SetStyleFromSettings()
 	}
 	else if (theme == "VioletAngelPurple")
 	{
-		// Custom palette by RedDevilus, Blue as main color and Purple as complimentary.
-		// Alternative dark theme.
 		qApp->setStyle(QStyleFactory::create("Fusion"));
 
 		const QColor blackishblue(50, 25, 70);
@@ -432,9 +398,6 @@ void QtHost::SetStyleFromSettings()
 	}
 	else if (theme == "CobaltSky")
 	{
-		// Custom palette by KamFretoZ, A soothing deep royal blue
-		// that are meant to be easy on the eyes as the main color.
-		// Alternative dark theme.
 		qApp->setStyle(QStyleFactory::create("Fusion"));
 
 		const QColor abyssBlue(39, 58, 114);
@@ -470,9 +433,6 @@ void QtHost::SetStyleFromSettings()
 	}
 	else if (theme == "AMOLED")
 	{
-		// Custom palette by KamFretoZ, A pure concentrated darkness
-		// of a theme designed for maximum eye comfort and benefits
-		// OLED screens.
 		qApp->setStyle(QStyleFactory::create("Fusion"));
 
 		const QColor black(5, 5, 5);
@@ -507,8 +467,6 @@ void QtHost::SetStyleFromSettings()
 	}
 	else if (theme == "Ruby")
 	{
-		// Custom palette by Daisouji, Black as main color and Red as complimentary.
-		// Alternative dark (black) theme.
 		qApp->setStyle(QStyleFactory::create("Fusion"));
 
 		const QColor gray(128, 128, 128);
@@ -541,8 +499,6 @@ void QtHost::SetStyleFromSettings()
 	}
 	else if (theme == "Sapphire")
 	{
-		// Custom palette by RedDevilus, Black as main color and Blue as complimentary.
-		// Alternative dark (black) theme.
 		qApp->setStyle(QStyleFactory::create("Fusion"));
 
 		const QColor gray(128, 128, 128);
@@ -575,8 +531,6 @@ void QtHost::SetStyleFromSettings()
 	}
 	else if (theme == "Emerald")
 	{
-		// Custom palette by RedDevilus, Black as main color and Blue as complimentary.
-		// Alternative dark (black) theme.
 		qApp->setStyle(QStyleFactory::create("Fusion"));
 
 		const QColor gray(128, 128, 128);
@@ -609,7 +563,6 @@ void QtHost::SetStyleFromSettings()
 	}
 	else if (theme == "Custom")
 	{
-		//Additional Theme option than loads .qss from main PCSX2 Directory
 		qApp->setStyle(QStyleFactory::create("Fusion"));
 
 		QString sheet_content;

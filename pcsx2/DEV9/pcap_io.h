@@ -26,9 +26,7 @@ public:
 	PCAPAdapter();
 	virtual bool blocks();
 	virtual bool isInitialised();
-	//gets a packet.rv :true success
 	virtual bool recv(NetPacket* pkt);
-	//sends the packet and deletes it when done (if successful).rv :true success
 	virtual bool send(NetPacket* pkt);
 	virtual void reloadSettings();
 	virtual ~PCAPAdapter();

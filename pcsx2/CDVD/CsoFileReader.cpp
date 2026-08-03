@@ -14,8 +14,6 @@
 
 #include <zlib.h>
 
-// Implementation of CSO compressed ISO reading, based on:
-// https://github.com/unknownbrackets/maxcso/blob/master/README_CSO.md
 struct CsoHeader
 {
 	u8 magic[4];
@@ -40,7 +38,6 @@ bool CsoFileReader::ValidateHeader(const CsoHeader& hdr, Error* error)
 {
 	if ((hdr.magic[0] != 'C' && hdr.magic[0] != 'Z') || hdr.magic[1] != 'I' || hdr.magic[2] != 'S' || hdr.magic[3] != 'O')
 	{
-		// Invalid magic, definitely a bad file.
 		Error::SetString(error, "File is not a CSO or ZSO.");
 		return false;
 	}
@@ -60,7 +57,6 @@ bool CsoFileReader::ValidateHeader(const CsoHeader& hdr, Error* error)
 		return false;
 	}
 
-	// All checks passed, this is a good CSO header.
 	return true;
 }
 
@@ -123,18 +119,15 @@ bool CsoFileReader::ReadFileHeader(Error* error)
 		return false;
 
 	m_frameSize = hdr.frame_size;
-	// Determine the translation from bytes to frame.
 	m_frameShift = 0;
 	for (u32 i = m_frameSize; i > 1; i >>= 1)
 	{
 		++m_frameShift;
 	}
 
-	// This is the index alignment (index values need shifting by this amount.)
 	m_indexShift = hdr.align;
 	m_totalSize = hdr.total_bytes;
 
-	// Check compression method (ZSO=lz4)
 	m_uselz4 = hdr.magic[0] == 'Z';
 
 	return true;
@@ -142,10 +135,8 @@ bool CsoFileReader::ReadFileHeader(Error* error)
 
 bool CsoFileReader::InitializeBuffers(Error* error)
 {
-	// Round up, since part of a frame requires a full frame.
 	u32 numFrames = (u32)((m_totalSize + m_frameSize - 1) / m_frameSize);
 
-	// We might read a bit of alignment too, so be prepared.
 	if (m_frameSize + (1 << m_indexShift) < CSO_READ_BUFFER_SIZE)
 	{
 		m_readBuffer = std::make_unique<u8[]>(CSO_READ_BUFFER_SIZE);
@@ -163,7 +154,6 @@ bool CsoFileReader::InitializeBuffers(Error* error)
 		return false;
 	}
 
-	// initialize zlib if not a ZSO
 	if (!m_uselz4)
 	{
 		if (inflateInit2(&m_z_stream, -15) != Z_OK)
@@ -222,12 +212,10 @@ int CsoFileReader::ReadChunk(void* dst, s64 chunkID)
 
 	const u32 frame = chunkID;
 
-	// Grab the index data for the frame we're about to read.
 	const bool compressed = (m_index[frame + 0] & 0x80000000) == 0;
 	const u32 index0 = m_index[frame + 0] & 0x7FFFFFFF;
 	const u32 index1 = m_index[frame + 1] & 0x7FFFFFFF;
 
-	// Calculate where the compressed payload is (if compressed.)
 	const u64 frameRawPos = (u64)index0 << m_indexShift;
 	const u64 frameRawSize = (u64)(index1 - index0) << m_indexShift;
 
@@ -243,7 +231,6 @@ int CsoFileReader::ReadChunk(void* dst, s64 chunkID)
 			return static_cast<int>(read_count);
 		}
 
-		// Just read directly, easy.
 		if (FileSystem::FSeek64(m_src, frameRawPos, SEEK_SET) != 0)
 		{
 			Console.Error("Unable to seek to uncompressed CSO data.");
@@ -253,8 +240,6 @@ int CsoFileReader::ReadChunk(void* dst, s64 chunkID)
 	}
 	else
 	{
-		// This might be less bytes than frameRawSize in case of padding on the last frame.
-		// This is because the index positions must be aligned.
 		u32 readRawBytes;
 		u8* readBuffer;
 		if (m_file_cache)

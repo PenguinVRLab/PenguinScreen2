@@ -13,4 +13,4 @@ namespace BuildVersion
 	const char* GitRev = GIT_REV;
 	const char* GitHash = GIT_HASH;
 	const char* GitDate = GIT_DATE;
-} // namespace BuildVersion
+}

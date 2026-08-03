@@ -51,4 +51,4 @@ namespace Sessions
 	private:
 		void HandleChildConnectionClosed(BaseSession* sender);
 	};
-} // namespace Sessions
+}

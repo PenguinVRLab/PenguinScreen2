@@ -24,19 +24,17 @@ struct EEInternalCtx
 	u32 fcsr;
 	u32 float_thing;
 	u32 unk;
-	// gpr excluding $zero
-	// k0/k1 contains hi, hi1, lo, lo1
 	u128 gpr[31];
 	float fpr[32];
 };
 
 struct EEInternalThread
-{ // internal struct
+{
 	u32 prev;
 	u32 next;
 	int status;
-	u32 resumeAddr; // address to return to when switching
-	u32 regCtx; // points to the saved regs on stack
+	u32 resumeAddr;
+	u32 regCtx;
 	u32 gpReg;
 	short initPriority;
 	short currentPriority;
@@ -54,7 +52,6 @@ struct EEInternalThread
 	u32 heap_base;
 };
 
-// Not the full struct, just what we care about
 struct IOPInternalThread
 {
 	u32 tid;
@@ -111,7 +108,6 @@ public:
 	[[nodiscard]] virtual u32 EntryPoint() const = 0;
 	[[nodiscard]] virtual u32 Priority() const = 0;
 
-	// Only call RegCtx on threads that aren't running
 	[[nodiscard]] virtual u32 RegCtx() const = 0;
 };
 

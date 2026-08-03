@@ -42,11 +42,11 @@ VkSurfaceKHR VKSwapChain::CreateVulkanSurface(VkInstance instance, VkPhysicalDev
 	if (wi->type == WindowInfo::Type::Win32)
 	{
 		VkWin32SurfaceCreateInfoKHR surface_create_info = {
-			VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR, // VkStructureType               sType
-			nullptr, // const void*                   pNext
-			0, // VkWin32SurfaceCreateFlagsKHR  flags
-			nullptr, // HINSTANCE                     hinstance
-			reinterpret_cast<HWND>(wi->window_handle) // HWND                          hwnd
+			VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
+			nullptr,
+			0,
+			nullptr,
+			reinterpret_cast<HWND>(wi->window_handle)
 		};
 
 		VkSurfaceKHR surface;
@@ -65,11 +65,11 @@ VkSurfaceKHR VKSwapChain::CreateVulkanSurface(VkInstance instance, VkPhysicalDev
 	if (wi->type == WindowInfo::Type::X11)
 	{
 		VkXlibSurfaceCreateInfoKHR surface_create_info = {
-			VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR, // VkStructureType               sType
-			nullptr, // const void*                   pNext
-			0, // VkXlibSurfaceCreateFlagsKHR   flags
-			static_cast<Display*>(wi->display_connection), // Display*                      dpy
-			reinterpret_cast<Window>(wi->window_handle) // Window                        window
+			VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,
+			nullptr,
+			0,
+			static_cast<Display*>(wi->display_connection),
+			reinterpret_cast<Window>(wi->window_handle)
 		};
 
 		VkSurfaceKHR surface;
@@ -185,16 +185,11 @@ std::optional<VkSurfaceFormatKHR> VKSwapChain::SelectSurfaceFormat(VkSurfaceKHR 
 		GSDeviceVK::GetInstance()->GetPhysicalDevice(), surface, &format_count, surface_formats.data());
 	pxAssert(res == VK_SUCCESS);
 
-	// If there is a single undefined surface format, the device doesn't care, so we'll just use RGBA
 	if (surface_formats[0].format == VK_FORMAT_UNDEFINED)
 		return VkSurfaceFormatKHR{VK_FORMAT_R8G8B8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
 
-	// Try to find a suitable format.
 	for (const VkSurfaceFormatKHR& surface_format : surface_formats)
 	{
-		// Some drivers seem to return a SRGB format here (Intel Mesa).
-		// This results in gamma correction when presenting to the screen, which we don't want.
-		// Use a linear format instead, if this is the case.
 		return VkSurfaceFormatKHR{GetLinearFormat(surface_format.format), VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
 	}
 
@@ -246,7 +241,6 @@ bool VKSwapChain::SelectPresentMode(VkSurfaceKHR surface, GSVSyncMode* vsync_mod
 		GSDeviceVK::GetInstance()->GetPhysicalDevice(), surface, &mode_count, present_modes.data());
 	pxAssert(res == VK_SUCCESS);
 
-	// Checks if a particular mode is supported, if it is, returns that mode.
 	const auto CheckForMode = [&present_modes](VkPresentModeKHR check_mode) {
 		auto it = std::find_if(present_modes.begin(), present_modes.end(),
 			[check_mode](VkPresentModeKHR mode) { return check_mode == mode; });
@@ -257,7 +251,6 @@ bool VKSwapChain::SelectPresentMode(VkSurfaceKHR surface, GSVSyncMode* vsync_mod
 	{
 		case GSVSyncMode::Disabled:
 		{
-			// Prefer immediate > mailbox > fifo.
 			if (CheckForMode(VK_PRESENT_MODE_IMMEDIATE_KHR))
 			{
 				*present_mode = VK_PRESENT_MODE_IMMEDIATE_KHR;
@@ -279,14 +272,12 @@ bool VKSwapChain::SelectPresentMode(VkSurfaceKHR surface, GSVSyncMode* vsync_mod
 
 		case GSVSyncMode::FIFO:
 		{
-			// FIFO is always available.
 			*present_mode = VK_PRESENT_MODE_FIFO_KHR;
 		}
 		break;
 
 		case GSVSyncMode::Mailbox:
 		{
-			// Mailbox > fifo.
 			if (CheckForMode(VK_PRESENT_MODE_MAILBOX_KHR))
 			{
 				*present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
@@ -308,12 +299,10 @@ bool VKSwapChain::SelectPresentMode(VkSurfaceKHR surface, GSVSyncMode* vsync_mod
 
 bool VKSwapChain::CreateSwapChain()
 {
-	// Select swap chain format
 	std::optional<VkSurfaceFormatKHR> surface_format = SelectSurfaceFormat(m_surface);
 	if (!surface_format.has_value())
 		return false;
 
-	// Look up surface properties to determine image count and dimensions
 	VkSurfaceCapabilitiesKHR surface_capabilities;
 	VkResult res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
 		GSDeviceVK::GetInstance()->GetPhysicalDevice(), m_surface, &surface_capabilities);
@@ -323,15 +312,11 @@ bool VKSwapChain::CreateSwapChain()
 		return false;
 	}
 
-	// Select number of images in swap chain, we prefer one buffer in the background to work on in triple-buffered mode.
-	// maxImageCount can be zero, in which case there isn't an upper limit on the number of buffers.
 	u32 image_count = std::clamp<u32>(
 		(m_present_mode == VK_PRESENT_MODE_MAILBOX_KHR) ? 3 : 2, surface_capabilities.minImageCount,
 		(surface_capabilities.maxImageCount == 0) ? std::numeric_limits<u32>::max() : surface_capabilities.maxImageCount);
 	DEV_LOG("Creating a swap chain with {} images in present mode {}", image_count, PresentModeToString(m_present_mode));
 
-	// Determine the dimensions of the swap chain. Values of -1 indicate the size we specify here
-	// determines window size?
 	VkExtent2D size = surface_capabilities.currentExtent;
 	if (size.width == UINT32_MAX)
 	{
@@ -343,7 +328,6 @@ bool VKSwapChain::CreateSwapChain()
 	size.height =
 		std::clamp(size.height, surface_capabilities.minImageExtent.height, surface_capabilities.maxImageExtent.height);
 
-	// Prefer identity transform if possible
 	VkSurfaceTransformFlagBitsKHR transform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
 	if (!(surface_capabilities.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR))
 		transform = surface_capabilities.currentTransform;
@@ -351,12 +335,10 @@ bool VKSwapChain::CreateSwapChain()
 	VkCompositeAlphaFlagBitsKHR alpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 	if (!(surface_capabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR))
 	{
-		// If we only support pre-multiplied/post-multiplied... :/
 		if (surface_capabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR)
 			alpha = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
 	}
 
-	// Select swap chain flags, we only need a colour attachment
 	VkImageUsageFlags image_usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 	if ((surface_capabilities.supportedUsageFlags & image_usage) != image_usage)
 	{
@@ -364,11 +346,7 @@ bool VKSwapChain::CreateSwapChain()
 		return false;
 	}
 
-	// Store the old/current swap chain when recreating for resize
-	// Old swap chain is destroyed regardless of whether the create call succeeds
 	VkSwapchainKHR old_swap_chain;
-	// RDNA4 experences a 2s delay in the following 2-3 vkAcquireNextImageKHR calls if we pass the old swapchain to the new one.
-	// Instead, pass null. This requires us to have freed the old image, which we already do with the swapchain maintenance extension.
 	if (GSDeviceVK::GetInstance()->IsDeviceAMD() && GSDeviceVK::GetInstance()->GetOptionalExtensions().vk_swapchain_maintenance1)
 	{
 		vkDestroySwapchainKHR(GSDeviceVK::GetInstance()->GetDevice(), m_swap_chain, nullptr);
@@ -379,10 +357,8 @@ bool VKSwapChain::CreateSwapChain()
 
 	m_swap_chain = VK_NULL_HANDLE;
 
-	// VK_EXT_swapchain_maintenance1 types/enums are aliases of VK_KHR_swapchain_maintenance1 types/enums.
 	const VkSwapchainPresentModesCreateInfoKHR modes_info{VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_MODES_CREATE_INFO_KHR, nullptr, 1u, &m_present_mode};
 
-	// Now we can actually create the swap chain
 	VkSwapchainCreateInfoKHR swap_chain_info = {VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR, 
 		GSDeviceVK::GetInstance()->GetOptionalExtensions().vk_swapchain_maintenance1 ? &modes_info : nullptr, 0, m_surface,
 		image_count, surface_format->format, surface_format->colorSpace, size, 1u, image_usage,
@@ -436,15 +412,12 @@ bool VKSwapChain::CreateSwapChain()
 		return false;
 	}
 
-	// Now destroy the old swap chain, since it's been recreated.
-	// We can do this immediately since all work should have been completed before calling resize.
 	if (old_swap_chain != VK_NULL_HANDLE)
 		vkDestroySwapchainKHR(GSDeviceVK::GetInstance()->GetDevice(), old_swap_chain, nullptr);
 
 	m_window_info.surface_width = std::max(1u, size.width);
 	m_window_info.surface_height = std::max(1u, size.height);
 
-	// Get and create images.
 	pxAssert(m_images.empty());
 
 	res = vkGetSwapchainImagesKHR(GSDeviceVK::GetInstance()->GetDevice(), m_swap_chain, &image_count, nullptr);
@@ -503,7 +476,6 @@ void VKSwapChain::DestroySwapChainImages()
 {
 	for (auto& it : m_images)
 	{
-		// don't defer view destruction, images are no longer valid
 		it->Destroy(false);
 	}
 	m_images.clear();
@@ -548,7 +520,6 @@ VkResult VKSwapChain::AcquireNextImage()
 	if (!m_swap_chain)
 		return VK_ERROR_SURFACE_LOST_KHR;
 
-	// Use a different semaphore for each image.
 	m_current_semaphore = (m_current_semaphore + 1) % static_cast<u32>(m_semaphores.size());
 
 	const VkResult res = vkAcquireNextImageKHR(GSDeviceVK::GetInstance()->GetDevice(), m_swap_chain, UINT64_MAX,
@@ -567,7 +538,6 @@ void VKSwapChain::ReleaseCurrentImage()
 	{
 		GSDeviceVK::GetInstance()->WaitForGPUIdle();
 
-		// VK_EXT_swapchain_maintenance1 types/enums are aliases of VK_KHR_swapchain_maintenance1 types/enums.
 		const VkReleaseSwapchainImagesInfoKHR info = {.sType = VK_STRUCTURE_TYPE_RELEASE_SWAPCHAIN_IMAGES_INFO_KHR,
 			.swapchain = m_swap_chain,
 			.imageIndexCount = 1,
@@ -619,7 +589,6 @@ bool VKSwapChain::SetPresentMode(VkPresentModeKHR present_mode)
 
 	m_present_mode = present_mode;
 
-	// Recreate the swap chain with the new present mode.
 	INFO_LOG("Recreating swap chain to change present mode.");
 	ReleaseCurrentImage();
 	DestroySwapChainImages();
@@ -634,18 +603,15 @@ bool VKSwapChain::SetPresentMode(VkPresentModeKHR present_mode)
 
 bool VKSwapChain::RecreateSurface(const WindowInfo& new_wi)
 {
-	// Destroy the old swap chain, images, and surface.
 	DestroySwapChain();
 	DestroySurface();
 
-	// Re-create the surface with the new native handle
 	m_window_info = new_wi;
 	m_surface = CreateVulkanSurface(
 		GSDeviceVK::GetInstance()->GetVulkanInstance(), GSDeviceVK::GetInstance()->GetPhysicalDevice(), &m_window_info);
 	if (m_surface == VK_NULL_HANDLE)
 		return false;
 
-	// The validation layers get angry at us if we don't call this before creating the swapchain.
 	VkBool32 present_supported = VK_TRUE;
 	VkResult res = vkGetPhysicalDeviceSurfaceSupportKHR(GSDeviceVK::GetInstance()->GetPhysicalDevice(),
 		GSDeviceVK::GetInstance()->GetPresentQueueFamilyIndex(), m_surface, &present_supported);
@@ -660,7 +626,6 @@ bool VKSwapChain::RecreateSurface(const WindowInfo& new_wi)
 		return false;
 	}
 
-	// Finally re-create the swap chain
 	if (!CreateSwapChain())
 	{
 		DestroySwapChain();

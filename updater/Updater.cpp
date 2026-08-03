@@ -186,7 +186,6 @@ bool Updater::ParseZip()
 
 	for (u32 file_index = 0; file_index < m_archive.NumFiles; file_index++)
 	{
-		// skip directories, we handle them ourselves
 		if (SzArEx_IsDir(&m_archive, file_index))
 			continue;
 
@@ -197,29 +196,23 @@ bool Updater::ParseZip()
 		filename_buffer.resize(filename_len);
 		SzArEx_GetFileNameUtf16(&m_archive, file_index, filename_buffer.data());
 
-		// TODO: This won't work on Linux (4-byte wchar_t).
 		FileToUpdate entry;
 		entry.file_index = file_index;
 		entry.destination_filename = StringUtil::WideStringToUTF8String(reinterpret_cast<wchar_t*>(filename_buffer.data()));
 		if (entry.destination_filename.empty())
 			continue;
 
-		// replace forward slashes with backslashes
 		for (size_t i = 0; i < entry.destination_filename.length(); i++)
 		{
 			if (entry.destination_filename[i] == '/' || entry.destination_filename[i] == '\\')
 				entry.destination_filename[i] = FS_OSPATH_SEPARATOR_CHARACTER;
 		}
 
-		// should never have a leading slash. just in case.
 		while (entry.destination_filename[0] == FS_OSPATH_SEPARATOR_CHARACTER)
 			entry.destination_filename.erase(0, 1);
 
-		// skip directories (we sort them out later)
 		if (!entry.destination_filename.empty() && entry.destination_filename.back() != FS_OSPATH_SEPARATOR_CHARACTER)
 		{
-			// skip updater itself, since it was already pre-extracted.
-			// also skips portable.ini to not mess with future non-portable installs.
 			if (StringUtil::Strcasecmp(entry.destination_filename.c_str(), "updater.exe") != 0)
 			{
 				m_progress->DisplayFormattedInformation("Found file in zip: '%s'", entry.destination_filename.c_str());
@@ -279,7 +272,6 @@ bool Updater::PrepareStagingDirectory()
 		return false;
 	}
 
-	// create subdirectories in staging directory
 	for (const std::string& subdir : m_update_directories)
 	{
 		m_progress->DisplayFormattedInformation("Creating subdirectory in staging: %s", subdir.c_str());
@@ -302,9 +294,9 @@ bool Updater::StageUpdate()
 	m_progress->SetProgressValue(0);
 
 #ifdef _WIN32
-	UInt32 block_index = 0xFFFFFFFF; /* it can have any value before first call (if outBuffer = 0) */
-	Byte* out_buffer = 0; /* it must be 0 before first call for each new archive. */
-	size_t out_buffer_size = 0; /* it can have any value before first call (if outBuffer = 0) */
+	UInt32 block_index = 0xFFFFFFFF;
+	Byte* out_buffer = 0;
+	size_t out_buffer_size = 0;
 	ScopedGuard out_buffer_guard([&out_buffer]() {
 		if (out_buffer)
 			ISzAlloc_Free(&g_Alloc, out_buffer);
@@ -358,7 +350,6 @@ bool Updater::CommitUpdate()
 {
 	m_progress->SetStatusText("Committing update...");
 
-	// create directories in target
 	for (const std::string& subdir : m_update_directories)
 	{
 		const std::string dest_subdir = StringUtil::StdStringFromFormat("%s" FS_OSPATH_SEPARATOR_STR "%s",
@@ -371,7 +362,6 @@ bool Updater::CommitUpdate()
 		}
 	}
 
-	// move files to target
 	for (const FileToUpdate& ftu : m_update_paths)
 	{
 		const std::string staging_file_name = StringUtil::StdStringFromFormat(
@@ -399,7 +389,6 @@ bool Updater::CommitUpdate()
 
 void Updater::CleanupStagingDirectory()
 {
-	// remove staging directory itself
 	if (!RecursiveDeleteDirectory(m_staging_directory.c_str()))
 		m_progress->DisplayFormattedError("Failed to remove staging directory '%s'", m_staging_directory.c_str());
 }
@@ -421,7 +410,7 @@ std::string Updater::FindPCSX2Exe() const
 	{
 		const std::string& name = file.destination_filename;
 		if (name.find(FS_OSPATH_SEPARATOR_CHARACTER) != name.npos)
-			continue; // Main exe is expected to be at the top level
+			continue;
 		if (!StringUtil::StartsWithNoCase(name, "pcsx2"))
 			continue;
 		if (!StringUtil::EndsWithNoCase(name, "exe"))

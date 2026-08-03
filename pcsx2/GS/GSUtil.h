@@ -80,14 +80,12 @@ public:
 	}
 };
 
-// Class that represents an octogonal bounding area with sides at 45 degree increments.
 class BoundingOct
 {
 private:
-	GSVector4i bbox0; // Standard bbox.
-	GSVector4i bbox1; // Bounding diamond (rotated 45 degrees axes and scaled, so (x, y) becomes (x + y, x - y)).
+	GSVector4i bbox0;
+	GSVector4i bbox1;
 
-	// Assumes that v is of the form { x, y, x, y }.
 	static GSVector4i Rotate45(const GSVector4i& v)
 	{
 		const GSVector4i swap = v.yxwz();
@@ -101,7 +99,6 @@ private:
 	}
 
 public:
-	// Initialize to null bounding area.
 	BoundingOct()
 		: bbox0(GSVector4i(INT_MAX, INT_MAX, INT_MIN, INT_MIN))
 		, bbox1(GSVector4i(INT_MAX, INT_MAX, INT_MIN, INT_MIN))
@@ -114,16 +111,12 @@ public:
 		return { v, Rotate45(v) };
 	}
 
-	// The two inputs are assumed to be diagonally opposite to each other in an axis-aligned quad (i.e. sprite).
 	static BoundingOct FromSprite(GSVector4i v0, GSVector4i v1)
 	{
 		const GSVector4i min = v0.min_i32(v1);
 		const GSVector4i max = v0.max_i32(v1);
 		const GSVector4i bbox = min.upl64(max);
-		// Rotate45(x, y) => (x + y, x - y), we want the (min, max) result for any pair of (x, y)
-		// Min: (min.x + min.y, min.x - max.y)
-		// Max: (max.x + max.y, max.x - min.y)
-		const GSVector4i x = GSVector4i::cast(GSVector4::cast(min).xxxx(GSVector4::cast(max))); // Don't use bbox immediately to help the compiler optimize.
+		const GSVector4i x = GSVector4i::cast(GSVector4::cast(min).xxxx(GSVector4::cast(max)));
 		const GSVector4i y = bbox.ywwy();
 		return {
 			bbox,

@@ -65,7 +65,7 @@ namespace InternalServers
 				str += StringUtil::StdStringFromFormat("%.2X:", data[i]);
 
 			str.pop_back();
-		} // else leave string empty
+		}
 		return str;
 	}
 
@@ -79,7 +79,7 @@ namespace InternalServers
 				str += StringUtil::StdStringFromFormat("%.2X:", data[i]);
 
 			str.pop_back();
-		} // else leave string empty
+		}
 		return str;
 	}
 
@@ -335,4 +335,4 @@ namespace InternalServers
 			}
 		}
 	}
-} // namespace InternalServers
+}

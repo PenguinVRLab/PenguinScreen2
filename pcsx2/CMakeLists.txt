@@ -86,7 +86,6 @@ set(pcsx2Sources
 	IopHw.cpp
 	IopIrq.cpp
 	IopMem.cpp
-	PINE.cpp
 	Mdec.cpp
 	Memory.cpp
 	MMI.cpp
@@ -167,7 +166,6 @@ set(pcsx2Headers
 	IopHw.h
 	IopMem.h
 	LayeredSettingsInterface.h
-	PINE.h
 	Mdec.h
 	MTGS.h
 	MTVU.h
@@ -1060,6 +1058,32 @@ set(pcsx2arm64Headers
 	arm64/AsmHelpers.h
 )
 
+# PCSX2-VR: OpenXR support
+set(pcsx2VRSources
+	VR/CameraDriver.cpp
+	VR/HeadPose.cpp
+	VR/PadLook.cpp
+	VR/StereoState.cpp
+	VR/VRManager.cpp
+	VR/VRProfileDB.cpp
+	VR/VRVulkanBridge.cpp
+	VR/XRCompositor.cpp
+	VR/XRSession.cpp
+)
+
+set(pcsx2VRHeaders
+	VR/CameraDriver.h
+	VR/HeadPose.h
+	VR/PadLook.h
+	VR/StereoState.h
+	VR/VRInternal.h
+	VR/VRManager.h
+	VR/VRProfileDB.h
+	VR/VRVulkanBridge.h
+	VR/XRCompositor.h
+	VR/XRSession.h
+)
+
 # These ones benefit a lot from LTO
 set(pcsx2LTOSources
 	${pcsx2Sources}
@@ -1133,6 +1157,11 @@ if(WIN32)
 endif()
 
 target_sources(PCSX2 PRIVATE ${pcsx2USBSources} ${pcsx2USBHeaders})
+
+if(ENABLE_VR)
+	target_sources(PCSX2 PRIVATE ${pcsx2VRSources} ${pcsx2VRHeaders})
+	target_link_libraries(PCSX2_FLAGS INTERFACE openxr_loader)
+endif()
 
 if(APPLE OR BSD)
 	if(APPLE)

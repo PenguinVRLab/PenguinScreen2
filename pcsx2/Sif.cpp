@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2002-2026 PCSX2 Dev Team
 // SPDX-License-Identifier: GPL-3.0+
 
-#define _PC_	// disables MIPS opcode macros.
+#define _PC_
 
 #include "R3000A.h"
 #include "Common.h"

@@ -5,18 +5,13 @@
 
 #include "common/Pcsx2Defs.h"
 
-// For multiple-isa compilation
 #ifdef MULTI_ISA_UNSHARED_COMPILATION
-	// Preprocessor should have MULTI_ISA_UNSHARED_COMPILATION defined to `isa_sse4`, `isa_avx`, or `isa_avx2`
 	#define CURRENT_ISA MULTI_ISA_UNSHARED_COMPILATION
 #else
-	// Define to isa_native in shared section in addition to multi-isa-off so if someone tries to use it they'll hopefully get a linker error and notice
 	#define CURRENT_ISA isa_native
 #endif
 
 #if defined(MULTI_ISA_UNSHARED_COMPILATION)
-	// Preprocessor should have MULTI_ISA_IS_FIRST defined to 0 or 1
-	/// Use with `#if MULTI_ISA_COMPILE_ONCE` to make a single definition of something in an otherwise multi-isa-compiled file.
 	#define MULTI_ISA_COMPILE_ONCE MULTI_ISA_IS_FIRST
 #elif !defined(MULTI_ISA_SHARED_COMPILATION)
 	#define MULTI_ISA_COMPILE_ONCE 1
@@ -25,15 +20,8 @@
 #endif
 
 #ifndef MULTI_ISA_SHARED_COMPILATION
-	/// Mark the start of a header defining code that will be compiled multiple times in multi-isa mode
-	/// Anything between this and a `MULTI_ISA_UNSHARED_END` will be placed in a different namespace for each of the multilple compilations
 	#define MULTI_ISA_UNSHARED_START namespace CURRENT_ISA {
-	/// Mark the end of a header defining code that will be compiled multiple times in multi-isa mode
 	#define MULTI_ISA_UNSHARED_END }
-	/// Mark the beginning of a file implementing things that will be compiled multiple times in multi-isa mode
-	/// Takes advantage of the fact that a `using namespace` declaration will also affect any implementations of things as long as they're not valid without it
-	/// Fully global variables are valid as-is, however, and will need to have `CURRENT_ISA::` manually prepended to them.
-	/// If you forget to do this, it will show up as a linker error (either multiple definitions of the function/variable, or a "failed to find isa_native::function")
 	#define MULTI_ISA_UNSHARED_IMPL using namespace CURRENT_ISA
 #else
 	#define MULTI_ISA_UNSHARED_START static_assert(0, "This file should not be included by multi-isa shared compilation!");

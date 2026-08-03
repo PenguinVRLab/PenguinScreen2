@@ -77,6 +77,5 @@ private:
 
 	AdapterOptions m_adapter_options{AdapterOptions::None};
 
-	//Use by per-game ui only
 	Pcsx2Config::DEV9Options::NetApi m_global_api{Pcsx2Config::DEV9Options::NetApi::Unset};
 };

@@ -19,7 +19,6 @@ namespace Common
 
 	Timer::Value Timer::GetCurrentValue()
 	{
-		// even if this races, it should still result in the same value..
 		if (!s_counter_initialized)
 		{
 			LARGE_INTEGER Freq;
@@ -188,4 +187,4 @@ namespace Common
 		m_tvStartValue = value;
 		return true;
 	}
-} // namespace Common
+}

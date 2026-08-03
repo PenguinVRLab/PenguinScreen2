@@ -18,4 +18,4 @@ namespace PacketReader::IP
 		bool operator==(const IP_Address& other) const { return this->integer == other.integer; }
 		bool operator!=(const IP_Address& other) const { return this->integer != other.integer; }
 	};
-} // namespace PacketReader::IP
+}

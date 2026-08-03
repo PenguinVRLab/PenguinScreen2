@@ -48,5 +48,5 @@ namespace usb_mic
 			RingBuffer mBuffer;
 			std::mutex mMutex;
 		};
-	} // namespace audiodev_cubeb
-} // namespace usb_mic
+	}
+}

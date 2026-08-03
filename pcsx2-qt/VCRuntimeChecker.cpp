@@ -11,7 +11,6 @@
 		(static_cast<DWORD64>(v0) << 48))
 #define VERSION64_PART(v, p) (static_cast<WORD>(((v) >> (48 - ((p) * 16))) & 0xFFFFu))
 
-// Minimum version is 14.38.33135.0.
 static constexpr DWORD64 MIN_VERSION = MAKE_VERSION64(14, 38, 33135, 0);
 static constexpr const char* DOWNLOAD_URL = "https://aka.ms/vs/17/release/vc_redist.x64.exe";
 
@@ -77,16 +76,15 @@ struct VCRuntimeCheckObject
 		if (version >= MIN_VERSION)
 			return;
 
-		// fmt is self-contained, hopefully it'll be okay.
 		char message[512];
 		const auto fmt_result =
 			fmt::format_to_n(message, sizeof(message),
-				"Your Microsoft Visual C++ Runtime appears to be too old for this build of PCSX2.\n\n"
+				"Your Microsoft Visual C++ Runtime appears to be too old for this build of PenguinScreen2.\n\n"
 				"Your version: {}.{}.{}.{}\n"
 				"Required version: {}.{}.{}.{}\n\n"
 				"You can download the latest version from {}.\n\n"
 				"Do you want to exit and download this version now?\n"
-				"If you select No, PCSX2 will likely crash.",
+				"If you select No, PenguinScreen2 will likely crash.",
 				VERSION64_PART(version, 0), VERSION64_PART(version, 1), VERSION64_PART(version, 2),
 				VERSION64_PART(version, 3), VERSION64_PART(MIN_VERSION, 0), VERSION64_PART(MIN_VERSION, 1),
 				VERSION64_PART(MIN_VERSION, 2), VERSION64_PART(MIN_VERSION, 3), DOWNLOAD_URL);
@@ -102,9 +100,7 @@ struct VCRuntimeCheckObject
 	}
 };
 
-// We have to use a special object which gets initialized before all other global objects, because those might use the
-// CRT and go kaboom. Yucky, but gets the job done.
 #pragma optimize("", off)
-#pragma warning(disable : 4075) // warning C4075: initializers put in unrecognized initialization area
+#pragma warning(disable : 4075)
 #pragma init_seg(".CRT$XCT")
 VCRuntimeCheckObject s_vcruntime_checker;

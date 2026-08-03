@@ -71,7 +71,6 @@ ControllerGlobalSettingsWidget::ControllerGlobalSettingsWidget(QWidget* parent, 
 	}
 	else
 	{
-		// remove profile options from the UI.
 		m_ui.mainLayout->removeWidget(m_ui.profileSettings);
 		m_ui.profileSettings->deleteLater();
 		m_ui.profileSettings = nullptr;

@@ -16,8 +16,6 @@
 
 #include "fast_float/fast_float.h"
 
-// Older versions of libstdc++ are missing support for from_chars() with floats, and was only recently
-// merged in libc++. So, just fall back to stringstream (yuck!) on everywhere except MSVC.
 #if !defined(_MSC_VER)
 #include <locale>
 #include <sstream>
@@ -28,7 +26,6 @@
 
 namespace StringUtil
 {
-	/// Constructs a std::string from a format string.
 #ifdef __GNUC__
 	std::string StdStringFromFormat(const char* format, ...) __attribute__((format(printf, 1, 2)));
 #else
@@ -36,16 +33,12 @@ namespace StringUtil
 #endif
 	std::string StdStringFromFormatV(const char* format, std::va_list ap);
 
-	/// Checks if a wildcard matches a search string.
 	bool WildcardMatch(const char* subject, const char* mask, bool case_sensitive = true);
 
-	/// Safe version of strlcpy.
 	std::size_t Strlcpy(char* dst, const char* src, std::size_t size);
 
-	/// Strlcpy from string_view.
 	std::size_t Strlcpy(char* dst, const std::string_view src, std::size_t size);
 
-	/// Platform-independent strcasecmp
 	static inline int Strcasecmp(const char* s1, const char* s2)
 	{
 #ifdef _MSC_VER
@@ -55,7 +48,6 @@ namespace StringUtil
 #endif
 	}
 
-	/// Platform-independent strcasecmp
 	static inline int Strncasecmp(const char* s1, const char* s2, std::size_t n)
 	{
 #ifdef _MSC_VER
@@ -65,7 +57,6 @@ namespace StringUtil
 #endif
 	}
 
-	/// Wrapper around std::from_chars
 	template <typename T>
 		requires std::is_integral_v<T>
 	inline std::optional<T> FromChars(const std::string_view str, int base = 10)
@@ -126,12 +117,10 @@ namespace StringUtil
 		return value;
 	}
 
-	/// Wrapper around std::to_chars
 	template <typename T>
 		requires std::is_integral_v<T>
 	inline std::string ToChars(T value, int base = 10)
 	{
-		// to_chars() requires macOS 10.15+.
 #if !defined(__APPLE__) || MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_X_VERSION_10_15
 		constexpr size_t MAX_SIZE = 32;
 		char buf[MAX_SIZE];
@@ -154,7 +143,6 @@ namespace StringUtil
 		requires std::is_floating_point_v<T>
 	inline std::string ToChars(T value)
 	{
-		// No to_chars() in older versions of libstdc++/libc++.
 #ifdef _MSC_VER
 		constexpr size_t MAX_SIZE = 64;
 		char buf[MAX_SIZE];
@@ -172,7 +160,6 @@ namespace StringUtil
 	}
 
 
-	/// Explicit override for booleans
 	template <>
 	inline std::optional<bool> FromChars(const std::string_view str, int base)
 	{
@@ -199,11 +186,9 @@ namespace StringUtil
 		return std::string(value ? "true" : "false");
 	}
 
-	/// Encode/decode hexadecimal byte buffers
 	std::optional<std::vector<u8>> DecodeHex(const std::string_view str);
 	std::string EncodeHex(const u8* data, int length);
 
-	/// StartsWith/EndsWith variants which aren't case sensitive.
 	static inline bool StartsWithNoCase(const std::string_view str, const std::string_view prefix)
 	{
 		return (!str.empty() && Strncasecmp(str.data(), prefix.data(), prefix.length()) == 0);
@@ -214,14 +199,11 @@ namespace StringUtil
 		return (str.length() >= suffix_length && Strncasecmp(str.data() + (str.length() - suffix_length), suffix.data(), suffix_length) == 0);
 	}
 
-	/// Strip whitespace from the start/end of the string.
 	std::string_view StripWhitespace(const std::string_view str);
 	void StripWhitespace(std::string* str);
 
-	/// Splits a string based on a single character delimiter.
 	std::vector<std::string_view> SplitString(const std::string_view str, char delimiter, bool skip_empty = true);
 
-	/// Joins a string together using the specified delimiter.
 	template <typename T>
 	static inline std::string JoinString(const T& start, const T& end, char delimiter)
 	{
@@ -247,30 +229,22 @@ namespace StringUtil
 		return ret;
 	}
 
-	/// Replaces all instances of search in subject with replacement.
 	std::string ReplaceAll(const std::string_view subject, const std::string_view search, const std::string_view replacement);
 	void ReplaceAll(std::string* subject, const std::string_view search, const std::string_view replacement);
 
-	/// Parses an assignment string (Key = Value) into its two components.
 	bool ParseAssignmentString(const std::string_view str, std::string_view* key, std::string_view* value);
 
-	/// Appends a UTF-16/UTF-32 codepoint to a UTF-8 string.
 	void AppendUTF16CharacterToUTF8(std::string& s, u16 ch);
 
-	/// Appends a UTF-16/UTF-32 codepoint to a UTF-8 string.
 	void EncodeAndAppendUTF8(std::string& s, char32_t ch);
 
-	/// Decodes UTF-8 to a single codepoint, updating the position parameter.
-	/// Returns the number of bytes the codepoint took in the original string.
 	size_t DecodeUTF8(const void* bytes, size_t length, char32_t* ch);
 	size_t DecodeUTF8(const std::string_view str, size_t offset, char32_t* ch);
 	size_t DecodeUTF8(const std::string& str, size_t offset, char32_t* ch);
 
-	// Replaces the end of a string with ellipsis if it exceeds the specified length.
 	std::string Ellipsise(const std::string_view str, u32 max_length, const char* ellipsis = "...");
 	void EllipsiseInPlace(std::string& str, u32 max_length, const char* ellipsis = "...");
 
-	/// Strided memcpy/memcmp.
 	static inline void StrideMemCpy(void* dst, std::size_t dst_stride, const void* src, std::size_t src_stride,
 		std::size_t copy_size, std::size_t count)
 	{
@@ -316,16 +290,13 @@ namespace StringUtil
 	std::vector<std::string> splitOnNewLine(const std::string& str);
 
 #ifdef _WIN32
-	/// Converts the specified UTF-8 string to a wide string.
 	std::wstring UTF8StringToWideString(const std::string_view str);
 	bool UTF8StringToWideString(std::wstring& dest, const std::string_view str);
 
-	/// Converts the specified wide string to a UTF-8 string.
 	std::string WideStringToUTF8String(const std::wstring_view& str);
 	bool WideStringToUTF8String(std::string& dest, const std::wstring_view& str);
 #endif
 
-	/// Converts unsigned 128-bit data to string.
 	std::string U128ToString(const u128& u);
 	std::string& AppendU128ToString(const u128& u, std::string& s);
 
@@ -339,4 +310,4 @@ namespace StringUtil
 		return std::search(std::begin(haystack), std::end(haystack), reinterpret_cast<const ValueType*>(needle.data()),
 				   reinterpret_cast<const ValueType*>(needle.data() + needle.length())) != std::end(haystack);
 	}
-} // namespace StringUtil
+}

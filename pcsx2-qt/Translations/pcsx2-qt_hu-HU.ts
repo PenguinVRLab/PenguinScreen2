@@ -1551,11 +1551,6 @@ Ranglista Helyezés: {1}/{2}</translation>
       <translation>Állásmentés Választó Használata</translation>
     </message>
     <message>
-      <location filename="../Settings/AdvancedSettingsWidget.ui" line="505"/>
-      <source>PINE Settings</source>
-      <translation>PINE Beállítások</translation>
-    </message>
-    <message>
       <location filename="../Settings/AdvancedSettingsWidget.ui" line="527"/>
       <source>Slot:</source>
       <translation>Port:</translation>

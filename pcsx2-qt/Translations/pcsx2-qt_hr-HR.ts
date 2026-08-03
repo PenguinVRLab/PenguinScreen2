@@ -1556,11 +1556,6 @@ Pozicija na ljestvici: {1} od {2}</translation>
       <translation type="unfinished">Use Save State Selector</translation>
     </message>
     <message>
-      <location filename="../Settings/AdvancedSettingsWidget.ui" line="505"/>
-      <source>PINE Settings</source>
-      <translation>Postavke PINE-a</translation>
-    </message>
-    <message>
       <location filename="../Settings/AdvancedSettingsWidget.ui" line="527"/>
       <source>Slot:</source>
       <translation>Utor:</translation>

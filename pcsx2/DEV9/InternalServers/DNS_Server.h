@@ -71,14 +71,9 @@ namespace InternalServers
 		void Init(ifaddrs* adapter);
 #endif
 
-		//Recv
 		PacketReader::IP::UDP::UDP_Packet* Recv();
-		//Expects a UDP_payload
 		bool Send(PacketReader::IP::UDP::UDP_Packet* payload);
 
-		//This might block for a large amount of time
-		//if destruction takes place during DNS request
-		//and the OS configured DNS server is unreachable
 		~DNS_Server();
 
 	private:
@@ -103,4 +98,4 @@ namespace InternalServers
 		void GetAddrInfoThread(const std::string& url, DNS_State* state);
 #endif
 	};
-} // namespace InternalServers
+}

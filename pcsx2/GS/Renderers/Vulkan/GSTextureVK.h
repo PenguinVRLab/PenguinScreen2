@@ -33,7 +33,11 @@ public:
 
 	~GSTextureVK() override;
 
-	static std::unique_ptr<GSTextureVK> Create(Usage usage, Format format, int width, int height, int levels);
+	// PCSX2-VR (M4.3-pre): an optional array-layer count enables stereo/multiview render
+	// targets. Defaults to 1 layer, keeping every existing caller and single-layer behavior
+	// byte-identical. When layers > 1 the primary view (GetView()) is a 2D_ARRAY covering
+	// all layers; per-layer single-view accessors are created lazily via GetLayerView().
+	static std::unique_ptr<GSTextureVK> Create(Usage usage, Format format, int width, int height, int levels, int layers = 1);
 	static std::unique_ptr<GSTextureVK> Adopt(
 		VkImage image, Usage usage, Format format, int width, int height, int levels, VkFormat vk_format);
 
@@ -41,7 +45,30 @@ public:
 
 	__fi VkImage GetImage() const { return m_image; }
 	__fi VkImageView GetView() const { return m_view; }
-	__fi Layout GetLayout() const { return m_layout; }
+
+	// PCSX2-VR (M4.3-pre): lazily-created single-layer 2D view of one array layer, for the
+	// per-eye merge/compositor path. Returns m_view's layer for single-layer textures too.
+	VkImageView GetLayerView(u32 layer);
+
+	// PCSX2-VR (M4.3): layer-proxy support. A proxy is a non-owning GSTextureVK aliasing one
+	// layer of its parent array texture: same VkImage, view = the parent's layer view, its
+	// own lazily-built framebuffers. Layout/fence state routes to the parent (whose barriers
+	// span all layers), so parent and proxies share one coherent layout. Update/Map are
+	// forbidden on proxies. Owned by (and destroyed just before) the parent.
+	GSTexture* GetLayerProxyTexture(u32 layer) override;
+	__fi bool IsLayerProxy() const { return m_proxy_parent != nullptr; }
+	/// First layer this texture addresses in copies: the aliased layer for proxies, 0 otherwise.
+	__fi u32 GetBaseArrayLayer() const { return m_proxy_base_layer; }
+	/// View to bind when SAMPLING this texture through a plain 2D sampler: layer 0 for array
+	/// textures (Phase-A rule — mono consumers read the left eye), m_view otherwise. Const
+	/// because lazily creating the cached layer view is logically const (callers hold
+	/// const pointers at descriptor-build time).
+	__fi VkImageView GetViewForSampling() const
+	{
+		return (m_array_layers > 1) ? const_cast<GSTextureVK*>(this)->GetLayerView(0) : m_view;
+	}
+
+	__fi Layout GetLayout() const { return m_proxy_parent ? m_proxy_parent->m_layout : m_layout; }
 	bool IsShaderWriteMode() const override { return GetLayout() == Layout::ReadWriteImage; }
 
 	__fi VkFormat GetVkFormat() const { return m_vk_format; }
@@ -80,11 +107,17 @@ public:
 	VkFramebuffer GetLinkedFramebuffer(GSTextureVK* depth_texture, bool feedback_loop_color, bool feedback_loop_depth);
 
 	// Call when the texture is bound to the pipeline, or read from in a copy.
-	__fi void SetUseFenceCounter(u64 counter) { m_use_fence_counter = counter; }
+	__fi void SetUseFenceCounter(u64 counter)
+	{
+		m_use_fence_counter = counter;
+		// Keep the parent alive/undeleted for as long as any proxy is in flight.
+		if (m_proxy_parent)
+			m_proxy_parent->m_use_fence_counter = counter;
+	}
 
 private:
-	GSTextureVK(Usage usage, Format format, int width, int height, int levels, VkImage image, VmaAllocation allocation,
-		VkImageView view, VkFormat vk_format);
+	GSTextureVK(Usage usage, Format format, int width, int height, int levels, int layers, VkImage image,
+		VmaAllocation allocation, VkImageView view, VkFormat vk_format);
 
 	VkCommandBuffer GetCommandBufferForUpdate();
 	void CopyTextureDataForUpload(void* dst, const void* src, u32 pitch, u32 upload_pitch, u32 height) const;
@@ -97,6 +130,15 @@ private:
 	VkImageView m_view = VK_NULL_HANDLE;
 	VkFormat m_vk_format = VK_FORMAT_UNDEFINED;
 	Layout m_layout = Layout::Undefined;
+
+	// PCSX2-VR (M4.3-pre): m_layer_views holds the lazily-created single-layer views for
+	// array textures (the layer count itself lives in GSTexture::m_array_layers).
+	std::vector<VkImageView> m_layer_views;
+
+	// PCSX2-VR (M4.3): layer-proxy plumbing (see GetLayerProxyTexture).
+	GSTextureVK* m_proxy_parent = nullptr;
+	u32 m_proxy_base_layer = 0;
+	std::vector<std::unique_ptr<GSTextureVK>> m_layer_proxies;
 
 	// Contains the fence counter when the texture was last used.
 	// When this matches the current fence counter, the texture was used this command buffer.

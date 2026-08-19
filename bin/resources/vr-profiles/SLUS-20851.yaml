@@ -1,0 +1,28 @@
+# SPDX-FileCopyrightText: 2026 Patrick Carey
+# SPDX-License-Identifier: CC-BY-NC-4.0
+# PenguinScreen2 shipped profile — generated, data only.
+# Copyright (c) 2026 Patrick Carey. Licensed CC BY-NC 4.0 (non-commercial
+# use/share/adapt with attribution); COMMERCIAL RIGHTS RESERVED. This is
+# DATA, not part of the GPL emulator — see LICENSE.md in this folder.
+# To customize: COPY this file into your user profiles folder and edit
+# the copy — a user file for the same serial overrides this one at
+# launch. Do not edit here (read-only in flatpak installs).
+
+SLUS-20851:
+  name: "Ace Combat 5: The Unsung War"
+  crcs: [0x39B574F0]
+  tier: stereo
+  stereo: { separation: 0.008, convergence: 6.0, uvDraws: screen }
+  camera:
+    base:
+      pattern: "00 00 20 44 00 00 ?? 43 ?? ?? ?? ?? ?? ?? ?? ?? 00 00 ?? ?? 00 00 00 00 00 02 C0 01 00 00 80 3F FF FF 7F 4B 00 00 00 00 00 02 C0 01 00 00"
+      range: [0x00800000, 0x01F00000]
+      offset: 0xD20
+      validate: { offset: -0xCC0, equals: 0x004D4341 }
+    guards:
+      - { address: 0x00959C0C, equals: 2, width: 1 }
+      - { address: 0x006CD49C, equals: 0x300, width: 4 }
+    writes:
+      - { address: 0xF0, relative: true, encoding: f32, source: head_pitch, axisSign: 1, clampMin: -1.5, clampMax: 1.5 }
+      - { address: 0xF4, relative: true, encoding: f32, source: head_yaw,   axisSign: 1, clampMin: -2.8, clampMax: 2.8 }
+      - { address: 0xF8, relative: true, encoding: f32, source: head_roll,  axisSign:  1, clampMin: -1.0, clampMax: 1.0 }

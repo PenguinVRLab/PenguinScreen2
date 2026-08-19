@@ -294,7 +294,7 @@ bool GSCapture::LoadFFmpeg(bool report_errors)
 	if (report_errors)
 	{
 		Host::ReportErrorAsync(TRANSLATE_SV("GSCapture", "Failed to load FFmpeg"),
-			fmt::format(TRANSLATE_FS("GSCapture", "You may be missing one or more files, or are using the incorrect version. This build of PCSX2 requires:\n"
+			fmt::format(TRANSLATE_FS("GSCapture", "You may be missing one or more files, or are using the incorrect version. This build of PenguinScreen2 requires:\n"
 												  "  libavcodec: {}\n"
 												  "  libavformat: {}\n"
 												  "  libavutil: {}\n"

@@ -685,7 +685,10 @@ struct alignas(16) GSHWDrawConfig
 				u8 iip : 1;
 				u8 point_size : 1;		///< Set when points need to be expanded without VS expanding.
 				VSExpand expand : 3;
-				u8 _free : 1;
+				/// PCSX2-VR (M4.3): draw targets a 2-layer stereo texture through a multiview
+				/// render pass; the VS displaces per-eye via gl_ViewIndex. Set by the Vulkan
+				/// backend only (from the bound target's array-layer count).
+				u8 multiview : 1;
 			};
 			u8 key;
 		};
@@ -797,6 +800,23 @@ struct alignas(16) GSHWDrawConfig
 				// ROVs
 				u32 rov_color : 1;
 				PS_ROV_DEPTH rov_depth : 2;
+
+				/// PCSX2-VR (M4.3): Texture is a 2-layer stereo array and this draw runs
+				/// in a multiview pass — the FS samples the gl_ViewIndex layer, so a
+				/// stereo upstream target carries each eye through feed blits into the
+				/// display target. Set by the Vulkan backend only.
+				u32 tex_in_array : 1;
+
+				/// PCSX2-VR (Stage 1 / D4): the RT / depth feedback texture read on the
+				/// SAMPLED feedback path (feedback-loop-layout — the modern-NVIDIA path —
+				/// or no-texture-barrier) is a 2-layer stereo array; declare Rt/DepthSampler
+				/// as texture2DArray and texelFetch the gl_ViewIndex layer so each eye reads
+				/// its OWN destination (Full DATE / StencilOne FS / SW blend / FBMASK), not
+				/// the left eye's. Separate bits because a stereo RT can legitimately pair
+				/// with a MONO depth (the temporary-Z path, GSRendererHW), so the two
+				/// samplers must be gated independently. Set by the Vulkan backend only.
+				u32 rt_in_array : 1;
+				u32 depth_in_array : 1;
 			};
 
 			struct
@@ -1035,6 +1055,11 @@ struct alignas(16) GSHWDrawConfig
 		GSVector2 point_size;
 		u32 max_depth;
 		float line_aa1_width;
+		// PCSX2-VR (M4.1): x = per-eye horizontal NDC displacement (sign encodes the eye),
+		// y = convergence in Q units. Filled from VR::StereoState; {0,0} when stereo is
+		// disabled makes the tfx VS displacement path provably inert (byte-identical off-state).
+		GSVector2 vr_stereo;
+		GSVector2 vr_pad; // pads the CB to 64 B so every backend mirror (incl. the Metal sizeof assert) matches exactly
 		__fi VSConstantBuffer()
 		{
 			memset(static_cast<void*>(this), 0, sizeof(*this));
@@ -1488,7 +1513,9 @@ protected:
 
 	bool AcquireWindow(bool recreate_window);
 
-	virtual GSTexture* CreateSurface(GSTexture::Usage usage, int width, int height, int levels, GSTexture::Format format) = 0;
+	// PCSX2-VR (M4.3): layers > 1 requests a stereo array target; only the Vulkan backend
+	// supports it (gated by GSDevice::SupportsStereoTargets, so other backends never see >1).
+	virtual GSTexture* CreateSurface(GSTexture::Usage usage, int width, int height, int levels, GSTexture::Format format, u32 layers = 1) = 0;
 
 	virtual void DoMerge(GSTexture* sTex[3], GSVector4* sRect, GSTexture* dTex, GSVector4* dRect, const GSRegPMODE& PMODE, const GSRegEXTBUF& EXTBUF, u32 c, const Filter filter) = 0;
 	virtual void DoInterlace(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, ShaderInterlace shader, Filter filter, const InterlaceConstantBuffer& cb) = 0;
@@ -1637,16 +1664,21 @@ public:
 	virtual void PopDebugGroup() = 0;
 	virtual void InsertDebugMessage(DebugMessageCategory category, const char* fmt, ...) = 0;
 
-	GSTexture* FetchSurface(GSTexture::Usage usage, int width, int height, int levels, GSTexture::Format format, bool clear, bool prefer_reuse);
-	GSTexture* FetchSurface(GSTexture::Usage usage, const GSVector2i& size, int levels, GSTexture::Format format, bool clear, bool prefer_reuse);
-	GSTexture* CreateRenderTarget(int w, int h, GSTexture::Format format, bool clear = true, bool prefer_reuse = true);
-	GSTexture* CreateRenderTarget(const GSVector2i& size, GSTexture::Format format, bool clear = true, bool prefer_reuse = true);
-	GSTexture* CreateFeedbackTarget(int w, int h, GSTexture::Format format, bool clear = true, bool prefer_reuse = true);
+	GSTexture* FetchSurface(GSTexture::Usage usage, int width, int height, int levels, GSTexture::Format format, bool clear, bool prefer_reuse, u32 layers = 1);
+	GSTexture* FetchSurface(GSTexture::Usage usage, const GSVector2i& size, int levels, GSTexture::Format format, bool clear, bool prefer_reuse, u32 layers = 1);
+	GSTexture* CreateRenderTarget(int w, int h, GSTexture::Format format, bool clear = true, bool prefer_reuse = true, u32 layers = 1);
+	GSTexture* CreateRenderTarget(const GSVector2i& size, GSTexture::Format format, bool clear = true, bool prefer_reuse = true, u32 layers = 1);
+
+	/// PCSX2-VR (M4.3): whether this backend can create/render 2-layer stereo targets
+	/// (Vulkan with the multiview feature). Gates texture-cache promotion, so no other
+	/// backend ever receives layers > 1.
+	virtual bool SupportsStereoTargets() const { return false; }
+	GSTexture* CreateFeedbackTarget(int w, int h, GSTexture::Format format, bool clear = true, bool prefer_reuse = true, u32 layers = 1);
 	GSTexture* CreateFeedbackTarget(const GSVector2i& size, GSTexture::Format format, bool clear = true, bool prefer_reuse = true);
 	GSTexture* CreateShaderWriteTarget(int w, int h, GSTexture::Format format, bool clear = true, bool prefer_reuse = true);
 	GSTexture* CreateShaderWriteTarget(const GSVector2i& size, GSTexture::Format format, bool clear = true, bool prefer_reuse = true);
-	GSTexture* CreateDepthStencil(int w, int h, bool clear = true, bool prefer_reuse = true);
-	GSTexture* CreateDepthStencil(const GSVector2i& size, bool clear = true, bool prefer_reuse = true);
+	GSTexture* CreateDepthStencil(int w, int h, bool clear = true, bool prefer_reuse = true, u32 layers = 1);
+	GSTexture* CreateDepthStencil(const GSVector2i& size, bool clear = true, bool prefer_reuse = true, u32 layers = 1);
 	GSTexture* CreateTexture(int w, int h, int mipmap_levels, GSTexture::Format format, bool prefer_reuse = false);
 	GSTexture* CreateTexture(const GSVector2i& size, int mipmap_levels, GSTexture::Format format, bool prefer_reuse = false);
 	GSTexture* CreateCompatible(GSTexture* tex, bool clear = true, bool prefer_reuse = true);
@@ -1656,6 +1688,17 @@ public:
 	virtual std::unique_ptr<GSDownloadTexture> CreateDownloadTexture(u32 width, u32 height, GSTexture::Format format) = 0;
 
 	virtual void CopyRect(GSTexture* sTex, GSTexture* dTex, const GSVector4i& r, u32 destX, u32 destY) = 0;
+
+	/// PCSX2-VR (ISS-001): mirror `dRect` (dest pixel coords; may be inverted) of layer 0
+	/// into layer 1 on a promoted 2-layer stereo target. The convert/stretch pipelines are
+	/// not multiview, so a stretch whose destination is the FULL layered handle writes
+	/// layer 0 only. Every layer-AWARE writer goes through 1-layer proxy views
+	/// (GetLayerProxyTexture) or CopyRect, so a >=2-layer stretch destination is always
+	/// layer-oblivious mono content (uploads, moves, page copies, target merges) that both
+	/// eyes must see identically. Called from the common stretch funnel and the batched
+	/// multi-stretch override; no-op on backends without stereo targets and on
+	/// single-layer textures.
+	virtual void BroadcastLayer0(GSTexture* tex, const GSVector4& dRect) {}
 
 	// StretchRect - all options
 	void StretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, ShaderConvertSelector shader, Filter filter);
@@ -1706,7 +1749,7 @@ public:
 
 	void CAS(GSTexture*& tex, GSVector4i& src_rect, GSVector4& src_uv, const GSVector4& draw_rect, bool sharpen_only);
 
-	bool ResizeRenderTarget(GSTexture** t, int w, int h, bool preserve_contents, bool recycle);
+	bool ResizeRenderTarget(GSTexture** t, int w, int h, bool preserve_contents, bool recycle, u32 layers = 1);
 
 	void AgePool();
 	void PurgePool();

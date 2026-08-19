@@ -12,6 +12,9 @@
 #include "GSDumpReplayer.h"
 #include "Host.h"
 #include "PerformanceMetrics.h"
+#ifdef ENABLE_VR
+#include "VR/VRManager.h"
+#endif
 #include "pcsx2/Config.h"
 #include "VMManager.h"
 
@@ -26,6 +29,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdlib>
 #include <deque>
 #include <thread>
 #include <mutex>
@@ -641,6 +645,17 @@ void GSRenderer::VSync(u32 field, bool registers_written, bool idle_frame)
 		if (BeginPresentFrame(true))
 			EndPresentFrame();
 
+#ifdef ENABLE_VR
+		// A skipped desktop present never calls EndPresentFrame(), so the merge that
+		// VR::EndOfFrame (below) is about to copy is still UNSUBMITTED in the GS
+		// command buffer — the compositor would copy draws that never reached the
+		// queue (headset-only block corruption, worst under load: heavy scenes skip
+		// more frames). Submit it here, matching the guarantee the present branch
+		// gives for free. No-op unless a VR session is live.
+		if (!blank_frame)
+			VR::EnsureFrameSubmitted();
+#endif
+
 		PerformanceMetrics::Update(registers_written, fb_sprite_frame, skip_frame);
 	}
 	else
@@ -707,6 +722,17 @@ void GSRenderer::VSync(u32 field, bool registers_written, bool idle_frame)
 
 		PerformanceMetrics::Update(registers_written, fb_sprite_frame, false);
 	}
+
+#ifdef ENABLE_VR
+	// PCSX2-VR: service the XR frame loop after the desktop present. EndOfFrame
+	// copies `current` on the graphics queue, so its draws must be SUBMITTED first:
+	// the present branch submits inside EndPresent, and the skip branch calls
+	// VR::EnsureFrameSubmitted() (a skipped present never reaches EndPresent — the
+	// old "both branches kick the command buffer" assumption was false and caused
+	// headset-only corruption under load). A present that FAILS mid-resize is a rare
+	// transient exception (one glitched frame, not the sustained under-load case).
+	VR::EndOfFrame(blank_frame ? nullptr : g_gs_device->GetCurrent());
+#endif
 
 	// snapshot
 	if (!m_snapshot.empty())
@@ -978,6 +1004,12 @@ void GSRenderer::PresentCurrentFrame()
 
 		EndPresentFrame();
 	}
+
+#ifdef ENABLE_VR
+	// PCSX2-VR: keep the XR frame loop alive on idle re-presents too (paused,
+	// menus). Runs after the present so command buffers are submitted.
+	VR::EndOfFrame(g_gs_device->GetCurrent());
+#endif
 }
 
 void GSTranslateWindowToDisplayCoordinates(float window_x, float window_y, float* display_x, float* display_y)
@@ -1033,7 +1065,7 @@ bool GSRenderer::IsIdleFrame() const
 bool GSRenderer::SaveSnapshotToMemory(u32 window_width, u32 window_height, bool apply_aspect, bool crop_borders,
 	u32* width, u32* height, std::vector<u32>* pixels)
 {
-	GSTexture* const current = g_gs_device->GetCurrent();
+	GSTexture* current = g_gs_device->GetCurrent();
 	if (!current)
 	{
 		*width = 0;
@@ -1041,6 +1073,18 @@ bool GSRenderer::SaveSnapshotToMemory(u32 window_width, u32 window_height, bool 
 		pixels->clear();
 		return false;
 	}
+
+#ifdef ENABLE_VR
+	// PCSX2-VR (M4.3): PCSX2_VR_SNAPSHOT_LAYER=1 redirects snapshots/screenshots to the
+	// right-eye layer of a stereo frame — the headless verification harness replays a dump
+	// twice (with/without it) and diffs the PNGs for the expected per-eye displacement.
+	if (current->GetArrayLayers() > 1)
+	{
+		static const char* layer_env = std::getenv("PCSX2_VR_SNAPSHOT_LAYER");
+		if (layer_env && layer_env[0] == '1')
+			current = current->GetLayerProxyTexture(1);
+	}
+#endif
 
 	const GSVector4i src_rect(CalculateDrawSrcRect(current, m_real_size));
 	const GSVector4 src_uv(GSVector4(src_rect) / GSVector4(current->GetSize()).xyxy());

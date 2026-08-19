@@ -83,6 +83,11 @@ public:
 protected:
 	GSVector2i m_size{};
 	int m_mipmap_levels = 0;
+	// PCSX2-VR (M4.3): array-layer count; 2 for stereo (multiview) render targets,
+	// 1 everywhere else. Lives in the base so backend-agnostic code (texture cache
+	// promotion, merge, VR compositor) can query it; only the Vulkan backend ever
+	// creates layered textures.
+	u32 m_array_layers = 1;
 	Usage m_usage = Usage::Texture;
 	Format m_format = Format::Invalid;
 	State m_state = State::Dirty;
@@ -123,6 +128,15 @@ public:
 
 	__fi int GetMipmapLevels() const { return m_mipmap_levels; }
 	__fi bool IsMipmap() const { return m_mipmap_levels > 1; }
+	// PCSX2-VR (M4.3): 1 = normal 2D texture, 2 = stereo array target.
+	__fi u32 GetArrayLayers() const { return m_array_layers; }
+
+	/// PCSX2-VR (M4.3): a single-layer alias of array layer `layer`, usable anywhere a
+	/// plain texture is (render target for utility draws, sampled source, copies). For
+	/// 1-layer textures this returns the texture itself, which makes per-layer loops in
+	/// backend-agnostic code (the merge chain) a no-op on every non-stereo path/backend.
+	/// The proxy is owned by the parent texture; callers never free it.
+	virtual GSTexture* GetLayerProxyTexture(u32 layer) { return this; }
 
 	__fi Usage GetUsage() const { return m_usage; }
 	__fi Format GetFormat() const { return m_format; }

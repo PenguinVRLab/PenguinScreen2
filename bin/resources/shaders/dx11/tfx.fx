@@ -1637,6 +1637,9 @@ cbuffer cb0
 	float2 PointSize;
 	uint MaxDepth;
 	float LineAA1Width;
+	// PCSX2-VR (M4.1): carried for CB-layout coherence; math lives only in the Vulkan backend.
+	float2 vr_stereo;
+	float2 vr_pad; // keep the cbuffer 64 B, matching VSConstantBuffer
 };
 
 #ifdef DX12

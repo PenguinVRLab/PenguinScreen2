@@ -280,7 +280,7 @@ private:
 	void PopTimestampQuery();
 	void KickTimestampQuery();
 
-	GSTexture* CreateSurface(GSTexture::Usage usage, int width, int height, int levels, GSTexture::Format format) override;
+	GSTexture* CreateSurface(GSTexture::Usage usage, int width, int height, int levels, GSTexture::Format format, u32 layers = 1) override;
 
 	void CreatePipelineStatisticsQueries();
 	void DestroyPipelineStatisticsQueries();

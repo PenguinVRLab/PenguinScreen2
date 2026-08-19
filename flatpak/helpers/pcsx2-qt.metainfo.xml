@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Uses the AppStream standard https://www.freedesktop.org/software/appstream/docs/chap-Metadata.html -->
+<component type="desktop">
+  <id>org.penguinvr.penguinscreen2</id>
+  <launchable type="desktop-id">org.penguinvr.penguinscreen2.desktop</launchable>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>PenguinScreen2</name>
+  <developer id="org.penguinvr">
+    <name>PenguinVR</name>
+  </developer>
+  <summary>PlayStation 2 emulator in VR</summary>
+  <description>
+    <p>PenguinScreen2 plays PlayStation 2 games in VR — head-tracked big-screen for every game, per-eye stereo depth and head-driven cameras where profiled. It is built on PCSX2, the free and open-source PlayStation 2 emulator, and ships with per-game VR profiles you can edit or extend, one file per game.</p>
+    <p>PlayStation 2 and PS2 are registered trademarks of Sony Interactive Entertainment. This application is not affiliated in any way with Sony Interactive Entertainment.</p>
+  </description>
+                      <categories>
+    <category>Game</category>
+    <category>Emulator</category>
+  </categories>
+  <branding>
+    <color type="primary" scheme_preference="light">#3584e4</color>
+    <color type="primary" scheme_preference="dark">#241f31</color>
+  </branding>
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+    <internet>offline-only</internet>
+  </supports>
+  <recommends>
+    <control>gamepad</control>
+    <memory>8192</memory>
+  </recommends>
+  <requires>
+    <display_length compare="ge">768</display_length>
+  </requires>
+  <content_rating type="oars-1.1"/>
+    <releases>
+    <release version="1.0-rc2" date="2026-08-03" />
+  </releases>
+  </component>

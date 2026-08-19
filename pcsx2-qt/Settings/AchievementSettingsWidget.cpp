@@ -29,6 +29,12 @@ AchievementSettingsWidget::AchievementSettingsWidget(SettingsWindow* settings_di
 
 	setupTab(m_ui);
 
+	// PCSX2-VR: RetroAchievements is force-disabled in this build (see
+	// AchievementsOptions::LoadSave) — the page stays visible but inert so
+	// the feature's existence (and its pending return) is communicated.
+	setEnabled(false);
+	setToolTip(tr("RetroAchievements is disabled in this build."));
+
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.enable, "Achievements", "Enabled", false);
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.hardcoreMode, "Achievements", "ChallengeMode", false);
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.achievementNotifications, "Achievements", "Notifications", true);
@@ -51,7 +57,7 @@ AchievementSettingsWidget::AchievementSettingsWidget(SettingsWindow* settings_di
 	SettingWidgetBinder::BindWidgetToAudioFileSetting(sif, m_ui.unlockSoundPath, m_ui.unlockSoundBrowse, m_ui.unlockSoundOpen, m_ui.unlockSoundReset, "Achievements", "UnlockSoundName", Path::Combine(EmuFolders::Resources, DEFAULT_UNLOCK_SOUND_NAME), qApp->translate("AchievementSettingsWidget", AUDIO_FILE_FILTER), true, false);
 	SettingWidgetBinder::BindWidgetToAudioFileSetting(sif, m_ui.lbSoundPath, m_ui.lbSoundBrowse, m_ui.lbSoundOpen, m_ui.lbSoundReset, "Achievements", "LBSubmitSoundName", Path::Combine(EmuFolders::Resources, DEFAULT_LBSUBMIT_SOUND_NAME), qApp->translate("AchievementSettingsWidget", AUDIO_FILE_FILTER), true, false);
 
-	dialog()->registerWidgetHelp(m_ui.enable, tr("Enable Achievements"), tr("Unchecked"), tr("When enabled and logged in, PCSX2 will scan for achievements on startup."));
+	dialog()->registerWidgetHelp(m_ui.enable, tr("Enable Achievements"), tr("Unchecked"), tr("When enabled and logged in, PenguinScreen2 will scan for achievements on startup."));
 	dialog()->registerWidgetHelp(m_ui.hardcoreMode, tr("Enable Hardcore Mode"), tr("Unchecked"), tr("\"Challenge\" mode for achievements, including leaderboard tracking. Disables save state, cheats, and slowdown functions."));
 	dialog()->registerWidgetHelp(m_ui.achievementNotifications, tr("Show Achievement Notifications"), tr("Checked"), tr("Displays popup messages on events such as achievement unlocks and game completion."));
 	dialog()->registerWidgetHelp(m_ui.leaderboardNotifications, tr("Show Leaderboard Notifications"), tr("Checked"), tr("Displays popup messages when starting, submitting, or failing a leaderboard challenge."));
@@ -62,8 +68,8 @@ AchievementSettingsWidget::AchievementSettingsWidget(SettingsWindow* settings_di
 	dialog()->registerWidgetHelp(m_ui.overlayPosition, tr("Overlay Position"), tr("Bottom Right"), tr("Determines where achievement/leaderboard overlays are positioned on the screen."));
 	dialog()->registerWidgetHelp(m_ui.notificationPosition, tr("Notification Position"), tr("Top Left"), tr("Determines where achievement/leaderboard notification popups are positioned on the screen."));
 	dialog()->registerWidgetHelp(m_ui.encoreMode, tr("Enable Encore Mode"), tr("Unchecked"), tr("When enabled, each session will behave as if no achievements have been unlocked."));
-	dialog()->registerWidgetHelp(m_ui.spectatorMode, tr("Enable Spectator Mode"), tr("Unchecked"), tr("When enabled, PCSX2 will assume all achievements are locked and not send any unlock notifications to the server."));
-	dialog()->registerWidgetHelp(m_ui.unofficialAchievements, tr("Test Unofficial Achievements"), tr("Unchecked"), tr("When enabled, PCSX2 will list achievements from unofficial sets. Please note that these achievements are not tracked by RetroAchievements, so they unlock every time."));
+	dialog()->registerWidgetHelp(m_ui.spectatorMode, tr("Enable Spectator Mode"), tr("Unchecked"), tr("When enabled, PenguinScreen2 will assume all achievements are locked and not send any unlock notifications to the server."));
+	dialog()->registerWidgetHelp(m_ui.unofficialAchievements, tr("Test Unofficial Achievements"), tr("Unchecked"), tr("When enabled, PenguinScreen2 will list achievements from unofficial sets. Please note that these achievements are not tracked by RetroAchievements, so they unlock every time."));
 
 	connect(m_ui.enable, &QCheckBox::checkStateChanged, this, &AchievementSettingsWidget::updateEnableState);
 	connect(m_ui.hardcoreMode, &QCheckBox::checkStateChanged, this, &AchievementSettingsWidget::updateEnableState);

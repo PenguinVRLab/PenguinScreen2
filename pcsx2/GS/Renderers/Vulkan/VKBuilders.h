@@ -316,12 +316,19 @@ namespace Vulkan
 		void AddSubpassColorAttachment(u32 subpass, u32 attachment, VkImageLayout layout);
 		void AddSubpassDepthAttachment(u32 subpass, u32 attachment, VkImageLayout layout);
 
+		// PCSX2-VR (M4.3-pre): turn this into a multiview (stereo) render pass covering
+		// view_count views (view mask = (1 << view_count) - 1). The view/correlation masks
+		// are stored as members so they outlive the vkCreateRenderPass() call in Create().
+		void SetMultiview(u32 view_count);
+
 	private:
 		VkRenderPassCreateInfo m_ci;
 		std::array<VkAttachmentDescription, MAX_ATTACHMENTS> m_attachments;
 		std::array<VkAttachmentReference, MAX_ATTACHMENT_REFERENCES> m_attachment_references;
 		u32 m_num_attachment_references = 0;
 		std::array<VkSubpassDescription, MAX_SUBPASSES> m_subpasses;
+		VkRenderPassMultiviewCreateInfo m_multiview;
+		u32 m_view_mask = 0;
 	};
 
 	class BufferViewBuilder

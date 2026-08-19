@@ -153,6 +153,18 @@ namespace QtUtils
 			wi.display_connection = pni->nativeResourceForWindow("display", windowHandle);
 			wi.window_handle = pni->nativeResourceForWindow("surface", windowHandle);
 		}
+		else if (platform_name == QStringLiteral("offscreen"))
+		{
+			// PCSX2-VR: QT_QPA_PLATFORM=offscreen has no native handle, which used
+			// to abort GS creation ("Unknown PNI platform") and hang boot at
+			// "Opening GS". The Vulkan renderer already has a full Surfaceless
+			// path (GSDeviceVK gates every swapchain/surface use on
+			// wi.type != Surfaceless), so declare exactly that: no surface, no
+			// display, render headless. This is what makes the no-headset
+			// validation harness possible (headless-rbr-probe.sh).
+			wi.type = WindowInfo::Type::Surfaceless;
+			wi.window_handle = nullptr;
+		}
 		else
 		{
 			Console.WriteLn("Unknown PNI platform '%s'.", platform_name.toUtf8().constData());

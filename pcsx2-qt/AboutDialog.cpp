@@ -82,7 +82,10 @@ QString AboutDialog::getGitHubRepositoryUrl()
 
 QString AboutDialog::getLicenseUrl()
 {
-	return GetDocFileUrl("GPL.html");
+	// GPL.txt ships in-tree (and in the flatpak's resources/docs); the .html
+	// variant only exists in upstream's pandoc release CI, which never runs
+	// for this fork's builds — linking it left a dead link (strict-review #6).
+	return GetDocFileUrl("GPL.txt");
 }
 
 QString AboutDialog::getThirdPartyLicensesUrl()

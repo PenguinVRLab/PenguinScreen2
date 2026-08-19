@@ -22,6 +22,9 @@
 #include "Settings/InterfaceSettingsWidget.h"
 #include "Settings/MemoryCardSettingsWidget.h"
 #include "Settings/DebugSettingsWidget.h"
+#ifdef ENABLE_VR
+#include "Settings/VRSettingsWidget.h"
+#endif
 #include "SettingsWindow.h"
 
 #include "pcsx2/Achievements.h"
@@ -120,7 +123,7 @@ void SettingsWindow::setupUi(const GameList::Entry* game)
 	{
 		addWidget(m_game_list_settings = new GameListSettingsWidget(this, m_ui.settingsContainer), tr("Game List"),
 			QStringLiteral("folder-open-line"),
-			tr("<strong>Game List Settings</strong><hr>The list above shows the directories which will be searched by PCSX2 to populate "
+			tr("<strong>Game List Settings</strong><hr>The list above shows the directories which will be searched by PenguinScreen2 to populate "
 			   "the game list. Search directories can be added, removed, and switched to recursive/non-recursive."));
 		addWidget(m_bios_settings = new BIOSSettingsWidget(this, m_ui.settingsContainer), tr("BIOS"), QStringLiteral("chip-line"),
 			tr("<strong>BIOS Settings</strong><hr>Configure your BIOS here.<br><br>Mouse over an option for additional information, "
@@ -178,7 +181,7 @@ void SettingsWindow::setupUi(const GameList::Entry* game)
 	{
 		addWidget(m_folder_settings = new FolderSettingsWidget(this, m_ui.settingsContainer), tr("Folders"),
 			QStringLiteral("folder-settings-line"),
-			tr("<strong>Folder Settings</strong><hr>These options control where PCSX2 will save runtime data files."));
+			tr("<strong>Folder Settings</strong><hr>These options control where PenguinScreen2 will save runtime data files."));
 	}
 
 	{
@@ -186,20 +189,37 @@ void SettingsWindow::setupUi(const GameList::Entry* game)
 		QString icon_text(QStringLiteral("trophy-line"));
 		QString help_text =
 			tr("<strong>Achievements Settings</strong><hr>"
-			   "These options control the RetroAchievements implementation in PCSX2, allowing you to earn achievements in your games.");
-		if (Achievements::IsUsingRAIntegration())
-		{
-			QLabel* placeholder_label =
-				new QLabel(tr("RAIntegration is being used, built-in RetroAchievements support is disabled."), m_ui.settingsContainer);
-			placeholder_label->setAlignment(Qt::AlignLeft | Qt::AlignTop);
-			addWidget(placeholder_label, std::move(title), std::move(icon_text), std::move(help_text));
-		}
-		else
-		{
-			addWidget((m_achievement_settings = new AchievementSettingsWidget(this, m_ui.settingsContainer)), std::move(title),
-				std::move(icon_text), std::move(help_text));
-		}
+			   "These options control the RetroAchievements implementation in PenguinScreen2, allowing you to earn achievements in your games.");
+		// Fork decision (see the force-disable in Pcsx2Config LoadSave):
+		// PenguinScreen2 is not registered with RetroAchievements as its own
+		// client, so the whole feature stays unreachable until it is — the old
+		// settings page's Login button performed a real credential POST to
+		// retroachievements.org while presenting as upstream PCSX2
+		// (strict-review #10). Show why instead of a dead-end page.
+		QLabel* placeholder_label = new QLabel(
+			tr("RetroAchievements support is disabled in this build.\n\n"
+			   "PenguinScreen2 is not yet registered with RetroAchievements as its own "
+			   "client, so achievements (and the RetroAchievements login) are unavailable. "
+			   "The feature will return in a future release once registration is complete."),
+			m_ui.settingsContainer);
+		placeholder_label->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+		placeholder_label->setWordWrap(true);
+		addWidget(placeholder_label, std::move(title), std::move(icon_text), std::move(help_text));
 	}
+
+#ifdef ENABLE_VR
+	// Shown in BOTH the global settings and a game's properties dialog. In
+	// the per-game dialog the checkboxes render tri-state on purpose — the
+	// filled-square third state is upstream's convention on every page for
+	// "no per-game override, use the global value". Shipped profiles carry
+	// the game-trait tuning; the per-game page carries the user's own
+	// per-game ergonomics (e.g. a bigger screen for one title).
+	addWidget(new VRSettingsWidget(this, m_ui.settingsContainer), tr("VR"), QStringLiteral("headset-line"),
+		tr("<strong>VR Settings</strong><hr>These options control the experimental OpenXR virtual reality output, which mirrors the "
+		   "emulated display onto a virtual screen inside a headset. VR requires the Vulkan renderer and a running OpenXR runtime; "
+		   "enabling or disabling it takes effect when the emulator restarts.<br><br>Mouse over an option for additional information, "
+		   "and Shift+Wheel to scroll this panel."));
+#endif
 
 	if (show_advanced_settings)
 	{
@@ -292,7 +312,7 @@ void SettingsWindow::onCopyGlobalSettingsClicked()
 	if (!isPerGameSettings())
 		return;
 
-	if (QMessageBox::question(this, tr("PCSX2 Settings"),
+	if (QMessageBox::question(this, tr("PenguinScreen2 Settings"),
 			tr("The configuration for this game will be replaced by the current global settings.\n\nAny current setting values will be "
 			   "overwritten.\n\nDo you want to continue?"),
 			QMessageBox::Yes, QMessageBox::No) != QMessageBox::Yes)
@@ -316,7 +336,7 @@ void SettingsWindow::onClearSettingsClicked()
 	if (!isPerGameSettings())
 		return;
 
-	if (QMessageBox::question(this, tr("PCSX2 Settings"),
+	if (QMessageBox::question(this, tr("PenguinScreen2 Settings"),
 			tr("The configuration for this game will be cleared.\n\nAny current setting values will be lost.\n\nDo you want to continue?"),
 			QMessageBox::Yes, QMessageBox::No) != QMessageBox::Yes)
 	{
@@ -354,7 +374,7 @@ void SettingsWindow::reopen(const QString& message)
 		close();
 		dlg->show();
 		if (!message.isEmpty())
-			QMessageBox::information(dlg, tr("PCSX2 Settings"), message);
+			QMessageBox::information(dlg, tr("PenguinScreen2 Settings"), message);
 	});
 }
 

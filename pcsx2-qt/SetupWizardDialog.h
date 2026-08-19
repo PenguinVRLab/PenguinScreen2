@@ -12,6 +12,9 @@
 
 #include "common/Pcsx2Defs.h"
 
+class QFileSystemWatcher;
+class QTimer;
+
 class SetupWizardDialog final : public QDialog
 {
 	Q_OBJECT
@@ -79,6 +82,10 @@ private:
 	void doDeviceAutomaticBinding(u32 port, QLabel* update_label, const QString& device);
 
 	Ui::SetupWizardDialog m_ui;
+
+	QFileSystemWatcher* m_bios_dir_watcher = nullptr;
+	QTimer* m_bios_refresh_timer = nullptr;
+	bool m_refreshing_bios_list = false;
 
 	std::array<QLabel*, Page_Count> m_page_labels;
 

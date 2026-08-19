@@ -616,7 +616,7 @@ namespace QtUtils
 				link_file = Path::ToNativePath(fmt::format("{}/{}.lnk", directory_utf8, clean_name));
 			else
 			{
-				const std::string pcsx2_start_menu_dir = Path::ToNativePath(fmt::format("{}/PCSX2", directory_utf8));
+				const std::string pcsx2_start_menu_dir = Path::ToNativePath(fmt::format("{}/PenguinScreen2", directory_utf8));
 				if (!FileSystem::EnsureDirectoryExists(pcsx2_start_menu_dir.c_str(), false))
 				{
 					QMessageBox::critical(parent, tr_msg("Failed to create shortcut"), tr_msg("Could not create start menu directory."), QMessageBox::StandardButton::Ok, QMessageBox::StandardButton::Ok);
@@ -830,13 +830,13 @@ namespace QtUtils
 		{
 			if (is_flatpak) // Flatpak
 			{
-				executable_path = "flatpak run net.pcsx2.PCSX2";
-				icon_name = "net.pcsx2.PCSX2";
+				executable_path = "flatpak run org.penguinvr.penguinscreen2";
+				icon_name = "org.penguinvr.penguinscreen2";
 			}
 			else
 			{
-				// Copy PCSX2 icon
-				icon_name = "PCSX2";
+				// Copy PenguinScreen2 icon
+				icon_name = "PenguinScreen2";
 				const std::string icon_dest = fmt::format("{}/icons/hicolor/512x512/apps/", QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation).toStdString());
 				const std::string icon_path_dest = fmt::format("{}/{}.png", icon_dest, icon_name);
 				if (FileSystem::EnsureDirectoryExists(icon_dest.c_str(), true))

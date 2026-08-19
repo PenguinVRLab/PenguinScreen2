@@ -1457,8 +1457,9 @@ void GSDevice11::InsertDebugMessage(DebugMessageCategory category, const char* f
 	m_annotation->SetMarker(StringUtil::UTF8StringToWideString(str).c_str());
 }
 
-GSTexture* GSDevice11::CreateSurface(GSTexture::Usage usage, int width, int height, int levels, GSTexture::Format format)
+GSTexture* GSDevice11::CreateSurface(GSTexture::Usage usage, int width, int height, int levels, GSTexture::Format format, u32 layers)
 {
+	pxAssert(layers == 1); // stereo array targets are Vulkan-only (SupportsStereoTargets gates this)
 	pxAssert(GSTexture::ValidateUsageAndFormat(usage, format));
 
 	D3D11_TEXTURE2D_DESC desc = {};

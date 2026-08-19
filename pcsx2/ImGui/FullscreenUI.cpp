@@ -1282,7 +1282,7 @@ void FullscreenUI::DrawLandingTemplate(ImVec2* menu_pos, ImVec2* menu_size)
 			dl->AddImage(reinterpret_cast<ImTextureID>(GetCachedTexture("icons/AppIconLarge.png")->GetNativeHandle()),
 				logo_pos, logo_pos + logo_size);
 			const ImVec2 branding_pos(logo_pos.x + logo_size.x + LayoutScale(LAYOUT_MENU_BUTTON_X_PADDING), logo_pos.y);
-			ImGuiFullscreen::AddTextWithShadow(dl, heading_font, branding_pos, ImGui::GetColorU32(ImGuiCol_Text), "PCSX2");
+			ImGuiFullscreen::AddTextWithShadow(dl, heading_font, branding_pos, ImGui::GetColorU32(ImGuiCol_Text), "PenguinScreen2");
 		}
 
 		// draw time
@@ -1507,7 +1507,7 @@ void FullscreenUI::DrawExitWindow()
 			QueueResetFocus(FocusResetType::WindowChanged);
 		}
 
-		if (HorizontalMenuSvgItem("fullscreenui/exit.svg", FSUI_CSTR("Exit PCSX2"),
+		if (HorizontalMenuSvgItem("fullscreenui/exit.svg", FSUI_CSTR("Exit PenguinScreen2"),
 				FSUI_CSTR("Completely exits the application, returning you to your desktop.")))
 		{
 			DoRequestExit();
@@ -3402,13 +3402,13 @@ void FullscreenUI::DrawAboutWindow()
 {
 	ImGui::SetNextWindowSize(LayoutScale(1000.0f, 600.0f));
 	ImGui::SetNextWindowPos(ImGui::GetIO().DisplaySize * 0.5f, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-	ImGui::OpenPopup(FSUI_CSTR("About PCSX2"));
+	ImGui::OpenPopup(FSUI_CSTR("About PenguinScreen2"));
 
 	ImGui::PushFont(g_large_font.first, g_large_font.second);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, LayoutScale(ImGuiFullscreen::LAYOUT_WINDOW_ROUNDING));
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, LayoutScale(30.0f, 30.0f));
 
-	if (ImGui::BeginPopupModal(FSUI_CSTR("About PCSX2"), &s_about_window_open, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize))
+	if (ImGui::BeginPopupModal(FSUI_CSTR("About PenguinScreen2"), &s_about_window_open, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize))
 	{
 		const ImVec2 image_size = LayoutScale(500.0f, 76.0f);
 		const ImRect image_bb(ImGui::GetCursorScreenPos(), ImGui::GetCursorScreenPos() + ImVec2(ImGui::GetCurrentWindow()->WorkRect.GetWidth(), image_size.y));
@@ -3427,7 +3427,7 @@ void FullscreenUI::DrawAboutWindow()
 		const float indent = LayoutScale(12.0f);
 		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + indent);
 		ImGui::TextWrapped("%s", FSUI_CSTR(
-									 "PCSX2 is a free and open-source PlayStation 2 (PS2) emulator. Its purpose is to emulate the PS2's hardware, using a "
+									 "PenguinScreen2 plays PlayStation 2 games in VR, built on PCSX2 — a free and open-source PlayStation 2 (PS2) emulator. Its purpose is to emulate the PS2's hardware, using a "
 									 "combination of MIPS CPU Interpreters, Recompilers and a Virtual Machine which manages hardware states and PS2 system memory. "
 									 "This allows you to play PS2 games on your PC, with many additional features and benefits."));
 		ImGui::NewLine();
@@ -3662,7 +3662,7 @@ void FullscreenUI::DrawCoverDownloaderWindow()
 		BeginMenuButtons();
 		ResetFocusHere();
 
-		ImGui::TextWrapped("%s", FSUI_CSTR("PCSX2 can automatically download covers for games which do not currently have a cover set. We do not host any cover images, the user must provide their own source for images."));
+		ImGui::TextWrapped("%s", FSUI_CSTR("PenguinScreen2 can automatically download covers for games which do not currently have a cover set. We do not host any cover images, the user must provide their own source for images."));
 		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + LayoutScale(8.0f));
 		ImGui::TextWrapped("%s", FSUI_CSTR("Enter one or more cover image URL templates below. Variables such as ${serial} and ${title} are supported. See the Qt Cover Downloader for more information."));
 
@@ -4032,7 +4032,7 @@ TRANSLATE_NOOP("FullscreenUI", "Start BIOS");
 TRANSLATE_NOOP("FullscreenUI", "Start the console without any disc inserted.");
 TRANSLATE_NOOP("FullscreenUI", "Back");
 TRANSLATE_NOOP("FullscreenUI", "Return to the previous menu.");
-TRANSLATE_NOOP("FullscreenUI", "Exit PCSX2");
+TRANSLATE_NOOP("FullscreenUI", "Exit PenguinScreen2");
 TRANSLATE_NOOP("FullscreenUI", "Completely exits the application, returning you to your desktop.");
 TRANSLATE_NOOP("FullscreenUI", "Desktop Mode");
 TRANSLATE_NOOP("FullscreenUI", "Exits Big Picture mode, returning to the desktop interface.");
@@ -4056,10 +4056,10 @@ TRANSLATE_NOOP("FullscreenUI", "Shows Titles for Games when in Game Grid View Mo
 TRANSLATE_NOOP("FullscreenUI", "Operations");
 TRANSLATE_NOOP("FullscreenUI", "Identifies any new files added to the game directories.");
 TRANSLATE_NOOP("FullscreenUI", "Forces a full rescan of all games previously identified.");
-TRANSLATE_NOOP("FullscreenUI", "About PCSX2");
-TRANSLATE_NOOP("FullscreenUI", "PCSX2 is a free and open-source PlayStation 2 (PS2) emulator. Its purpose is to emulate the PS2's hardware, using a combination of MIPS CPU Interpreters, Recompilers and a Virtual Machine which manages hardware states and PS2 system memory. This allows you to play PS2 games on your PC, with many additional features and benefits.");
+TRANSLATE_NOOP("FullscreenUI", "About PenguinScreen2");
+TRANSLATE_NOOP("FullscreenUI", "PenguinScreen2 plays PlayStation 2 games in VR, built on PCSX2 — a free and open-source PlayStation 2 (PS2) emulator. Its purpose is to emulate the PS2's hardware, using a combination of MIPS CPU Interpreters, Recompilers and a Virtual Machine which manages hardware states and PS2 system memory. This allows you to play PS2 games on your PC, with many additional features and benefits.");
 TRANSLATE_NOOP("FullscreenUI", "PlayStation 2 and PS2 are registered trademarks of Sony Interactive Entertainment. This application is not affiliated in any way with Sony Interactive Entertainment.");
-TRANSLATE_NOOP("FullscreenUI", "PCSX2 can automatically download covers for games which do not currently have a cover set. We do not host any cover images, the user must provide their own source for images.");
+TRANSLATE_NOOP("FullscreenUI", "PenguinScreen2 can automatically download covers for games which do not currently have a cover set. We do not host any cover images, the user must provide their own source for images.");
 TRANSLATE_NOOP("FullscreenUI", "Enter one or more cover image URL templates below. Variables such as ${serial} and ${title} are supported. See the Qt Cover Downloader for more information.");
 TRANSLATE_NOOP("FullscreenUI", "URLs:");
 TRANSLATE_NOOP("FullscreenUI", "Saves covers using the game's title instead of serial number.");

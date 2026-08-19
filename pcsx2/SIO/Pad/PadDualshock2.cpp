@@ -12,6 +12,10 @@
 
 #include "IconsPromptFont.h"
 
+#ifdef ENABLE_VR
+#include "VR/PadLook.h" // PCSX2-VR: head-look RX injection (poll byte 5)
+#endif
+
 static const InputBindingInfo s_bindings[] = {
 	// clang-format off
 	{"Up", TRANSLATE_NOOP("Pad", "D-Pad Up"), ICON_PF_DPAD_UP, InputBindingInfo::Type::Button, PadDualshock2::Inputs::PAD_UP, GenericInputBinding::DPadUp},
@@ -203,6 +207,15 @@ u8 PadDualshock2::ButtonQuery(u8 commandByte)
 u8 PadDualshock2::Poll(u8 commandByte)
 {
 	const u32 buttons = GetButtons();
+#ifdef ENABLE_VR
+	// PCSX2-VR: device-independent recenter chord (L1+R1+L3+R3), read from the
+	// virtual pad AFTER mapping so any bound device works (ISS-015: SDL-index
+	// bindings drift). Bit indices follow this word's wire-swapped layout, the
+	// same literals the pressure cases below use. Port 0; edge logic VR-side.
+	if (this->unifiedSlot == 0)
+		VR::PadLook::UpdateRecenterChord(IsButtonBitSet(buttons, 2), IsButtonBitSet(buttons, 3),
+			IsButtonBitSet(buttons, 9), IsButtonBitSet(buttons, 10));
+#endif
 	u8 largeMotor = 0x00;
 	u8 smallMotor = 0x00;
 
@@ -258,6 +271,13 @@ u8 PadDualshock2::Poll(u8 commandByte)
 
 			return buttons & 0xff;
 		case 5:
+#ifdef ENABLE_VR
+			// PCSX2-VR: blend the head-look deflection into the RX byte the game
+			// polls (port 0 only). Inert (published deflection 0) unless a game
+			// profile arms camera.padLook — see VR/PadLook.h.
+			if (this->unifiedSlot == 0)
+				return VR::PadLook::ApplyRx(GetPressure(Inputs::PAD_R_RIGHT));
+#endif
 			return GetPressure(Inputs::PAD_R_RIGHT);
 		case 6:
 			return GetPressure(Inputs::PAD_R_UP);

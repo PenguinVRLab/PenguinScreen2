@@ -10,6 +10,10 @@
 #include "GS/GSUtil.h"
 #include "GS/GSXXH.h"
 
+#ifdef ENABLE_VR
+#include "VR/StereoState.h"
+#endif
+
 #include "common/Console.h"
 #include "common/BitUtils.h"
 #include "common/HashCombine.h"
@@ -24,6 +28,7 @@
 #include <stdlib.h>
 #else
 #include <malloc.h>
+#include <cstdlib> // PCSX2-VR: std::getenv (CHAINLOG diagnostic lane)
 #endif
 
 std::unique_ptr<GSTextureCache> g_texture_cache;
@@ -78,6 +83,11 @@ void GSTextureCache::ReadbackAll()
 void GSTextureCache::RemoveAll(bool sources, bool targets, bool hash_cache)
 {
 	InvalidateTemporaryZ();
+
+#ifdef ENABLE_VR
+	if (targets)
+		m_vr_display_bps.clear();
+#endif
 
 	if (sources || targets)
 	{
@@ -4017,7 +4027,19 @@ GSTextureCache::Target* GSTextureCache::LookupDisplayTarget(GIFRegTEX0 TEX0, con
 	}
 	
 	if (dst)
+	{
+#ifdef ENABLE_VR
+		// PCSX2-VR (M4.3): the target being scanned out IS the display chain — promote it
+		// to a 2-layer stereo target so subsequent draws to it render both eyes (multiview).
+		// One frame of mono warmup per target; gates keep every non-stereo path untouched.
+		if (VR::StereoState::Get().enabled && g_gs_device->SupportsStereoTargets())
+		{
+			NoteDisplayChainBP(dst->m_TEX0.TBP0);
+			dst->PromoteToStereo();
+		}
+#endif
 		return dst;
+	}
 
 	// Didn't find a target, check if the frame was uploaded.
 
@@ -6070,7 +6092,11 @@ GSTextureCache::Source* GSTextureCache::CreateSource(const GIFRegTEX0& TEX0, con
 			const bool outside_target = ((x + w) > dst->m_texture->GetWidth() || (y + h) > dst->m_texture->GetHeight());
 			GSTexture::Usage usage = outside_target ? dst->m_texture->GetUsage() : GSTexture::Texture;
 			GSTexture* sTex = dst->m_texture;
-			GSTexture* dTex = g_gs_device->FetchSurface(usage, w, h, outside_target ? 1 : tlevels, sTex->GetFormat(), true, PreferReusedLabelledTexture());
+			// PCSX2-VR (ISS-013): same rule as the region-copy site below — a source copied
+			// from a promoted stereo target keeps both layers, or the effect chain feeding
+			// from it composites LEFT-eye world content into both eyes (the Mercenaries
+			// cinematic ghost: this offset-source path is the one its bloom feed takes).
+			GSTexture* dTex = g_gs_device->FetchSurface(usage, w, h, outside_target ? 1 : tlevels, sTex->GetFormat(), true, PreferReusedLabelledTexture(), sTex->GetArrayLayers());
 			if (!dTex) [[unlikely]]
 			{
 				Console.Error("Failed to allocate %dx%d texture for offset source", w, h);
@@ -6380,7 +6406,16 @@ GSTextureCache::Source* GSTextureCache::CreateSource(const GIFRegTEX0& TEX0, con
 			// 'src' is the new texture cache entry (hence the output)
 			GSTexture::Usage usage = use_texture ? GSTexture::Texture : dst->m_texture->GetUsage();
 			GSTexture* sTex = dst->m_texture;
-			GSTexture* dTex = g_gs_device->FetchSurface(usage, new_size, 1, sTex->GetFormat(), source_rect_empty || destX != 0 || destY != 0, PreferReusedLabelledTexture());
+			// PCSX2-VR (ISS-013): a source COPIED from a promoted stereo target must keep
+			// both layers — a 1-layer copy takes layer 0 (the Phase-A stereo->mono rule),
+			// and any effect draw sampling it then blends LEFT-eye world content into BOTH
+			// eyes at the wrong disparity (field symptom: ghosted/double-exposed statue in
+			// the right eye of the Mercenaries opening cinematic). With matching layers the
+			// equal-layer CopyRect copies layer-for-layer, the stereo->stereo stretch runs
+			// per layer through the funnel, and ps.tex_in_array samples the copy per view.
+			// The 8-bit indexed-conversion path stays mono (Phase-A; niche).
+			const u32 vr_src_layers = is_8bits ? 1u : sTex->GetArrayLayers();
+			GSTexture* dTex = g_gs_device->FetchSurface(usage, new_size, 1, sTex->GetFormat(), source_rect_empty || destX != 0 || destY != 0, PreferReusedLabelledTexture(), vr_src_layers);
 			if (!dTex) [[unlikely]]
 			{
 				Console.Error("Failed to allocate %dx%d texture for target copy to source", new_size.x, new_size.y);
@@ -7168,7 +7203,18 @@ GSTextureCache::Target* GSTextureCache::Target::Create(GIFRegTEX0 TEX0, int w, i
 	GSTexture::Usage usage = type == RenderTarget ? GSTexture::FeedbackTarget :
 	                         (g_gs_device->Features().depth_feedback ? GSTexture::FeedbackDepth : GSTexture::DepthStencil);
 	GSTexture::Format format = type == RenderTarget ? GSTexture::Format::Color : GSTexture::Format::DepthStencil;
-	GSTexture* texture = g_gs_device->FetchSurface(usage, scaled_w, scaled_h, 1, format, clear, PreferReusedLabelledTexture());
+	u32 layers = 1;
+#ifdef ENABLE_VR
+	// PCSX2-VR (M4.3): known display-chain targets are born 2-layer, so games that
+	// recreate their frame buffers every frame (NFL 2K5) never pay a per-flip
+	// promote-and-copy and render stereo from the frame's first draw.
+	if (type == RenderTarget && g_gs_device->SupportsStereoTargets() &&
+		VR::StereoState::Get().enabled && g_texture_cache->IsDisplayChainBP(TEX0.TBP0))
+	{
+		layers = 2;
+	}
+#endif
+	GSTexture* texture = g_gs_device->FetchSurface(usage, scaled_w, scaled_h, 1, format, clear, PreferReusedLabelledTexture(), layers);
 	if (!texture)
 		return nullptr;
 
@@ -8152,6 +8198,66 @@ void GSTextureCache::Target::UpdateValidity(const GSVector4i& rect, bool can_res
 	// GL_CACHE("TC: UpdateValidity (0x%x->0x%x) from R:%d,%d Valid: %d,%d", m_TEX0.TBP0, m_end_block, rect.z, rect.w, m_valid.z, m_valid.w);
 }
 
+bool GSTextureCache::Target::PromoteToStereo()
+{
+	GSTexture* old_tex = m_texture;
+	if (!old_tex || old_tex->GetArrayLayers() >= 2)
+		return true;
+
+	const GSVector2i size = old_tex->GetSize();
+	const bool depth = old_tex->IsDepthStencil();
+	GSTexture* tex = depth ?
+		g_gs_device->CreateDepthStencil(size.x, size.y, false, true, 2) :
+		g_gs_device->CreateRenderTarget(size.x, size.y, old_tex->GetFormat(), false, true, 2);
+	if (!tex)
+	{
+		Console.Error("TC: Failed to allocate %dx%d stereo target for promotion.", size.x, size.y);
+		return false;
+	}
+
+	// Both layers start as copies of the mono content (CopyRect broadcasts mono->stereo);
+	// clears pass straight through, same as ResizeTexture.
+	// PCSX2-VR (ISS-001 diagnostic): log which content path each promotion takes.
+	static const bool s_vr_chainlog = (std::getenv("PCSX2_VR_CHAINLOG") != nullptr);
+	if (s_vr_chainlog)
+	{
+		Console.WriteLn("(VR) CHAINLOG promote bp=0x%x state=%s depth=%d %dx%d",
+			m_TEX0.TBP0,
+			old_tex->GetState() == GSTexture::State::Dirty ? "dirty-copy" :
+			old_tex->GetState() == GSTexture::State::Cleared ? "cleared-clear" : "invalidate",
+			depth ? 1 : 0, size.x, size.y);
+	}
+	if (old_tex->GetState() == GSTexture::State::Dirty)
+	{
+		g_gs_device->CopyRect(old_tex, tex, GSVector4i::loadh(size), 0, 0);
+	}
+	else if (old_tex->GetState() == GSTexture::State::Cleared)
+	{
+		if (depth)
+			g_gs_device->ClearDepth(tex, old_tex->GetClearDepth());
+		else
+			g_gs_device->ClearRenderTarget(tex, old_tex->GetClearColor());
+	}
+	else
+	{
+		g_gs_device->InvalidateRenderTarget(tex);
+	}
+
+	// Sources wrapping this target hold the old texture pointer — drop them before the swap
+	// (draw-time promotion can run while such sources exist; scanout-time usually not).
+	g_texture_cache->InvalidateSourcesFromTarget(this);
+
+	g_texture_cache->m_target_memory_usage =
+		(g_texture_cache->m_target_memory_usage - old_tex->GetMemUsage()) + tex->GetMemUsage();
+	g_gs_device->Recycle(old_tex);
+	m_texture = tex;
+	UpdateTextureDebugName();
+
+	DevCon.WriteLn("(VR) TC: promoted %s 0x%x to a 2-layer stereo target (%dx%d).",
+		depth ? "DS" : "RT", m_TEX0.TBP0, size.x, size.y);
+	return true;
+}
+
 bool GSTextureCache::Target::ResizeTexture(int new_unscaled_width, int new_unscaled_height, bool recycle_old, bool require_new_rect, GSVector4i new_rect, bool keep_old)
 {
 	const GSVector2i size = m_texture->GetSize();
@@ -8179,13 +8285,28 @@ bool GSTextureCache::Target::ResizeTexture(int new_unscaled_width, int new_unsca
 			// Can't do partial copies in DirectX for depth textures, and it's probably not ideal in other
 			// APIs either. So use a fullscreen quad setting depth instead.
 			// Use bilinear to avoid artifacts with upscaling. At native this is equivalent to nearest.
-			g_gs_device->StretchRectAuto(m_texture, tex, GSVector4(rc), Biln);
+			// PCSX2-VR (M4.3): per layer — a stereo depth target must keep both eyes on resize.
+			const u32 copy_layers = std::min(m_texture->GetArrayLayers(), tex->GetArrayLayers());
+			for (u32 l = 0; l < copy_layers; l++)
+				g_gs_device->StretchRectAuto(m_texture->GetLayerProxyTexture(l), tex->GetLayerProxyTexture(l), GSVector4(rc), Biln);
 		}
 		else
 		{
 			if (require_new_rect)
 			{
-				g_gs_device->StretchRectAuto(m_texture, tex, GSVector4(rc), Nearest);
+				// PCSX2-VR (ISS-001): per layer, matching the depth branch above — the
+				// full-handle stretch wrote layer 0 only, dropping the right eye's real
+				// stereo content on every promoted-target resize.
+				const u32 copy_layers = std::min(m_texture->GetArrayLayers(), tex->GetArrayLayers());
+				if (copy_layers > 1)
+				{
+					for (u32 l = 0; l < copy_layers; l++)
+						g_gs_device->StretchRectAuto(m_texture->GetLayerProxyTexture(l), tex->GetLayerProxyTexture(l), GSVector4(rc), Nearest);
+				}
+				else
+				{
+					g_gs_device->StretchRectAuto(m_texture, tex, GSVector4(rc), Nearest);
+				}
 			}
 			else
 			{

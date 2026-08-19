@@ -169,6 +169,7 @@ namespace EmuFolders
 	std::string Textures;
 	std::string InputProfiles;
 	std::string Videos;
+	std::string VRProfiles; // PCSX2-VR
 
 	static bool ShouldUsePortableMode();
 	static std::string GetPortableModePath();
@@ -1925,6 +1926,14 @@ void Pcsx2Config::AchievementsOptions::LoadSave(SettingsWrapper& wrap)
 		//Clamp in case setting was updated manually using the INI
 		NotificationsDuration = std::clamp(NotificationsDuration, MINIMUM_NOTIFICATION_DURATION, MAXIMUM_NOTIFICATION_DURATION);
 		LeaderboardsDuration = std::clamp(LeaderboardsDuration, MINIMUM_NOTIFICATION_DURATION, MAXIMUM_NOTIFICATION_DURATION);
+
+		// PCSX2-VR: RetroAchievements is force-disabled (owner decision
+		// 2026-07-18). This fork is not an RA-approved client; presenting as
+		// upstream to their anti-cheat is not acceptable, so the integration
+		// stays off regardless of INI until the fork is registered with
+		// RetroAchievements (their fork pathway allows it — post-launch).
+		Enabled = false;
+		HardcoreMode = false;
 	}
 }
 
@@ -1935,6 +1944,48 @@ bool Pcsx2Config::AchievementsOptions::operator==(const AchievementsOptions& rig
 }
 
 bool Pcsx2Config::AchievementsOptions::operator!=(const AchievementsOptions& right) const
+{
+	return !this->operator==(right);
+}
+
+Pcsx2Config::VROptions::VROptions() = default;
+
+void Pcsx2Config::VROptions::LoadSave(SettingsWrapper& wrap)
+{
+	SettingsWrapSection("VR");
+
+	SettingsWrapEntry(Enable);
+	SettingsWrapEntry(ScreenDistance);
+	SettingsWrapEntry(ScreenHeight);
+	SettingsWrapEntry(ScreenVerticalOffset);
+	SettingsWrapEntry(ScreenArcDeg);
+	SettingsWrapEntry(StereoMode);
+	SettingsWrapEntry(StereoUseProfile);
+	SettingsWrapEntry(StereoSeparation);
+	SettingsWrapEntry(StereoConvergence);
+	SettingsWrapEntry(HeadCamera);
+
+	if (wrap.IsLoading())
+	{
+		ScreenDistance = std::clamp(ScreenDistance, 0.5f, 10.0f);
+		ScreenHeight = std::clamp(ScreenHeight, 0.3f, 6.0f);
+		ScreenVerticalOffset = std::clamp(ScreenVerticalOffset, -2.0f, 2.0f);
+		ScreenArcDeg = std::clamp(ScreenArcDeg, 0.0f, 270.0f);
+		StereoSeparation = std::clamp(StereoSeparation, 0.0f, 0.1f);
+		StereoConvergence = std::clamp(StereoConvergence, 0.0f, 200.0f);
+	}
+}
+
+bool Pcsx2Config::VROptions::operator==(const VROptions& right) const
+{
+	return OpEqu(Enable) && OpEqu(ScreenDistance) && OpEqu(ScreenHeight) &&
+	       OpEqu(ScreenVerticalOffset) &&
+	       OpEqu(ScreenArcDeg) && OpEqu(StereoMode) && OpEqu(StereoUseProfile) &&
+	       OpEqu(StereoSeparation) && OpEqu(StereoConvergence) &&
+	       OpEqu(HeadCamera);
+}
+
+bool Pcsx2Config::VROptions::operator!=(const VROptions& right) const
 {
 	return !this->operator==(right);
 }
@@ -2019,6 +2070,12 @@ void Pcsx2Config::LoadSaveCore(SettingsWrapper& wrap)
 	Trace.LoadSave(wrap);
 
 	Achievements.LoadSave(wrap);
+
+#ifdef ENABLE_VR
+	// PCSX2-VR: only touch the [VR] INI section in VR-capable builds so that
+	// ENABLE_VR=OFF builds remain behaviorally identical to upstream.
+	VR.LoadSave(wrap);
+#endif
 
 	SettingsWrapEntry(GzipIsoIndexTemplate);
 	SettingsWrapEntry(PINESlot);
@@ -2217,7 +2274,7 @@ bool EmuFolders::SetDataDirectory(Error* error)
 			if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Documents, 0, NULL, &documents_directory)))
 			{
 				if (std::wcslen(documents_directory) > 0)
-					DataRoot = Path::Combine(StringUtil::WideStringToUTF8String(documents_directory), "PCSX2");
+					DataRoot = Path::Combine(StringUtil::WideStringToUTF8String(documents_directory), "PenguinScreen2");
 				CoTaskMemFree(documents_directory);
 			}
 #elif defined(__linux__) || defined(__FreeBSD__)
@@ -2225,7 +2282,7 @@ bool EmuFolders::SetDataDirectory(Error* error)
 			const char* xdg_config_home = getenv("XDG_CONFIG_HOME");
 			if (xdg_config_home && Path::IsAbsolute(xdg_config_home))
 			{
-				DataRoot = Path::RealPath(Path::Combine(xdg_config_home, "PCSX2"));
+				DataRoot = Path::RealPath(Path::Combine(xdg_config_home, "PenguinScreen2"));
 			}
 			else
 			{
@@ -2238,18 +2295,18 @@ bool EmuFolders::SetDataDirectory(Error* error)
 					if (!FileSystem::DirectoryExists(config_dir.c_str()))
 						FileSystem::CreateDirectoryPath(config_dir.c_str(), false);
 
-					DataRoot = Path::RealPath(Path::Combine(config_dir, "PCSX2"));
+					DataRoot = Path::RealPath(Path::Combine(config_dir, "PenguinScreen2"));
 				}
 			}
 #elif defined(__APPLE__)
-			static constexpr char MAC_DATA_DIR[] = "Library/Application Support/PCSX2";
+			static constexpr char MAC_DATA_DIR[] = "Library/Application Support/PenguinScreen2";
 			const char* home_dir = getenv("HOME");
 			if (home_dir)
 				DataRoot = Path::RealPath(Path::Combine(home_dir, MAC_DATA_DIR));
 #endif
 			}
 			else // Otherwise use the custom path provided by the user
-				DataRoot = Path::RealPath(Path::Combine(EmuConfig.CustomDataPath, "PCSX2"));
+				DataRoot = Path::RealPath(Path::Combine(EmuConfig.CustomDataPath, "PenguinScreen2"));
 		}
 
 	// Couldn't determine the data directory, or using portable mode? fallback to portable.
@@ -2262,7 +2319,7 @@ bool EmuFolders::SetDataDirectory(Error* error)
 		if (getenv("APPIMAGE"))
 		{
 			std::string_view appimage_path = Path::GetDirectory(getenv("APPIMAGE"));
-			DataRoot = Path::RealPath(Path::Combine(appimage_path, "PCSX2"));
+			DataRoot = Path::RealPath(Path::Combine(appimage_path, "PenguinScreen2"));
 		}
 		else
 			DataRoot = Path::Combine(AppRoot, GetPortableModePath());
@@ -2296,6 +2353,7 @@ void EmuFolders::SetDefaults(SettingsInterface& si)
 	si.SetStringValue("Folders", "Videos", "videos");
 	si.SetStringValue("Folders", "DebuggerLayouts", "debuggerlayouts");
 	si.SetStringValue("Folders", "DebuggerSettings", "debuggersettings");
+	si.SetStringValue("Folders", "VRProfiles", "vrprofiles"); // PCSX2-VR
 }
 
 static std::string LoadPathFromSettings(SettingsInterface& si, const std::string& root, const char* name, const char* def)
@@ -2324,6 +2382,7 @@ void EmuFolders::LoadConfig(SettingsInterface& si)
 	Videos = LoadPathFromSettings(si, DataRoot, "Videos", "videos");
 	DebuggerLayouts = LoadPathFromSettings(si, Settings, "DebuggerLayouts", "debuggerlayouts");
 	DebuggerSettings = LoadPathFromSettings(si, Settings, "DebuggerSettings", "debuggersettings");
+	VRProfiles = LoadPathFromSettings(si, DataRoot, "VRProfiles", "vrprofiles"); // PCSX2-VR
 
 	Console.WriteLn("BIOS Directory: %s", Bios.c_str());
 	Console.WriteLn("Snapshots Directory: %s", Snapshots.c_str());
@@ -2363,6 +2422,7 @@ bool EmuFolders::EnsureFoldersExist()
 	result = FileSystem::CreateDirectoryPath(Videos.c_str(), false) && result;
 	result = FileSystem::CreateDirectoryPath(DebuggerLayouts.c_str(), false) && result;
 	result = FileSystem::CreateDirectoryPath(DebuggerSettings.c_str(), false) && result;
+	result = FileSystem::CreateDirectoryPath(VRProfiles.c_str(), false) && result; // PCSX2-VR
 	return result;
 }
 

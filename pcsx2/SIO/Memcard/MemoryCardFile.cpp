@@ -316,9 +316,9 @@ void FileMemoryCard::Open()
 		{
 			Host::ReportErrorAsync(TRANSLATE_SV("MemoryCard", "Memory Card Read Failed"),
 				fmt::format(TRANSLATE_FS("MemoryCard", "Unable to access memory card:\n\n{}\n\n"
-													   "Another instance of PCSX2 may be using this memory card "
+													   "Another instance of PenguinScreen2 may be using this memory card "
 													   "or the memory card is stored in a write-protected folder.\n"
-													   "Close any other instances of PCSX2, or restart your computer.\n"),
+													   "Close any other instances of PenguinScreen2, or restart your computer.\n"),
 					fname));
 		}
 		else // Load checksum

@@ -131,7 +131,7 @@ bool CubebAudioStream::Initialize(const char* driver_name, const char* device_na
 	wil::unique_couninitialize_call uninit;
 #endif
 
-	int rv = cubeb_init(&m_context, "PCSX2", (driver_name && *driver_name) ? driver_name : nullptr);
+	int rv = cubeb_init(&m_context, "PenguinScreen2", (driver_name && *driver_name) ? driver_name : nullptr);
 	if (rv != CUBEB_OK)
 	{
 		Error::SetStringFmt(error, "Could not initialize cubeb context: {}", GetCubebErrorString(rv));
@@ -341,7 +341,7 @@ std::vector<AudioStream::DeviceInfo> AudioStream::GetCubebOutputDevices(const ch
 #endif
 
 	cubeb* context;
-	int rv = cubeb_init(&context, "PCSX2", (driver && *driver) ? driver : nullptr);
+	int rv = cubeb_init(&context, "PenguinScreen2", (driver && *driver) ? driver : nullptr);
 	if (rv != CUBEB_OK)
 	{
 		ERROR_LOG("cubeb_init() failed: {}", GetCubebErrorString(rv));

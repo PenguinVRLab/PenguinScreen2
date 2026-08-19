@@ -22517,7 +22517,7 @@ Ejecting {2} and replacing it with {3}.</source>
     <name>PermissionsDialogCamera</name>
     <message>
         <location filename="../Translations.cpp" line="61"/>
-        <source>PCSX2 uses your camera to emulate an EyeToy camera plugged into the virtual PS2.</source>
+        <source>PenguinScreen2 uses your camera to emulate an EyeToy camera plugged into the virtual PS2.</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -22525,7 +22525,7 @@ Ejecting {2} and replacing it with {3}.</source>
     <name>PermissionsDialogMicrophone</name>
     <message>
         <location filename="../Translations.cpp" line="60"/>
-        <source>PCSX2 uses your microphone to emulate a USB microphone plugged into the virtual PS2.</source>
+        <source>PenguinScreen2 uses your microphone to emulate a USB microphone plugged into the virtual PS2.</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

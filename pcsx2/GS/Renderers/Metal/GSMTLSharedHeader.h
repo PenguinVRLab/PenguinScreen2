@@ -99,6 +99,9 @@ struct GSMTLMainVSUniform
 	vector_float2 point_size;
 	uint max_depth;
 	float line_aa1_width;
+	// PCSX2-VR (M4.1): carried for CB-layout coherence; math lives only in the Vulkan backend.
+	vector_float2 vr_stereo;
+	vector_float2 vr_pad; // pads to 64 B so sizeof matches alignas(16) VSConstantBuffer
 };
 
 struct GSMTLMainPSUniform

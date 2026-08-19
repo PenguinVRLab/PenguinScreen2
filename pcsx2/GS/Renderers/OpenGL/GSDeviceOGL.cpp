@@ -213,8 +213,9 @@ std::vector<GSAdapterInfo> GSDeviceOGL::GetAdapterInfo()
 	return ret;
 }
 
-GSTexture* GSDeviceOGL::CreateSurface(GSTexture::Usage usage, int width, int height, int levels, GSTexture::Format format)
+GSTexture* GSDeviceOGL::CreateSurface(GSTexture::Usage usage, int width, int height, int levels, GSTexture::Format format, u32 layers)
 {
+	pxAssert(layers == 1); // stereo array targets are Vulkan-only (SupportsStereoTargets gates this)
 	GL_PUSH("Create surface");
 	pxAssert(GLAD_GL_ARB_shader_image_load_store || !GSTexture::IsShaderWrite(usage));
 	return new GSTextureOGL(usage, width, height, levels, format);

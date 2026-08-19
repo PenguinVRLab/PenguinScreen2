@@ -15,6 +15,9 @@ layout(std140, binding = 1) uniform cb20
 
 	uint  MaxDepth;
 	float LineAA1Width;
+	// PCSX2-VR (M4.1): carried for CB-layout coherence; math lives only in the Vulkan backend.
+	vec2  vr_stereo;
+	vec2  vr_pad; // keep the block 64 B, matching VSConstantBuffer
 };
 
 #ifdef VERTEX_SHADER

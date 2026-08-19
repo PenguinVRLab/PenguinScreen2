@@ -1340,6 +1340,79 @@ struct Pcsx2Config
 		bool operator!=(const SavestateOptions& right) const;
 	};
 
+	// PCSX2-VR: OpenXR options. The struct is
+	// declared unconditionally so config code stays portable, but it is only
+	// loaded/saved and acted upon in ENABLE_VR builds.
+	struct VROptions
+	{
+		// SHIP DEFAULT true (2026-07-20): PenguinScreen2 is a VR-first product —
+		// a clean install must boot into VR, not flat. Every VR tier (screen arc,
+		// stereo, head camera) gates on Enable, so shipping it false left a fresh
+		// install with all of them inert (the SteamOS clean-install trap). When no
+		// OpenXR runtime is active (no headset / WiVRn down) VR init fails and the
+		// app falls back to a flat window gracefully, so this is safe headless.
+		bool Enable = true;
+
+		// Tier 1 virtual screen placement, in metres, in the runtime's LOCAL
+		// (seated) reference space. Height is the physical height of the screen;
+		// width follows from the content's aspect ratio.
+		float ScreenDistance = 2.0f;
+		float ScreenHeight = 1.4f;
+
+		// Vertical offset of the screen centre vs the recenter eye-height
+		// anchor, metres (+up/-down). USER-OWNED ergonomics (seated setups,
+		// look-down-heavy games — the KF4 staircase): deliberately NOT a
+		// profile field (per the framework precedence decision: profiles must
+		// not stomp a user's personal seated offset). Applied as a plain
+		// world-up translation to both the flat quad and the cylinder.
+		float ScreenVerticalOffset = 0.0f;
+
+		// Curved screen: degrees of cylinder arc wrapping around the viewer.
+		// 0 = flat quad. When set, the arc governs the screen's width (height
+		// follows aspect) and ScreenDistance is the cylinder radius. Requires
+		// XR_KHR_composition_layer_cylinder; falls back to the flat quad.
+		// SHIP DEFAULT 100 (owner-tuned, 2026-07-19): the tested immersive
+		// wrap-around screen. A clean install must render like the demo, not a
+		// small flat quad — the tuning cannot live only in a dev's local config.
+		float ScreenArcDeg = 100.0f;
+
+		// PCSX2-VR Tier-2 stereo (M4.1). Inert unless StereoMode is on AND Enable is set; with
+		// StereoMode off the render path is byte-identical to a non-stereo build
+		// (a hard design invariant). Separation is the per-eye horizontal NDC
+		// displacement magnitude; convergence is the zero-parallax depth in Q (≈1/w)
+		// units. A per-game VR profile (VR::ProfileDB) overrides these when present
+		// and StereoUseProfile is set; clear it to tune with the config values live
+		// (the values a profile should then record).
+		// SHIP DEFAULT true (2026-07-19): the master must be ON so the shipped
+		// per-game stereo profiles actually engage on a clean install — shipping
+		// tuned profiles with StereoMode=false renders them all inert, which was
+		// the ship bug. Non-profiled games stay flat regardless: VRManager gates
+		// stereo.enabled on (profile-has-stereo || !StereoUseProfile), so the
+		// "Screen tier is universal / Stereo needs a profile" invariant holds and
+		// no untuned game is forced into stereo.
+		bool StereoMode = true;
+		bool StereoUseProfile = true;
+		float StereoSeparation = 0.02f;
+		float StereoConvergence = 20.0f;
+
+		// PCSX2-VR Tier-3 head camera (M5). Master switch for VR::CameraDriver: when off the
+		// camera driver performs ZERO EE-memory writes, so the build is
+		// byte-identical to a non-camera build. When on (and Enable is set, the VM is
+		// running, a valid head pose exists, and a CRC-matched profile with a
+		// `camera:` block exists for the running game), the guest camera follows the
+		// player's head each vsync. Requires the immersive-tier per-game profile
+		// data; inert without it — so it is SAFE as a ship default: non-immersive
+		// games (no camera profile) are unaffected, immersive games get head-look
+		// out of the box. SHIP DEFAULT true (2026-07-19, matches the tested build).
+		bool HeadCamera = true;
+
+		VROptions();
+		void LoadSave(SettingsWrapper& wrap);
+
+		bool operator==(const VROptions& right) const;
+		bool operator!=(const VROptions& right) const;
+	};
+
 	// ------------------------------------------------------------------------
 
 	BITFIELD32()
@@ -1389,6 +1462,8 @@ struct Pcsx2Config
 	FilenameOptions BaseFilenames;
 
 	AchievementsOptions Achievements;
+
+	VROptions VR;
 
 	// Memorycard options - first 2 are default slots, last 6 are multitap 1 and 2
 	// slots (3 each)
@@ -1465,6 +1540,8 @@ namespace EmuFolders
 	extern std::string Videos;
 	extern std::string DebuggerLayouts;
 	extern std::string DebuggerSettings;
+	// PCSX2-VR: user VR profile drop folder (per-game yaml; overrides shipped)
+	extern std::string VRProfiles;
 
 	/// Initializes critical folders (AppRoot, DataRoot, Settings). Call once on startup.
 	void SetAppRoot();

@@ -285,6 +285,17 @@ public:
 		/// Resizes target texture, DOES NOT RESCALE.
 		bool ResizeTexture(int new_unscaled_width, int new_unscaled_height, bool recycle_old = true, bool require_new_rect = false, GSVector4i new_rect = GSVector4i::zero(), bool keep_old = false);
 
+		/// PCSX2-VR (M4.3): swap this target's texture for a 2-layer stereo one (contents
+		/// broadcast to both layers). Draws to a 2-layer target run through a multiview
+		/// render pass with per-eye displacement — this is THE stereo classification act;
+		/// everything downstream derives structurally from the texture's layer count.
+		/// Called at scanout (display-chain classification, gated on device support +
+		/// stereo enabled) and at draw time to keep an rt/ds attachment pair
+		/// layer-consistent. No-op when already 2-layer; false only on alloc failure.
+		bool PromoteToStereo();
+
+
+
 	private:
 		void UpdateTextureDebugName();
 	};
@@ -545,6 +556,19 @@ public:
 		const GSVector4i draw_rc = GSVector4i::zero(), GSTextureCache::Source* src = nullptr);
 
 	Target* LookupDisplayTarget(GIFRegTEX0 TEX0, const GSVector2i& size, float scale, bool is_feedback);
+
+	/// PCSX2-VR (M4.3): display-chain base pointers, remembered at scanout. Games that
+	/// clear/recreate their frame buffers every frame (NFL 2K5) get fresh MONO targets on
+	/// each flip — promoting only at scanout would leave every frame's draws mono. The
+	/// draw path consults this set and promotes known display-chain targets BEFORE the
+	/// frame's draws instead. Cleared with the targets in RemoveAll.
+	__fi bool IsDisplayChainBP(u32 bp) const { return m_vr_display_bps.find(bp) != m_vr_display_bps.end(); }
+	__fi void NoteDisplayChainBP(u32 bp) { m_vr_display_bps.insert(bp); }
+
+private:
+	std::unordered_set<u32> m_vr_display_bps;
+
+public:
 
 	Target* LookupDrawTarget(GIFRegTEX0 TEX0, const GSVector2i& size, float scale, int type, bool used = true, u32 fbmask = 0,
 		bool preload = GSConfig.PreloadFrameWithGSData, bool preserve_rgb = true, bool preserve_alpha = true,

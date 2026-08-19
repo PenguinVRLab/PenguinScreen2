@@ -865,7 +865,7 @@ void MainWindow::onShowAdvancedSettingsToggled(bool checked)
 					  "even corrupted save files. "
 					  "We do not recommend changing advanced settings unless you know what you are doing, and the implications of changing "
 					  "each setting.\n\n"
-					  "The PCSX2 team will not provide any support for configurations that modify these settings, you are on your own.\n\n"
+					  "The PenguinScreen2 team will not provide any support for configurations that modify these settings, you are on your own.\n\n"
 					  "Are you sure you want to continue?"));
 		mb.setIcon(QMessageBox::Warning);
 		mb.addButton(QMessageBox::Yes);
@@ -2086,10 +2086,10 @@ void MainWindow::checkForUpdates(bool display_message, bool force_check)
 
 			QString message;
 #ifdef _WIN32
-			message = tr("<p>Sorry, you are trying to update a PCSX2 version which is not an official GitHub release. To "
+			message = tr("<p>Sorry, you are trying to update a PenguinScreen2 version which is not an official GitHub release. To "
 						 "prevent incompatibilities, the auto-updater is only enabled on official builds.</p>"
 						 "<p>To obtain an official build, please download from the link below:</p>"
-						 "<p><a href=\"https://pcsx2.net/downloads/\">https://pcsx2.net/downloads/</a></p>");
+						 "<p><a href=\"https://github.com/PenguinVRLab/PenguinScreen2/releases\">https://github.com/PenguinVRLab/PenguinScreen2/releases</a></p>");
 #else
 			message = tr("Automatic updating is not supported on the current platform.");
 #endif

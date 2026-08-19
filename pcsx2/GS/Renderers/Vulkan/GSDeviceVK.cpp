@@ -11,6 +11,10 @@
 #include "GS/Renderers/Vulkan/VKSwapChain.h"
 #include "GS/Renderers/Common/GSDevice.h"
 
+#ifdef ENABLE_VR
+#include "VR/VRVulkanBridge.h"
+#endif
+
 #include "BuildVersion.h"
 #include "Host.h"
 #include "ImGui/ImGuiManager.h"
@@ -131,6 +135,18 @@ VkInstance GSDeviceVK::CreateVulkanInstance(const WindowInfo& wi, OptionalExtens
 	}
 
 	VkInstance instance;
+
+#ifdef ENABLE_VR
+	// PCSX2-VR: OpenXR runtimes must participate in instance creation so they
+	// can inject their required extensions. On failure the bridge aborts
+	// itself and we fall through to the normal path (VR never fails GS).
+	if (VR::VulkanBootstrapActive())
+	{
+		if (VR::CreateVulkanInstanceThroughXR(&instance_create_info, &instance))
+			return instance;
+	}
+#endif
+
 	VkResult res = vkCreateInstance(&instance_create_info, nullptr, &instance);
 	if (res != VK_SUCCESS)
 	{
@@ -635,6 +651,17 @@ bool GSDeviceVK::CreateDevice(VkSurfaceKHR surface, bool enable_validation_layer
 	VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT fragment_shader_interlock_ext_feature = {
 		VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_INTERLOCK_FEATURES_EXT};
 
+	// PCSX2-VR (M4.3-pre): multiview is core in Vulkan 1.1 (the instance and device already run
+	// at 1.1), so there is no extension to enable — query the feature directly and record it.
+	// Absence just leaves stereo/multiview reporting unsupported; it is never required.
+	VkPhysicalDeviceMultiviewFeatures multiview_feature = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES};
+	{
+		VkPhysicalDeviceMultiviewFeatures multiview_query = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES};
+		VkPhysicalDeviceFeatures2 multiview_features2 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, &multiview_query};
+		vkGetPhysicalDeviceFeatures2(m_physical_device, &multiview_features2);
+		m_optional_extensions.vk_khr_multiview = (multiview_query.multiview == VK_TRUE);
+	}
+
 	if (m_optional_extensions.vk_ext_provoking_vertex)
 	{
 		provoking_vertex_feature.provokingVertexLast = VK_TRUE;
@@ -665,8 +692,24 @@ bool GSDeviceVK::CreateDevice(VkSurfaceKHR surface, bool enable_validation_layer
 		fragment_shader_interlock_ext_feature.fragmentShaderPixelInterlock = VK_TRUE;
 		Vulkan::AddPointerToChain(&device_info, &fragment_shader_interlock_ext_feature);
 	}
+	if (m_optional_extensions.vk_khr_multiview)
+	{
+		multiview_feature.multiview = VK_TRUE;
+		Vulkan::AddPointerToChain(&device_info, &multiview_feature);
+	}
 
-	VkResult res = vkCreateDevice(m_physical_device, &device_info, nullptr, &m_device);
+	VkResult res;
+#ifdef ENABLE_VR
+	// PCSX2-VR: route device creation through the OpenXR runtime so it can add
+	// its required device extensions. Falls back to the plain path if the
+	// bridge aborts (VR never fails GS).
+	if (VR::VulkanBootstrapActive() && VR::CreateVulkanDeviceThroughXR(m_physical_device, &device_info, &m_device))
+		res = VK_SUCCESS;
+	else
+#endif
+	{
+		res = vkCreateDevice(m_physical_device, &device_info, nullptr, &m_device);
+	}
 	if (res != VK_SUCCESS)
 	{
 		LOG_VULKAN_ERROR(res, "vkCreateDevice failed: ");
@@ -1021,7 +1064,7 @@ bool GSDeviceVK::CreateGlobalDescriptorPool()
 VkRenderPass GSDeviceVK::GetRenderPass(VkFormat color_format, VkFormat depth_format, VkAttachmentLoadOp color_load_op,
 	VkAttachmentStoreOp color_store_op, VkAttachmentLoadOp depth_load_op, VkAttachmentStoreOp depth_store_op,
 	VkAttachmentLoadOp stencil_load_op, VkAttachmentStoreOp stencil_store_op, bool color_feedback_loop,
-	bool depth_sampling)
+	bool depth_sampling, bool multiview)
 {
 	RenderPassCacheKey key = {};
 	key.color_format = color_format;
@@ -1034,12 +1077,36 @@ VkRenderPass GSDeviceVK::GetRenderPass(VkFormat color_format, VkFormat depth_for
 	key.stencil_store_op = stencil_store_op;
 	key.color_feedback_loop = color_feedback_loop;
 	key.depth_sampling = depth_sampling;
+	key.multiview = multiview;
 
 	auto it = m_render_pass_cache.find(key.key);
 	if (it != m_render_pass_cache.end())
 		return it->second;
 
 	return CreateCachedRenderPass(key);
+}
+
+// PCSX2-VR (M4.3): the stereo twin of the precreated m_tfx_render_pass array. Same format
+// and load-op mapping as CreateRenderPasses' GET macro, but built lazily through the keyed
+// render-pass cache with the multiview bit set (view mask 0b11). Only draws that target a
+// 2-layer texture ever reach this.
+VkRenderPass GSDeviceVK::GetTFXMultiviewRenderPass(bool rt, bool ds, bool colclip, bool stencil, bool fbl,
+	bool dsp, VkAttachmentLoadOp rt_op, VkAttachmentLoadOp ds_op)
+{
+	const VkFormat rp_rt_format =
+		rt ? LookupNativeFormat(colclip ? GSTexture::Format::ColorClip : GSTexture::Format::Color) :
+			 VK_FORMAT_UNDEFINED;
+	const VkFormat rp_depth_format = ds ? LookupNativeFormat(GSTexture::Format::DepthStencil) : VK_FORMAT_UNDEFINED;
+	const VkAttachmentLoadOp opc =
+		(!stencil || !m_features.stencil_buffer) ? VK_ATTACHMENT_LOAD_OP_DONT_CARE : VK_ATTACHMENT_LOAD_OP_LOAD;
+
+	return GetRenderPass(rp_rt_format, rp_depth_format,
+		(rp_rt_format != VK_FORMAT_UNDEFINED) ? rt_op : VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+		(rp_rt_format != VK_FORMAT_UNDEFINED) ? VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE,
+		(rp_depth_format != VK_FORMAT_UNDEFINED) ? ds_op : VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+		(rp_depth_format != VK_FORMAT_UNDEFINED) ? VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE,
+		(rp_depth_format != VK_FORMAT_UNDEFINED) ? opc : VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+		VK_ATTACHMENT_STORE_OP_DONT_CARE, fbl, dsp, /*multiview=*/true);
 }
 
 VkRenderPass GSDeviceVK::GetRenderPassForRestarting(VkRenderPass pass)
@@ -1706,7 +1773,16 @@ VkRenderPass GSDeviceVK::CreateCachedRenderPass(RenderPassCacheKey key)
 	const VkSubpassDescription subpass = {subpass_flags, VK_PIPELINE_BIND_POINT_GRAPHICS, num_subpass_inputs,
 		num_subpass_inputs ? input_reference.data() : nullptr, color_reference_ptr ? 1u : 0u,
 		color_reference_ptr ? color_reference_ptr : nullptr, nullptr, depth_reference_ptr, 0, nullptr};
-	const VkRenderPassCreateInfo pass_info = {VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO, nullptr, 0u, num_attachments,
+
+	// PCSX2-VR (M4.3-pre): stereo (2-view) multiview render pass. view_mask 0b11 drives both
+	// eye layers from one subpass. view_mask must outlive vkCreateRenderPass, so it is a local
+	// that lives to the end of this function (past the create call below).
+	const u32 view_mask = 0x3u; // views 0 and 1 (two eyes)
+	const VkRenderPassMultiviewCreateInfo multiview_info = {VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO, nullptr,
+		1u, &view_mask, 0u, nullptr, 1u, &view_mask};
+
+	const VkRenderPassCreateInfo pass_info = {VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+		key.multiview ? &multiview_info : nullptr, 0u, num_attachments,
 		attachments.data(), 1u, &subpass, num_subpass_dependencies, num_subpass_dependencies ? subpass_dependency.data() : nullptr};
 
 	VkRenderPass pass;
@@ -2106,7 +2182,27 @@ bool GSDeviceVK::AllocatePreinitializedGPUBuffer(u32 size, VkBuffer* gpu_buffer,
 	const VkBufferCopy buf_copy = {0u, 0u, size};
 	fill_callback(cpu_ai.pMappedData);
 	vmaFlushAllocation(m_allocator, cpu_allocation, 0, size);
-	vkCmdCopyBuffer(GetCurrentInitCommandBuffer(), cpu_buffer, *gpu_buffer, 1, &buf_copy);
+	const VkCommandBuffer cmdbuf = GetCurrentInitCommandBuffer();
+	vkCmdCopyBuffer(cmdbuf, cpu_buffer, *gpu_buffer, 1, &buf_copy);
+
+	// This buffer is consumed as an index buffer by vkCmdDrawIndexed (the fixed
+	// sprite/point/line expansion path), which is recorded in a different command
+	// buffer submitted after this init buffer. Submission order alone does not make
+	// the transfer write available/visible to the index-input stage, so an explicit
+	// buffer barrier is required - otherwise the index fetch can read stale memory
+	// (SYNC-HAZARD-READ-AFTER-WRITE: vkCmdDrawIndexed INDEX_READ vs vkCmdCopyBuffer
+	// TRANSFER_WRITE with write_barriers: 0).
+	VkBufferMemoryBarrier barrier = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
+	barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+	barrier.dstAccessMask = VK_ACCESS_INDEX_READ_BIT;
+	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.buffer = *gpu_buffer;
+	barrier.offset = 0;
+	barrier.size = VK_WHOLE_SIZE;
+	vkCmdPipelineBarrier(cmdbuf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0, 0, nullptr, 1,
+		&barrier, 0, nullptr);
+
 	DeferBufferDestruction(cpu_buffer, cpu_allocation);
 	return true;
 }
@@ -2235,8 +2331,220 @@ bool GSDeviceVK::Create(GSVSyncMode vsync_mode, bool allow_present_throttle)
 	if (!CompileImGuiPipeline())
 		return false;
 
+	// PCSX2-VR (M4.3-pre): optional, env-gated multiview infrastructure self-test. Runs before
+	// InitializeState() so the (fresh, post-submit) command buffer is set up afterwards. Fully
+	// inert unless PCSX2_VR_MV_SELFTEST=1, so the shipping path is byte-identical when unset.
+	if (const char* val = std::getenv("PCSX2_VR_MV_SELFTEST"); val && StringUtil::FromChars<bool>(val).value_or(false))
+		RunMultiviewSelfTest();
+
 	InitializeState();
 	return true;
+}
+
+void GSDeviceVK::RunMultiviewSelfTest()
+{
+	Console.WriteLn("(VR) MV self-test: starting (PCSX2_VR_MV_SELFTEST=1).");
+
+	const bool mv_supported = SupportsMultiview();
+	Console.WriteLn("(VR) MV self-test: multiview feature supported: %s", mv_supported ? "yes" : "no");
+	if (!mv_supported)
+	{
+		Console.WriteLn("(VR) MV self-test: multiview unsupported on this GPU — skipping gracefully (not a failure).");
+		return;
+	}
+
+	static constexpr int TEST_W = 256;
+	static constexpr int TEST_H = 224;
+	static constexpr int TEST_LAYERS = 2;
+
+	bool ok = true;
+
+	// (1) 2-layer array render target + its array/per-layer views.
+	std::unique_ptr<GSTextureVK> tex =
+		GSTextureVK::Create(GSTexture::RenderTarget, GSTexture::Format::Color, TEST_W, TEST_H, 1, TEST_LAYERS);
+	const bool tex_ok =
+		static_cast<bool>(tex) && tex->GetArrayLayers() == static_cast<u32>(TEST_LAYERS) && tex->GetView() != VK_NULL_HANDLE;
+	const VkImageView layer0 = tex_ok ? tex->GetLayerView(0) : VK_NULL_HANDLE;
+	const VkImageView layer1 = tex_ok ? tex->GetLayerView(1) : VK_NULL_HANDLE;
+	const bool views_ok = tex_ok && layer0 != VK_NULL_HANDLE && layer1 != VK_NULL_HANDLE;
+	Console.WriteLn("(VR) MV self-test: 2-layer image + array/per-layer views created: %s", views_ok ? "yes" : "NO");
+	ok = ok && views_ok;
+
+	// (2) 2-view multiview render pass (CLEAR/STORE) built via the new RenderPassBuilder path.
+	VkRenderPass rp = VK_NULL_HANDLE;
+	if (views_ok)
+	{
+		Vulkan::RenderPassBuilder rpb;
+		rpb.AddAttachment(tex->GetVkFormat(), VK_SAMPLE_COUNT_1_BIT, VK_ATTACHMENT_LOAD_OP_CLEAR,
+			VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+		rpb.AddSubpass();
+		rpb.AddSubpassColorAttachment(0, 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+		rpb.SetMultiview(2);
+		rp = rpb.Create(m_device);
+	}
+	const bool rp_ok = (rp != VK_NULL_HANDLE);
+	Console.WriteLn("(VR) MV self-test: 2-view multiview render pass created: %s", rp_ok ? "yes" : "NO");
+	ok = ok && rp_ok;
+
+	// (3) Framebuffer over the 2D_ARRAY view. Multiview framebuffers use layers=1 — the render
+	// pass view mask (not the framebuffer layer count) selects the array layers. Classic gotcha.
+	VkFramebuffer fb = VK_NULL_HANDLE;
+	if (rp_ok)
+	{
+		Vulkan::FramebufferBuilder fbb;
+		fbb.AddAttachment(tex->GetView());
+		fbb.SetSize(TEST_W, TEST_H, 1);
+		fbb.SetRenderPass(rp);
+		fb = fbb.Create(m_device);
+	}
+	const bool fb_ok = (fb != VK_NULL_HANDLE);
+	Console.WriteLn("(VR) MV self-test: framebuffer (layers=1 over 2D_ARRAY view) created: %s", fb_ok ? "yes" : "NO");
+	ok = ok && fb_ok;
+
+	// (4) Record the multiview pass with a clear, then submit and wait idle.
+	bool submit_ok = false;
+	if (fb_ok)
+	{
+		EndRenderPass();
+		const VkCommandBuffer cmdbuf = GetCurrentCommandBuffer();
+
+		VkClearValue cv = {};
+		cv.color.float32[0] = 0.0f;
+		cv.color.float32[1] = 0.25f;
+		cv.color.float32[2] = 0.5f;
+		cv.color.float32[3] = 1.0f;
+		const VkRenderPassBeginInfo bi = {VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO, nullptr, rp, fb,
+			{{0, 0}, {static_cast<u32>(TEST_W), static_cast<u32>(TEST_H)}}, 1u, &cv};
+		vkCmdBeginRenderPass(cmdbuf, &bi, VK_SUBPASS_CONTENTS_INLINE);
+		vkCmdEndRenderPass(cmdbuf);
+
+		// The render pass leaves both layers in COLOR_ATTACHMENT_OPTIMAL; sync the tracker and
+		// exercise the multi-layer transition barrier by moving the whole array to ShaderReadOnly.
+		tex->OverrideImageLayout(GSTextureVK::Layout::ColorAttachment);
+		tex->TransitionToLayout(cmdbuf, GSTextureVK::Layout::ShaderReadOnly);
+
+		ExecuteCommandBuffer(true);
+		submit_ok = !m_last_submit_failed;
+	}
+	Console.WriteLn("(VR) MV self-test: pass recorded + submitted + waited idle: %s", submit_ok ? "yes" : "NO");
+	ok = ok && submit_ok;
+
+	// (5) Prove the layer0 -> layer1 mirror (BroadcastLayer0) actually copies. Clear layer 0 to a
+	// colour A and layer 1 to a DISTINCT colour B, broadcast layer 0 over layer 1, then read BOTH
+	// layers back and assert layer1 == A (the mirror ran) and layer0 == A (source untouched). The
+	// distinct B is what makes it a real test: a no-op broadcast would leave layer1 reading B.
+	//
+	// Two plumbing facts drive the shape here:
+	//   * Per-layer CLEARS use vkCmdClearColorImage with baseArrayLayer=L,layerCount=1 OUTSIDE any
+	//     render pass (image in TRANSFER_DST) — no per-layer framebuffer needed.
+	//   * READBACK: GSDownloadTexture::CopyFromTexture addresses a mip LEVEL, not an array layer, so
+	//     layer 1 can't be downloaded directly. We vkCmdCopyImage each source layer into its own
+	//     1-layer scratch RT, then download the scratch.
+	bool mirror_ok = false;
+	if (ok)
+	{
+		// tex format is Format::Color == VK_FORMAT_R8G8B8A8_UNORM: in-memory byte order is R,G,B,A.
+		static constexpr u8 COLOUR_A[4] = {255, 0, 0, 255}; // red
+		static constexpr u8 COLOUR_B[4] = {0, 255, 0, 255}; // green (distinct in every channel)
+		const VkClearColorValue cvA = {{1.0f, 0.0f, 0.0f, 1.0f}};
+		const VkClearColorValue cvB = {{0.0f, 1.0f, 0.0f, 1.0f}};
+
+		// Per-layer clears: whole array to TRANSFER_DST (TransitionToLayout spans every layer), then
+		// clear each layer's single-layer subresource range independently.
+		EndRenderPass();
+		VkCommandBuffer cmdbuf = GetCurrentCommandBuffer();
+		tex->TransitionToLayout(cmdbuf, GSTextureVK::Layout::TransferDst);
+		const VkImageSubresourceRange srr_l0 = {VK_IMAGE_ASPECT_COLOR_BIT, 0u, 1u, 0u, 1u};
+		const VkImageSubresourceRange srr_l1 = {VK_IMAGE_ASPECT_COLOR_BIT, 0u, 1u, 1u, 1u};
+		vkCmdClearColorImage(cmdbuf, tex->GetImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &cvA, 1, &srr_l0);
+		vkCmdClearColorImage(cmdbuf, tex->GetImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &cvB, 1, &srr_l1);
+
+		// Mirror layer 0 over the full rect into layer 1. BroadcastLayer0 EndRenderPass()es and runs
+		// its own TransferDst->TransferSelf transition + same-image copy; tex stays State::Dirty
+		// (constructor default, never cleared through GSTexture's tracker), so it doesn't early-out.
+		BroadcastLayer0(tex.get(), GSVector4(0.0f, 0.0f, static_cast<float>(TEST_W), static_cast<float>(TEST_H)));
+
+		// Readback resources: one 1-layer scratch RT + one download buffer per source layer.
+		std::unique_ptr<GSTextureVK> scratch0 =
+			GSTextureVK::Create(GSTexture::RenderTarget, GSTexture::Format::Color, TEST_W, TEST_H, 1, 1);
+		std::unique_ptr<GSTextureVK> scratch1 =
+			GSTextureVK::Create(GSTexture::RenderTarget, GSTexture::Format::Color, TEST_W, TEST_H, 1, 1);
+		std::unique_ptr<GSDownloadTextureVK> dl0 = GSDownloadTextureVK::Create(TEST_W, TEST_H, GSTexture::Format::Color);
+		std::unique_ptr<GSDownloadTextureVK> dl1 = GSDownloadTextureVK::Create(TEST_W, TEST_H, GSTexture::Format::Color);
+		const bool rb_alloc_ok = static_cast<bool>(scratch0) && static_cast<bool>(scratch1) &&
+								 static_cast<bool>(dl0) && static_cast<bool>(dl1);
+		Console.WriteLn("(VR) MV self-test: readback scratch RTs + download buffers allocated: %s",
+			rb_alloc_ok ? "yes" : "NO");
+
+		if (rb_alloc_ok)
+		{
+			// Copy each source layer into a scratch layer 0. Source: whole array to TransferSrc;
+			// scratches to TransferDst. (These TransitionToLayout calls keep the layout tracker in
+			// sync with reality so the subsequent GSDownloadTextureVK transitions are correct.)
+			cmdbuf = GetCurrentCommandBuffer();
+			tex->TransitionToLayout(cmdbuf, GSTextureVK::Layout::TransferSrc);
+			scratch0->TransitionToLayout(cmdbuf, GSTextureVK::Layout::TransferDst);
+			scratch1->TransitionToLayout(cmdbuf, GSTextureVK::Layout::TransferDst);
+
+			const VkImageCopy ic0 = {{VK_IMAGE_ASPECT_COLOR_BIT, 0u, 0u, 1u}, {0, 0, 0},
+				{VK_IMAGE_ASPECT_COLOR_BIT, 0u, 0u, 1u}, {0, 0, 0},
+				{static_cast<u32>(TEST_W), static_cast<u32>(TEST_H), 1u}};
+			const VkImageCopy ic1 = {{VK_IMAGE_ASPECT_COLOR_BIT, 0u, 1u, 1u}, {0, 0, 0},
+				{VK_IMAGE_ASPECT_COLOR_BIT, 0u, 0u, 1u}, {0, 0, 0},
+				{static_cast<u32>(TEST_W), static_cast<u32>(TEST_H), 1u}};
+			vkCmdCopyImage(cmdbuf, tex->GetImage(), tex->GetVkLayout(), scratch0->GetImage(),
+				scratch0->GetVkLayout(), 1, &ic0);
+			vkCmdCopyImage(cmdbuf, tex->GetImage(), tex->GetVkLayout(), scratch1->GetImage(),
+				scratch1->GetVkLayout(), 1, &ic1);
+
+			// Download both scratches (records copy-to-buffer into the same cmdbuf), then flush once
+			// to submit + wait; the second flush is a no-op (its fence already completed).
+			const GSVector4i full = GSVector4i(0, 0, TEST_W, TEST_H);
+			dl0->CopyFromTexture(full, scratch0.get(), full, 0, false);
+			dl1->CopyFromTexture(full, scratch1.get(), full, 0, false);
+			dl0->Flush();
+			dl1->Flush();
+
+			const bool map_ok = dl0->Map(full) && dl1->Map(full);
+			if (map_ok)
+			{
+				const auto sample_eq = [](const GSDownloadTextureVK* dl, int x, int y, const u8 exp[4]) -> bool {
+					const u8* px = dl->GetMapPointer() + static_cast<size_t>(y) * dl->GetMapPitch() +
+								   static_cast<size_t>(x) * 4u;
+					return px[0] == exp[0] && px[1] == exp[1] && px[2] == exp[2] && px[3] == exp[3];
+				};
+				// Corners + centre — clears are exact, so a handful of samples is conclusive.
+				const int sx[5] = {0, TEST_W - 1, 0, TEST_W - 1, TEST_W / 2};
+				const int sy[5] = {0, 0, TEST_H - 1, TEST_H - 1, TEST_H / 2};
+				bool l0_all_A = true, l1_all_A = true;
+				for (int i = 0; i < 5; i++)
+				{
+					l0_all_A = l0_all_A && sample_eq(dl0.get(), sx[i], sy[i], COLOUR_A);
+					l1_all_A = l1_all_A && sample_eq(dl1.get(), sx[i], sy[i], COLOUR_A);
+				}
+				mirror_ok = l0_all_A && l1_all_A;
+				Console.WriteLn("(VR) MV self-test: layer0 == A (source untouched): %s", l0_all_A ? "yes" : "NO");
+				Console.WriteLn("(VR) MV self-test: layer1 == A (mirror of layer0, was B): %s", l1_all_A ? "yes" : "NO");
+			}
+			else
+			{
+				Console.WriteLn("(VR) MV self-test: readback map failed: NO");
+			}
+		}
+		// scratch0/scratch1/dl0/dl1 are unique_ptr locals: released here, after the flush waited.
+	}
+	Console.WriteLn("(VR) MV self-test: layer0->layer1 mirror verified: %s",
+		ok ? (mirror_ok ? "yes" : "NO") : "skipped (prereqs failed)");
+	ok = ok && mirror_ok;
+
+	// Cleanup — we waited idle, so nothing is in flight and immediate destroys are safe.
+	if (fb != VK_NULL_HANDLE)
+		vkDestroyFramebuffer(m_device, fb, nullptr);
+	if (rp != VK_NULL_HANDLE)
+		vkDestroyRenderPass(m_device, rp, nullptr);
+	tex.reset();
+
+	Console.WriteLn("(VR) MV self-test: RESULT: %s", ok ? "PASS" : "FAIL");
 }
 
 void GSDeviceVK::Destroy()
@@ -2251,6 +2559,12 @@ void GSDeviceVK::Destroy()
 		ExecuteCommandBuffer(false);
 		WaitForGPUIdle();
 	}
+
+#ifdef ENABLE_VR
+	// PCSX2-VR: tear down the compositor (joins the pacer thread, waits for
+	// its fences) and the XR session/instance while the device is still alive.
+	VR::OnGSDeviceDestroyed();
+#endif
 
 	m_swap_chain.reset();
 
@@ -2625,6 +2939,13 @@ bool GSDeviceVK::CreateDeviceAndSwapChain()
 	if (!AcquireWindow(true))
 		return false;
 
+#ifdef ENABLE_VR
+	// PCSX2-VR: when VR is enabled, create the OpenXR instance up front and
+	// route Vulkan instance/device creation through the runtime
+	// (XR_KHR_vulkan_enable2). Any failure logs and degrades to flat rendering.
+	VR::BeginVulkanBootstrap();
+#endif
+
 	m_instance = CreateVulkanInstance(m_window_info, &m_optional_extensions, enable_debug_utils, enable_validation_layer);
 	if (m_instance == VK_NULL_HANDLE)
 	{
@@ -2683,6 +3004,21 @@ bool GSDeviceVK::CreateDeviceAndSwapChain()
 		m_physical_device = gpus[0].first;
 	}
 
+#ifdef ENABLE_VR
+	// PCSX2-VR: the runtime dictates which physical device we must render on
+	// (xrGetVulkanGraphicsDevice2KHR); a mismatched device fails session
+	// creation. Overrides the user's adapter selection while VR is active.
+	if (VR::VulkanBootstrapActive())
+	{
+		const VkPhysicalDevice xr_physical_device = VR::GetXrVulkanPhysicalDevice(m_instance);
+		if (xr_physical_device != VK_NULL_HANDLE && xr_physical_device != m_physical_device)
+		{
+			INFO_LOG("(VR) Overriding adapter selection with the OpenXR runtime's physical device.");
+			m_physical_device = xr_physical_device;
+		}
+	}
+#endif
+
 	// Read device physical memory properties, we need it for allocating buffers
 	vkGetPhysicalDeviceProperties(m_physical_device, &m_device_properties);
 
@@ -2725,6 +3061,13 @@ bool GSDeviceVK::CreateDeviceAndSwapChain()
 		return false;
 
 	VKShaderCache::Create();
+
+#ifdef ENABLE_VR
+	// PCSX2-VR: device + queues are live; create the XR session and start the
+	// compositor. Failure logs and continues flat.
+	if (VR::VulkanBootstrapActive())
+		VR::OnVulkanDeviceCreated(m_instance, m_physical_device, m_device, m_graphics_queue_family_index, m_graphics_queue);
+#endif
 
 	if (surface != VK_NULL_HANDLE)
 	{
@@ -2937,15 +3280,15 @@ VkFormat GSDeviceVK::LookupNativeFormat(GSTexture::Format format) const
 		VK_FORMAT_D32_SFLOAT;
 }
 
-GSTexture* GSDeviceVK::CreateSurface(GSTexture::Usage usage, int width, int height, int levels, GSTexture::Format format)
+GSTexture* GSDeviceVK::CreateSurface(GSTexture::Usage usage, int width, int height, int levels, GSTexture::Format format, u32 layers)
 {
-	std::unique_ptr<GSTexture> tex = GSTextureVK::Create(usage, format, width, height, levels);
+	std::unique_ptr<GSTexture> tex = GSTextureVK::Create(usage, format, width, height, levels, static_cast<int>(layers));
 	if (!tex)
 	{
 		// We're probably out of vram, try flushing the command buffer to release pending textures.
 		PurgePool();
 		ExecuteCommandBufferAndRestartRenderPass(true, "Couldn't allocate texture.");
-		tex = GSTextureVK::Create(usage, format, width, height, levels);
+		tex = GSTextureVK::Create(usage, format, width, height, levels, static_cast<int>(layers));
 	}
 
 	return tex.release();
@@ -2973,7 +3316,17 @@ void GSDeviceVK::CopyRect(GSTexture* sTex, GSTexture* dTex, const GSVector4i& r,
 	// Source is cleared, if destination is a render target, we can carry the clear forward.
 	if (sTexVK->GetState() == GSTexture::State::Cleared)
 	{
-		if (dTexVK->IsRenderTargetOrDepthStencil())
+		// PCSX2-VR (ISS-001 hunt, 2026-07-17; round 3): the attachment-clear fast path
+		// issues a VkClearRect with layerCount=1 over a 1-layer framebuffer — on any
+		// >=2-layer destination it would "complete" the copy while leaving layer 1
+		// untouched (stale right eye). Mismatched layer counts always fall through;
+		// equal >=2-layer pairs may only take it for FULL copies (ProcessClearsBeforeCopy
+		// defers a whole-texture clear, which commits across all layers) — a PARTIAL
+		// copy from a cleared 2-layer source must fall through to CommitClear + the
+		// copy proper, whose per-layer regions are layer-correct.
+		if (dTexVK->IsRenderTargetOrDepthStencil() &&
+			dTexVK->GetArrayLayers() == sTexVK->GetArrayLayers() &&
+			(full_draw_copy || dTexVK->GetArrayLayers() < 2))
 		{
 			if (ProcessClearsBeforeCopy(sTex, dTex, full_draw_copy))
 				return;
@@ -3004,6 +3357,18 @@ void GSDeviceVK::CopyRect(GSTexture* sTex, GSTexture* dTex, const GSVector4i& r,
 
 	g_perfmon.Put(GSPerfMon::TextureCopies, 1);
 
+	// PCSX2-VR (ISS-013 hunt): every stereo->mono handoff is a Phase-A left-eye-only
+	// copy — census them so the site feeding a mono effect source is identifiable.
+	{
+		static const bool s_vr_drawcensus = (std::getenv("PCSX2_VR_DRAWCENSUS") != nullptr);
+		if (s_vr_drawcensus && sTexVK->GetArrayLayers() >= 2 && dTexVK->GetArrayLayers() < 2)
+		{
+			DevCon.WriteLn("(VR) CENSUS s2m-copy %dx%d rect=%d,%d-%d,%d dst=%dx%d fmt=%d",
+				sTexVK->GetWidth(), sTexVK->GetHeight(), r.x, r.y, r.z, r.w,
+				dTexVK->GetWidth(), dTexVK->GetHeight(), static_cast<int>(dTexVK->GetFormat()));
+		}
+	}
+
 	// if the destination has been cleared, and we're not overwriting the whole thing, commit the clear first
 	// (the area outside of where we're copying to)
 	if (dTexVK->GetState() == GSTexture::State::Cleared && !full_draw_copy)
@@ -3014,9 +3379,23 @@ void GSDeviceVK::CopyRect(GSTexture* sTex, GSTexture* dTex, const GSVector4i& r,
 		(sTexVK->IsDepthStencil()) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
 	const VkImageAspectFlags dst_aspect =
 		(dTexVK->IsDepthStencil()) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
-	const VkImageCopy ic = {{src_aspect, 0u, 0u, 1u}, {r.left, r.top, 0u}, {dst_aspect, 0u, 0u, 1u},
+
+	// PCSX2-VR (M4.3): layer-aware subresources. Proxies address their aliased layer via
+	// GetBaseArrayLayer(); equal layer counts copy layer-for-layer; a mono source into a
+	// stereo destination BROADCASTS (both layers receive the same content, e.g. promoting
+	// a target); a stereo source into a mono destination takes layer 0 (Phase-A rule).
+	const u32 copy_layers = std::min(sTexVK->GetArrayLayers(), dTexVK->GetArrayLayers());
+	VkImageCopy ics[2] = {{{src_aspect, 0u, sTexVK->GetBaseArrayLayer(), copy_layers}, {r.left, r.top, 0u},
+		{dst_aspect, 0u, dTexVK->GetBaseArrayLayer(), copy_layers},
 		{static_cast<s32>(destX), static_cast<s32>(destY), 0u},
-		{static_cast<u32>(r.width()), static_cast<u32>(r.height()), 1u}};
+		{static_cast<u32>(r.width()), static_cast<u32>(r.height()), 1u}}};
+	u32 num_regions = 1;
+	if (dTexVK->GetArrayLayers() > sTexVK->GetArrayLayers())
+	{
+		ics[1] = ics[0];
+		ics[1].dstSubresource.baseArrayLayer = dTexVK->GetBaseArrayLayer() + 1;
+		num_regions = 2;
+	}
 
 	EndRenderPass();
 
@@ -3028,9 +3407,57 @@ void GSDeviceVK::CopyRect(GSTexture* sTex, GSTexture* dTex, const GSVector4i& r,
 		(dTexVK == sTexVK) ? GSTextureVK::Layout::TransferSelf : GSTextureVK::Layout::TransferDst);
 
 	vkCmdCopyImage(GetCurrentCommandBuffer(), sTexVK->GetImage(), sTexVK->GetVkLayout(), dTexVK->GetImage(),
-		dTexVK->GetVkLayout(), 1, &ic);
+		dTexVK->GetVkLayout(), num_regions, ics);
 
 	dTexVK->SetState(GSTexture::State::Dirty);
+}
+
+void GSDeviceVK::BroadcastLayer0(GSTexture* tex, const GSVector4& dRect)
+{
+	// PCSX2-VR (ISS-001): layer 0 -> layer 1 mirror on a promoted stereo target, for
+	// content that arrived through a non-multiview path (the convert/stretch pipelines).
+	// Same-image copy between distinct array layers: subresources don't overlap, and
+	// TransferSelf handles the single-layout requirement (same scheme as CopyRect's
+	// dTexVK == sTexVK case).
+	GSTextureVK* const texVK = static_cast<GSTextureVK*>(tex);
+	if (!texVK || texVK->GetArrayLayers() < 2)
+		return;
+
+	// dRect may be inverted (flipped stretches) — normalize, then snap outward to
+	// whole texels and clamp to the texture.
+	const GSVector4 mn = dRect.min(dRect.zwxy());
+	const GSVector4 mx = dRect.max(dRect.zwxy());
+	const GSVector4i r = GSVector4i(mn.floor()).blend32<0xC>(GSVector4i(mx.ceil()))
+							 .rintersect(GSVector4i(0, 0, texVK->GetWidth(), texVK->GetHeight()));
+	if (r.rempty())
+		return;
+
+	// A still-pending clear already covers every layer (CommitClear spans m_array_layers);
+	// mirroring would just copy the clear onto itself.
+	if (texVK->GetState() == GSTexture::State::Cleared)
+		return;
+
+	static const bool s_vr_chainlog = (std::getenv("PCSX2_VR_CHAINLOG") != nullptr);
+	if (s_vr_chainlog)
+	{
+		Console.WriteLn("(VR) CHAINLOG bcast0->1 %dx%d @(%d,%d) %dx%d",
+			texVK->GetWidth(), texVK->GetHeight(), r.x, r.y, r.width(), r.height());
+	}
+
+	g_perfmon.Put(GSPerfMon::TextureCopies, 1);
+	EndRenderPass();
+
+	texVK->SetUseFenceCounter(GetCurrentFenceCounter());
+	texVK->TransitionToLayout(GSTextureVK::Layout::TransferSelf);
+
+	const VkImageAspectFlags aspect =
+		texVK->IsDepthStencil() ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
+	const VkImageCopy ic = {{aspect, 0u, texVK->GetBaseArrayLayer(), 1u}, {r.left, r.top, 0},
+		{aspect, 0u, texVK->GetBaseArrayLayer() + 1u, 1u}, {r.left, r.top, 0},
+		{static_cast<u32>(r.width()), static_cast<u32>(r.height()), 1u}};
+
+	vkCmdCopyImage(GetCurrentCommandBuffer(), texVK->GetImage(), texVK->GetVkLayout(), texVK->GetImage(),
+		texVK->GetVkLayout(), 1, &ic);
 }
 
 void GSDeviceVK::DoStretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect,
@@ -3066,6 +3493,29 @@ void GSDeviceVK::PresentRect(GSTexture* sTex, const GSVector4& sRect, GSTexture*
 void GSDeviceVK::DrawMultiStretchRects(
 	const MultiStretchRect* rects, u32 num_rects, GSTexture* dTex, ShaderConvertSelector shader)
 {
+	// PCSX2-VR (ISS-001 round 3): source-aware routing, mirroring the scalar funnel.
+	// If any source is a >=2-layer stereo texture (target-to-target page copies), the
+	// batch must run per layer through proxies or the right eye's content is dropped
+	// and the union mirror below would flatten it. Proxies report 1 layer, so the
+	// recursion below takes the normal path.
+	if (dTex && dTex->GetArrayLayers() >= 2)
+	{
+		bool any_layered_src = false;
+		for (u32 i = 0; i < num_rects; i++)
+			any_layered_src |= (rects[i].src && rects[i].src->GetArrayLayers() >= 2);
+		if (any_layered_src)
+		{
+			std::vector<MultiStretchRect> lrects(rects, rects + num_rects);
+			for (u32 l = 0; l < dTex->GetArrayLayers(); l++)
+			{
+				for (u32 i = 0; i < num_rects; i++)
+					lrects[i].src = rects[i].src->GetLayerProxyTexture(l);
+				DrawMultiStretchRects(lrects.data(), num_rects, dTex->GetLayerProxyTexture(l), shader);
+			}
+			return;
+		}
+	}
+
 	GSTexture* last_tex = rects[0].src;
 	Filter last_filter = rects[0].filter;
 	u8 last_wmask = rects[0].wmask.wrgba;
@@ -3103,6 +3553,21 @@ void GSDeviceVK::DrawMultiStretchRects(
 	}
 
 	DoMultiStretchRects(rects + first, count, static_cast<GSTextureVK*>(dTex), shader);
+
+	// PCSX2-VR (ISS-001): this override bypasses the common stretch funnel, so mirror
+	// the union of the destination rects into layer 1 here (one copy per batch). See
+	// GSDevice::BroadcastLayer0.
+	if (dTex && dTex->GetArrayLayers() >= 2)
+	{
+		GSVector4 mn = rects[0].dst_rect.min(rects[0].dst_rect.zwxy());
+		GSVector4 mx = rects[0].dst_rect.max(rects[0].dst_rect.zwxy());
+		for (u32 i = 1; i < num_rects; i++)
+		{
+			mn = mn.min(rects[i].dst_rect.min(rects[i].dst_rect.zwxy()));
+			mx = mx.max(rects[i].dst_rect.max(rects[i].dst_rect.zwxy()));
+		}
+		BroadcastLayer0(dTex, GSVector4(mn.x, mn.y, mx.z, mx.w));
+	}
 }
 
 void GSDeviceVK::DoMultiStretchRects(
@@ -4919,6 +5384,9 @@ VkShaderModule GSDeviceVK::GetTFXVertexShader(GSHWDrawConfig::VSSelector sel)
 	AddMacro(ss, "VS_IIP", sel.iip);
 	AddMacro(ss, "VS_POINT_SIZE", sel.point_size);
 	AddMacro(ss, "VS_EXPAND", static_cast<int>(sel.expand));
+	AddMacro(ss, "VS_MULTIVIEW", sel.multiview);
+	if (sel.multiview)
+		DevCon.WriteLn("(VR) Compiling multiview TFX vertex shader variant (key %02X).", sel.key);
 	AddMacro(ss, "VS_PROVOKING_VERTEX_LAST", static_cast<int>(m_features.provoking_vertex_last));
 	ss << m_tfx_source;
 
@@ -4993,6 +5461,9 @@ VkShaderModule GSDeviceVK::GetTFXFragmentShader(const GSHWDrawConfig::PSSelector
 	AddMacro(ss, "PS_PABE", sel.pabe);
 	AddMacro(ss, "PS_SCANMSK", sel.scanmsk);
 	AddMacro(ss, "PS_TEX_IS_FB", sel.tex_is_fb);
+	AddMacro(ss, "PS_TEX_IN_ARRAY", sel.tex_in_array);
+	AddMacro(ss, "PS_RT_IN_ARRAY", sel.rt_in_array);
+	AddMacro(ss, "PS_DEPTH_IN_ARRAY", sel.depth_in_array);
 	AddMacro(ss, "PS_NO_COLOR", sel.no_color);
 	AddMacro(ss, "PS_NO_COLOR1", sel.no_color1);
 	AddMacro(ss, "PS_ZTST", sel.ztst);
@@ -5049,7 +5520,7 @@ VkPipeline GSDeviceVK::CreateTFXPipeline(const PipelineSelector& p)
 			GetTFXRenderPass(p.rt, p.ds, p.ps.colclip_hw, p.dss.date,
 				p.IsRTFeedbackLoop(), p.IsTestingAndSamplingDepth(),
 				p.rt ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-				p.ds ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_DONT_CARE),
+				p.ds ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_DONT_CARE, p.vs.multiview),
 			0);
 	}
 	gpb.SetPrimitiveTopology(topology_lookup[p.topology]);
@@ -5750,9 +6221,16 @@ bool GSDeviceVK::ApplyTFXState(bool already_execed)
 	{
 		if (flags & DIRTY_FLAG_TFX_TEXTURE_TEX)
 		{
+			// PCSX2-VR (M4.3): sampled bindings of array textures use the layer-0 view
+			// (sampler2D can't take a 2D_ARRAY view; mono consumers read the left eye) —
+			// EXCEPT stereo feed draws (ps.tex_in_array), whose FS declares
+			// sampler2DArray and samples the gl_ViewIndex layer: those bind the ARRAY
+			// view. Input-attachment bindings below keep the array view — multiview
+			// passes auto-select the current view's layer for input attachments.
 			dsub.AddCombinedImageSamplerDescriptorWrite(VK_NULL_HANDLE, TFX_TEXTURE_TEXTURE,
-				m_tfx_textures[TFX_TEXTURE_TEXTURE]->GetView(), m_tfx_sampler,
-				m_tfx_textures[TFX_TEXTURE_TEXTURE]->GetVkLayout());
+				m_tfx_tex_in_array ? m_tfx_textures[TFX_TEXTURE_TEXTURE]->GetView() :
+									 m_tfx_textures[TFX_TEXTURE_TEXTURE]->GetViewForSampling(),
+				m_tfx_sampler, m_tfx_textures[TFX_TEXTURE_TEXTURE]->GetVkLayout());
 		}
 		if (flags & DIRTY_FLAG_TFX_TEXTURE_PALETTE)
 		{
@@ -5768,7 +6246,12 @@ bool GSDeviceVK::ApplyTFXState(bool already_execed)
 			}
 			else
 			{
-				dsub.AddImageDescriptorWrite(VK_NULL_HANDLE, TFX_TEXTURE_RT, m_tfx_textures[TFX_TEXTURE_RT]->GetView(),
+				// PCSX2-VR (Stage 1 / D4): on the sampled feedback path a stereo RT must be
+				// read per-view — bind the ARRAY view (FS declares texture2DArray RtSampler),
+				// else the layer-0 sampling view (both eyes read the left eye's destination).
+				dsub.AddImageDescriptorWrite(VK_NULL_HANDLE, TFX_TEXTURE_RT,
+					m_tfx_rt_in_array ? m_tfx_textures[TFX_TEXTURE_RT]->GetView() :
+										m_tfx_textures[TFX_TEXTURE_RT]->GetViewForSampling(),
 					m_tfx_textures[TFX_TEXTURE_RT]->GetVkLayout());
 			}
 		}
@@ -5786,7 +6269,13 @@ bool GSDeviceVK::ApplyTFXState(bool already_execed)
 			}
 			else
 			{
-				dsub.AddImageDescriptorWrite(VK_NULL_HANDLE, TFX_TEXTURE_DEPTH, m_tfx_textures[TFX_TEXTURE_DEPTH]->GetView(),
+				// PCSX2-VR (Stage 1 / D4): a stereo depth feedback read is per-view too — bind
+				// the ARRAY view (FS texture2DArray DepthSampler) when the depth target is a
+				// 2-layer array, else the layer-0 view. Gated separately from the RT: a stereo
+				// RT can pair with a mono temporary-Z depth (this stays layer-0/texture2D).
+				dsub.AddImageDescriptorWrite(VK_NULL_HANDLE, TFX_TEXTURE_DEPTH,
+					m_tfx_depth_in_array ? m_tfx_textures[TFX_TEXTURE_DEPTH]->GetView() :
+										   m_tfx_textures[TFX_TEXTURE_DEPTH]->GetViewForSampling(),
 					m_tfx_textures[TFX_TEXTURE_DEPTH]->GetVkLayout());
 			}
 		}
@@ -5823,7 +6312,7 @@ bool GSDeviceVK::ApplyUtilityState(bool already_execed)
 
 		Vulkan::DescriptorSetUpdateBuilder dsub;
 		dsub.AddCombinedImageSamplerDescriptorWrite(
-			VK_NULL_HANDLE, 0, m_utility_texture->GetView(), m_utility_sampler, m_utility_texture->GetVkLayout());
+			VK_NULL_HANDLE, 0, m_utility_texture->GetViewForSampling(), m_utility_sampler, m_utility_texture->GetVkLayout());
 		dsub.PushUpdate(cmdbuf, VK_PIPELINE_BIND_POINT_GRAPHICS, m_utility_pipeline_layout, 0, false);
 	}
 
@@ -6028,6 +6517,36 @@ void GSDeviceVK::RenderHW(GSHWDrawConfig& config)
 	PipelineSelector& pipe = m_pipeline_selector;
 	UpdateHWPipelineSelector(config, pipe);
 
+	// PCSX2-VR (Phase-A gap census, PCSX2_VR_DRAWCENSUS=1, zero-cost off): one line
+	// per stereo draw whose config touches a class the aux passes don't yet handle
+	// per-eye — colclip episodes, any destination-alpha mode, or an RT/depth
+	// feedback read (the RtSampler layer-0 path). Replayed over a dump this names
+	// which gap a field artifact belongs to. See docs/features/multiview-aux-passes.md.
+	{
+		static const bool s_vr_drawcensus = (std::getenv("PCSX2_VR_DRAWCENSUS") != nullptr);
+		if (s_vr_drawcensus && pipe.vs.multiview &&
+			(config.colclip_mode != GSHWDrawConfig::ColClipMode::NoModify || colclip_rt ||
+				config.destination_alpha != GSHWDrawConfig::DestinationAlphaMode::Off ||
+				pipe.IsRTFeedbackLoop() || pipe.IsDepthFeedbackLoop() || config.vs.fst ||
+				(config.rt && config.ds &&
+					config.rt->GetArrayLayers() != config.ds->GetArrayLayers())))
+		{
+			static u32 s_census_n = 0;
+			if (config.vs.fst)
+				DevCon.WriteLn("(VR) CENSUS-FST area=%d,%d-%d,%d verts=%u indices=%u tex=%d abe=%u",
+					config.drawarea.x, config.drawarea.y, config.drawarea.z, config.drawarea.w,
+					config.nverts, config.nindices, config.tex ? 1 : 0,
+					static_cast<u32>(config.blend.enable));
+			DevCon.WriteLn("(VR) CENSUS n=%u colclip_mode=%d colclip_rt=%d date=%d datm=%u ps_date=%u rtl=%u dsl=%u fbl=%u dfbl=%u fst=%u verts=%u",
+				++s_census_n, static_cast<int>(config.colclip_mode), colclip_rt ? 1 : 0,
+				static_cast<int>(config.destination_alpha), static_cast<u32>(config.datm),
+				static_cast<u32>(config.ps.date),
+				config.rt ? config.rt->GetArrayLayers() : 0u, config.ds ? config.ds->GetArrayLayers() : 0u,
+				pipe.IsRTFeedbackLoop() ? 1u : 0u, pipe.IsDepthFeedbackLoop() ? 1u : 0u,
+				static_cast<u32>(config.vs.fst), config.nverts);
+		}
+	}
+
 	// now blit the colclip texture back to the original target
 	if (colclip_rt)
 	{
@@ -6052,7 +6571,8 @@ void GSDeviceVK::RenderHW(GSHWDrawConfig& config)
 
 				BeginClearRenderPass(GetTFXRenderPass(true, pipe.ds, false, false, pipe.IsRTFeedbackLoop(),
 										 pipe.IsTestingAndSamplingDepth(), VK_ATTACHMENT_LOAD_OP_CLEAR,
-										 pipe.ds ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_DONT_CARE),
+										 pipe.ds ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+										 pipe.vs.multiview),
 					draw_rt->GetRect(), cvs, cv_count);
 				draw_rt->SetState(GSTexture::State::Dirty);
 			}
@@ -6060,7 +6580,8 @@ void GSDeviceVK::RenderHW(GSHWDrawConfig& config)
 			{
 				BeginRenderPass(GetTFXRenderPass(true, pipe.ds, false, false, pipe.IsRTFeedbackLoop(),
 									pipe.IsTestingAndSamplingDepth(), VK_ATTACHMENT_LOAD_OP_LOAD,
-									pipe.ds ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_DONT_CARE),
+									pipe.ds ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+									pipe.vs.multiview),
 					draw_rt->GetRect());
 			}
 
@@ -6103,6 +6624,20 @@ void GSDeviceVK::RenderHW(GSHWDrawConfig& config)
 		break;
 
 		case GSHWDrawConfig::DestinationAlphaMode::Stencil:
+#ifdef ENABLE_VR
+			// Known Phase-A gap: the DATE stencil-setup pass is not multiview, so on a
+			// stereo target only layer 0's stencil is primed; the right eye's DATE test
+			// reads stale stencil. Escalate if a showcase shows right-eye DATE artifacts.
+			if (pipe.vs.multiview)
+			{
+				static bool s_warned_date_stereo = false;
+				if (!s_warned_date_stereo)
+				{
+					s_warned_date_stereo = true;
+					Console.Warning("(VR) DATE stencil on a stereo target — right-eye stencil is a known Phase-A gap.");
+				}
+			}
+#endif
 			SetupDATE(draw_rt, config.ds, config.datm, config.drawarea);
 			break;
 	}
@@ -6114,7 +6649,10 @@ void GSDeviceVK::RenderHW(GSHWDrawConfig& config)
 		{
 			config.colclip_update_area = config.drawarea;
 			EndRenderPass();
-			colclip_rt = static_cast<GSTextureVK*>(CreateFeedbackTarget(rtsize.x, rtsize.y, GSTexture::Format::ColorClip, false));
+			// PCSX2-VR (M4.3): the colclip temp inherits the draw target's layer count so a
+			// stereo draw chain stays multiview through hw colclip rendering.
+			colclip_rt = static_cast<GSTextureVK*>(CreateFeedbackTarget(
+				rtsize.x, rtsize.y, GSTexture::Format::ColorClip, false, true, draw_rt->GetArrayLayers()));
 			if (!colclip_rt)
 			{
 				Console.Warning("VK: Failed to allocate ColorClip render target, aborting draw.");
@@ -6281,7 +6819,7 @@ void GSDeviceVK::RenderHW(GSHWDrawConfig& config)
 		const VkAttachmentLoadOp ds_op = GetLoadOpForTexture(draw_ds);
 		const VkRenderPass rp = GetTFXRenderPass(pipe.rt, pipe.ds, pipe.ps.colclip_hw,
 			config.destination_alpha == GSHWDrawConfig::DestinationAlphaMode::Stencil, pipe.IsRTFeedbackLoop(),
-			pipe.IsTestingAndSamplingDepth(), rt_op, ds_op);
+			pipe.IsTestingAndSamplingDepth(), rt_op, ds_op, pipe.vs.multiview);
 		const bool is_clearing_rt = (rt_op == VK_ATTACHMENT_LOAD_OP_CLEAR || ds_op == VK_ATTACHMENT_LOAD_OP_CLEAR);
 
 		// Only draw to the active area of the colclip hw target. Except when depth is cleared, we need to use the full
@@ -6420,7 +6958,8 @@ void GSDeviceVK::RenderHW(GSHWDrawConfig& config)
 
 				BeginClearRenderPass(GetTFXRenderPass(true, pipe.ds, false, false, pipe.IsRTFeedbackLoop(),
 										 pipe.IsTestingAndSamplingDepth(), VK_ATTACHMENT_LOAD_OP_CLEAR,
-										 pipe.ds ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_DONT_CARE),
+										 pipe.ds ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+										 pipe.vs.multiview),
 					draw_rt->GetRect(), cvs, cv_count);
 				draw_rt->SetState(GSTexture::State::Dirty);
 			}
@@ -6428,7 +6967,8 @@ void GSDeviceVK::RenderHW(GSHWDrawConfig& config)
 			{
 				BeginRenderPass(GetTFXRenderPass(true, pipe.ds, false, false, pipe.IsRTFeedbackLoop(),
 									pipe.IsTestingAndSamplingDepth(), VK_ATTACHMENT_LOAD_OP_LOAD,
-									pipe.ds ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_DONT_CARE),
+									pipe.ds ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+									pipe.vs.multiview),
 					draw_rt->GetRect());
 			}
 
@@ -6449,7 +6989,34 @@ void GSDeviceVK::RenderHW(GSHWDrawConfig& config)
 void GSDeviceVK::UpdateHWPipelineSelector(GSHWDrawConfig& config, PipelineSelector& pipe)
 {
 	pipe.vs.key = config.vs.key;
+	// PCSX2-VR (M4.3): a draw is multiview iff its target is a 2-layer stereo texture.
+	// Classification lives entirely in the texture cache (promote-at-scanout); everything
+	// here derives structurally from the bound target, so mono configs are untouched.
+	pipe.vs.multiview = ((config.rt && config.rt->GetArrayLayers() > 1) ||
+						 (config.ds && config.ds->GetArrayLayers() > 1));
 	pipe.ps.key_hi = config.ps.key_hi;
+	// A multiview draw sampling a stereo texture (a feed blit between display-chain
+	// targets) samples per-view layers: bind the ARRAY view and select the layer with
+	// gl_ViewIndex in the FS. Mono draws keep the layer-0 sampling rule.
+	m_tfx_tex_in_array = (pipe.vs.multiview && config.tex && config.tex->GetArrayLayers() > 1);
+	pipe.ps.tex_in_array = m_tfx_tex_in_array;
+	// PCSX2-VR (Stage 1 / D4): the RT / depth FEEDBACK read on the sampled path (feedback-loop-
+	// layout, the modern-NVIDIA path where the input attachment is NOT used) binds the layer-0
+	// GetViewForSampling view — on a promoted stereo target both eyes read the LEFT eye's
+	// destination (Full DATE / StencilOne FS / SW blend / FBMASK). When the bound feedback
+	// texture is a 2-layer array, bind the ARRAY view + sample gl_ViewIndex. Gated per-texture
+	// on the actual bound layer count: the temporary-Z path (GSRendererHW) legitimately pairs a
+	// stereo RT with a mono depth, so a single shared bit would bind a 1-layer view to a
+	// texture2DArray sampler. The input-attachment path (texture_barrier && !FBL) is already
+	// per-view correct (multiview auto-selects the view's layer) and keeps both bits clear. Both
+	// bits live in key_hi, so they are set after `pipe.ps.key_hi = config.ps.key_hi` above.
+	const bool fb_layout_sampled = UseFeedbackLoopLayout();
+	m_tfx_rt_in_array = (fb_layout_sampled && pipe.vs.multiview && config.rt &&
+						 config.rt->GetArrayLayers() > 1 && !config.ps.HasColorROV());
+	pipe.ps.rt_in_array = m_tfx_rt_in_array;
+	m_tfx_depth_in_array = (fb_layout_sampled && pipe.vs.multiview && config.ds &&
+							config.ds->GetArrayLayers() > 1 && !config.ps.HasDepthROV());
+	pipe.ps.depth_in_array = m_tfx_depth_in_array;
 	pipe.ps.key_lo = config.ps.key_lo;
 	pipe.dss.key = config.ps.HasDepthROV() ? GSHWDrawConfig::DepthStencilSelector::NoDepth().key : config.depth.key;
 	pipe.bs.key = config.ps.HasColorROV() ? GSHWDrawConfig::BlendState().key : config.blend.key;

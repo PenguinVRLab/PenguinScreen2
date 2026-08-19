@@ -14,7 +14,7 @@
    <bool>true</bool>
   </property>
   <property name="windowTitle">
-   <string>PCSX2</string>
+   <string>PenguinScreen2</string>
   </property>
   <property name="windowIcon">
    <iconset>
@@ -533,7 +533,7 @@
     <iconset theme="book"/>
    </property>
    <property name="text">
-    <string>PCSX2 &amp;Wiki...</string>
+    <string>PenguinScreen2 &amp;Wiki...</string>
    </property>
   </action>
   <action name="actionDocumentation">
@@ -575,7 +575,7 @@
      <normaloff>:/icons/AppIcon64.png</normaloff>:/icons/AppIcon64.png</iconset>
    </property>
    <property name="text">
-    <string>&amp;About PCSX2...</string>
+    <string>&amp;About PenguinScreen2...</string>
    </property>
   </action>
   <action name="actionToolbarChangeDisc">

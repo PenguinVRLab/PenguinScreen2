@@ -11,6 +11,9 @@
 #include "common/BitUtils.h"
 #include "common/StringUtil.h"
 #include <bit>
+#ifdef ENABLE_VR
+#include "VR/StereoState.h"
+#endif
 
 using PS_ATST  = GSShader::PS_ATST;
 using PS_AFAIL = GSShader::PS_AFAIL;
@@ -185,7 +188,20 @@ GSTexture* GSRendererHW::GetOutput(int i, float& scale, int& y_offset)
 
 		if (GSConfig.SaveFrame && GSConfig.ShouldDump(s_n, g_perfmon.GetFrame()))
 		{
-			t->Save(GetDrawDumpPath("%05lld_f%05lld_fr%d_%05x_%s.bmp", s_n, g_perfmon.GetFrame(), i, static_cast<int>(TEX0.TBP0), GSUtil::GetPSMName(TEX0.PSM)));
+			GSTexture* save_tex = t;
+#ifdef ENABLE_VR
+			// PCSX2-VR (ISS-013 probe): -dump f saves the display target AFTER rt->Update()
+			// (the post-Update merge source). Honor PCSX2_VR_SNAPSHOT_LAYER=1 here too so the
+			// probe can see whether a merge-time mono upload stamps the right eye. Same idiom
+			// as GSRenderer::SaveSnapshotToMemory. Zero-cost when the env is unset.
+			if (save_tex->GetArrayLayers() > 1)
+			{
+				static const char* layer_env = std::getenv("PCSX2_VR_SNAPSHOT_LAYER");
+				if (layer_env && layer_env[0] == '1')
+					save_tex = save_tex->GetLayerProxyTexture(1);
+			}
+#endif
+			save_tex->Save(GetDrawDumpPath("%05lld_f%05lld_fr%d_%05x_%s.bmp", s_n, g_perfmon.GetFrame(), i, static_cast<int>(TEX0.TBP0), GSUtil::GetPSMName(TEX0.PSM)));
 		}
 	}
 
@@ -211,7 +227,19 @@ GSTexture* GSRendererHW::GetFeedbackOutput(float& scale)
 	scale = rt->m_scale;
 
 	if (GSConfig.SaveFrame && GSConfig.ShouldDump(s_n, g_perfmon.GetFrame()))
-		t->Save(GetDrawDumpPath("%05lld_f%05lld_fr%d_%05x_%s.bmp", s_n, g_perfmon.GetFrame(), 3, static_cast<int>(TEX0.TBP0), GSUtil::GetPSMName(TEX0.PSM)));
+	{
+		GSTexture* save_tex = t;
+#ifdef ENABLE_VR
+		// PCSX2-VR (ISS-013 probe): same layer-1 redirect for the feedback (EXTBUF) output.
+		if (save_tex->GetArrayLayers() > 1)
+		{
+			static const char* layer_env = std::getenv("PCSX2_VR_SNAPSHOT_LAYER");
+			if (layer_env && layer_env[0] == '1')
+				save_tex = save_tex->GetLayerProxyTexture(1);
+		}
+#endif
+		save_tex->Save(GetDrawDumpPath("%05lld_f%05lld_fr%d_%05x_%s.bmp", s_n, g_perfmon.GetFrame(), 3, static_cast<int>(TEX0.TBP0), GSUtil::GetPSMName(TEX0.PSM)));
+	}
 
 	return t;
 }
@@ -5033,7 +5061,22 @@ void GSRendererHW::Draw()
 			s = GetDrawDumpPath("%05lld_f%05lld_rt0_%05x_(%05x)_%s.bmp", s_n, frame, m_cached_ctx.FRAME.Block(), rt->m_TEX0.TBP0, GSUtil::GetPSMName(m_cached_ctx.FRAME.PSM));
 
 			if (rt->m_texture)
-				rt->m_texture->Save(s);
+			{
+				GSTexture* save_tex = rt->m_texture;
+#ifdef ENABLE_VR
+				// PCSX2-VR (ISS-013 probe): PCSX2_VR_SNAPSHOT_LAYER=1 redirects the per-draw RT
+				// dump to the right-eye layer of a stereo target, mirroring the snapshot idiom in
+				// GSRenderer::GetSnapshotRGBA, so "-dump rt -dumprange" watches layer 1 build draw
+				// by draw. Zero-cost when the env is unset. RT save only (probe needs no depth/tex).
+				if (save_tex->GetArrayLayers() > 1)
+				{
+					static const char* layer_env = std::getenv("PCSX2_VR_SNAPSHOT_LAYER");
+					if (layer_env && layer_env[0] == '1')
+						save_tex = save_tex->GetLayerProxyTexture(1);
+				}
+#endif
+				save_tex->Save(s);
+			}
 		}
 
 		if (ds && GSConfig.SaveDepth)
@@ -5236,7 +5279,20 @@ void GSRendererHW::Draw()
 		{
 			s = GetDrawDumpPath("%05lld_f%05lld_rt1_%05x_(%05x)_%s.bmp", s_n, frame, m_cached_ctx.FRAME.Block(), rt->m_TEX0.TBP0, GSUtil::GetPSMName(m_cached_ctx.FRAME.PSM));
 
-			rt->m_texture->Save(s);
+			GSTexture* save_tex = rt->m_texture;
+#ifdef ENABLE_VR
+			// PCSX2-VR (ISS-013 probe): mirror the pre-draw rt0 layer redirect above — the
+			// post-draw rt1 dump follows layer 1 too when PCSX2_VR_SNAPSHOT_LAYER=1, so a
+			// draw-range sweep shows the right eye's statue-region residual appear on the
+			// exact draw that introduces it. Zero-cost when the env is unset.
+			if (save_tex->GetArrayLayers() > 1)
+			{
+				static const char* layer_env = std::getenv("PCSX2_VR_SNAPSHOT_LAYER");
+				if (layer_env && layer_env[0] == '1')
+					save_tex = save_tex->GetLayerProxyTexture(1);
+			}
+#endif
+			save_tex->Save(s);
 		}
 
 		if (ds && GSConfig.SaveDepth)
@@ -6191,6 +6247,59 @@ void GSRendererHW::DetermineVSConfig(GSTextureCache::Target* rt, float rtscale, 
 	scale_y = sy;
 	m_conf.cb_vs.vertex_scale = GSVector2(sx, sy);
 	m_conf.cb_vs.vertex_offset = GSVector2(ox * sx + ox2 + 1, oy * sy + oy2 + 1);
+
+	// PCSX2-VR: per-eye horizontal displacement for the tfx VS, driven by the
+	// VR::StereoState config/profile snapshot. {0,0} whenever stereo is disabled
+	// makes the shader's displacement branch unreachable — a byte-identical
+	// off-state (a hard design invariant). Interleaved stereo (M4.3 stage 1): the
+	// whole frame renders from ONE eye, alternating per vsync — the sign selects
+	// the eye. Simultaneous multiview (stage 2) derives the sign from
+	// gl_ViewIndex instead.
+#ifdef ENABLE_VR
+	const VR::StereoState::Params st = VR::StereoState::Get();
+	// Stage 2 (multiview): the draw targets a 2-layer texture and gl_ViewIndex supplies the
+	// eye sign, so the CB carries the unsigned separation. The interleave debug path keeps
+	// baking the per-frame sign.
+	const bool vr_multiview_target = rt && rt->m_texture && (rt->m_texture->GetArrayLayers() > 1);
+	// Draw classification rule #1 (profile pinUniformQ): perspective world
+	// geometry always varies Q (= 1/w) across a draw, so a draw whose Q is
+	// CONSTANT on every vertex is screen-space authored overlay geometry —
+	// whatever the constant (2K5: brim Q=16, facemask cage Q=128). Under the
+	// depth-proportional formula such draws land at an arbitrary partial
+	// separation while occluding the nearest content — a depth inversion.
+	// Zeroing the CB pins exactly these draws at screen depth. Textured
+	// non-FST draws only: m_vt.m_eq.q is not maintained otherwise (see the
+	// equality-check caveat at the texture-offset heuristics).
+	bool vr_pin_screen = false;
+	// PCSX2_VR_PINQ1=1 forces the rule on and logs every uniform-Q draw's
+	// state — the headless calibration lane for finding a game's overlay
+	// draws in gsrunner, where per-game profiles may not resolve.
+	static const bool s_vr_pinq1_debug = (std::getenv("PCSX2_VR_PINQ1") != nullptr);
+	if (st.enabled && (st.pin_uniform_q || s_vr_pinq1_debug) && PRIM->TME && !PRIM->FST && m_vt.m_eq.q)
+	{
+		vr_pin_screen = true;
+		if (s_vr_pinq1_debug)
+			DevCon.WriteLn("(VR) uniform-Q draw pinned: Q=%f verts=%u",
+				m_vertex->buff[0].RGBAQ.Q, static_cast<unsigned>(m_vertex->next));
+	}
+	m_conf.cb_vs.vr_stereo =
+		(st.enabled && !vr_pin_screen) ?
+			GSVector2(st.separation * (vr_multiview_target ? 1.0f : VR::StereoState::GetCurrentEyeSign()),
+				st.convergence) :
+			GSVector2(0.0f, 0.0f);
+	if (vr_multiview_target)
+	{
+		static bool s_logged_mv_draw = false;
+		if (!s_logged_mv_draw)
+		{
+			s_logged_mv_draw = true;
+			DevCon.WriteLn("(VR) First multiview draw: vr_stereo = {%.4f, %.3f}.",
+				m_conf.cb_vs.vr_stereo.x, m_conf.cb_vs.vr_stereo.y);
+		}
+	}
+#else
+	m_conf.cb_vs.vr_stereo = GSVector2(0.0f, 0.0f);
+#endif
 
 	m_conf.vs.iip = !IsFlatShaded();
 }
@@ -7807,12 +7916,16 @@ void GSRendererHW::ConvertTextureTypeROVSingle(GSTextureCache::Target* tgt, bool
 
 	GSTexture* old_tex = depth ? m_conf.ds : m_conf.rt;
 
+	// PCSX2-VR (ISS-001 round 3): carry the layer count through the conversion — the
+	// defaulted layers=1 silently DEMOTED a promoted stereo target to mono here
+	// (right eye dropped + a promote/demote ping-pong per ROV draw at scanout).
+	const u32 vr_layers = old_tex->GetArrayLayers();
 	const GSTexture::Usage usage = shader_write ? GSTexture::ShaderWriteTarget : GSTexture::FeedbackTarget;
 	if (GSTexture* new_tex = depth ?
 		(shader_write ?
-			g_gs_device->FetchSurface(usage, old_tex->GetSize(), 1, GSTexture::Format::DepthColor, false, true) :
-			g_gs_device->CreateDepthStencil(old_tex->GetSize(), false, true)) :
-			g_gs_device->FetchSurface(usage, old_tex->GetSize(), 1, GSTexture::Format::Color, false, true))
+			g_gs_device->FetchSurface(usage, old_tex->GetSize(), 1, GSTexture::Format::DepthColor, false, true, vr_layers) :
+			g_gs_device->CreateDepthStencil(old_tex->GetSize(), false, true, vr_layers)) :
+			g_gs_device->FetchSurface(usage, old_tex->GetSize(), 1, GSTexture::Format::Color, false, true, vr_layers))
 	{
 		switch (old_tex->GetState())
 		{
@@ -9262,6 +9375,53 @@ __ri void GSRendererHW::DrawPrims(GSTextureCache::Target* rt, GSTextureCache::Ta
 
 	m_conf.cb_vs.texture_offset = {};
 	m_conf.ps.scanmsk = env.SCANMSK.MSK;
+#ifdef ENABLE_VR
+	// PCSX2-VR (M4.3): a multiview framebuffer needs BOTH attachments 2-layer. Scanout
+	// promotion makes the display rt stereo; pair-promote whichever side lags so the
+	// attachment pair stays layer-consistent (PS2 games alias FBP/ZBP freely, so the
+	// mismatch arises in both directions).
+	// Games that recreate their frame buffers every frame (full-clear via EE upload) get
+	// fresh MONO targets each flip; the scanout promotion would then always be one frame
+	// late. If this draw's rt sits at a KNOWN display-chain BP, promote it before the
+	// frame's draws so the whole frame renders stereo.
+	if (rt && rt->m_texture && rt->m_texture->GetArrayLayers() == 1 &&
+		g_gs_device->SupportsStereoTargets() && VR::StereoState::Get().enabled &&
+		g_texture_cache->IsDisplayChainBP(rt->m_TEX0.TBP0))
+	{
+		rt->PromoteToStereo();
+	}
+	// Feed-edge classification: a draw INTO a stereo target that samples a MONO
+	// target means that upstream target is part of the display chain too (AC5
+	// renders its world one blit upstream of the scanned-out field buffer). Note
+	// its BP — it is promoted/created stereo from its next frame on, and the feed
+	// blit then carries each eye's layer via per-view sampling (ps.tex_in_array).
+	if (rt && rt->m_texture && rt->m_texture->GetArrayLayers() > 1 && tex && tex->m_from_target &&
+		tex->m_from_target->m_texture && tex->m_from_target->m_texture->GetArrayLayers() == 1 &&
+		!g_texture_cache->IsDisplayChainBP(tex->m_from_target->m_TEX0.TBP0))
+	{
+		g_texture_cache->NoteDisplayChainBP(tex->m_from_target->m_TEX0.TBP0);
+		DevCon.WriteLn("(VR) TC: feed-edge — target 0x%x joins the display chain (sampled by a stereo draw).",
+			tex->m_from_target->m_TEX0.TBP0);
+	}
+	if (rt && ds && rt->m_texture && ds->m_texture && !m_using_temp_z)
+	{
+		if (rt->m_texture->GetArrayLayers() > ds->m_texture->GetArrayLayers())
+			ds->PromoteToStereo();
+		else if (ds->m_texture->GetArrayLayers() > rt->m_texture->GetArrayLayers())
+			rt->PromoteToStereo();
+	}
+	else if (m_using_temp_z && rt && rt->m_texture && rt->m_texture->GetArrayLayers() > 1)
+	{
+		// Known Phase-A gap: the temporary-Z path would pair a mono depth with a stereo rt.
+		static bool s_warned_temp_z = false;
+		if (!s_warned_temp_z)
+		{
+			s_warned_temp_z = true;
+			Console.Warning("(VR) Stereo rt with temporary-Z depth — this draw combination is "
+							"not yet layer-consistent (Phase A); expect right-eye depth artifacts here.");
+		}
+	}
+#endif
 	m_conf.rt = rt ? rt->m_texture : nullptr;
 	m_conf.ds = ds ? (m_using_temp_z ? g_texture_cache->GetTemporaryZ() : ds->m_texture) : nullptr;
 

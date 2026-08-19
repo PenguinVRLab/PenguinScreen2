@@ -599,12 +599,12 @@ void GSDevice::TextureRecycleDeleter::operator()(GSTexture* const tex)
 	g_gs_device->Recycle(tex);
 }
 
-GSTexture* GSDevice::FetchSurface(GSTexture::Usage usage, const GSVector2i& size, int levels, GSTexture::Format format, bool clear, bool prefer_reuse)
+GSTexture* GSDevice::FetchSurface(GSTexture::Usage usage, const GSVector2i& size, int levels, GSTexture::Format format, bool clear, bool prefer_reuse, u32 layers)
 {
-	return FetchSurface(usage, size.x, size.y, levels, format, clear, prefer_reuse);
+	return FetchSurface(usage, size.x, size.y, levels, format, clear, prefer_reuse, layers);
 }
 
-GSTexture* GSDevice::FetchSurface(GSTexture::Usage usage, int width, int height, int levels, GSTexture::Format format, bool clear, bool prefer_reuse)
+GSTexture* GSDevice::FetchSurface(GSTexture::Usage usage, int width, int height, int levels, GSTexture::Format format, bool clear, bool prefer_reuse, u32 layers)
 {
 	const GSVector2i size(std::clamp(width, 1, static_cast<int>(g_gs_device->GetMaxTextureSize())),
 		std::clamp(height, 1, static_cast<int>(g_gs_device->GetMaxTextureSize())));
@@ -619,7 +619,8 @@ GSTexture* GSDevice::FetchSurface(GSTexture::Usage usage, int width, int height,
 
 		pxAssert(t);
 
-		if (t->GetUsage() == usage && t->GetFormat() == format && t->GetSize() == size && t->GetMipmapLevels() == levels)
+		if (t->GetUsage() == usage && t->GetFormat() == format && t->GetSize() == size && t->GetMipmapLevels() == levels &&
+			t->GetArrayLayers() == layers)
 		{
 			if (prefer_reuse || t->GetLastFrameUsed() != m_frame)
 			{
@@ -647,12 +648,12 @@ GSTexture* GSDevice::FetchSurface(GSTexture::Usage usage, int width, int height,
 		}
 		else
 		{
-			t = CreateSurface(usage, size.x, size.y, levels, format);
+			t = CreateSurface(usage, size.x, size.y, levels, format, layers);
 			if (!t)
 			{
 				ERROR_LOG("GS: Memory allocation failure for {}x{} texture. Purging pool and retrying.", size.x, size.y);
 				PurgePool();
-				t = CreateSurface(usage, size.x, size.y, levels, format);
+				t = CreateSurface(usage, size.x, size.y, levels, format, layers);
 				if (!t)
 				{
 					ERROR_LOG("GS: Memory allocation failure for {}x{} texture after purging pool.", size.x, size.y);
@@ -761,19 +762,19 @@ void GSDevice::PurgePool()
 	m_pool_memory_usage = 0;
 }
 
-GSTexture* GSDevice::CreateRenderTarget(int w, int h, GSTexture::Format format, bool clear, bool prefer_reuse)
+GSTexture* GSDevice::CreateRenderTarget(int w, int h, GSTexture::Format format, bool clear, bool prefer_reuse, u32 layers)
 {
-	return FetchSurface(GSTexture::RenderTarget, w, h, 1, format, clear, prefer_reuse);
+	return FetchSurface(GSTexture::RenderTarget, w, h, 1, format, clear, prefer_reuse, layers);
 }
 
-GSTexture* GSDevice::CreateRenderTarget(const GSVector2i& size, GSTexture::Format format, bool clear, bool prefer_reuse)
+GSTexture* GSDevice::CreateRenderTarget(const GSVector2i& size, GSTexture::Format format, bool clear, bool prefer_reuse, u32 layers)
 {
-	return FetchSurface(GSTexture::RenderTarget, size.x, size.y, 1, format, clear, prefer_reuse);
+	return FetchSurface(GSTexture::RenderTarget, size.x, size.y, 1, format, clear, prefer_reuse, layers);
 }
 
-GSTexture* GSDevice::CreateFeedbackTarget(int w, int h, GSTexture::Format format, bool clear, bool prefer_reuse)
+GSTexture* GSDevice::CreateFeedbackTarget(int w, int h, GSTexture::Format format, bool clear, bool prefer_reuse, u32 layers)
 {
-	return FetchSurface(GSTexture::FeedbackTarget, w, h, 1, format, clear, prefer_reuse);
+	return FetchSurface(GSTexture::FeedbackTarget, w, h, 1, format, clear, prefer_reuse, layers);
 }
 
 GSTexture* GSDevice::CreateFeedbackTarget(const GSVector2i& size, GSTexture::Format format, bool clear, bool prefer_reuse)
@@ -791,14 +792,14 @@ GSTexture* GSDevice::CreateShaderWriteTarget(const GSVector2i& size, GSTexture::
 	return FetchSurface(GSTexture::ShaderWriteTarget, size.x, size.y, 1, format, clear, prefer_reuse);
 }
 
-GSTexture* GSDevice::CreateDepthStencil(int w, int h, bool clear, bool prefer_reuse)
+GSTexture* GSDevice::CreateDepthStencil(int w, int h, bool clear, bool prefer_reuse, u32 layers)
 {
-	return FetchSurface(GSTexture::DepthStencil, w, h, 1, GSTexture::Format::DepthStencil, clear, prefer_reuse);
+	return FetchSurface(GSTexture::DepthStencil, w, h, 1, GSTexture::Format::DepthStencil, clear, prefer_reuse, layers);
 }
 
-GSTexture* GSDevice::CreateDepthStencil(const GSVector2i& size, bool clear, bool prefer_reuse)
+GSTexture* GSDevice::CreateDepthStencil(const GSVector2i& size, bool clear, bool prefer_reuse, u32 layers)
 {
-	return FetchSurface(GSTexture::DepthStencil, size.x, size.y, 1, GSTexture::Format::DepthStencil, clear, prefer_reuse);
+	return FetchSurface(GSTexture::DepthStencil, size.x, size.y, 1, GSTexture::Format::DepthStencil, clear, prefer_reuse, layers);
 }
 
 GSTexture* GSDevice::CreateTexture(int w, int h, int mipmap_levels, GSTexture::Format format, bool prefer_reuse)
@@ -825,7 +826,8 @@ GSTexture* GSDevice::CreateCompatible(GSTexture* tex, const GSVector2i& size, bo
 
 GSTexture* GSDevice::CreateCompatible(GSTexture* tex, int w, int h, bool clear, bool prefer_reuse)
 {
-	return FetchSurface(tex->GetUsage(), w, h, 1, tex->GetFormat(), clear, prefer_reuse);
+	// PCSX2-VR (M4.3): inherit the layer count so resizing a stereo target keeps it stereo.
+	return FetchSurface(tex->GetUsage(), w, h, 1, tex->GetFormat(), clear, prefer_reuse, tex->GetArrayLayers());
 }
 
 void GSDevice::DoStretchRectWithAssertions(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex,
@@ -837,7 +839,37 @@ void GSDevice::DoStretchRectWithAssertions(GSTexture* sTex, const GSVector4& sRe
 		int(sRect.left), int(sRect.top),
 		int(sRect.right - sRect.left), int(sRect.bottom - sRect.top), int(dRect.left), int(dRect.top),
 		int(dRect.right - dRect.left), int(dRect.bottom - dRect.top));
-	DoStretchRect(sTex, sRect, dTex, dRect, shader, filter);
+	// PCSX2-VR (ISS-001 round 3): route by SOURCE layer count. A >=2-layer source is
+	// real per-eye stereo — a plain stretch samples layer 0 only, and the mirror below
+	// would then cement left-into-right (the "stereo flatten" class: RTA scale/unscale,
+	// display rescale, colclip resolves). Stereo-to-stereo stretches therefore run per
+	// layer through the 1-layer proxy views. A 1-layer source into a >=2-layer
+	// destination is mono content by construction (uploads, page copies) and both eyes
+	// must see it identically — stretch, then mirror. A >=2-layer source into a 1-layer
+	// destination keeps the Phase-A rule (mono consumers read the left eye). Layer-aware
+	// callers pass 1-layer proxies and skip all of this.
+	if (sTex && dTex && sTex->GetArrayLayers() >= 2 && dTex->GetArrayLayers() >= 2)
+	{
+		const u32 layers = std::min(sTex->GetArrayLayers(), dTex->GetArrayLayers());
+		for (u32 l = 0; l < layers; l++)
+			DoStretchRect(sTex->GetLayerProxyTexture(l), sRect, dTex->GetLayerProxyTexture(l), dRect, shader, filter);
+	}
+	else
+	{
+		// PCSX2-VR (ISS-013 hunt): census stereo->mono stretches (Phase-A left-eye-only).
+		static const bool s_vr_drawcensus = (std::getenv("PCSX2_VR_DRAWCENSUS") != nullptr);
+		if (s_vr_drawcensus && sTex && sTex->GetArrayLayers() >= 2 &&
+			(!dTex || dTex->GetArrayLayers() < 2))
+		{
+			Console.WriteLn("(VR) CENSUS s2m-stretch src=%dx%d dst=%dx%d shader=%d sRect=%.2f,%.2f-%.2f,%.2f dRect=%.0f,%.0f-%.0f,%.0f",
+				sTex->GetWidth(), sTex->GetHeight(), dTex ? dTex->GetWidth() : -1, dTex ? dTex->GetHeight() : -1,
+				static_cast<int>(shader.Shader()), sRect.x, sRect.y, sRect.z, sRect.w, dRect.x, dRect.y, dRect.z, dRect.w);
+		}
+
+		DoStretchRect(sTex, sRect, dTex, dRect, shader, filter);
+		if (dTex && dTex->GetArrayLayers() >= 2)
+			BroadcastLayer0(dTex, dRect);
+	}
 }
 
 void GSDevice::StretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect,
@@ -936,8 +968,41 @@ void GSDevice::ClearCurrent()
 
 void GSDevice::Merge(GSTexture* sTex[3], GSVector4* sRect, GSVector4* dRect, const GSVector2i& fs, const GSRegPMODE& PMODE, const GSRegEXTBUF& EXTBUF, u32 c)
 {
-	if (ResizeRenderTarget(&m_merge, fs.x, fs.y, false, false))
-		DoMerge(sTex, sRect, m_merge, dRect, PMODE, EXTBUF, c, BilnIf(GSConfig.PCRTCOffsets));
+	// PCSX2-VR (M4.3): stereo display targets are 2-layer; run the merge once per layer
+	// through single-layer proxies so every Do* implementation stays layer-blind. Mono
+	// (every non-VR path) has layers == 1 and proxies alias the textures themselves.
+	u32 layers = 1;
+	for (u32 i = 0; i < 3; i++)
+	{
+		if (sTex[i])
+			layers = std::max(layers, sTex[i]->GetArrayLayers());
+	}
+
+	// PCSX2-VR (ISS-001 diagnostic, PCSX2_VR_CHAINLOG=1): merge-side layer accounting —
+	// pairs with the compositor's per-visit line to separate "layer 1 never written"
+	// from "layer 1 written but stale content".
+	static const bool s_vr_chainlog = (std::getenv("PCSX2_VR_CHAINLOG") != nullptr);
+	if (s_vr_chainlog)
+	{
+		Console.WriteLn("(VR) CHAINLOG merge src=[%u,%u,%u] want=%u had=%u",
+			sTex[0] ? sTex[0]->GetArrayLayers() : 0, sTex[1] ? sTex[1]->GetArrayLayers() : 0,
+			sTex[2] ? sTex[2]->GetArrayLayers() : 0, layers,
+			m_merge ? m_merge->GetArrayLayers() : 0);
+	}
+
+	if (ResizeRenderTarget(&m_merge, fs.x, fs.y, false, false, layers))
+	{
+		for (u32 l = 0; l < layers; l++)
+		{
+			GSTexture* sTexL[3] = {
+				sTex[0] ? sTex[0]->GetLayerProxyTexture(l) : nullptr,
+				sTex[1] ? sTex[1]->GetLayerProxyTexture(l) : nullptr,
+				sTex[2] ? sTex[2]->GetLayerProxyTexture(l) : nullptr,
+			};
+			DoMerge(sTexL, sRect, m_merge->GetLayerProxyTexture(l), dRect, PMODE, EXTBUF, c,
+				BilnIf(GSConfig.PCRTCOffsets));
+		}
+	}
 
 	m_current = m_merge;
 }
@@ -970,26 +1035,33 @@ void GSDevice::Interlace(const GSVector2i& ds, int field, int mode, float yoffse
 		};
 
 		GL_PUSH("DoInterlace %dx%d Shader:%d Filter:%d", ds_i.x, ds_i.y, static_cast<int>(shader), filter);
-		DoInterlace(sTex, sRect, dTex, dRect, shader, filter, cb);
+		// PCSX2-VR (M4.3): deinterlace each stereo layer independently — both eyes of one
+		// vsync are same-eye content, so blending fields can never mix eyes (the stage-1
+		// interleave failure this stage exists to fix).
+		const u32 layers = std::min(sTex->GetArrayLayers(), dTex->GetArrayLayers());
+		for (u32 l = 0; l < layers; l++)
+			DoInterlace(sTex->GetLayerProxyTexture(l), sRect, dTex->GetLayerProxyTexture(l), dRect, shader, filter, cb);
 	};
+
+	const u32 il_layers = m_merge ? m_merge->GetArrayLayers() : 1;
 
 	switch (mode)
 	{
 		case 0: // Weave
-			ResizeRenderTarget(&m_weavebob, ds.x, ds.y, true, false);
+			ResizeRenderTarget(&m_weavebob, ds.x, ds.y, true, false, il_layers);
 			do_interlace(m_merge, m_weavebob, ShaderInterlace::WEAVE, Nearest, offset, field);
 			m_current = m_weavebob;
 			break;
 		case 1: // Bob
 			// Field is reversed here as we are countering the bounce.
-			ResizeRenderTarget(&m_weavebob, ds.x, ds.y, true, false);
+			ResizeRenderTarget(&m_weavebob, ds.x, ds.y, true, false, il_layers);
 			do_interlace(m_merge, m_weavebob, ShaderInterlace::BOB, Biln, yoffset * (1 - field), 0);
 			m_current = m_weavebob;
 			break;
 		case 2: // Blend
-			ResizeRenderTarget(&m_weavebob, ds.x, ds.y, true, false);
+			ResizeRenderTarget(&m_weavebob, ds.x, ds.y, true, false, il_layers);
 			do_interlace(m_merge, m_weavebob, ShaderInterlace::WEAVE, Nearest, offset, field);
-			ResizeRenderTarget(&m_blend, ds.x, ds.y, true, false);
+			ResizeRenderTarget(&m_blend, ds.x, ds.y, true, false, il_layers);
 			do_interlace(m_weavebob, m_blend, ShaderInterlace::BLEND, Biln, 0, 0);
 			m_current = m_blend;
 			break;
@@ -998,9 +1070,9 @@ void GSDevice::Interlace(const GSVector2i& ds, int field, int mode, float yoffse
 			bufIdx &= ~1;
 			bufIdx |= field;
 			bufIdx &= 3;
-			ResizeRenderTarget(&m_mad, ds.x, ds.y * 2.0f, true, false);
+			ResizeRenderTarget(&m_mad, ds.x, ds.y * 2.0f, true, false, il_layers);
 			do_interlace(m_merge, m_mad, ShaderInterlace::MAD_BUFFER, Nearest, offset, bufIdx);
-			ResizeRenderTarget(&m_weavebob, ds.x, ds.y, true, false);
+			ResizeRenderTarget(&m_weavebob, ds.x, ds.y, true, false, il_layers);
 			do_interlace(m_mad, m_weavebob, ShaderInterlace::MAD_RECONSTRUCT, Nearest, 0, bufIdx);
 			m_current = m_weavebob;
 			break;
@@ -1014,16 +1086,19 @@ void GSDevice::FXAA()
 {
 	// Combining FXAA+ShadeBoost can't share the same target.
 	GSTexture*& dTex = (m_current == m_target_tmp) ? m_merge : m_target_tmp;
-	if (ResizeRenderTarget(&dTex, m_current->GetWidth(), m_current->GetHeight(), false, false))
+	const u32 layers = m_current->GetArrayLayers();
+	if (ResizeRenderTarget(&dTex, m_current->GetWidth(), m_current->GetHeight(), false, false, layers))
 	{
-		DoFXAA(m_current, dTex);
+		for (u32 l = 0; l < layers; l++)
+			DoFXAA(m_current->GetLayerProxyTexture(l), dTex->GetLayerProxyTexture(l));
 		m_current = dTex;
 	}
 }
 
 void GSDevice::ShadeBoost()
 {
-	if (ResizeRenderTarget(&m_target_tmp, m_current->GetWidth(), m_current->GetHeight(), false, false))
+	const u32 layers = m_current->GetArrayLayers();
+	if (ResizeRenderTarget(&m_target_tmp, m_current->GetWidth(), m_current->GetHeight(), false, false, layers))
 	{
 		// predivide to avoid the divide (multiply) in the shader
 		const GSVector4 params(
@@ -1032,7 +1107,8 @@ void GSDevice::ShadeBoost()
 			static_cast<float>(GSConfig.ShadeBoost_Saturation) * (1.0f / 50.0f),
 			static_cast<float>(GSConfig.ShadeBoost_Gamma) * (1.0f / 50.0f));
 
-		DoShadeBoost(m_current, m_target_tmp, params.v);
+		for (u32 l = 0; l < layers; l++)
+			DoShadeBoost(m_current->GetLayerProxyTexture(l), m_target_tmp->GetLayerProxyTexture(l), params.v);
 
 		m_current = m_target_tmp;
 	}
@@ -1063,12 +1139,12 @@ void GSDevice::Resize(int width, int height)
 	}
 }
 
-bool GSDevice::ResizeRenderTarget(GSTexture** t, int w, int h, bool preserve_contents, bool recycle)
+bool GSDevice::ResizeRenderTarget(GSTexture** t, int w, int h, bool preserve_contents, bool recycle, u32 layers)
 {
 	pxAssert(t);
 
 	GSTexture* orig_tex = *t;
-	if (orig_tex && orig_tex->GetWidth() == w && orig_tex->GetHeight() == h)
+	if (orig_tex && orig_tex->GetWidth() == w && orig_tex->GetHeight() == h && orig_tex->GetArrayLayers() == layers)
 	{
 		if (!preserve_contents)
 			InvalidateRenderTarget(orig_tex);
@@ -1079,7 +1155,7 @@ bool GSDevice::ResizeRenderTarget(GSTexture** t, int w, int h, bool preserve_con
 	const GSTexture::Format fmt = orig_tex ? orig_tex->GetFormat() : GSTexture::Format::Color;
 	const GSTexture::Usage usage = orig_tex ? orig_tex->GetUsage() : GSTexture::RenderTarget;
 	const bool really_preserve_contents = (preserve_contents && orig_tex);
-	GSTexture* new_tex = FetchSurface(usage, w, h, 1, fmt, !really_preserve_contents, false);
+	GSTexture* new_tex = FetchSurface(usage, w, h, 1, fmt, !really_preserve_contents, false, layers);
 	if (!new_tex)
 	{
 		Console.WriteLn("%dx%d texture allocation failed in ResizeTexture()", w, h);
@@ -1090,7 +1166,13 @@ bool GSDevice::ResizeRenderTarget(GSTexture** t, int w, int h, bool preserve_con
 	{
 		constexpr GSVector4 sRect = GSVector4::cxpr(0, 0, 1, 1);
 		const GSVector4 dRect = GSVector4(orig_tex->GetRect());
-		StretchRect(orig_tex, sRect, new_tex, dRect, ShaderConvert::COPY, Biln);
+		// PCSX2-VR (M4.3): preserve every shared layer (mono<->stereo transitions keep layer 0).
+		const u32 copy_layers = std::min(orig_tex->GetArrayLayers(), layers);
+		for (u32 l = 0; l < copy_layers; l++)
+		{
+			StretchRect(orig_tex->GetLayerProxyTexture(l), sRect, new_tex->GetLayerProxyTexture(l), dRect,
+				ShaderConvert::COPY, Biln);
+		}
 	}
 
 	if (orig_tex)
@@ -1137,6 +1219,7 @@ void GSDevice::EndDSAsRT()
 #define A_CPU 1
 #include "bin/resources/shaders/common/ffx_a.h"
 #include "bin/resources/shaders/common/ffx_cas.h"
+#include <cstdlib> // PCSX2-VR: std::getenv (CHAINLOG diagnostic lane)
 
 #if defined(__clang__)
 #pragma clang diagnostic pop

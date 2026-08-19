@@ -45,6 +45,9 @@
 #include "pcsx2/SIO/Pad/Pad.h"
 #include "pcsx2/PerformanceMetrics.h"
 #include "pcsx2/VMManager.h"
+#ifdef ENABLE_VR
+#include "pcsx2/VR/VRProfileDB.h"
+#endif
 
 #include "svnrev.h"
 
@@ -750,6 +753,14 @@ bool GSRunner::ParseCommandLineArgs(int argc, char* argv[], VMBootParameters& pa
 				for (const auto& [key, value] : si_ini.GetKeyValueList("EmuCore/GS"))
 					s_settings_interface.SetStringValue("EmuCore/GS", key.c_str(), value.c_str());
 
+#ifdef ENABLE_VR
+				// PCSX2-VR: the gsrunner is the headless harness for VR frame-loop
+				// testing, so forward the [VR] block too (the memory settings
+				// interface starts empty; without this VR can't be exercised here).
+				for (const auto& [key, value] : si_ini.GetKeyValueList("VR"))
+					s_settings_interface.SetStringValue("VR", key.c_str(), value.c_str());
+#endif
+
 				continue;
 			}
 			else if (CHECK_ARG_PARAM("-upscale"))
@@ -982,6 +993,40 @@ int main(int argc, char* argv[])
 		Console.Error("Failed to initialize config.");
 		return EXIT_FAILURE;
 	}
+
+#ifdef ENABLE_VR
+	// PCSX2-VR owner rule: automation never limps past an invalid profile
+	// yaml — headless hosts HARD-FAIL so a broken catalog can't quietly
+	// contaminate sweeps, replays, or CI.
+	{
+		const auto& issues = VR::ProfileDB::ValidateAtLaunch();
+		if (!issues.empty())
+		{
+			// The Console/Log sink is DISABLED at this point: InitializeConfig() ran
+			// VMManager::Internal::LoadStartupSettings() -> UpdateLoggingSettings(),
+			// which set the console output level to NONE because the fresh in-memory
+			// settings default EnableSystemConsole=false. GSRunner::SettingsOverride()
+			// (which re-enables the console) and any -logfile are both parsed/applied
+			// AFTER this hook, so Console.ErrorFmt here would go nowhere — that is the
+			// silent-refusal bug. Write the refusal straight to stderr with std::fputs
+			// so it is unmissable in a headless run regardless of the Log sink state,
+			// and ALSO emit through Console so the lines land in the file/host sinks
+			// for any host where those are live.
+			for (const auto& issue : issues)
+			{
+				std::fputs(fmt::format("(VR) invalid profile file: {} — {}\n", issue.file, issue.message).c_str(), stderr);
+				Console.ErrorFmt("(VR) invalid profile file: {} — {}", issue.file, issue.message);
+			}
+			std::fputs(
+				fmt::format("(VR) {} invalid VR profile file(s) — refusing to run. Fix or remove them.\n", issues.size())
+					.c_str(),
+				stderr);
+			Console.ErrorFmt("(VR) {} invalid VR profile file(s) — refusing to run. Fix or remove them.", issues.size());
+			std::fflush(stderr);
+			return EXIT_FAILURE;
+		}
+	}
+#endif
 
 	VMBootParameters params;
 	if (!GSRunner::ParseCommandLineArgs(argc, argv, params))

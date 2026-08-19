@@ -3,6 +3,10 @@
 
 #include "Achievements.h"
 #include "BuildVersion.h"
+#ifdef ENABLE_VR
+#include "VR/CameraDriver.h"
+#include "VR/VRManager.h"
+#endif
 #include "CDVD/CDVD.h"
 #include "CDVD/IsoReader.h"
 #include "Counters.h"
@@ -202,14 +206,14 @@ static bool s_discord_presence_active = false;
 static time_t s_discord_presence_time_epoch;
 static const char* s_discord_presence_app_id = "1458595419499139094";
 static const char* s_discord_presence_large_image_key = "4k-pcsx2";
-static const char* s_discord_presence_large_image_text = "PCSX2 PS2 Emulator";
+static const char* s_discord_presence_large_image_text = "PenguinScreen2 PS2 Emulator";
 
 // Making GSDumpReplayer.h dependent on R5900.h is a no-no, since the GS uses it.
 extern R5900cpu GSDumpReplayerCpu;
 
 bool VMManager::PerformEarlyHardwareChecks(const char** error)
 {
-#define COMMON_DOWNLOAD_MESSAGE "PCSX2 builds can be downloaded from https://pcsx2.net/downloads/"
+#define COMMON_DOWNLOAD_MESSAGE "PenguinScreen2 builds can be downloaded from https://github.com/PenguinVRLab/PenguinScreen2/releases"
 
 #if defined(ARCH_X86)
 	// On Windows, this gets called as a global object constructor, before any of our objects are constructed.
@@ -219,8 +223,8 @@ bool VMManager::PerformEarlyHardwareChecks(const char** error)
 	if (!cpuinfo_has_x86_sse4_1())
 	{
 		*error =
-			"PCSX2 requires the Streaming SIMD 4.1 Extensions instruction set, which your CPU does not support.\n\n"
-			"SSE4.1 is now a minimum requirement for PCSX2. You should either upgrade your CPU, or use an older build "
+			"PenguinScreen2 requires the Streaming SIMD 4.1 Extensions instruction set, which your CPU does not support.\n\n"
+			"SSE4.1 is now a minimum requirement for PenguinScreen2. You should either upgrade your CPU, or use an older build "
 			"such as 1.6.0.\n\n" COMMON_DOWNLOAD_MESSAGE;
 		return false;
 	}
@@ -228,9 +232,9 @@ bool VMManager::PerformEarlyHardwareChecks(const char** error)
 #if _M_SSE >= 0x0501
 	if (!cpuinfo_has_x86_avx2())
 	{
-		*error = "This build of PCSX2 requires the Advanced Vector Extensions 2 instruction set, which your CPU does "
+		*error = "This build of PenguinScreen2 requires the Advanced Vector Extensions 2 instruction set, which your CPU does "
 				 "not support.\n\n"
-				 "You should download and run the SSE4.1 build of PCSX2 instead, or upgrade to a CPU that supports "
+				 "You should download and run the SSE4.1 build of PenguinScreen2 instead, or upgrade to a CPU that supports "
 				 "AVX2 to use this build.\n\n" COMMON_DOWNLOAD_MESSAGE;
 		return false;
 	}
@@ -421,6 +425,11 @@ bool VMManager::Internal::CPUThreadInitialize()
 
 	if (EmuConfig.Achievements.Enabled)
 		Achievements::Initialize();
+
+#ifdef ENABLE_VR
+	// PCSX2-VR: publish the initial [VR] settings snapshot to the VR module.
+	VR::UpdateSettings();
+#endif
 
 	ReloadPINE();
 
@@ -1145,6 +1154,14 @@ void VMManager::UpdateDiscDetails(bool booting)
 	UpdateGameSettingsLayer();
 	ApplySettings();
 
+#ifdef ENABLE_VR
+	// PCSX2-VR: republish VR settings now that the disc serial/CRC are known, so
+	// per-game VR profiles (VRProfileDB) resolve at game change. ApplySettings only
+	// re-runs VR::UpdateSettings when the [VR] config itself changed, which it
+	// doesn't on a plain game boot; the profile lookup keys on the serial.
+	VR::UpdateSettings();
+#endif
+
 	// Patches are game-dependent, thus should get applied after game settings ia loaded.
 	Patch::ReloadPatches(s_disc_serial, HasBootedELF() ? s_current_crc : 0, true, true, false, false);
 
@@ -1438,11 +1455,11 @@ VMBootResult VMManager::Initialize(const VMBootParameters& boot_params, Error* e
 		{
 			Error::SetStringFmt(error,
 				TRANSLATE_FS("VMManager",
-					"PCSX2 requires a PlayStation 2 BIOS in order to run.\n\n"
-					"For legal reasons, you will need to obtain this BIOS from a PlayStation 2 unit which you own.\n\n"
-					"For step-by-step help with this process, please consult the setup guide at {}.\n\n"
-					"PCSX2 will be able to run once you've placed your BIOS image inside the folder named \"bios\" within the data directory "
-					"(Tools Menu -> Open Data Directory)."),
+					"PenguinScreen2 requires a PlayStation 2 BIOS in order to run.\n\n"
+					"For legal reasons, you must dump this BIOS from a PlayStation 2 console you own — it is never included or downloaded. "
+					"For step-by-step help dumping it, see the guide at {}.\n\n"
+					"Easiest fix: drop the BIOS file into the \"PS2-BIOS\" folder in your home directory and restart PenguinScreen2 — it will be found automatically. "
+					"(Any BIOS folder also works via Settings -> BIOS.)"),
 				PCSX2_DOCUMENTATION_BIOS_URL_SHORTENED);
 			return VMBootResult::StartupFailure;
 		}
@@ -2596,7 +2613,7 @@ void LogGPUCapabilities()
 
 void VMManager::LogCPUCapabilities()
 {
-	Console.WriteLn(Color_StrongGreen, "PCSX2 %s", BuildVersion::GitRev);
+	Console.WriteLn(Color_StrongGreen, "PenguinScreen2 %s", BuildVersion::GitRev);
 	Console.WriteLnFmt("Savestate version: 0x{:x}\n", g_SaveVersion);
 	Console.WriteLn();
 
@@ -2904,6 +2921,17 @@ void VMManager::Internal::VSyncOnCPUThread()
 
 	Patch::ApplyVsyncPatches();
 
+#ifdef ENABLE_VR
+	// PCSX2-VR (M5): head-tracked camera injection — same EE-thread, per-vsync
+	// cadence as the patch engine above. Inert unless VR + HeadCamera are on AND
+	// a camera-tier profile matches the running game (see VR::CameraDriver).
+	VR::CameraDriver::Apply();
+	// PCSX2-VR: per-scene stereo override — probes the game's own scene variable
+	// and swaps separation/convergence on scene transitions (vr-profiles.yaml
+	// `stereo.scenes`). Zero reads/publishes unless the profile declares scenes.
+	VR::ApplySceneStereo();
+#endif
+
 	// Frame advance must be done *before* pumping messages, because otherwise
 	// we'll immediately reduce the counter we just set.
 	if (s_frame_advance_count > 0)
@@ -3124,6 +3152,11 @@ void VMManager::CheckForConfigChanges(const Pcsx2Config& old_config)
 
 	if (EmuConfig.Achievements != old_config.Achievements)
 		Achievements::UpdateSettings(old_config.Achievements);
+
+#ifdef ENABLE_VR
+	if (EmuConfig.VR != old_config.VR)
+		VR::UpdateSettings();
+#endif
 
 	FullscreenUI::CheckForConfigChanges(old_config);
 

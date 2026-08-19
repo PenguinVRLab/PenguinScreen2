@@ -97,26 +97,13 @@ AutoUpdaterDialog::~AutoUpdaterDialog() = default;
 
 bool AutoUpdaterDialog::isSupported()
 {
-	// Logic to detect whether we can use the auto updater.
-	// We use tagged commit, because this gets set on nightly builds.
-	if (!BuildVersion::GitTaggedCommit)
-		return false;
-
-#ifdef __linux__
-	// For Linux, we need to check whether we're running from the appimage.
-	if (!std::getenv("APPIMAGE"))
-	{
-		Console.Warning("We're a tagged commit, but not running from an AppImage. Disabling automatic updater.");
-		return false;
-	}
-
-	return true;
-#elif defined(_WIN32) || defined(__APPLE__)
-	// Windows, MacOS - always supported.
-	return true;
-#else
+	// PenguinScreen2 (2026-07-19): auto-update is removed product-wide. This
+	// product never phones home — updates arrive via flatpak or a manual
+	// download. Returning false here disables every updater code path: the
+	// startup check, and the wizard / Interface-Settings auto-update widgets,
+	// which both gate on isSupported(). The upstream api.pcsx2.net endpoint
+	// (LATEST_RELEASE_URL) is therefore never contacted on any platform.
 	return false;
-#endif
 }
 
 QStringList AutoUpdaterDialog::getTagList()

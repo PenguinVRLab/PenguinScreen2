@@ -1,27 +1,82 @@
-# PCSX2
+# PenguinScreen2
 
-![Windows Build Status](https://img.shields.io/github/actions/workflow/status/PCSX2/pcsx2/windows_build_matrix.yml?label=%F0%9F%96%A5%EF%B8%8F%20Windows%20Builds)
-![Linux Build Status](https://img.shields.io/github/actions/workflow/status/PCSX2/pcsx2/linux_build_matrix.yml?label=%F0%9F%90%A7%20Linux%20Builds)
-![MacOS Build Status](https://img.shields.io/github/actions/workflow/status/PCSX2/pcsx2/macos_build_matrix.yml?label=%F0%9F%8D%8E%20MacOS%20Builds)
-[![Codacy Badge](https://app.codacy.com/project/badge/Grade/1f7c0d75fec74d6daa6adb084e5b4f71)](https://app.codacy.com/gh/PCSX2/pcsx2/dashboard?utm_source=github.com&utm_medium=referral&utm_content=PCSX2/pcsx2&utm_campaign=Badge_Grade)
-[![Discord Server](https://img.shields.io/discord/309643527816609793?color=%235CA8FA&label=PCSX2%20Discord&logo=discord&logoColor=white)](https://discord.com/invite/TCz3t9k)
+Play your PS2 library in VR — a head-tracked big screen for every game, with real
+geometric 3D depth and head-driven cameras where profiled, on a headset streamed
+from your own PC or Steam Deck.
 
-PCSX2 is a free and open-source PlayStation 2 (PS2) emulator. Its purpose is to emulate the PS2's hardware, using a combination of MIPS CPU [Interpreters](<https://en.wikipedia.org/wiki/Interpreter_(computing)>), [Recompilers](https://en.wikipedia.org/wiki/Dynamic_recompilation) and a [Virtual Machine](https://en.wikipedia.org/wiki/Virtual_machine) which manages hardware states and PS2 system memory. This allows you to play PS2 games on your PC, with many additional features and benefits.
+PenguinScreen2 is **built on [PCSX2](https://pcsx2.net)**, the long-running
+open-source PlayStation 2 emulator. The emulation is PCSX2's work and lineage;
+PenguinScreen2 adds the VR presentation layer, per-game 3D tuning, and the
+profile system. The emulator — VR code included — is free software
+(**GPL-3.0-or-later** — see `COPYING.GPLv3`); the bundled launch VR profiles
+are the author's own work, provided under a separate non-commercial license
+(see `bin/resources/vr-profiles/LICENSE.md`).
 
-## Project Details
+## What you need
 
-PCSX2 has been in development for more than 20 years. Past versions could only run a few public domain game demos, but newer versions can run most games at full speed, including popular titles such as Final Fantasy X and Devil May Cry 3. Visit the [PCSX2 compatibility list](https://pcsx2.net/compat/) to check the latest compatibility status of games (with more than 2500 titles tested).
+- A PC (SteamOS or desktop Linux) and a standalone headset served by
+  [WiVRn](https://github.com/WiVRn/WiVRn) or another OpenXR runtime — see
+  `STACK.md` for the exact versions this release was built and validated
+  against.
+- **Your own PS2 BIOS, dumped from your own console.** No BIOS, game images,
+  or copyrighted game data are included or downloaded — ever.
 
-Installers and binaries for both stable and nightly builds are available from [our website](https://pcsx2.net/downloads/).
+## Fully offline by design
 
-## System Requirements
+PenguinScreen2 never phones home on its own — no update checks, no telemetry,
+no analytics. The handful of optional online features (cover-art and font
+downloads) only touch the network if you explicitly ask them to. Everything it
+needs to run ships in the box, including VR profiles for the launch games. Additional per-game profiles are single files — drop them into your
+profiles folder and they're live on next boot.
 
-PCSX2 supports Windows, Linux, and Mac platforms. Our [setup documentation page](https://pcsx2.net/docs/setup/requirements) contains additional details on software and hardware requirements.
+## Install
 
-Please note that a BIOS dump from a legitimately-owned PS2 console is required to use the emulator. For more information, visit [this page](https://pcsx2.net/docs/setup/bios/).
+From the release page you want the **flatpak** (SteamOS-tuned; runs on any
+Linux with flatpak installed). A **source archive** of this exact tree is
+there too if you'd rather build it yourself (see `STACK.md`).
 
-## Contributing / Building
+**1. Install the emulator** (user scope — no root, works on a stock Steam
+Deck in Desktop Mode):
 
-PCSX2 supports translation into other languages using [Crowdin](https://crowdin.com/project/pcsx2-emulator).
+    flatpak install --user -y ./PenguinScreen2-*.flatpak
 
-See the [Contribution Guide](https://pcsx2.net/docs/contributing/) for more info on how to contribute.
+The first install downloads about 1 GB of shared KDE runtime from Flathub —
+one time only; a long progress bar here is normal. No other extension is
+required. Reinstalling or upgrading? Add `--reinstall`.
+
+**2. One-time VR setup** (from this folder):
+
+    bash setup-configure-deps.sh
+
+Installs the [WiVRn](https://github.com/WiVRn/WiVRn) streaming server (user
+scope, from Flathub), creates the two drop folders below, and fetches `adb`
+for the wired USB-C headset link. On the **headset**: install the free WiVRn
+client from the store (Meta Horizon Store for Quest).
+
+**3. Drop in your own files** — found automatically at next launch:
+
+    BIOS (dumped from your console)  ->  ~/PS2-BIOS
+    games (.iso/.chd/.bin+.cue ...)  ->  ~/PS2-Games
+
+**4. Play in VR:**
+
+    bash launch-vr-session.sh
+
+It starts the VR link, prints this machine's IP address and the one-time
+pairing PIN, walks you through pairing, then launches the emulator. In the
+headset's WiVRn app, connect **by IP** (SteamOS ships with auto-discovery
+blocked; `bash enable-vr-discovery.sh` is the optional opt-in to fix that —
+re-run it after each SteamOS update). **Steam Deck: play wired** — docked
+with Ethernet, or direct USB-C to the headset (headset Developer Mode
+required for the cable).
+
+**5. No headset handy?**
+
+    flatpak run org.penguinvr.penguinscreen2
+
+runs it as a normal flat PS2 emulator — nothing is lost.
+
+The full guided walkthrough, per-game expectations, and known issues:
+`QUICKSTART.md` and `KNOWN-ISSUES.md`, shipped alongside this file. (USB
+install-kit users also get a generated `INSTALL.txt` tailored to the exact
+kit contents.)

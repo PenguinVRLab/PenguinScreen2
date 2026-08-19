@@ -7,6 +7,12 @@
 
 #if defined(VERTEX_SHADER)
 
+#if VS_MULTIVIEW
+// PCSX2-VR (M4.3 stage 2): both eyes render in a single multiview pass; gl_ViewIndex
+// selects the eye (0 = left, 1 = right) for the stereo displacement below.
+#extension GL_EXT_multiview : require
+#endif
+
 #ifndef VS_EXPAND_NONE
 #define VS_EXPAND_NONE 0
 #define VS_EXPAND_POINT 1
@@ -25,6 +31,9 @@ layout(std140, set = 0, binding = 0) uniform cb0
 	vec2 PointSize;
 	uint MaxDepth;
 	float LineAA1Width;
+	// PCSX2-VR (M4.1): x = per-eye horizontal NDC displacement (signed), y = convergence in Q units.
+	vec2 vr_stereo;
+	vec2 vr_pad; // keep the block 64 B, matching VSConstantBuffer
 };
 
 layout(location = 0) out VSOutput
@@ -66,6 +75,30 @@ void main()
 	gl_Position.xy = gl_Position.xy * vec2(VertexScale.x, -VertexScale.y) - vec2(VertexOffset.x, -VertexOffset.y);
 	gl_Position.z *= exp2(-32.0f);		// integer->float depth
 	gl_Position.y = -gl_Position.y;
+
+	// PCSX2-VR (M4.1): depth-proportional per-eye horizontal displacement (3D-Vision-style).
+	// a_q ~= 1/w is the perspective term; near geometry (large q) shifts more than far.
+	// Guarded on vr_stereo.x so a disabled stereo mode (vr_stereo == 0) is provably a no-op.
+	// UV/FST draws carry no meaningful Q, so they are excluded at compile time -> zero displacement.
+	// The clamp pins content nearer than the convergence plane AT the screen instead of
+	// popping it out with unbounded amplification: untextured screen-space geometry (HUD
+	// lines etc.) arrives with q ~= 1 and would otherwise be flung by (conv*q - 1) times
+	// the separation (field-verified on AC5's pitch ladder). Tier-2 stereo is a "deep
+	// window": depth goes INTO the screen only.
+	#if !VS_FST
+		if (vr_stereo.x != 0.0f)
+		{
+			// Multiview (stage 2): vr_stereo.x is the unsigned separation; the view index
+			// supplies the eye sign. Otherwise the sign is pre-baked into vr_stereo.x
+			// (mono is 0; the interleave debug path bakes the alternating sign).
+			#if VS_MULTIVIEW
+				float vr_eye_sign = (gl_ViewIndex == 0) ? -1.0f : 1.0f;
+			#else
+				float vr_eye_sign = 1.0f;
+			#endif
+			gl_Position.x += vr_eye_sign * vr_stereo.x * max(0.0f, 1.0f - vr_stereo.y * a_q);
+		}
+	#endif
 
 	#if VS_TME
 		vec2 uv = a_uv - TextureOffset;
@@ -455,6 +488,25 @@ void main()
 #endif
 
 	gl_Position = vtx.p;
+
+	// PCSX2-VR (M4.1): same displacement as the non-expand path, applied post-expansion.
+	// vtx.t.w carries a_q for textured draws (1.0 otherwise), covering sprite/line/point
+	// primitives; inert when vr_stereo == 0, skipped for FST/UV draws. Same behind-screen
+	// clamp as the non-expand path: untextured expanded lines carry q = 1.0 and must land
+	// at screen depth, not fly off by (conv - 1) separations.
+	#if !VS_FST
+		if (vr_stereo.x != 0.0f)
+		{
+			// Same per-view sign selection as the non-expand path above.
+			#if VS_MULTIVIEW
+				float vr_eye_sign = (gl_ViewIndex == 0) ? -1.0f : 1.0f;
+			#else
+				float vr_eye_sign = 1.0f;
+			#endif
+			gl_Position.x += vr_eye_sign * vr_stereo.x * max(0.0f, 1.0f - vr_stereo.y * vtx.t.w);
+		}
+	#endif
+
 	vsOut.t = vtx.t;
 	vsOut.ti = vtx.ti;
 	vsOut.c = vtx.c;
@@ -662,19 +714,53 @@ layout(location = 0) in VSOutput
 #endif
 
 #if NEEDS_TEX
+// PCSX2-VR (M4.3): for stereo feed draws (a multiview draw sampling a 2-layer
+// stereo texture) the texture binds as an ARRAY and every sample selects the
+// current view's layer — each eye's upstream content flows through blits into
+// its own display layer. TEXC/ITEXC wrap the coordinates so the sampling sites
+// below stay layer-blind.
+#if PS_TEX_IN_ARRAY
+#extension GL_EXT_multiview : require
+layout(set = 1, binding = 0) uniform sampler2DArray Texture;
+#define TEXC(uv) vec3(uv, float(gl_ViewIndex))
+#define ITEXC(uv) ivec3(uv, gl_ViewIndex)
+#else
 layout(set = 1, binding = 0) uniform sampler2D Texture;
+#define TEXC(uv) (uv)
+#define ITEXC(uv) (uv)
+#endif
 layout(set = 1, binding = 1) uniform texture2D Palette;
 #endif
 
 #if PS_FEEDBACK_LOOP_IS_NEEDED_RT || PS_FEEDBACK_LOOP_IS_NEEDED_DEPTH
 	#if defined(DISABLE_TEXTURE_BARRIER) || defined(HAS_FEEDBACK_LOOP_LAYOUT)
+		// PCSX2-VR (Stage 1 / D4): on a promoted stereo target the feedback texture is a
+		// 2-layer array. Sampled as a plain texture2D (this path — feedback-loop-layout,
+		// the modern-NVIDIA path, or no-texture-barrier) both eyes read layer 0 (the LEFT
+		// eye). When ApplyTFXState binds the ARRAY view instead, declare the sampler as
+		// texture2DArray and texelFetch the current view's layer so each eye reads its own
+		// destination (Full DATE / StencilOne FS / SW blend / FBMASK). RT and depth are
+		// gated independently — a stereo RT can pair with a mono depth (temporary-Z path).
+		#if (PS_RT_IN_ARRAY || PS_DEPTH_IN_ARRAY)
+		#extension GL_EXT_multiview : require
+		#endif
 		#if (PS_FEEDBACK_LOOP_IS_NEEDED_RT && !PS_ROV_COLOR)
-			layout(set = 1, binding = 2) uniform texture2D RtSampler;
-			vec4 sample_from_rt() { return texelFetch(RtSampler, ivec2(gl_FragCoord.xy), 0); }
+			#if PS_RT_IN_ARRAY
+				layout(set = 1, binding = 2) uniform texture2DArray RtSampler;
+				vec4 sample_from_rt() { return texelFetch(RtSampler, ivec3(ivec2(gl_FragCoord.xy), gl_ViewIndex), 0); }
+			#else
+				layout(set = 1, binding = 2) uniform texture2D RtSampler;
+				vec4 sample_from_rt() { return texelFetch(RtSampler, ivec2(gl_FragCoord.xy), 0); }
+			#endif
 		#endif
 		#if (PS_FEEDBACK_LOOP_IS_NEEDED_DEPTH && !PS_ROV_DEPTH)
-			layout(set = 1, binding = 4) uniform texture2D DepthSampler;
-			float sample_from_depth() { return texelFetch(DepthSampler, ivec2(gl_FragCoord.xy), 0).r; }
+			#if PS_DEPTH_IN_ARRAY
+				layout(set = 1, binding = 4) uniform texture2DArray DepthSampler;
+				float sample_from_depth() { return texelFetch(DepthSampler, ivec3(ivec2(gl_FragCoord.xy), gl_ViewIndex), 0).r; }
+			#else
+				layout(set = 1, binding = 4) uniform texture2D DepthSampler;
+				float sample_from_depth() { return texelFetch(DepthSampler, ivec2(gl_FragCoord.xy), 0).r; }
+			#endif
 		#endif
 	#else
 		// Must consider each case separately since the input attachment indices must be consecutive.
@@ -732,7 +818,7 @@ vec4 sample_c_af(vec2 uv, float uv_w)
 	// Below taken from https://microsoft.github.io/DirectX-Specs/d3d/archive/D3D11_3_FunctionalSpec.htm#7.18.11%20LOD%20Calculations
 	// And https://registry.khronos.org/OpenGL/extensions/EXT/EXT_texture_filter_anisotropic.txt
 	// With guidance from https://pema.dev/2025/05/09/mipmaps-too-much-detail/ 
-	vec2 sz = textureSize(Texture, 0);
+	vec2 sz = vec2(textureSize(Texture, 0).xy);
 	vec2 dX = dFdx(uv) * sz;
 	vec2 dY = dFdy(uv) * sz;
 
@@ -831,7 +917,7 @@ vec4 sample_c_af(vec2 uv, float uv_w)
 
 	vec4 colour;
 	if (aniso_ratio == 1.0f)
-		colour = textureLod(Texture, uv, lod);
+		colour = textureLod(Texture, TEXC(uv), lod);
 	else
 	{
 		vec4 num = vec4(0.0f, 0.0f, 0.0f, 0.0f);
@@ -840,7 +926,7 @@ vec4 sample_c_af(vec2 uv, float uv_w)
 		{
 			vec2 d = -aniso_line + (0.5f + i) * segment;	
 			vec2 uv_sample = uv + d;
-			vec4 sample_colour = textureLod(Texture, uv_sample, lod);
+			vec4 sample_colour = textureLod(Texture, TEXC(uv_sample), lod);
 			num += sample_colour;
 		}
 
@@ -855,7 +941,7 @@ vec4 sample_c(vec2 uv)
 #if PS_TEX_IS_FB
 	return sample_from_rt();
 #elif PS_REGION_RECT
-	return texelFetch(Texture, ivec2(uv), 0);
+	return texelFetch(Texture, ITEXC(ivec2(uv)), 0);
 #else
 
 #if !PS_ADJS && !PS_ADJT
@@ -876,11 +962,11 @@ vec4 sample_c(vec2 uv)
 #if PS_ANISOTROPIC_FILTERING > 1
 	return sample_c_af(uv, vsIn.t.w);
 #elif PS_AUTOMATIC_LOD == 1
-	return texture(Texture, uv);
+	return texture(Texture, TEXC(uv));
 #elif PS_MANUAL_LOD == 1
-	return textureLod(Texture, uv, manual_lod(vsIn.t.w));
+	return textureLod(Texture, TEXC(uv), manual_lod(vsIn.t.w));
 #else
-	return textureLod(Texture, uv, 0); // No lod
+	return textureLod(Texture, TEXC(uv), 0); // No lod
 #endif
 #endif
 }
@@ -1035,7 +1121,7 @@ uint fetch_raw_depth(ivec2 xy)
 #if PS_TEX_IS_FB
 	vec4 col = sample_from_rt();
 #else
-	vec4 col = texelFetch(Texture, xy, 0);
+	vec4 col = texelFetch(Texture, ITEXC(xy), 0);
 #endif
 	return uint(col.r * exp2(32.0f));
 }
@@ -1045,7 +1131,7 @@ vec4 fetch_raw_color(ivec2 xy)
 #if PS_TEX_IS_FB
 	return sample_from_rt();
 #else
-	return texelFetch(Texture, xy, 0);
+	return texelFetch(Texture, ITEXC(xy), 0);
 #endif
 }
 
@@ -1054,7 +1140,7 @@ vec4 fetch_c(ivec2 uv)
 #if PS_TEX_IS_FB
 	return sample_from_rt();
 #else
-	return texelFetch(Texture, uv, 0);
+	return texelFetch(Texture, ITEXC(uv), 0);
 #endif
 }
 

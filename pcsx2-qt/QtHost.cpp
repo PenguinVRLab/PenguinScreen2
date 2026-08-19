@@ -19,6 +19,7 @@
 #include "pcsx2/Counters.h"
 #include "pcsx2/DebugTools/Debug.h"
 #include "pcsx2/GS.h"
+#include "pcsx2/ps2/BiosTools.h"
 #include "pcsx2/GS/GS.h"
 #include "pcsx2/GSDumpReplayer.h"
 #include "pcsx2/GameList.h"
@@ -33,6 +34,10 @@
 #include "pcsx2/PerformanceMetrics.h"
 #include "pcsx2/SPU2/spu2.h"
 #include "pcsx2/VMManager.h"
+#ifdef ENABLE_VR
+#include "pcsx2/VR/VRManager.h"
+#include "pcsx2/VR/VRProfileDB.h"
+#endif
 
 #include "common/Assertions.h"
 #include "common/Console.h"
@@ -45,6 +50,7 @@
 #include "common/StringUtil.h"
 #include "common/Timer.h"
 
+#include <QtCore/QDir>
 #include <QtCore/QTimer>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QMessageBox>
@@ -1331,6 +1337,22 @@ void Host::OnCaptureStopped()
 	emit g_emu_thread->onCaptureStopped();
 }
 
+static bool DropFolderHasBios(const std::string& dir)
+{
+	FileSystem::FindResultsArray files;
+	if (!FileSystem::FindFiles(dir.c_str(), "*", FILESYSTEM_FIND_FILES | FILESYSTEM_FIND_HIDDEN_FILES, &files))
+		return false;
+
+	u32 version, region;
+	std::string description, zone;
+	for (const FILESYSTEM_FIND_DATA& fd : files)
+	{
+		if (IsBIOS(fd.FileName.c_str(), version, description, region, zone))
+			return true;
+	}
+	return false;
+}
+
 bool QtHost::InitializeConfig()
 {
 	Error error;
@@ -1339,7 +1361,7 @@ bool QtHost::InitializeConfig()
 
 	if (!EmuFolders::SetResourcesDirectory())
 	{
-		QMessageBox::critical(nullptr, QStringLiteral("PCSX2"),
+		QMessageBox::critical(nullptr, QStringLiteral("PenguinScreen2"),
 			QStringLiteral("Resources directory is missing, your installation is incomplete."));
 		return false;
 	}
@@ -1348,11 +1370,11 @@ bool QtHost::InitializeConfig()
 	{
 		// no point translating, config isn't loaded
 		QMessageBox::critical(
-			nullptr, QStringLiteral("PCSX2"),
+			nullptr, QStringLiteral("PenguinScreen2"),
 			QStringLiteral("Failed to create data directory at path\n\n%1\n\n"
 						   "The error was: %2\n"
 						   "Please ensure this directory is writable. You can also try portable mode "
-						   "by creating portable.txt in the same directory you installed PCSX2 into.")
+						   "by creating portable.txt in the same directory you installed PenguinScreen2 into.")
 				.arg(QString::fromStdString(EmuFolders::DataRoot))
 				.arg(QString::fromStdString(error.GetDescription())));
 		return false;
@@ -1362,7 +1384,7 @@ bool QtHost::InitializeConfig()
 	CrashHandler::SetWriteDirectory(EmuFolders::DataRoot);
 
 	// Load main settings ini
-	const std::string path = Path::Combine(EmuFolders::Settings, "PCSX2.ini");
+	const std::string path = Path::Combine(EmuFolders::Settings, "PenguinScreen2.ini");
 	const bool settings_exists = FileSystem::FileExists(path.c_str());
 	Console.WriteLnFmt("Loading config from {}.", path);
 
@@ -1372,7 +1394,7 @@ bool QtHost::InitializeConfig()
 	{
 		// If the config file doesn't exist, assume this is a new install and don't prompt to overwrite.
 		if (FileSystem::FileExists(s_base_settings_interface->GetFileName().c_str()) &&
-			QMessageBox::question(nullptr, QStringLiteral("PCSX2"),
+			QMessageBox::question(nullptr, QStringLiteral("PenguinScreen2"),
 				QStringLiteral("Settings failed to load, or are the incorrect version. Clicking Yes will reset all settings to defaults. "
 							   "Do you want to continue?")) != QMessageBox::Yes)
 		{
@@ -1384,14 +1406,35 @@ bool QtHost::InitializeConfig()
 		// Flag for running the setup wizard if this is our first run. We want to run it next time if they don't finish it.
 		s_base_settings_interface->SetBoolValue("UI", "SetupWizardIncomplete", true);
 
+		// Hands-off first run (see the QUICKSTART): users are told to drop
+		// their BIOS in ~/PS2-BIOS and games in ~/PS2-Games before ever
+		// launching. If a valid BIOS is really there, adopt both folders on
+		// top of the fresh defaults (keyboard binds/hotkeys stay intact) and
+		// skip the wizard — first launch goes straight to the library, and
+		// LoadBIOS() picks the image up by scanning the folder. No BIOS
+		// dropped -> normal wizard flow, untouched.
+		const std::string drop_bios =
+			Path::Combine(QDir::homePath().toStdString(), "PS2-BIOS");
+		const std::string drop_games =
+			Path::Combine(QDir::homePath().toStdString(), "PS2-Games");
+		if (DropFolderHasBios(drop_bios))
+		{
+			s_base_settings_interface->SetStringValue("Folders", "Bios", drop_bios.c_str());
+			if (FileSystem::DirectoryExists(drop_games.c_str()))
+				s_base_settings_interface->AddToStringList("GameList", "RecursivePaths", drop_games.c_str());
+			s_base_settings_interface->SetBoolValue("UI", "SetupWizardIncomplete", false);
+			Console.WriteLn("First run: valid BIOS found in '%s' — adopted the drop folders and skipping the setup wizard.",
+				drop_bios.c_str());
+		}
+
 		// Make sure we can actually save the config, and the user doesn't have some permission issue.
 		if (!s_base_settings_interface->Save(&error))
 		{
 			QMessageBox::critical(
-				nullptr, QStringLiteral("PCSX2"),
+				nullptr, QStringLiteral("PenguinScreen2"),
 				QStringLiteral(
 					"Failed to save configuration to\n\n%1\n\nThe error was: %2\n\nPlease ensure this directory is writable. You "
-					"can also try portable mode by creating portable.txt in the same directory you installed PCSX2 into.")
+					"can also try portable mode by creating portable.txt in the same directory you installed PenguinScreen2 into.")
 					.arg(QString::fromStdString(s_base_settings_interface->GetFileName()))
 					.arg(QString::fromStdString(error.GetDescription())));
 			return false;
@@ -1400,6 +1443,27 @@ bool QtHost::InitializeConfig()
 		// Don't save if we're running the setup wizard. We want to run it next time if they don't finish it.
 		if (!s_run_setup_wizard)
 			SaveSettings();
+	}
+
+	// The ~/PS2-BIOS drop-folder promise must hold on EVERY launch, not only a
+	// fresh install (strict-review #5/#9 + G2): the no-BIOS dialog tells users
+	// to drop a BIOS there and restart, but the first-run block above never
+	// re-runs once the config file exists. If the configured BIOS folder holds
+	// no valid BIOS and the drop folder does, adopt it now. Idempotent — once
+	// adopted (or once the configured folder gains a BIOS) this no-ops.
+	{
+		const std::string drop_bios =
+			Path::Combine(QDir::homePath().toStdString(), "PS2-BIOS");
+		std::string cur_bios = s_base_settings_interface->GetStringValue("Folders", "Bios", "bios");
+		if (!Path::IsAbsolute(cur_bios))
+			cur_bios = Path::Combine(EmuFolders::DataRoot, cur_bios);
+		if (cur_bios != drop_bios && !DropFolderHasBios(cur_bios) && DropFolderHasBios(drop_bios))
+		{
+			Console.WriteLn("BIOS folder '%s' has no valid BIOS but '%s' does — adopting the drop folder.",
+				cur_bios.c_str(), drop_bios.c_str());
+			s_base_settings_interface->SetStringValue("Folders", "Bios", drop_bios.c_str());
+			s_base_settings_interface->Save();
+		}
 	}
 
 	// Layer secrets ini on top
@@ -1414,10 +1478,10 @@ bool QtHost::InitializeConfig()
 		if (!s_base_settings_interface->Save(&error))
 		{
 			QMessageBox::critical(
-				nullptr, QStringLiteral("PCSX2"),
+				nullptr, QStringLiteral("PenguinScreen2"),
 				QStringLiteral(
 					"Failed to save secrets to\n\n%1\n\nThe error was: %2\n\nPlease ensure this directory is writable. You "
-					"can also try portable mode by creating portable.txt in the same directory you installed PCSX2 into.")
+					"can also try portable mode by creating portable.txt in the same directory you installed PenguinScreen2 into.")
 					.arg(QString::fromStdString(s_secrets_settings_interface->GetFileName()))
 					.arg(QString::fromStdString(error.GetDescription())));
 			return false;
@@ -1543,7 +1607,7 @@ bool Host::RequestResetSettings(bool folders, bool core, bool controllers, bool 
 
 QString QtHost::GetAppNameAndVersion()
 {
-	return QString("PCSX2 %1").arg(BuildVersion::GitRev);
+	return QString("PenguinScreen2 %1").arg(BuildVersion::GitRev);
 }
 
 QString QtHost::GetAppConfigSuffix()
@@ -2140,7 +2204,7 @@ void QtHost::PrintCommandLineHelp(const std::string_view progname)
 	std::fprintf(stderr, "  -version: Displays version information and exits.\n");
 	std::fprintf(stderr, "  -batch: Enables batch mode (exits after shutting down).\n");
 	std::fprintf(stderr, "  -nogui: Hides main window while running (implies batch mode).\n");
-	std::fprintf(stderr, "  -portable: Force enable portable mode to store data in local PCSX2 path instead of the default configuration path. Overrides '-datapath'.\n");
+	std::fprintf(stderr, "  -portable: Force enable portable mode to store data in local PenguinScreen2 path instead of the default configuration path. Overrides '-datapath'.\n");
 	std::fprintf(stderr, "  -datapath <path>: Specify the directory to be used for all application data.\n");
 	std::fprintf(stderr, "  -elf <file>: Overrides the boot ELF with the specified filename.\n");
 	std::fprintf(stderr, "  -gameargs <string>: passes the specified quoted space-delimited string of launch arguments.\n");
@@ -2153,7 +2217,7 @@ void QtHost::PrintCommandLineHelp(const std::string_view progname)
 	std::fprintf(stderr, "  -statefile <filename>: Loads state from the specified filename.\n");
 	std::fprintf(stderr, "  -fullscreen: Enters fullscreen mode immediately after starting.\n");
 	std::fprintf(stderr, "  -nofullscreen: Prevents fullscreen mode from triggering if enabled.\n");
-	std::fprintf(stderr, "  -bigpicture: Forces PCSX2 to use the Big Picture mode (useful for controller-only and couch play).\n");
+	std::fprintf(stderr, "  -bigpicture: Forces PenguinScreen2 to use the Big Picture mode (useful for controller-only and couch play).\n");
 	std::fprintf(stderr, "  -earlyconsolelog: Forces logging of early console messages to console.\n");
 	std::fprintf(stderr, "  -testconfig: Initializes configuration and checks version, then exits.\n");
 	std::fprintf(stderr, "  -setupwizard: Forces initial setup wizard to run.\n");
@@ -2162,6 +2226,9 @@ void QtHost::PrintCommandLineHelp(const std::string_view progname)
 	std::fprintf(stderr, "  -unlimited: Enters unlimited (fast forward) mode after starting.\n");
 #ifdef ENABLE_RAINTEGRATION
 	std::fprintf(stderr, "  -raintegration: Use RAIntegration instead of built-in achievement support.\n");
+#endif
+#ifdef ENABLE_VR
+	std::fprintf(stderr, "  -vr-info: Prints OpenXR runtime/headset information and exits.\n");
 #endif
 	std::fprintf(stderr, "  --: Signals that no more arguments will follow and the remaining\n"
 						 "    parameters make up the filename. Use when the filename contains\n"
@@ -2204,6 +2271,14 @@ bool QtHost::ParseCommandLineOptions(const QStringList& args, std::shared_ptr<VM
 				PrintCommandLineVersion();
 				return false;
 			}
+#ifdef ENABLE_VR
+			else if (CHECK_ARG(QStringLiteral("-vr-info")))
+			{
+				PrintCommandLineVersion();
+				std::fprintf(stderr, "%s", VR::GetRuntimeInfoReport().c_str());
+				return false;
+			}
+#endif
 			else if (CHECK_ARG(QStringLiteral("-batch")))
 			{
 				s_batch_mode = true;
@@ -2479,6 +2554,14 @@ int main(int argc, char* argv[])
 #endif
 
 	QGuiApplication::setHighDpiScaleFactorRoundingPolicy(Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
+
+	// PenguinScreen2 (2026-07-20): bind the Wayland/desktop app_id to the branded
+	// .desktop so SteamOS Game Mode / Gamescope (and Wayland taskbars generally)
+	// associate the installed icon + overlay with our window. Without this the
+	// compositor falls back to the binary name (pcsx2-qt), which does not match
+	// org.penguinvr.penguinscreen2.desktop and the icon fails to bind. Independent
+	// of the internal binary/WM_CLASS name.
+	QGuiApplication::setDesktopFileName(QStringLiteral("org.penguinvr.penguinscreen2"));
 	QtHost::RegisterTypes();
 
 	PCSX2MainApplication app(argc, argv);
@@ -2501,6 +2584,30 @@ int main(int argc, char* argv[])
 	// Are we just setting up the configuration?
 	if (s_test_config_and_exit)
 		return EXIT_SUCCESS;
+
+#ifdef ENABLE_VR
+	// PCSX2-VR: every per-game profile yaml (user folder + shipped folder) is
+	// parsed and validated NOW, and an invalid file raises a modal the user
+	// must acknowledge — never a silent skip, never console-only. These files
+	// are user-editable; this is how a broken hand edit surfaces instead of
+	// mysteriously not applying in game.
+	{
+		const auto& issues = VR::ProfileDB::ValidateAtLaunch();
+		if (!issues.empty())
+		{
+			QString msg = QStringLiteral("%1 invalid VR profile file(s) found at launch:\n\n").arg(issues.size());
+			for (const auto& issue : issues)
+			{
+				msg += QStringLiteral("%1\n    %2\n\n")
+						   .arg(QString::fromStdString(issue.file), QString::fromStdString(issue.message));
+			}
+			msg += QStringLiteral("These files are SKIPPED for this session. Where a shipped profile "
+								  "exists for the same game, it is used instead. Fix or remove the "
+								  "listed files — this check runs at every launch.");
+			QMessageBox::critical(nullptr, QStringLiteral("Invalid VR profiles"), msg);
+		}
+	}
+#endif
 
 	// Remove any previous-version remanants.
 	if (s_cleanup_after_update)

@@ -9,6 +9,10 @@
 #include "ImGui/ImGuiOverlays.h"
 #include "Input/InputManager.h"
 #include "Recording/InputRecording.h"
+#ifdef ENABLE_VR
+#include "VR/CameraDriver.h"
+#include "VR/XRCompositor.h"
+#endif
 #include "SPU2/spu2.h"
 #include "VMManager.h"
 #include "SIO/Memcard/MemoryCardFile.h"
@@ -158,6 +162,21 @@ DEFINE_HOTKEY("OpenPauseMenu", TRANSLATE_NOOP("Hotkeys", "Navigation"), TRANSLAT
 		if (!pressed && VMManager::HasValidVM() && CanPause())
 			FullscreenUI::OpenPauseMenu();
 	})
+#ifdef ENABLE_VR
+// Category "VR", not "Graphics": the docs say "Settings → Hotkeys → VR" and
+// more VR hotkeys are coming — make the docs true (strict-review #21).
+DEFINE_HOTKEY("VRRecenterHead", TRANSLATE_NOOP("Hotkeys", "VR"), TRANSLATE_NOOP("Hotkeys", "VR: Recenter Head Camera"),
+	[](s32 pressed) {
+		if (!pressed)
+		{
+			// Full recenter: head camera AND screen re-anchor (incl. vertical
+			// height) — same semantics as the L1+R1+L3+R3 pad chord (task #27).
+			VR::CameraDriver::RequestRecenter();
+			VR::XRCompositor::RequestScreenReanchor();
+			Host::AddKeyedOSDMessage("VRRecenter", TRANSLATE_STR("Hotkeys", "VR recentered (head + screen)."), 2.0f);
+		}
+	})
+#endif
 DEFINE_HOTKEY("OpenAchievementsList", TRANSLATE_NOOP("Hotkeys", "Navigation"),
 	TRANSLATE_NOOP("Hotkeys", "Open Achievements List"), [](s32 pressed) {
 		if (!pressed && CanPause())

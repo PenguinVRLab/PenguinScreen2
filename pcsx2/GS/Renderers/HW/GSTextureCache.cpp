@@ -3289,6 +3289,13 @@ GSTextureCache::Target* GSTextureCache::ProcessTargetAfterLookup(RescaleHelper& 
 GSTextureCache::Target* GSTextureCache::CreateTarget(GIFRegTEX0 TEX0, const GSVector2i& size, const GSVector2i& valid_size, float scale, int type,
 	bool used, u32 fbmask, bool is_frame, bool preload, bool preserve_target, const GSVector4i draw_rect, GSTextureCache::Source* src)
 {
+	{
+		// ISS-031/037 census: every NEW target allocation (content starts empty).
+		static const bool s_tcensus = (std::getenv("PCSX2_VR_CHAINLOG") != nullptr);
+		if (s_tcensus)
+			Console.WriteLn("(VR) CHAINLOG newtarget bp=0x%x type=%d %dx%d preload=%d preserve=%d frame=%d",
+				TEX0.TBP0, type, size.x, size.y, preload ? 1 : 0, preserve_target ? 1 : 0, is_frame ? 1 : 0);
+	}
 	if (type == DepthStencil)
 	{
 		GL_CACHE("TC: Lookup Target(Depth) %dx%d, miss (0x%x, TBW %d, %s) draw %lld", size.x, size.y, TEX0.TBP0,
@@ -5925,6 +5932,7 @@ void GSTextureCache::InvalidateVideoMemSubTarget(GSTextureCache::Target* rt)
 
 void GSTextureCache::InvalidateSourcesFromTarget(const Target* t)
 {
+	u32 removed = 0;
 	for (auto it = m_src.m_surfaces.begin(); it != m_src.m_surfaces.end();)
 	{
 		Source* src = *it++;
@@ -5932,8 +5940,124 @@ void GSTextureCache::InvalidateSourcesFromTarget(const Target* t)
 		{
 			GL_CACHE("TC: Removing source at %x referencing target", src->m_TEX0.TBP0);
 			m_src.RemoveAt(src);
+			removed++;
 		}
 	}
+
+	// PCSX2-VR (ISS-039): quantify how close this gets to the use-after-free window —
+	// how many map-resident sources a promotion actually frees, and whether a draw was
+	// holding one at the time. Without this the "SRCGUARD never fired" result cannot be
+	// told apart from "the guard is not wired up" (H-11).
+	static const bool s_srcguard = (std::getenv("PCSX2_VR_SRCGUARD") != nullptr);
+	if (s_srcguard && removed > 0)
+	{
+		Console.WriteLn("(VR) SRCGUARD invalidate: target 0x%x removed=%u promotion=%d inflight=%p inflight_from=0x%x",
+			t->m_TEX0.TBP0, removed, m_in_stereo_promotion ? 1 : 0,
+			static_cast<void*>(m_draw_inflight_source),
+			(m_draw_inflight_source && m_draw_inflight_source->m_from_target) ?
+				m_draw_inflight_source->m_from_target->m_TEX0.TBP0 : 0u);
+	}
+}
+
+void GSTextureCache::RetargetSourcesAfterPromotion(const Target* t, GSTexture* old_tex, GSTexture* new_tex)
+{
+	// PCSX2-VR (ISS-039). Called by Target::PromoteToStereo instead of
+	// InvalidateSourcesFromTarget — see the rationale there. Nothing is destroyed, so no raw
+	// Source* held by the draw in progress can be left dangling.
+	static const bool s_srcguard = (std::getenv("PCSX2_VR_SRCGUARD") != nullptr);
+
+	m_promo_total++;
+	if (m_draw_inflight_source)
+	{
+		m_promo_with_inflight++;
+		if (m_draw_inflight_source->m_texture == old_tex || m_draw_inflight_source->m_from_target == t)
+		{
+			// The window the old code would have walked into: the draw in progress is holding a
+			// Source that InvalidateSourcesFromTarget would have deleted, or that aliases the
+			// texture about to be recycled.
+			m_promo_inflight_dangerous++;
+			if (s_srcguard)
+			{
+				Console.Error("(VR) SRCGUARD DANGEROUS #%u: promotion of 0x%x with the draw holding "
+							  "src bp=0x%x (%s, aliases_old=%d, from_this=%d)",
+					m_promo_inflight_dangerous, t->m_TEX0.TBP0, m_draw_inflight_source->m_TEX0.TBP0,
+					m_draw_inflight_source->m_shared_texture ? "DIRECT(shared)" : "COPY(owned)",
+					(m_draw_inflight_source->m_texture == old_tex) ? 1 : 0,
+					(m_draw_inflight_source->m_from_target == t) ? 1 : 0);
+			}
+		}
+	}
+
+	for (Source* src : m_src.m_surfaces)
+	{
+		if (src->m_texture != old_tex)
+			continue;
+
+		// Only shared aliases may be re-pointed. A source that OWNED old_tex would mean the
+		// target had already handed ownership over (the `t->m_texture = nullptr` idiom used
+		// around this file), and PromoteToStereo would have bailed on a null m_texture — so
+		// this should be unreachable. Skipping rather than re-pointing keeps a hypothetical
+		// owner from ending up sharing new_tex with the target and double-freeing it.
+		pxAssert(src->m_shared_texture);
+		if (!src->m_shared_texture)
+			continue;
+
+		src->m_texture = new_tex;
+		m_promo_retargeted++;
+		if (s_srcguard)
+		{
+			Console.WriteLn("(VR) SRCGUARD RETARGET #%u: map-resident source bp=0x%x re-pointed from %p to %p "
+							"(target 0x%x, in_flight=%d)",
+				m_promo_retargeted, src->m_TEX0.TBP0, static_cast<void*>(old_tex),
+				static_cast<void*>(new_tex), t->m_TEX0.TBP0, (src == m_draw_inflight_source) ? 1 : 0);
+		}
+	}
+
+	// The temporary source is deliberately NOT map-resident — it is created from the CURRENT
+	// RT/DS and dropped after the draw (~6407 sets it, ~6675 skips m_src.Add for it) — so the
+	// loop above cannot reach it. It is exactly the kind of source that aliases the target being
+	// promoted, and InvalidateSourcesFromTarget could never see it either, which left it
+	// pointing at a texture about to go back into the pool.
+	if (m_temporary_source && m_temporary_source->m_texture == old_tex && m_temporary_source->m_shared_texture)
+	{
+		m_temporary_source->m_texture = new_tex;
+		m_promo_retargeted++;
+		if (s_srcguard)
+		{
+			Console.WriteLn("(VR) SRCGUARD RETARGET #%u: TEMPORARY source bp=0x%x re-pointed from %p to %p "
+							"(target 0x%x, in_flight=%d)",
+				m_promo_retargeted, m_temporary_source->m_TEX0.TBP0, static_cast<void*>(old_tex),
+				static_cast<void*>(new_tex), t->m_TEX0.TBP0,
+				(m_temporary_source == m_draw_inflight_source) ? 1 : 0);
+		}
+	}
+
+	if (s_srcguard && (m_promo_total % 4096) == 0)
+	{
+		Console.WriteLn("(VR) SRCGUARD summary: promotions=%u with_inflight_draw=%u dangerous=%u "
+						"retargeted=%u inflight_source_frees=%u",
+			m_promo_total, m_promo_with_inflight, m_promo_inflight_dangerous, m_promo_retargeted,
+			m_draw_inflight_source_kills);
+	}
+}
+
+bool GSTextureCache::ForceKillInFlightSourceForSelfTest()
+{
+	// PCSX2-VR (ISS-039): deliberate fault injection — free the Source the current draw is
+	// holding, exactly as a promotion-driven InvalidateSourcesFromTarget would. This exists
+	// to prove SRCGUARD can actually fire (H-11: a check that cannot fail is not a check).
+	// It reproduces the use-after-free ON PURPOSE, so it is opt-in via
+	// PCSX2_VR_SRCGUARD_SELFTEST and fires exactly once per process.
+	if (!m_draw_inflight_source)
+		return false;
+	if (m_src.m_surfaces.find(m_draw_inflight_source) == m_src.m_surfaces.end())
+		return false; // temporary sources are not map-resident; RemoveAt would never see them
+
+	Console.Error("(VR) SRCGUARD SELFTEST: deliberately freeing the in-flight draw source %p — "
+				  "the guard line below is the proof it fires; this draw is now a real UAF.",
+		static_cast<void*>(m_draw_inflight_source));
+	m_src.RemoveAt(m_draw_inflight_source);
+	return true;
 }
 
 void GSTextureCache::ReplaceSourceTexture(Source* s, GSTexture* new_texture, float new_scale,
@@ -7887,6 +8011,30 @@ bool GSTextureCache::Target::OverlapsValid(u32 bp, u32 bw, u32 psm, const GSVect
 
 void GSTextureCache::Target::Update(bool cannot_scale)
 {
+	// ISS-031/037 DIAGNOSTIC: census + optional skip of dirty-rect uploads into
+	// LAYERED (2-layer stereo) targets. Hypothesis under test: these uploads pull
+	// stale GS-memory content over the live host RT of a promoted target,
+	// page-column-wise (seams at 64*upscale) and content-destructively (the
+	// turn-blur then feeds back the stomped/stale data -> progressive crush).
+	if (m_texture && m_texture->GetArrayLayers() >= 2 && !m_dirty.empty())
+	{
+		static const bool s_census = (std::getenv("PCSX2_VR_CHAINLOG") != nullptr);
+		static const bool s_skip = (std::getenv("PCSX2_VR_SKIP_LAYERED_UPDATE") != nullptr);
+		if (s_census)
+		{
+			for (u32 di = 0; di < static_cast<u32>(m_dirty.size()); di++)
+			{
+				const GSVector4i dr = m_dirty.GetDirtyRect(di, m_TEX0, GSVector4i::loadh(m_unscaled_size), false);
+				Console.WriteLn("(VR) CHAINLOG layered-update bp=0x%x rect=%d,%d-%d,%d skip=%d",
+					m_TEX0.TBP0, dr.x, dr.y, dr.z, dr.w, s_skip ? 1 : 0);
+			}
+		}
+		if (s_skip)
+		{
+			m_dirty.clear();
+			return;
+		}
+	}
 	m_age = 0;
 
 	// FIXME: the union of the rects may also update wrong parts of the render target (but a lot faster :)
@@ -8204,11 +8352,23 @@ bool GSTextureCache::Target::PromoteToStereo()
 	if (!old_tex || old_tex->GetArrayLayers() >= 2)
 		return true;
 
-	const GSVector2i size = old_tex->GetSize();
 	const bool depth = old_tex->IsDepthStencil();
-	GSTexture* tex = depth ?
-		g_gs_device->CreateDepthStencil(size.x, size.y, false, true, 2) :
-		g_gs_device->CreateRenderTarget(size.x, size.y, old_tex->GetFormat(), false, true, 2);
+	const GSVector2i size = old_tex->GetSize();
+	// PCSX2-VR (ISS-031/037): PRESERVE THE SOURCE TEXTURE'S USAGE. Target::Create
+	// allocates colour targets as FeedbackTarget (RenderTarget|Feedback) and depth as
+	// FeedbackDepth where supported, so the image carries
+	// VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT. Re-allocating here through
+	// CreateRenderTarget/CreateDepthStencil passed the PLAIN RenderTarget/DepthStencil
+	// usage and silently DROPPED the Feedback bit — so a promoted target was used in
+	// VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT without the matching usage
+	// flag (VUID-vkCmdDrawIndexed-None-07001). That is UNDEFINED BEHAVIOUR, and the
+	// driver is free not to preserve attachment contents across such a draw: KF4's
+	// self-referential SCANMSK turn-blur (fbp==tbp) then loses its masked rows to
+	// black, halving frame brightness per blit (the ISS-037 darkening) with
+	// page-column edges (the ISS-031 seams). Targets BORN 2-layer keep the right
+	// usage, which is why this only bites games whose targets are promoted later.
+	GSTexture* tex = g_gs_device->FetchSurface(old_tex->GetUsage(), size.x, size.y, 1,
+		old_tex->GetFormat(), false, PreferReusedLabelledTexture(), 2);
 	if (!tex)
 	{
 		Console.Error("TC: Failed to allocate %dx%d stereo target for promotion.", size.x, size.y);
@@ -8243,9 +8403,35 @@ bool GSTextureCache::Target::PromoteToStereo()
 		g_gs_device->InvalidateRenderTarget(tex);
 	}
 
-	// Sources wrapping this target hold the old texture pointer — drop them before the swap
-	// (draw-time promotion can run while such sources exist; scanout-time usually not).
-	g_texture_cache->InvalidateSourcesFromTarget(this);
+	// PCSX2-VR (ISS-039): re-point the sources that alias this target; destroy nothing.
+	//
+	// This used to call InvalidateSourcesFromTarget(this), which DELETES every Source whose
+	// m_from_target is this target. GSRendererHW::DrawPrims holds one of those by raw pointer
+	// across the promotion — the VR promotion block runs at ~9564 and EmulateTextureSampler
+	// reads tex->m_texture into m_conf.tex at ~9693 — so a draw-time promotion could hand a
+	// freed GSTextureVK* to PSSetShaderResource. Deliberate fault injection reproduces exactly
+	// that: freeing the in-flight source on purpose under MALLOC_PERTURB_ SIGSEGVs in DrawPrims
+	// at the EmulateTextureSampler call (see ForceKillInFlightSourceForSelfTest).
+	//
+	// Deleting was never necessary. Promotion swaps the texture OBJECT, not the content: the new
+	// texture keeps the old one's size, scale, format and usage (FetchSurface above takes them
+	// from old_tex), and CopyRect broadcasts mono -> stereo with num_regions = 2, so BOTH layers
+	// come out byte-identical to old_tex. An aliasing source therefore only needs re-pointing —
+	// the same thing this file already does at ~3024 when a rescale swaps a target's texture
+	// under a live source, and what SourceMap::SwapTexture does for the hash cache.
+	// Diagnostic lane: restore the old destructive behaviour so the two can be A/B'd on the
+	// same binary (that is how "the fix changes no pixels" is measured). Default off.
+	static const bool s_iss039_oldpath = (std::getenv("PCSX2_VR_ISS039_OLDPATH") != nullptr);
+	if (s_iss039_oldpath) [[unlikely]]
+	{
+		g_texture_cache->m_in_stereo_promotion = true;
+		g_texture_cache->InvalidateSourcesFromTarget(this);
+		g_texture_cache->m_in_stereo_promotion = false;
+	}
+	else
+	{
+		g_texture_cache->RetargetSourcesAfterPromotion(this, old_tex, tex);
+	}
 
 	g_texture_cache->m_target_memory_usage =
 		(g_texture_cache->m_target_memory_usage - old_tex->GetMemUsage()) + tex->GetMemUsage();
@@ -8406,6 +8592,30 @@ void GSTextureCache::SourceMap::RemoveAll()
 
 void GSTextureCache::SourceMap::RemoveAt(Source* s)
 {
+	// PCSX2-VR (ISS-039): fire if we are about to free the Source the current draw still
+	// holds by raw pointer. That is the use-after-free window itself — see
+	// GSTextureCache::m_draw_inflight_source. Diagnostic only; nothing below changes.
+	if (g_texture_cache->m_draw_inflight_source == s)
+	{
+		g_texture_cache->m_draw_inflight_source_kills++;
+		if (g_texture_cache->m_in_stereo_promotion)
+			g_texture_cache->m_draw_inflight_source_kills_promo++;
+
+		static const bool s_srcguard = (std::getenv("PCSX2_VR_SRCGUARD") != nullptr);
+		if (s_srcguard)
+		{
+			Console.Error("(VR) SRCGUARD kill #%u (%s): in-flight draw source bp=0x%x from_target=0x%x %s tex=%p layers=%u",
+				g_texture_cache->m_draw_inflight_source_kills,
+				g_texture_cache->m_in_stereo_promotion ? "stereo-promotion" : "other",
+				s->m_TEX0.TBP0,
+				s->m_from_target ? s->m_from_target->m_TEX0.TBP0 : 0u,
+				s->m_shared_texture ? "DIRECT(shared)" : "COPY(owned)",
+				static_cast<void*>(s->m_texture),
+				s->m_texture ? s->m_texture->GetArrayLayers() : 0u);
+		}
+		pxAssertMsg(false, "TC: freeing the Source the current draw is holding (ISS-039 use-after-free window)");
+	}
+
 	m_surfaces.erase(s);
 
 	GL_CACHE("TC: Remove Src Texture: 0x%x TBW %u PSM %s",

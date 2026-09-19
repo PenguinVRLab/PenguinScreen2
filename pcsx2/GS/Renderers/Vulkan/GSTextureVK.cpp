@@ -244,6 +244,31 @@ GSTexture* GSTextureVK::GetLayerProxyTexture(u32 layer)
 		return this;
 
 	pxAssert(layer < m_array_layers);
+
+	// PCSX2-VR (KF4 root cause, 2026-08-13): materialize any DEFERRED CLEAR before handing
+	// out per-layer access.
+	//
+	// GSTexture::m_state lives on each object and a proxy is its own object, so a write
+	// through a proxy marks only the PROXY dirty — the parent stays State::Cleared with a
+	// clear still "pending". The next parent-level CommitClear() (PSSetShaderResource does
+	// one on every bind, GSDeviceVK.cpp:6271) then executes that stale clear and blanks the
+	// whole image, destroying everything the per-layer writes just put there.
+	//
+	// That is the KF4 darkening + seams: the 2-layer hazard snapshot was filled correctly
+	// through proxies (both layers verified populated by readback), then wiped to black at
+	// bind time, so the self-referential turn-blur blended 50/50 against black — a uniform
+	// halving per blit (38.2 -> 19.3 -> ...), with page-column edges. MEASURED: forcing the
+	// parent dirty after the fill restores the reference numbers exactly.
+	//
+	// A deferred clear is simply not expressible once a texture is addressed per layer
+	// (clearing "only the layers nobody wrote" is not a thing the tracker can represent), so
+	// this is the last point where the clear can still be applied coherently: every layer
+	// gets the clear colour, then per-layer writes land on top. CommitClear() early-outs
+	// unless a clear really is pending, so the cost on the common path is one branch — and
+	// it fixes every proxy consumer at once (stretch/merge/interlace/FXAA/shade-boost/
+	// resize/snapshot), not just the call site that exposed it.
+	CommitClear();
+
 	if (m_layer_proxies.empty())
 		m_layer_proxies.resize(m_array_layers);
 
@@ -345,7 +370,16 @@ void GSTextureVK::Destroy(bool defer)
 
 VkImageLayout GSTextureVK::GetVkLayout() const
 {
-	return GetVkImageLayout(m_layout);
+	// PCSX2-VR (ISS-031/037): MUST go through GetLayout(), which resolves a layer
+	// proxy to its parent. A proxy aliases the parent's VkImage but is a separate
+	// GSTextureVK, and TransitionToLayout() deliberately delegates to the parent —
+	// so a proxy's own m_layout NEVER leaves Undefined. Reading the raw member here
+	// handed VK_IMAGE_LAYOUT_UNDEFINED to every consumer of a proxy: descriptor
+	// writes (sampling an image declared UNDEFINED yields UNDEFINED CONTENTS) and
+	// vkCmdCopyImage src/dst layouts (a copy from/to UNDEFINED may legally discard
+	// the contents, at tile granularity). Layer proxies exist only for 2-layer
+	// (stereo) targets, which is why mono was always clean.
+	return GetVkImageLayout(GetLayout());
 }
 
 void* GSTextureVK::GetNativeHandle() const
@@ -918,11 +952,25 @@ VkFramebuffer GSTextureVK::GetLinkedFramebuffer(GSTextureVK* depth_texture, bool
 			return fb;
 	}
 
+	// PCSX2-VR (ISS-031/037): the framebuffer must be built against a render pass whose
+	// MULTIVIEW-ness matches the one used at draw time, or the two are incompatible —
+	// VUID-VkRenderPassBeginInfo-renderPass-00904: "The first uses Multiview (has
+	// non-zero viewMasks) while the second one does not" — and every stereo draw is
+	// then undefined (observed: 954 validation errors with stereo on vs 1 with it off,
+	// including sampled images reported in VK_IMAGE_LAYOUT_UNDEFINED). The draw path
+	// selects its render pass with pipe.vs.multiview, which is set when the target is a
+	// 2-layer array, so derive the identical condition from the attachments here.
+	// Mono targets keep multiview=false and the precreated mono render-pass array, so
+	// the stereo-off path stays byte-identical.
+	const bool multiview =
+		(GetArrayLayers() > 1) || (depth_texture && depth_texture->GetArrayLayers() > 1);
+
 	const VkRenderPass rp = GSDeviceVK::GetInstance()->GetRenderPass(
 		!IsDepthStencil() ? m_vk_format : VK_FORMAT_UNDEFINED,
 		!IsDepthStencil() ? (depth_texture ? depth_texture->m_vk_format : VK_FORMAT_UNDEFINED) : m_vk_format,
 		VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_LOAD_OP_LOAD,
-		VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE, feedback_loop_color, feedback_loop_depth);
+		VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+		feedback_loop_color, feedback_loop_depth, multiview);
 	if (!rp)
 		return VK_NULL_HANDLE;
 

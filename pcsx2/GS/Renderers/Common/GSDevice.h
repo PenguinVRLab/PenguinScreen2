@@ -1075,8 +1075,24 @@ struct alignas(16) GSHWDrawConfig
 		// the sign rides here instead. Linear keeps the pre-signed vr_stereo.x convention.
 		GSVector4 vr_splits;
 		// Per band: x = convergence, y = separation (UNSIGNED), z = solver-derived
-		// continuity bias, w = unused. In log mode band[0] is reinterpreted as
+		// continuity bias, w = see below. In log mode band[0] is reinterpreted as
 		// {w0, w1, dfar, -} and the rest are ignored.
+		//
+		// vr_band[0].w — HUD COLLIMATION, and the one field here that is NOT part of
+		// the depth map. It is the constant per-eye NDC displacement applied to
+		// UV/FST draws that a profile has classified as aim symbology (reticles,
+		// target designator brackets). Those draws carry no q, so they are excluded
+		// from the map above and render at exactly ZERO disparity — pinned on the
+		// screen plane while the target they enclose sits ~80 arcmin behind it.
+		// Collimation gives them one authored depth instead, the way a real combat
+		// HUD is collimated to infinity. It lives in band 0's spare w because
+		// VSSelector is a full byte (:676-704) and a new shader permutation is not
+		// available; the CB is the only channel, and this component is spare in
+		// every map mode. Signed exactly like vr_stereo.x (CPU bakes the eye sign;
+		// multiview leaves it unsigned and signs from gl_ViewIndex). 0 = no
+		// collimation, which is what every non-opted-in profile, every disabled
+		// draw, and every non-VR build writes — so the shader's guard is provably
+		// unreachable in the off-state.
 		GSVector4 vr_band[4];
 		__fi VSConstantBuffer()
 		{
@@ -1717,6 +1733,13 @@ public:
 	/// multi-stretch override; no-op on backends without stereo targets and on
 	/// single-layer textures.
 	virtual void BroadcastLayer0(GSTexture* tex, const GSVector4& dRect) {}
+
+	/// PCSX2-VR (KF4 hazard-snapshot hunt, 2026-08-13): DEBUG-ONLY per-layer content probe.
+	/// Reads back every array layer of `tex` and logs each layer's mean and non-zero fraction,
+	/// so "is layer 1 actually populated?" becomes a measured fact instead of an inference.
+	/// Stalls the GPU (submit + wait) — only ever called behind an env gate. No-op by default
+	/// and on backends without a readback path.
+	virtual void VRProbeLayers(GSTexture* tex, const char* tag) {}
 
 	// StretchRect - all options
 	void StretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, ShaderConvertSelector shader, Filter filter);

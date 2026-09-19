@@ -107,6 +107,8 @@ namespace VR::XRCompositor
 			bool warned_release = false;
 			bool warned_fence_timeout = false;
 			bool warned_swapchain = false;
+
+			VkFormat swapchain_format = VK_FORMAT_R8G8B8A8_SRGB;
 		} s;
 
 		enum class CopyResult
@@ -185,7 +187,7 @@ namespace VR::XRCompositor
 
 			XrSwapchainCreateInfo ci = {XR_TYPE_SWAPCHAIN_CREATE_INFO};
 			ci.usageFlags = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT | XR_SWAPCHAIN_USAGE_TRANSFER_DST_BIT;
-			ci.format = static_cast<int64_t>(VK_FORMAT_R8G8B8A8_SRGB);
+			ci.format = static_cast<int64_t>(s.swapchain_format);
 			ci.sampleCount = 1;
 			ci.width = w;
 			ci.height = h;
@@ -221,8 +223,10 @@ namespace VR::XRCompositor
 				return false;
 			}
 
-			Console.WriteLn("(VR) XR swapchain created (eye %u): %ux%u, %u images (VK_FORMAT_R8G8B8A8_SRGB).",
-				eye, w, h, count);
+			Console.WriteLn("(VR) XR swapchain created (eye %u): %ux%u, %u images (%s).",
+				eye, w, h, count,
+				s.swapchain_format == VK_FORMAT_R8G8B8A8_UNORM ? "VK_FORMAT_R8G8B8A8_UNORM" :
+																  "VK_FORMAT_R8G8B8A8_SRGB");
 			return true;
 		}
 
@@ -547,16 +551,37 @@ namespace VR::XRCompositor
 			return false;
 		}
 
-		bool has_srgb = false;
+		static const bool s_unorm_experiment = (std::getenv("PCSX2_VR_SWAPCHAIN_UNORM") != nullptr);
+		bool has_unorm = false, has_srgb = false;
 		for (int64_t f : formats)
 		{
-			if (f == static_cast<int64_t>(VK_FORMAT_R8G8B8A8_SRGB))
-			{
+			if (f == static_cast<int64_t>(VK_FORMAT_R8G8B8A8_UNORM))
+				has_unorm = true;
+			else if (f == static_cast<int64_t>(VK_FORMAT_R8G8B8A8_SRGB))
 				has_srgb = true;
-				break;
-			}
 		}
-		if (!has_srgb)
+		if (s_unorm_experiment && has_unorm)
+		{
+			s.swapchain_format = VK_FORMAT_R8G8B8A8_UNORM;
+			Console.Warning("(VR) PCSX2_VR_SWAPCHAIN_UNORM experiment ACTIVE: UNORM swapchain — the runtime "
+							"treats the GS's gamma-encoded bytes as linear. Expect a brightness shift; this is "
+							"an A/B lane, not a shipping mode.");
+		}
+		else if (has_srgb)
+		{
+			s.swapchain_format = VK_FORMAT_R8G8B8A8_SRGB;
+			if (s_unorm_experiment)
+				Console.Warning("(VR) PCSX2_VR_SWAPCHAIN_UNORM requested, but the runtime offers no "
+								"VK_FORMAT_R8G8B8A8_UNORM swapchain — using the sRGB default.");
+		}
+		else if (has_unorm)
+		{
+
+			s.swapchain_format = VK_FORMAT_R8G8B8A8_UNORM;
+			Console.Warning("(VR) Runtime offers no VK_FORMAT_R8G8B8A8_SRGB swapchain; using UNORM. "
+							"Brightness/gamma may be off on this runtime.");
+		}
+		else
 		{
 			std::string offered;
 			for (int64_t f : formats)
@@ -564,9 +589,10 @@ namespace VR::XRCompositor
 				offered += std::to_string(f);
 				offered += ' ';
 			}
-			Console.Error("(VR) Runtime does not offer VK_FORMAT_R8G8B8A8_SRGB (%d). Offered VkFormats: %s. "
-						  "Running flat.",
-				static_cast<int>(VK_FORMAT_R8G8B8A8_SRGB), offered.c_str());
+			Console.Error("(VR) Runtime offers neither VK_FORMAT_R8G8B8A8_SRGB (%d) nor _UNORM (%d). "
+						  "Offered VkFormats: %s. Running flat.",
+				static_cast<int>(VK_FORMAT_R8G8B8A8_SRGB), static_cast<int>(VK_FORMAT_R8G8B8A8_UNORM),
+				offered.c_str());
 			return false;
 		}
 

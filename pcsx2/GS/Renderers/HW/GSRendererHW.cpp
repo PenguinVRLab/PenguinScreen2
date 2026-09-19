@@ -6282,7 +6282,22 @@ void GSRendererHW::DetermineVSConfig(GSTextureCache::Target* rt, float rtscale, 
 			DevCon.WriteLn("(VR) uniform-Q draw pinned: Q=%f verts=%u",
 				m_vertex->buff[0].RGBAQ.Q, static_cast<unsigned>(m_vertex->next));
 	}
-	const bool vr_engaged = st.enabled && !vr_pin_screen;
+	// PCSX2-VR (ISS-037): a MONO (1-layer) target holds ONE image, and scanout
+	// promotion broadcasts it to BOTH eyes (PromoteToStereo's CopyRect), so its
+	// content must be the CENTRE image — undisplaced. Baking an eye sign into it
+	// shifts that single image and then hands the same shifted pixels to both
+	// eyes; when the same geometry is re-rendered later on a promoted 2-layer
+	// target with the correct per-view sign, the layers end up holding content
+	// displaced in OPPOSITE directions (measured on KF4: every 1-layer draw took
+	// sign -1.0 => -0.02 while the multiview pass takes ±0.02 — a 0.04 NDC
+	// right-eye swing). The temporal-interleave debug path (PCSX2_VR_INTERLEAVE,
+	// M4.3 stage 1) is the ONE case where a 1-layer target legitimately carries a
+	// baked per-frame eye sign; outside it the eye counter never advances
+	// (VRManager calls AdvanceEye only under that env), so GetCurrentEyeSign()
+	// was a PERMANENT -1.0 left shift on every mono target.
+	static const bool s_vr_interleave_debug = (std::getenv("PCSX2_VR_INTERLEAVE") != nullptr);
+	const bool vr_mono_centre = !vr_multiview_target && !s_vr_interleave_debug;
+	const bool vr_engaged = st.enabled && !vr_pin_screen && !vr_mono_centre;
 	const float vr_eye_sign = vr_multiview_target ? 1.0f : VR::StereoState::GetCurrentEyeSign();
 	m_conf.cb_vs.vr_stereo =
 		vr_engaged ?

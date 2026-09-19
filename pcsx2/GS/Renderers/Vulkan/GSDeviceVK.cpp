@@ -1712,9 +1712,18 @@ VkRenderPass GSDeviceVK::CreateCachedRenderPass(RenderPassCacheKey key)
 					VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 				subpass_dependency[num_subpass_dependencies].dstAccessMask =
 					UseFeedbackLoopLayout() ? VK_ACCESS_SHADER_READ_BIT : VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+				// PCSX2-VR (ISS-031/037): a self-dependency inside a MULTIVIEW subpass
+				// (non-zero viewMask) MUST be view-local — VUID-VkSubpassDependency-
+				// srcSubpass-00872. Without VK_DEPENDENCY_VIEW_LOCAL_BIT the render
+				// pass is created in violation of spec and the feedback-loop read
+				// (a draw sampling the target it writes — KF4's turn-blur) is
+				// undefined: it may observe another view's writes or none at all.
+				// Mono passes must NOT set the bit (there is no viewMask to be local
+				// to), so it is gated on key.multiview.
 				subpass_dependency[num_subpass_dependencies].dependencyFlags =
-					UseFeedbackLoopLayout() ? (VK_DEPENDENCY_BY_REGION_BIT | VK_DEPENDENCY_FEEDBACK_LOOP_BIT_EXT) :
-											  VK_DEPENDENCY_BY_REGION_BIT;
+					(UseFeedbackLoopLayout() ? (VK_DEPENDENCY_BY_REGION_BIT | VK_DEPENDENCY_FEEDBACK_LOOP_BIT_EXT) :
+											   VK_DEPENDENCY_BY_REGION_BIT) |
+					(key.multiview ? VK_DEPENDENCY_VIEW_LOCAL_BIT : 0u);
 				num_subpass_dependencies++;
 			}
 		}
@@ -1756,9 +1765,18 @@ VkRenderPass GSDeviceVK::CreateCachedRenderPass(RenderPassCacheKey key)
 					VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 				subpass_dependency[num_subpass_dependencies].dstAccessMask =
 					UseFeedbackLoopLayout() ? VK_ACCESS_SHADER_READ_BIT : VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+				// PCSX2-VR (ISS-031/037): a self-dependency inside a MULTIVIEW subpass
+				// (non-zero viewMask) MUST be view-local — VUID-VkSubpassDependency-
+				// srcSubpass-00872. Without VK_DEPENDENCY_VIEW_LOCAL_BIT the render
+				// pass is created in violation of spec and the feedback-loop read
+				// (a draw sampling the target it writes — KF4's turn-blur) is
+				// undefined: it may observe another view's writes or none at all.
+				// Mono passes must NOT set the bit (there is no viewMask to be local
+				// to), so it is gated on key.multiview.
 				subpass_dependency[num_subpass_dependencies].dependencyFlags =
-					UseFeedbackLoopLayout() ? (VK_DEPENDENCY_BY_REGION_BIT | VK_DEPENDENCY_FEEDBACK_LOOP_BIT_EXT) :
-											  VK_DEPENDENCY_BY_REGION_BIT;
+					(UseFeedbackLoopLayout() ? (VK_DEPENDENCY_BY_REGION_BIT | VK_DEPENDENCY_FEEDBACK_LOOP_BIT_EXT) :
+											   VK_DEPENDENCY_BY_REGION_BIT) |
+					(key.multiview ? VK_DEPENDENCY_VIEW_LOCAL_BIT : 0u);
 				num_subpass_dependencies++;
 			}
 		}
@@ -2331,13 +2349,25 @@ bool GSDeviceVK::Create(GSVSyncMode vsync_mode, bool allow_present_throttle)
 	if (!CompileImGuiPipeline())
 		return false;
 
-	// PCSX2-VR (M4.3-pre): optional, env-gated multiview infrastructure self-test. Runs before
-	// InitializeState() so the (fresh, post-submit) command buffer is set up afterwards. Fully
-	// inert unless PCSX2_VR_MV_SELFTEST=1, so the shipping path is byte-identical when unset.
-	if (const char* val = std::getenv("PCSX2_VR_MV_SELFTEST"); val && StringUtil::FromChars<bool>(val).value_or(false))
-		RunMultiviewSelfTest();
-
 	InitializeState();
+
+	// PCSX2-VR (M4.3-pre): optional, env-gated multiview infrastructure self-test. Fully inert
+	// unless PCSX2_VR_MV_SELFTEST=1, so the shipping path is byte-identical when unset.
+	//
+	// It runs AFTER InitializeState(), not before: routes (1)-(5) only clear/copy, but the
+	// proxy-write matrix (6) issues real StretchRect draws, and the utility draw path pushes
+	// m_point_sampler/m_linear_sampler — both VK_NULL_HANDLE until InitializeState() creates
+	// them. Running first aborted the process on
+	// VUID-VkWriteDescriptorSet-descriptorType-00325 (null sampler) before route (6b) could
+	// report. The self-test submits and waits on its own command buffers, so re-run
+	// InitializeState() afterwards to re-arm the cached state against the fresh buffer —
+	// which is what the original ordering was reaching for.
+	if (const char* val = std::getenv("PCSX2_VR_MV_SELFTEST"); val && StringUtil::FromChars<bool>(val).value_or(false))
+	{
+		RunMultiviewSelfTest();
+		InitializeState();
+	}
+
 	return true;
 }
 
@@ -2536,6 +2566,227 @@ void GSDeviceVK::RunMultiviewSelfTest()
 	Console.WriteLn("(VR) MV self-test: layer0->layer1 mirror verified: %s",
 		ok ? (mirror_ok ? "yes" : "NO") : "skipped (prereqs failed)");
 	ok = ok && mirror_ok;
+
+	// (6) PROXY-WRITE MATRIX (2026-08-13, KF4 right-eye doubling). Does writing INTO
+	// GetLayerProxyTexture(1) land in the PARENT's layer 1, leaving layer 0 alone?
+	// GSRendererHW::HandleTextureHazards' snapshot fill writes a 2-layer copy per-layer
+	// through proxies, and layer 1 kept coming back EMPTY while the proxy plumbing
+	// inspected as correct. This turns "play the game and squint" into a logged fact,
+	// across the four write shapes the fill can actually take:
+	//   (a) whole 2-layer src -> whole 2-layer dst  (the ORIGINAL, pre-repair shape)
+	//   (b) 1-layer src       -> proxy(1) of dst    (simplest proxy write)
+	//   (c) proxy(1) of src   -> proxy(1) of dst    (the REPAIR's exact shape)
+	//   (d) CopyRect: 1-layer src -> proxy(1) of dst (the transfer route)
+	//
+	// Baseline before every route: dst layer0 = RED, layer1 = GREEN. Sources carry BLUE
+	// in layer 0 and YELLOW in layer 1. PASS for (b)/(c)/(d) = layer1 took the written
+	// colour AND layer0 stayed RED. The failure modes are distinguished in the log,
+	// because which one it is decides the fix:
+	//   layer1 GREEN, layer0 RED    -> the write went NOWHERE
+	//   layer1 GREEN, layer0 BLUE   -> the write went to LAYER 0 (the proxy was ignored)
+	//   layer1 BLUE,  layer0 BLUE   -> the write was BROADCAST to both layers
+	bool proxy_ok = false;
+	if (ok)
+	{
+		// Format::Color == VK_FORMAT_R8G8B8A8_UNORM: in-memory byte order R,G,B,A.
+		static constexpr u8 COL_RED[4] = {255, 0, 0, 255};
+		static constexpr u8 COL_GRN[4] = {0, 255, 0, 255};
+		static constexpr u8 COL_BLU[4] = {0, 0, 255, 255};
+		static constexpr u8 COL_YEL[4] = {255, 255, 0, 255};
+		const VkClearColorValue cv_red = {{1.0f, 0.0f, 0.0f, 1.0f}};
+		const VkClearColorValue cv_grn = {{0.0f, 1.0f, 0.0f, 1.0f}};
+		const VkClearColorValue cv_blu = {{0.0f, 0.0f, 1.0f, 1.0f}};
+		const VkClearColorValue cv_yel = {{1.0f, 1.0f, 0.0f, 1.0f}};
+
+		// Clear one layer of a texture outside any render pass. The caller is responsible
+		// for having moved the whole image to TransferDst first.
+		const auto clear_layer = [&](GSTextureVK* t, u32 layer, const VkClearColorValue& cv) {
+			const VkImageSubresourceRange srr = {VK_IMAGE_ASPECT_COLOR_BIT, 0u, 1u, layer, 1u};
+			vkCmdClearColorImage(GetCurrentCommandBuffer(), t->GetImage(),
+				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &cv, 1, &srr);
+		};
+
+		// Reset the destination to the RED/GREEN baseline before each route, so every route
+		// is measured against a known state rather than the previous route's leftovers.
+		const auto reset_dst = [&]() {
+			EndRenderPass();
+			// No CommitClear here either: the two explicit clear_layer calls below define both
+			// layers outright, so committing a pending clear first is redundant — and the
+			// cmdbuf overload is unconditional (see read_both), which makes it a trap rather
+			// than a no-op.
+			tex->TransitionToLayout(GetCurrentCommandBuffer(), GSTextureVK::Layout::TransferDst);
+			clear_layer(tex.get(), 0, cv_red);
+			clear_layer(tex.get(), 1, cv_grn);
+			tex->SetState(GSTexture::State::Dirty);
+		};
+
+		// Read the centre texel of both of `tex`'s layers. Same scratch+download idiom as
+		// (5): GSDownloadTexture addresses mip LEVELS, not array layers, so each source
+		// layer is copied into its own 1-layer scratch first.
+		const auto read_both = [&](u8 out0[4], u8 out1[4]) -> bool {
+			std::unique_ptr<GSTextureVK> s0 =
+				GSTextureVK::Create(GSTexture::RenderTarget, GSTexture::Format::Color, TEST_W, TEST_H, 1, 1);
+			std::unique_ptr<GSTextureVK> s1 =
+				GSTextureVK::Create(GSTexture::RenderTarget, GSTexture::Format::Color, TEST_W, TEST_H, 1, 1);
+			std::unique_ptr<GSDownloadTextureVK> d0 =
+				GSDownloadTextureVK::Create(TEST_W, TEST_H, GSTexture::Format::Color);
+			std::unique_ptr<GSDownloadTextureVK> d1 =
+				GSDownloadTextureVK::Create(TEST_W, TEST_H, GSTexture::Format::Color);
+			if (!s0 || !s1 || !d0 || !d1)
+				return false;
+
+			EndRenderPass();
+			VkCommandBuffer cb = GetCurrentCommandBuffer();
+			// NO CommitClear(cb) here. The VkCommandBuffer overload is UNCONDITIONAL — unlike
+			// the no-arg CommitClear(), it does not check State::Cleared, so it clears the whole
+			// image to the clear colour (0) and only then marks it Dirty. Calling it before a
+			// readback zeroed every sample and made all four routes report a phantom failure.
+			tex->TransitionToLayout(cb, GSTextureVK::Layout::TransferSrc);
+			s0->TransitionToLayout(cb, GSTextureVK::Layout::TransferDst);
+			s1->TransitionToLayout(cb, GSTextureVK::Layout::TransferDst);
+			const VkImageCopy c0 = {{VK_IMAGE_ASPECT_COLOR_BIT, 0u, 0u, 1u}, {0, 0, 0},
+				{VK_IMAGE_ASPECT_COLOR_BIT, 0u, 0u, 1u}, {0, 0, 0},
+				{static_cast<u32>(TEST_W), static_cast<u32>(TEST_H), 1u}};
+			const VkImageCopy c1 = {{VK_IMAGE_ASPECT_COLOR_BIT, 0u, 1u, 1u}, {0, 0, 0},
+				{VK_IMAGE_ASPECT_COLOR_BIT, 0u, 0u, 1u}, {0, 0, 0},
+				{static_cast<u32>(TEST_W), static_cast<u32>(TEST_H), 1u}};
+			vkCmdCopyImage(cb, tex->GetImage(), tex->GetVkLayout(), s0->GetImage(), s0->GetVkLayout(), 1, &c0);
+			vkCmdCopyImage(cb, tex->GetImage(), tex->GetVkLayout(), s1->GetImage(), s1->GetVkLayout(), 1, &c1);
+
+			const GSVector4i full = GSVector4i(0, 0, TEST_W, TEST_H);
+			d0->CopyFromTexture(full, s0.get(), full, 0, false);
+			d1->CopyFromTexture(full, s1.get(), full, 0, false);
+			d0->Flush();
+			d1->Flush();
+			if (!d0->Map(full) || !d1->Map(full))
+				return false;
+
+			const size_t o0 = static_cast<size_t>(TEST_H / 2) * d0->GetMapPitch() + static_cast<size_t>(TEST_W / 2) * 4u;
+			const size_t o1 = static_cast<size_t>(TEST_H / 2) * d1->GetMapPitch() + static_cast<size_t>(TEST_W / 2) * 4u;
+			for (int i = 0; i < 4; i++)
+			{
+				out0[i] = d0->GetMapPointer()[o0 + i];
+				out1[i] = d1->GetMapPointer()[o1 + i];
+			}
+			return true;
+		};
+
+		const auto eq4 = [](const u8* a, const u8 b[4]) {
+			return a[0] == b[0] && a[1] == b[1] && a[2] == b[2] && a[3] == b[3];
+		};
+		// Name a sampled texel so the log reads as a story, not as hex. Anything that is not
+		// one of the four planted colours prints its raw RGBA: "other" on its own cannot
+		// distinguish a genuine proxy defect from a broken harness (it did exactly that on
+		// the first run), and the bytes tell those apart immediately.
+		static char name_buf[2][32];
+		int name_slot = 0;
+		const auto name4 = [&, eq4](const u8* c) -> const char* {
+			if (eq4(c, COL_RED)) return "RED(l0-base)";
+			if (eq4(c, COL_GRN)) return "GRN(l1-base)";
+			if (eq4(c, COL_BLU)) return "BLU(written)";
+			if (eq4(c, COL_YEL)) return "YEL(src-l1)";
+			char* b = name_buf[name_slot++ & 1];
+			std::snprintf(b, sizeof(name_buf[0]), "other(%02x%02x%02x%02x)", c[0], c[1], c[2], c[3]);
+			return b;
+		};
+
+		// Sources: a 1-layer BLUE texture, and a 2-layer BLUE/YELLOW texture.
+		std::unique_ptr<GSTextureVK> src1 =
+			GSTextureVK::Create(GSTexture::RenderTarget, GSTexture::Format::Color, TEST_W, TEST_H, 1, 1);
+		std::unique_ptr<GSTextureVK> src2 =
+			GSTextureVK::Create(GSTexture::RenderTarget, GSTexture::Format::Color, TEST_W, TEST_H, 1, 2);
+		const bool src_ok = static_cast<bool>(src1) && static_cast<bool>(src2);
+		Console.WriteLn("(VR) MV self-test: (6) proxy-write sources allocated: %s", src_ok ? "yes" : "NO");
+
+		if (src_ok)
+		{
+			EndRenderPass();
+			VkCommandBuffer cb = GetCurrentCommandBuffer();
+			src1->CommitClear(cb);
+			src2->CommitClear(cb);
+			src1->TransitionToLayout(cb, GSTextureVK::Layout::TransferDst);
+			src2->TransitionToLayout(cb, GSTextureVK::Layout::TransferDst);
+			clear_layer(src1.get(), 0, cv_blu);
+			clear_layer(src2.get(), 0, cv_blu);
+			clear_layer(src2.get(), 1, cv_yel);
+			src1->SetState(GSTexture::State::Dirty);
+			src2->SetState(GSTexture::State::Dirty);
+
+			const GSVector4 uv_full(0.0f, 0.0f, 1.0f, 1.0f);
+			const GSVector4 px_full(0.0f, 0.0f, static_cast<float>(TEST_W), static_cast<float>(TEST_H));
+			const GSVector4i px_fulli = GSVector4i(0, 0, TEST_W, TEST_H);
+			u8 g0[4] = {}, g1[4] = {};
+
+			// Sanity: the proxies must actually BE proxies. If GetLayerProxyTexture aliased
+			// back to the parent (its documented degrade-on-failure path), routes b/c/d would
+			// silently be whole-texture writes and every verdict below would be meaningless.
+			GSTexture* const dprox1 = tex->GetLayerProxyTexture(1);
+			GSTexture* const sprox1 = src2->GetLayerProxyTexture(1);
+			const bool proxies_real = (dprox1 != tex.get()) && (sprox1 != src2.get()) &&
+									  static_cast<GSTextureVK*>(dprox1)->GetBaseArrayLayer() == 1u;
+			Console.WriteLn("(VR) MV self-test: (6) layer-1 proxies are real distinct objects w/ baseLayer=1: %s",
+				proxies_real ? "yes" : "NO — routes b/c/d below are NOT testing what they claim");
+
+			// Routes b/c/d run FIRST because they answer the question. Route (a) binds a
+			// 2-layer texture as a convert-pipeline shader source (a 2D_ARRAY view into a
+			// 2D sampler binding) — that is exactly what the pre-repair code did, and it may
+			// legitimately trip validation or the driver. Running it last means an explosion
+			// there still leaves b/c/d's verdicts in the log.
+
+			// --- (0) BASELINE: reset and read back with NO write in between. This is the
+			// harness's own control. If layer0 does not read RED and layer1 GREEN here, the
+			// clear/readback plumbing in this test is broken and every verdict below is
+			// meaningless — which is a different (and much cheaper) bug than a proxy defect.
+			reset_dst();
+			const bool z_read = read_both(g0, g1);
+			const bool z_ok = z_read && eq4(g0, COL_RED) && eq4(g1, COL_GRN);
+			Console.WriteLn("(VR) MV self-test: (6-baseline) reset only, no write: layer0=%s layer1=%s -> %s",
+				z_read ? name4(g0) : "READ-FAIL", z_read ? name4(g1) : "READ-FAIL",
+				z_ok ? "PASS (harness sound)" : "FAIL — HARNESS BROKEN, ignore b/c/d below");
+
+			// --- (b) 1-layer src -> proxy(1) of dst
+			reset_dst();
+			StretchRectAuto(src1.get(), uv_full, tex->GetLayerProxyTexture(1), px_full, Nearest);
+			const bool b_read = read_both(g0, g1);
+			const bool b_ok = b_read && eq4(g1, COL_BLU) && eq4(g0, COL_RED);
+			Console.WriteLn("(VR) MV self-test: (6b) 1L->proxy(1) StretchRect: layer0=%s layer1=%s -> %s",
+				b_read ? name4(g0) : "READ-FAIL", b_read ? name4(g1) : "READ-FAIL", b_ok ? "PASS" : "FAIL");
+
+			// --- (c) proxy(1) of src -> proxy(1) of dst (the repair's exact shape)
+			reset_dst();
+			StretchRectAuto(src2->GetLayerProxyTexture(1), uv_full, tex->GetLayerProxyTexture(1), px_full, Nearest);
+			const bool c_read = read_both(g0, g1);
+			const bool c_ok = c_read && eq4(g1, COL_YEL) && eq4(g0, COL_RED);
+			Console.WriteLn("(VR) MV self-test: (6c) proxy(1)->proxy(1) StretchRect: layer0=%s layer1=%s -> %s",
+				c_read ? name4(g0) : "READ-FAIL", c_read ? name4(g1) : "READ-FAIL", c_ok ? "PASS" : "FAIL");
+
+			// --- (d) CopyRect: 1-layer src -> proxy(1) of dst (the transfer route)
+			reset_dst();
+			CopyRect(src1.get(), tex->GetLayerProxyTexture(1), px_fulli, 0, 0);
+			const bool d_read = read_both(g0, g1);
+			const bool d_ok = d_read && eq4(g1, COL_BLU) && eq4(g0, COL_RED);
+			Console.WriteLn("(VR) MV self-test: (6d) 1L->proxy(1) CopyRect: layer0=%s layer1=%s -> %s",
+				d_read ? name4(g0) : "READ-FAIL", d_read ? name4(g1) : "READ-FAIL", d_ok ? "PASS" : "FAIL");
+
+			// --- (a) whole 2-layer src -> whole 2-layer dst: the ORIGINAL, pre-repair shape.
+			// Diagnostic only (not part of the verdict): it tells us what the shipped code was
+			// actually doing to layer 1, which is the other half of the KF4 story.
+			reset_dst();
+			StretchRectAuto(src2.get(), uv_full, tex.get(), px_full, Nearest);
+			const bool a_read = read_both(g0, g1);
+			Console.WriteLn("(VR) MV self-test: (6a) whole 2L->2L StretchRect: layer0=%s layer1=%s%s",
+				a_read ? name4(g0) : "READ-FAIL", a_read ? name4(g1) : "READ-FAIL",
+				!a_read ? "" : (eq4(g1, COL_YEL) ? "  [per-layer: layer1 got src layer1]" :
+					(eq4(g1, COL_GRN) ? "  [*** layer1 NOT WRITTEN — matches the KF4 defect ***]" :
+						(eq4(g1, COL_BLU) ? "  [broadcast: layer1 got src layer0]" : "  [unexpected]"))));
+
+			proxy_ok = proxies_real && b_ok && c_ok && d_ok;
+		}
+	}
+	Console.WriteLn("(VR) MV self-test: writes into a layer proxy reach the parent's layer: %s",
+		ok ? (proxy_ok ? "yes" : "NO") : "skipped (prereqs failed)");
+	ok = ok && proxy_ok;
+
 
 	// Cleanup — we waited idle, so nothing is in flight and immediate destroys are safe.
 	if (fb != VK_NULL_HANDLE)
@@ -3412,6 +3663,99 @@ void GSDeviceVK::CopyRect(GSTexture* sTex, GSTexture* dTex, const GSVector4i& r,
 	dTexVK->SetState(GSTexture::State::Dirty);
 }
 
+void GSDeviceVK::VRProbeLayers(GSTexture* tex, const char* tag)
+{
+	// PCSX2-VR (KF4 hazard-snapshot hunt): read every array layer back to the CPU and report
+	// its mean + non-zero fraction. DEBUG ONLY — submits and blocks.
+	//
+	// NON-DESTRUCTIVENESS is the whole point of this instrument, and the previous run's
+	// phantom came from getting it wrong, so the design is deliberate:
+	//   * Download through the LAYER PROXY. GSDownloadTextureVK::CopyFromTexture builds its
+	//     imageSubresource from vkTex->GetBaseArrayLayer() (GSTextureVK.cpp:1049), which is
+	//     the proxy's layer — so layer 1 downloads directly, no scratch copy needed.
+	//   * It calls the NO-ARG CommitClear (GSTextureVK.cpp:1032), which early-outs unless the
+	//     texture is State::Cleared. That is the safe overload. NEVER call
+	//     CommitClear(VkCommandBuffer) here: it is unconditional, so it would clear the
+	//     texture to the clear colour and then mark it Dirty — i.e. the probe would zero the
+	//     very thing it is measuring and report a self-consistent "layer is empty" lie.
+	//   * The caller double-probes and compares, which turns the above from an argument into
+	//     a measurement (see the PROBE2 line at the hazard site).
+	GSTextureVK* const texVK = static_cast<GSTextureVK*>(tex);
+	if (!texVK)
+		return;
+
+	// Colour only: depth readback has a different format/aspect path and the hazard snapshot
+	// we care about is a colour target.
+	if (texVK->GetFormat() != GSTexture::Format::Color)
+	{
+		Console.WriteLn("(VR) PROBE %s: skipped, format=%d is not Color", tag, static_cast<int>(texVK->GetFormat()));
+		return;
+	}
+
+	const u32 layers = texVK->GetArrayLayers();
+	const int w = texVK->GetWidth();
+	const int h = texVK->GetHeight();
+	const GSVector4i full = GSVector4i(0, 0, w, h);
+
+	for (u32 l = 0; l < layers; l++)
+	{
+		GSTexture* const layer_tex = (layers > 1) ? texVK->GetLayerProxyTexture(l) : static_cast<GSTexture*>(texVK);
+
+		std::unique_ptr<GSDownloadTextureVK> dl = GSDownloadTextureVK::Create(w, h, GSTexture::Format::Color);
+		if (!dl)
+		{
+			Console.WriteLn("(VR) PROBE %s: layer %u — download alloc FAILED", tag, l);
+			continue;
+		}
+
+		dl->CopyFromTexture(full, layer_tex, full, 0, false);
+		dl->Flush();
+		if (!dl->Map(full))
+		{
+			Console.WriteLn("(VR) PROBE %s: layer %u — map FAILED", tag, l);
+			continue;
+		}
+
+		// Mean over RGB (alpha excluded — it is frequently a constant and would mask a black
+		// colour plane), plus the fraction of pixels with any non-zero colour channel.
+		u64 sum = 0;
+		u64 nonzero = 0;
+		// Row-parity means: KF4's blur is SCANMSK-driven, so "every pixel halved" and
+		// "alternate scanlines dark" both show up as mean/2 in a scalar. Splitting by row
+		// parity tells those two apart, which is the difference between a blend-factor bug
+		// and an interleave bug.
+		u64 sum_even = 0, sum_odd = 0;
+		const u8* base = dl->GetMapPointer();
+		const u32 pitch = dl->GetMapPitch();
+		for (int y = 0; y < h; y++)
+		{
+			const u8* row = base + static_cast<size_t>(y) * pitch;
+			u64 row_sum = 0;
+			for (int x = 0; x < w; x++)
+			{
+				const u8* px = row + static_cast<size_t>(x) * 4u;
+				const u32 rgb = static_cast<u32>(px[0]) + px[1] + px[2];
+				row_sum += rgb;
+				nonzero += (rgb != 0) ? 1u : 0u;
+			}
+			sum += row_sum;
+			((y & 1) ? sum_odd : sum_even) += row_sum;
+		}
+		dl->Unmap();
+
+		const double px_count = static_cast<double>(w) * static_cast<double>(h);
+		// The VkImage handle is logged so aliasing (pool handing back a live target) is
+		// visible as a fact rather than inferred from equal means — two textures holding
+		// identical content and two names for ONE texture look the same in a mean.
+		const double half_px = px_count / 2.0;
+		Console.WriteLn("(VR) PROBE %s: layer %u/%u %dx%d mean=%.3f even=%.3f odd=%.3f nonzero=%.2f%% obj=%p img=%p",
+			tag, l, layers, w, h, static_cast<double>(sum) / (px_count * 3.0),
+			static_cast<double>(sum_even) / (half_px * 3.0), static_cast<double>(sum_odd) / (half_px * 3.0),
+			100.0 * static_cast<double>(nonzero) / px_count, static_cast<const void*>(texVK),
+			static_cast<const void*>(texVK->GetImage()));
+	}
+}
+
 void GSDeviceVK::BroadcastLayer0(GSTexture* tex, const GSVector4& dRect)
 {
 	// PCSX2-VR (ISS-001): layer 0 -> layer 1 mirror on a promoted stereo target, for
@@ -3557,7 +3901,9 @@ void GSDeviceVK::DrawMultiStretchRects(
 	// PCSX2-VR (ISS-001): this override bypasses the common stretch funnel, so mirror
 	// the union of the destination rects into layer 1 here (one copy per batch). See
 	// GSDevice::BroadcastLayer0.
-	if (dTex && dTex->GetArrayLayers() >= 2)
+	// ISS-031/037 DIAGNOSTIC (PCSX2_VR_NO_MSR_BROADCAST=1): skip this union mirror.
+	static const bool s_no_msr_bcast = (std::getenv("PCSX2_VR_NO_MSR_BROADCAST") != nullptr);
+	if (!s_no_msr_bcast && dTex && dTex->GetArrayLayers() >= 2)
 	{
 		GSVector4 mn = rects[0].dst_rect.min(rects[0].dst_rect.zwxy());
 		GSVector4 mx = rects[0].dst_rect.max(rects[0].dst_rect.zwxy());
@@ -6998,7 +7344,13 @@ void GSDeviceVK::UpdateHWPipelineSelector(GSHWDrawConfig& config, PipelineSelect
 	// A multiview draw sampling a stereo texture (a feed blit between display-chain
 	// targets) samples per-view layers: bind the ARRAY view and select the layer with
 	// gl_ViewIndex in the FS. Mono draws keep the layer-0 sampling rule.
-	m_tfx_tex_in_array = (pipe.vs.multiview && config.tex && config.tex->GetArrayLayers() > 1);
+	// ISS-031/037 DIAGNOSTIC (PCSX2_VR_NO_TEX_ARRAY=1): make a 2-layer SOURCE
+	// texture sample as plain 2D (layer 0) instead of per-view. KF4's turn-blur is
+	// a self-referential full-screen blit (fbp==tbp) sampling the 2-layer target
+	// it renders into; this isolates whether that per-view source sampling is
+	// where the page-column content loss comes from.
+	static const bool s_no_tex_array = (std::getenv("PCSX2_VR_NO_TEX_ARRAY") != nullptr);
+	m_tfx_tex_in_array = (!s_no_tex_array && pipe.vs.multiview && config.tex && config.tex->GetArrayLayers() > 1);
 	pipe.ps.tex_in_array = m_tfx_tex_in_array;
 	// PCSX2-VR (Stage 1 / D4): the RT / depth FEEDBACK read on the sampled path (feedback-loop-
 	// layout, the modern-NVIDIA path where the input attachment is NOT used) binds the layer-0
@@ -7011,10 +7363,18 @@ void GSDeviceVK::UpdateHWPipelineSelector(GSHWDrawConfig& config, PipelineSelect
 	// per-view correct (multiview auto-selects the view's layer) and keeps both bits clear. Both
 	// bits live in key_hi, so they are set after `pipe.ps.key_hi = config.ps.key_hi` above.
 	const bool fb_layout_sampled = UseFeedbackLoopLayout();
-	m_tfx_rt_in_array = (fb_layout_sampled && pipe.vs.multiview && config.rt &&
+	// ISS-037 DIAGNOSTIC (PCSX2_VR_NO_FEEDBACK_ARRAY=1): disable per-view feedback
+	// sampling on stereo targets. That is the path a destination-colour (Cd) read
+	// takes — what KF4's turn-blur does when it blends over the previous frame. If
+	// the progressive pitch-darkening stops with this set, the 2-layer feedback
+	// read is the mechanism. Cost while set: reverts to the D4 defect (both eyes
+	// read the LEFT eye's destination colour) — a per-eye colour inaccuracy, far
+	// milder than a frame crushing to black. Diagnostic lane only, default off.
+	static const bool s_no_fb_array = (std::getenv("PCSX2_VR_NO_FEEDBACK_ARRAY") != nullptr);
+	m_tfx_rt_in_array = (!s_no_fb_array && fb_layout_sampled && pipe.vs.multiview && config.rt &&
 						 config.rt->GetArrayLayers() > 1 && !config.ps.HasColorROV());
 	pipe.ps.rt_in_array = m_tfx_rt_in_array;
-	m_tfx_depth_in_array = (fb_layout_sampled && pipe.vs.multiview && config.ds &&
+	m_tfx_depth_in_array = (!s_no_fb_array && fb_layout_sampled && pipe.vs.multiview && config.ds &&
 							config.ds->GetArrayLayers() > 1 && !config.ps.HasDepthROV());
 	pipe.ps.depth_in_array = m_tfx_depth_in_array;
 	pipe.ps.key_lo = config.ps.key_lo;

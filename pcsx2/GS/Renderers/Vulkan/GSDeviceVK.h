@@ -622,6 +622,7 @@ public:
 
 	void CopyRect(GSTexture* sTex, GSTexture* dTex, const GSVector4i& r, u32 destX, u32 destY) override;
 	void BroadcastLayer0(GSTexture* tex, const GSVector4& dRect) override;
+	void VRProbeLayers(GSTexture* tex, const char* tag) override;
 
 	void PresentRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect,
 		PresentShader shader, float shaderTime, Filter filter) override;

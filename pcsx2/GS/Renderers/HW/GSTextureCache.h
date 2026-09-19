@@ -464,6 +464,21 @@ protected:
 	std::unordered_map<SurfaceOffsetKey, SurfaceOffset, SurfaceOffsetKeyHash, SurfaceOffsetKeyEqual> m_surface_offset_cache;
 
 	Source* m_temporary_source = nullptr; // invalidated after the draw
+	// PCSX2-VR (ISS-039 use-after-free guard): the map-resident Source the CURRENT draw is
+	// holding by raw pointer (GSRendererHW::DrawPrims' `tex`). Anything that frees a Source
+	// while this is set has just dangled that pointer — DrawPrims then reads
+	// `tex->m_texture` into m_conf.tex, which is how a freed GSTextureVK* reaches
+	// PSSetShaderResource. SourceMap::RemoveAt reports/asserts on the match and counts it;
+	// m_in_stereo_promotion separates promotion-caused kills from any other path so the
+	// census is unambiguous. Purely diagnostic — it never changes what gets deleted.
+	Source* m_draw_inflight_source = nullptr;
+	u32 m_draw_inflight_source_kills = 0;
+	u32 m_draw_inflight_source_kills_promo = 0;
+	u32 m_promo_total = 0;
+	u32 m_promo_with_inflight = 0;
+	u32 m_promo_inflight_dangerous = 0;
+	u32 m_promo_retargeted = 0;
+	bool m_in_stereo_promotion = false;
 	GSTexture* m_temporary_z = nullptr; // invalidated after the draw
 	TempZAddress m_temporary_z_info;
 
@@ -594,6 +609,11 @@ public:
 	/// Removes any sources which point to the specified target.
 	void InvalidateSourcesFromTarget(const Target* t);
 
+	/// PCSX2-VR (ISS-039): re-points every Source aliasing a target's texture at its
+	/// replacement after Target::PromoteToStereo swaps in a 2-layer one. Destroys nothing, so
+	/// a raw Source* held across the promotion by the draw in progress stays valid.
+	void RetargetSourcesAfterPromotion(const Target* t, GSTexture* old_tex, GSTexture* new_tex);
+
 	/// Removes any sources which point to the same address as a new target.
 	void ReplaceSourceTexture(Source* s, GSTexture* new_texture, float new_scale, const GSVector2i& new_unscaled_size,
 		HashCacheEntry* hc_entry, bool new_texture_is_shared);
@@ -628,6 +648,15 @@ public:
 
 	/// Invalidates a temporary source, a partial copy only created from the current RT/DS for the current draw.
 	void InvalidateTemporarySource();
+
+	/// PCSX2-VR (ISS-039): register/clear the Source the current draw holds by raw pointer,
+	/// so SourceMap::RemoveAt can prove whether the free-under-a-live-draw window is taken.
+	__fi void SetDrawInFlightSource(Source* s) { m_draw_inflight_source = s; }
+	/// PCSX2-VR (ISS-039): fault injection that frees the in-flight source on purpose, to
+	/// prove SRCGUARD can fire. Opt-in, one shot. Returns true if it did the deed.
+	bool ForceKillInFlightSourceForSelfTest();
+	__fi u32 GetDrawInFlightSourceKills() const { return m_draw_inflight_source_kills; }
+	__fi u32 GetDrawInFlightSourceKillsFromPromotion() const { return m_draw_inflight_source_kills_promo; }
 	void SetTemporaryZ(GSTexture* temp_z);
 	GSTexture* GetTemporaryZ();
 	TempZAddress GetTemporaryZInfo();

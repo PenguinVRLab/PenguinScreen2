@@ -194,6 +194,27 @@ namespace VR
 		int s_scene_pending = -1;
 		u32 s_scene_pending_count = 0;
 		constexpr u32 SCENE_DEBOUNCE_VSYNCS = 3;
+
+		void CopyResolvedMap(StereoState::Params& dst, const ProfileDB::StereoResolvedMap& src)
+		{
+			static_assert(static_cast<u32>(ProfileDB::StereoMap::Linear) == static_cast<u32>(StereoState::Params::Map::Linear) &&
+							  static_cast<u32>(ProfileDB::StereoMap::Bands) == static_cast<u32>(StereoState::Params::Map::Bands) &&
+							  static_cast<u32>(ProfileDB::StereoMap::Log) == static_cast<u32>(StereoState::Params::Map::Log),
+				"StereoMap and StereoState::Params::Map must agree numerically — the copy below casts through u32");
+			dst.map = static_cast<StereoState::Params::Map>(src.map);
+			dst.band_count = src.band_count;
+			for (u32 i = 0; i < 3; i++)
+				dst.split_q[i] = src.split_q[i];
+			for (u32 i = 0; i < 4; i++)
+			{
+				dst.conv[i] = src.conv[i];
+				dst.sep[i] = src.sep[i];
+				dst.bias[i] = src.bias[i];
+			}
+			dst.log_w0 = src.log_w0;
+			dst.log_w1 = src.log_w1;
+			dst.log_dfar = src.log_dfar;
+		}
 	}
 
 	void UpdateSettings()
@@ -240,6 +261,8 @@ namespace VR
 									? StereoState::Params::UvPolicy::World
 									: StereoState::Params::UvPolicy::Screen;
 			stereo.pin_uniform_q = profile->stereo->pin_uniform_q;
+
+			CopyResolvedMap(stereo, profile->stereo->resolved);
 			from_profile = true;
 		}
 
@@ -361,11 +384,16 @@ namespace VR
 		                       StereoState::Params::UvPolicy::World :
 		                       StereoState::Params::UvPolicy::Screen;
 		stereo.pin_uniform_q = base.pin_uniform_q;
+
+		CopyResolvedMap(stereo, base.resolved);
 		if (match >= 0)
 		{
 			const ProfileDB::StereoSceneRule& rule = base.scenes[static_cast<size_t>(match)];
 			stereo.separation = rule.separation.value_or(stereo.separation);
 			stereo.convergence = rule.convergence.value_or(stereo.convergence);
+
+			if (rule.map_override.has_value())
+				CopyResolvedMap(stereo, *rule.map_override);
 		}
 
 		MTGS::RunOnGSThread([stereo]() { StereoState::Publish(stereo); });

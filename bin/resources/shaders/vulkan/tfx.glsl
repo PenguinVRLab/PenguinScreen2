@@ -32,8 +32,17 @@ layout(std140, set = 0, binding = 0) uniform cb0
 	uint MaxDepth;
 	float LineAA1Width;
 	// PCSX2-VR (M4.1): x = per-eye horizontal NDC displacement (signed), y = convergence in Q units.
+	// With a multiband map these carry band 0 / the linear pair — see vr_stereo_disp below.
 	vec2 vr_stereo;
-	vec2 vr_pad; // keep the block 64 B, matching VSConstantBuffer
+	// PCSX2-VR (multiband): 0 = linear (bit-exact with the pre-multiband path), 1 = bands,
+	// 2 = log. Field order and offsets must match VSConstantBuffer exactly (48/56/60/64/80).
+	uint vr_map_mode;
+	uint vr_band_count;
+	// xyz = split points in DESCENDING q; w = eye sign for the band path (see vr_stereo_disp).
+	vec4 vr_splits;
+	// Per band: x = conv, y = sep (UNSIGNED), z = continuity bias, w = unused.
+	// Log mode reinterprets vr_band[0] as {w0, w1, dfar, -}.
+	vec4 vr_band[4];
 };
 
 layout(location = 0) out VSOutput
@@ -50,6 +59,59 @@ layout(location = 0) out VSOutput
 	float inv_cov; // We use the inverse to make it simpler to interpolate.
 	flat uint interior; // 1 for triangle interior; 0 for edge;
 } vsOut;
+
+#if !VS_FST
+// PCSX2-VR (multiband): the depth map evaluator, shared by both VS paths below.
+// Returns the per-eye horizontal NDC displacement for a vertex whose perspective
+// term is q (~1/w). FST/UV draws never reach here (compile-excluded, as before).
+//
+// LINEAR is the default and MUST stay bit-exact with the pre-multiband shader: its
+// branch is a verbatim copy of the old expression, deliberately NOT rewritten to go
+// through the general band formula (that would add a `+ 0.0` bias term and re-order
+// the float ops). Wrapping identical arithmetic in a function does not reassociate
+// it, so this is safe.
+//
+// BANDS splits the depth range so near and far content can each get their own
+// convergence — one global pair can only serve one depth well. The compare chain
+// runs on DESCENDING split_q (band 0 = nearest = largest q); the CPU pads unused
+// splits with -FLT_MAX and duplicates the last valid band into the unused slots, so
+// no band-count check is needed here. Per-band bias is solved at profile-parse time
+// to make d continuous across every split.
+//
+// EYE SIGN: bands arrive unsigned because the deep-window clamp max(0, d) has to run
+// on the magnitude — clamping an already-signed value would be wrong for one eye — so
+// the sign is applied afterwards from vr_splits.w. The linear branch keeps the old
+// convention (sign pre-baked into vr_stereo.x, or supplied by vr_eye_sign under
+// multiview), which is why it is NOT multiplied by vr_splits.w.
+float vr_stereo_disp(float q)
+{
+	if (vr_map_mode == 0u)
+	{
+		// VERBATIM the pre-multiband expression — bit-exactness gate. Do not reassociate.
+		return vr_stereo.x * max(0.0f, 1.0f - vr_stereo.y * q);
+	}
+
+	if (vr_map_mode == 2u)
+	{
+		// Log map: band[0] holds {w0, w1, dfar}. Equal ratios of w get equal disparity
+		// steps; clamped flat outside the [w0, w1] anchors. dnear is pinned to 0 by
+		// design (deep window: depth goes INTO the screen only, never out).
+		float w = 1.0f / max(q, 1e-8f);
+		float t = clamp(log(w / vr_band[0].x) / log(vr_band[0].y / vr_band[0].x), 0.0f, 1.0f);
+		return (vr_band[0].z * t) * vr_splits.w;
+	}
+
+	vec4 band;
+	if      (q >= vr_splits.x) band = vr_band[0];
+	else if (q >= vr_splits.y) band = vr_band[1];
+	else if (q >= vr_splits.z) band = vr_band[2];
+	else                       band = vr_band[3];
+
+	// bias + sep*(1 - conv*q), clamped as an unsigned magnitude, then eye-signed.
+	float d = band.z + band.y * (1.0f - band.x * q);
+	return max(0.0f, d) * vr_splits.w;
+}
+#endif
 
 #if VS_EXPAND == VS_EXPAND_NONE
 
@@ -86,7 +148,11 @@ void main()
 	// the separation (field-verified on AC5's pitch ladder). Tier-2 stereo is a "deep
 	// window": depth goes INTO the screen only.
 	#if !VS_FST
-		if (vr_stereo.x != 0.0f)
+		// The map_mode term widens the guard for band/log maps, whose band 0 may
+		// legitimately have separation 0 while later bands do not. Off-state is
+		// unaffected: stereo disabled zeroes the whole VR block, so map_mode is 0
+		// and vr_stereo.x is 0, and this is still skipped.
+		if (vr_stereo.x != 0.0f || vr_map_mode != 0u)
 		{
 			// Multiview (stage 2): vr_stereo.x is the unsigned separation; the view index
 			// supplies the eye sign. Otherwise the sign is pre-baked into vr_stereo.x
@@ -96,7 +162,7 @@ void main()
 			#else
 				float vr_eye_sign = 1.0f;
 			#endif
-			gl_Position.x += vr_eye_sign * vr_stereo.x * max(0.0f, 1.0f - vr_stereo.y * a_q);
+			gl_Position.x += vr_eye_sign * vr_stereo_disp(a_q);
 		}
 	#endif
 
@@ -495,7 +561,8 @@ void main()
 	// clamp as the non-expand path: untextured expanded lines carry q = 1.0 and must land
 	// at screen depth, not fly off by (conv - 1) separations.
 	#if !VS_FST
-		if (vr_stereo.x != 0.0f)
+		// Same widened guard as the non-expand path above (band 0 may have sep 0).
+		if (vr_stereo.x != 0.0f || vr_map_mode != 0u)
 		{
 			// Same per-view sign selection as the non-expand path above.
 			#if VS_MULTIVIEW
@@ -503,7 +570,7 @@ void main()
 			#else
 				float vr_eye_sign = 1.0f;
 			#endif
-			gl_Position.x += vr_eye_sign * vr_stereo.x * max(0.0f, 1.0f - vr_stereo.y * vtx.t.w);
+			gl_Position.x += vr_eye_sign * vr_stereo_disp(vtx.t.w);
 		}
 	#endif
 

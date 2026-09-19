@@ -3,4 +3,4 @@
 
 /// Version number for GS and other shaders. Increment whenever any of the contents of the
 /// shaders change, to invalidate the cache.
-static constexpr u32 SHADER_CACHE_VERSION = 110; // upstream PR 14688 (=108) + PCSX2-VR tfx VS clamp + Stage 1/D4 rt_in_array/depth_in_array per-view feedback sampling
+static constexpr u32 SHADER_CACHE_VERSION = 111; // upstream PR 14688 (=108) + PCSX2-VR tfx VS clamp + Stage 1/D4 rt_in_array/depth_in_array per-view feedback sampling + multiband depth map (cb0 64->144 B, vr_stereo_disp)

@@ -1058,8 +1058,26 @@ struct alignas(16) GSHWDrawConfig
 		// PCSX2-VR (M4.1): x = per-eye horizontal NDC displacement (sign encodes the eye),
 		// y = convergence in Q units. Filled from VR::StereoState; {0,0} when stereo is
 		// disabled makes the tfx VS displacement path provably inert (byte-identical off-state).
+		// With a multiband map (below) these still carry band 0 / the linear pair, so every
+		// non-band consumer (OSD, dumps, the linear shader branch) is unchanged.
 		GSVector2 vr_stereo;
-		GSVector2 vr_pad; // pads the CB to 64 B so every backend mirror (incl. the Metal sizeof assert) matches exactly
+		// PCSX2-VR (multiband): the resolved depth map. 0 = linear (today's single
+		// sep/conv pair, bit-exact), 1 = bands, 2 = log. band_count is 1..4. These two
+		// consumed the old `vr_pad` GSVector2, so offsets 0..63 are byte-identical to the
+		// pre-multiband CB and only the tail is new.
+		u32 vr_map_mode;
+		u32 vr_band_count;
+		// x,y,z = band split points in DESCENDING q (band 0 = nearest = largest q); unused
+		// entries are -FLT_MAX so the shader's compare chain lands on the last valid band
+		// with no count check. w = the eye sign for the BAND path only: bands go to the GPU
+		// as unsigned magnitudes because the deep-window clamp max(0,d) has to run before
+		// the sign is applied (clamping a pre-signed value is wrong for the right eye), so
+		// the sign rides here instead. Linear keeps the pre-signed vr_stereo.x convention.
+		GSVector4 vr_splits;
+		// Per band: x = convergence, y = separation (UNSIGNED), z = solver-derived
+		// continuity bias, w = unused. In log mode band[0] is reinterpreted as
+		// {w0, w1, dfar, -} and the rest are ignored.
+		GSVector4 vr_band[4];
 		__fi VSConstantBuffer()
 		{
 			memset(static_cast<void*>(this), 0, sizeof(*this));

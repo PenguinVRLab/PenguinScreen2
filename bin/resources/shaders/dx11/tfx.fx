@@ -1639,7 +1639,14 @@ cbuffer cb0
 	float LineAA1Width;
 	// PCSX2-VR (M4.1): carried for CB-layout coherence; math lives only in the Vulkan backend.
 	float2 vr_stereo;
-	float2 vr_pad; // keep the cbuffer 64 B, matching VSConstantBuffer
+	// PCSX2-VR (multiband): also layout-only here. Offsets must match VSConstantBuffer
+	// exactly — vr_map_mode/vr_band_count at 56/60 fill out the row vr_stereo starts,
+	// then vr_splits lands on the 64 B boundary a float4 requires, so no explicit
+	// padding is needed. Total 144 B.
+	uint vr_map_mode;
+	uint vr_band_count;
+	float4 vr_splits;
+	float4 vr_band[4];
 };
 
 #ifdef DX12

@@ -17,7 +17,13 @@ layout(std140, binding = 1) uniform cb20
 	float LineAA1Width;
 	// PCSX2-VR (M4.1): carried for CB-layout coherence; math lives only in the Vulkan backend.
 	vec2  vr_stereo;
-	vec2  vr_pad; // keep the block 64 B, matching VSConstantBuffer
+	// PCSX2-VR (multiband): also layout-only here. std140 puts the two uints at 56/60,
+	// then vr_splits on the 64 B boundary its vec4 alignment requires; the vec4 array
+	// has a natural 16 B stride. Total 144 B, matching VSConstantBuffer.
+	uint  vr_map_mode;
+	uint  vr_band_count;
+	vec4  vr_splits;
+	vec4  vr_band[4];
 };
 
 #ifdef VERTEX_SHADER

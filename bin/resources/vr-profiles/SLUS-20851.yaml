@@ -12,7 +12,20 @@ SLUS-20851:
   name: "Ace Combat 5: The Unsung War"
   crcs: [0x39B574F0]
   tier: stereo
-  stereo: { separation: 0.008, convergence: 6.0, uvDraws: screen }
+  stereo:
+    separation: 0.008
+    convergence: 6.0
+    uvDraws: screen
+    scenes:
+      - when: { address: 0x00959C0C, equals: 2, width: 1 }
+        separation: 0.012
+        label: cockpit
+        map: bands
+        splits: [2.0, 8.0]
+        bands:
+          - { conv: 2.0, sep: 0.008 }
+          - { conv: 2.0, sep: 0.006 }
+          - { conv: 8.0, sep: 0.012 }
   camera:
     base:
       pattern: "00 00 20 44 00 00 ?? 43 ?? ?? ?? ?? ?? ?? ?? ?? 00 00 ?? ?? 00 00 00 00 00 02 C0 01 00 00 80 3F FF FF 7F 4B 00 00 00 00 00 02 C0 01 00 00"

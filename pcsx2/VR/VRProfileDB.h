@@ -27,6 +27,39 @@ namespace VR::ProfileDB
 		World,
 	};
 
+	enum class StereoMap : u32
+	{
+		Linear = 0,
+		Bands = 1,
+		Log = 2,
+	};
+
+	struct StereoBand
+	{
+		float conv = 0.0f;
+		float sep = 0.0f;
+	};
+
+	struct StereoLogParams
+	{
+		float w0 = 1.0f;
+		float w1 = 1.0f;
+		float dfar = 0.0f;
+	};
+
+	struct StereoResolvedMap
+	{
+		StereoMap map = StereoMap::Linear;
+		u32 band_count = 1;
+		float split_q[3] = {};
+		float conv[4] = {};
+		float sep[4] = {};
+		float bias[4] = {};
+		float log_w0 = 0.0f;
+		float log_w1 = 0.0f;
+		float log_dfar = 0.0f;
+	};
+
 	struct StereoSceneRule
 	{
 		u32 ee_address = 0;
@@ -34,6 +67,9 @@ namespace VR::ProfileDB
 		u8 width = 4;
 		std::optional<float> separation;
 		std::optional<float> convergence;
+
+		std::optional<StereoResolvedMap> map_override;
+
 		std::string label;
 	};
 
@@ -46,6 +82,13 @@ namespace VR::ProfileDB
 		bool pin_uniform_q = false;
 
 		std::vector<StereoSceneRule> scenes;
+
+		StereoMap map = StereoMap::Linear;
+		std::vector<float> splits;
+		std::vector<StereoBand> bands;
+		std::optional<StereoLogParams> log_params;
+
+		StereoResolvedMap resolved;
 	};
 
 	enum class CameraEncoding
@@ -241,4 +284,6 @@ namespace VR::ProfileDB
 	const Profile* Lookup(const std::string_view serial, u32 crc);
 
 	void Reset();
+
+	bool SelfTestMultibandResolve();
 }

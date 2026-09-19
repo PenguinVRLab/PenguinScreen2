@@ -16,6 +16,8 @@
 #include "fmt/format.h"
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <mutex>
 #include <optional>
 #include <regex>
@@ -89,6 +91,137 @@ static std::optional<VR::ProfileDB::UvDrawPolicy> parseUvDrawPolicy(const std::s
 	if (StringUtil::compareNoCase(s, "world"))
 		return UvDrawPolicy::World;
 	return std::nullopt;
+}
+
+static std::optional<VR::ProfileDB::StereoMap> parseStereoMap(const std::string_view s)
+{
+	using VR::ProfileDB::StereoMap;
+	if (StringUtil::compareNoCase(s, "linear"))
+		return StereoMap::Linear;
+	if (StringUtil::compareNoCase(s, "bands"))
+		return StereoMap::Bands;
+	if (StringUtil::compareNoCase(s, "log"))
+		return StereoMap::Log;
+	return std::nullopt;
+}
+
+static constexpr float kStereoBudgetNdc = 0.02f;
+
+static bool resolveDepthMap(const std::string_view serial, const char* where,
+	VR::ProfileDB::StereoMap map, const std::vector<float>& splits_w,
+	const std::vector<VR::ProfileDB::StereoBand>& bands,
+	const std::optional<VR::ProfileDB::StereoLogParams>& log_params,
+	VR::ProfileDB::StereoResolvedMap& out)
+{
+	using VR::ProfileDB::StereoMap;
+	using VR::ProfileDB::StereoResolvedMap;
+
+	out = StereoResolvedMap{};
+
+	if (map == StereoMap::Linear)
+		return true;
+
+	const auto reject = [&](const std::string_view why) {
+		Console.WarningFmt("(VR) ProfileDB: Serial '{}' {}: {}; falling back to 'map: linear' "
+						   "(the separation/convergence pair still applies).", serial, where, why);
+		out = StereoResolvedMap{};
+		return false;
+	};
+
+	constexpr float kSplitPad = -std::numeric_limits<float>::max();
+
+	if (map == StereoMap::Log)
+	{
+		if (!log_params.has_value())
+			return reject("'map: log' without a 'log:' block");
+		const VR::ProfileDB::StereoLogParams& lp = log_params.value();
+		if (!(lp.w0 > 0.0f))
+			return reject(fmt::format("log.w0 {} must be > 0", lp.w0));
+		if (!(lp.w1 > lp.w0))
+			return reject(fmt::format("log.w1 {} must be > log.w0 {}", lp.w1, lp.w0));
+		if (!(lp.dfar >= 0.0f))
+			return reject(fmt::format("log.dfar {} must be >= 0", lp.dfar));
+
+		out.map = StereoMap::Log;
+		out.band_count = 1;
+		out.log_w0 = lp.w0;
+		out.log_w1 = lp.w1;
+		out.log_dfar = lp.dfar;
+		for (int i = 0; i < 3; i++)
+			out.split_q[i] = kSplitPad;
+		if (lp.dfar > kStereoBudgetNdc)
+			Console.WarningFmt("(VR) ProfileDB: Serial '{}' {}: log.dfar {} exceeds the {} NDC comfort "
+							   "budget; rendering as authored, but expect fusion strain at the far end.",
+				serial, where, lp.dfar, kStereoBudgetNdc);
+		return true;
+	}
+
+	if (splits_w.size() > 3)
+		return reject(fmt::format("{} splits, at most 3 are supported", splits_w.size()));
+	if (bands.size() > 4)
+		return reject(fmt::format("{} bands, at most 4 are supported", bands.size()));
+	if (bands.empty())
+		return reject("'map: bands' without a 'bands:' list");
+	if (bands.size() != splits_w.size() + 1)
+		return reject(fmt::format("{} bands needs exactly {} splits, found {}",
+			bands.size(), bands.size() - 1, splits_w.size()));
+
+	for (size_t i = 0; i < splits_w.size(); i++)
+	{
+		if (!(splits_w[i] > 0.0f))
+			return reject(fmt::format("splits[{}] = {} must be > 0 (w-units)", i, splits_w[i]));
+		if (i > 0 && !(splits_w[i] > splits_w[i - 1]))
+			return reject(fmt::format("splits must be strictly ascending in w (near to far); "
+									  "splits[{}] = {} is not greater than splits[{}] = {}",
+				i, splits_w[i], i - 1, splits_w[i - 1]));
+	}
+
+	for (size_t i = 0; i < bands.size(); i++)
+	{
+		if (!(bands[i].sep > 0.0f))
+			return reject(fmt::format("bands[{}].sep = {} must be > 0", i, bands[i].sep));
+		if (!(bands[i].conv >= 0.0f))
+			return reject(fmt::format("bands[{}].conv = {} must be >= 0 (a negative convergence "
+									  "inverts depth)", i, bands[i].conv));
+	}
+
+	const u32 n = static_cast<u32>(bands.size());
+	out.map = StereoMap::Bands;
+	out.band_count = n;
+	for (u32 i = 0; i + 1 < n; i++)
+		out.split_q[i] = 1.0f / splits_w[i];
+	for (u32 i = (n > 0) ? (n - 1) : 0; i < 3; i++)
+		out.split_q[i] = kSplitPad;
+	for (u32 i = 0; i < n; i++)
+	{
+		out.conv[i] = bands[i].conv;
+		out.sep[i] = bands[i].sep;
+	}
+
+	out.bias[0] = 0.0f;
+	for (u32 i = 0; i + 1 < n; i++)
+	{
+		const float s = out.split_q[i];
+		out.bias[i + 1] = out.bias[i] + out.sep[i] * (1.0f - out.conv[i] * s) -
+						  out.sep[i + 1] * (1.0f - out.conv[i + 1] * s);
+	}
+
+	for (u32 i = n; i < 4; i++)
+	{
+		out.conv[i] = out.conv[n - 1];
+		out.sep[i] = out.sep[n - 1];
+		out.bias[i] = out.bias[n - 1];
+	}
+
+	for (u32 i = 0; i + 1 < n; i++)
+	{
+		const float d = out.bias[i] + out.sep[i] * (1.0f - out.conv[i] * out.split_q[i]);
+		if (std::abs(d) > kStereoBudgetNdc)
+			Console.WarningFmt("(VR) ProfileDB: Serial '{}' {}: displacement {} at split {} (w = {}) "
+							   "exceeds the {} NDC comfort budget; rendering as authored.",
+				serial, where, d, i, splits_w[i], kStereoBudgetNdc);
+	}
+	return true;
 }
 
 static std::optional<u32> parseHexU32(const std::string_view str)
@@ -167,6 +300,101 @@ static void parseGuardList(const std::string_view serial, const ryml::ConstNodeR
 		warnWidthFit(serial, eq.value(), guard.width, what);
 		out.push_back(guard);
 	}
+}
+
+static bool parseAuthoredDepthMap(const std::string_view serial, const char* where,
+	const ryml::ConstNodeRef& node, VR::ProfileDB::StereoMap& map, std::vector<float>& splits,
+	std::vector<VR::ProfileDB::StereoBand>& bands,
+	std::optional<VR::ProfileDB::StereoLogParams>& log_params)
+{
+	bool declared = false;
+
+	if (node.has_child("map"))
+	{
+		declared = true;
+		const std::optional<VR::ProfileDB::StereoMap> m = parseStereoMap(nodeVal(node["map"]));
+		if (m.has_value())
+			map = m.value();
+		else
+			Console.WarningFmt("(VR) ProfileDB: Serial '{}' {} has an invalid map '{}' "
+							   "(expected linear|bands|log); using 'linear'.",
+				serial, where, nodeVal(node["map"]));
+	}
+
+	if (node.has_child("splits") && node["splits"].is_seq())
+	{
+		for (const ryml::ConstNodeRef& s : node["splits"].children())
+		{
+			const std::string_view raw = nodeVal(s);
+			const std::optional<float> v = StringUtil::FromChars<float>(raw);
+			if (v.has_value())
+				splits.push_back(v.value());
+			else
+				Console.WarningFmt("(VR) ProfileDB: Serial '{}' {} has an invalid splits entry '{}'; "
+								   "ignoring it (the band count check will then reject the map).",
+					serial, where, raw);
+		}
+	}
+
+	if (node.has_child("bands") && node["bands"].is_seq())
+	{
+		for (const ryml::ConstNodeRef& b : node["bands"].children())
+		{
+			if (!b.is_map())
+			{
+				Console.WarningFmt("(VR) ProfileDB: Serial '{}' {} has a bands entry that is not a "
+								   "map; ignoring it.", serial, where);
+				continue;
+			}
+			VR::ProfileDB::StereoBand band;
+			if (b.has_child("conv"))
+			{
+				const std::optional<float> v = StringUtil::FromChars<float>(nodeVal(b["conv"]));
+				if (v.has_value())
+					band.conv = v.value();
+				else
+					Console.WarningFmt("(VR) ProfileDB: Serial '{}' {} has an invalid bands[].conv; "
+									   "leaving it 0.", serial, where);
+			}
+			if (b.has_child("sep"))
+			{
+				const std::optional<float> v = StringUtil::FromChars<float>(nodeVal(b["sep"]));
+				if (v.has_value())
+					band.sep = v.value();
+				else
+					Console.WarningFmt("(VR) ProfileDB: Serial '{}' {} has an invalid bands[].sep; "
+									   "leaving it 0 (the map will be rejected).", serial, where);
+			}
+			bands.push_back(band);
+		}
+	}
+
+	if (node.has_child("log") && node["log"].is_map())
+	{
+		const ryml::ConstNodeRef ln = node["log"];
+		VR::ProfileDB::StereoLogParams lp;
+		const auto readOne = [&](const char* key, float& dst) {
+			if (!ln.has_child(key))
+				return;
+			const std::optional<float> v = StringUtil::FromChars<float>(nodeVal(ln[key]));
+			if (v.has_value())
+				dst = v.value();
+			else
+				Console.WarningFmt("(VR) ProfileDB: Serial '{}' {} has an invalid log.{}; "
+								   "leaving it at its default.", serial, where, key);
+		};
+		readOne("w0", lp.w0);
+		readOne("w1", lp.w1);
+		readOne("dfar", lp.dfar);
+
+		if (ln.has_child("dnear"))
+			Console.WarningFmt("(VR) ProfileDB: Serial '{}' {} sets log.dnear, which does not exist: "
+							   "Tier-2 stereo is depth-into-screen only and the near end is always 0. "
+							   "Ignoring it.", serial, where);
+		log_params = lp;
+	}
+
+	return declared;
 }
 
 static std::optional<VR::ProfileDB::CameraEncoding> parseCameraEncoding(const std::string_view s)
@@ -704,6 +932,10 @@ bool VR::ProfileDB::parseProfile(const std::string_view serial, const ryml::Node
 		if (snode.has_child("pinUniformQ"))
 			sp.pin_uniform_q = StringUtil::compareNoCase(nodeVal(snode["pinUniformQ"]), "true");
 
+		parseAuthoredDepthMap(serial, "stereo", snode, sp.map, sp.splits, sp.bands, sp.log_params);
+		if (!resolveDepthMap(serial, "stereo", sp.map, sp.splits, sp.bands, sp.log_params, sp.resolved))
+			sp.map = StereoMap::Linear;
+
 		if (snode.has_child("scenes") && snode["scenes"].is_seq())
 		{
 			for (const ryml::ConstNodeRef& sc : snode["scenes"].children())
@@ -755,6 +987,20 @@ bool VR::ProfileDB::parseProfile(const std::string_view serial, const ryml::Node
 						rule.convergence = v.value();
 					else
 						Console.WarningFmt("(VR) ProfileDB: Serial '{}' has an invalid stereo scene convergence; inheriting base.", serial);
+				}
+
+				{
+					StereoMap smap = StereoMap::Linear;
+					std::vector<float> ssplits;
+					std::vector<StereoBand> sbands;
+					std::optional<StereoLogParams> slog;
+					if (parseAuthoredDepthMap(serial, "stereo scene", sc, smap, ssplits, sbands, slog))
+					{
+						StereoResolvedMap sresolved;
+
+						if (resolveDepthMap(serial, "stereo scene", smap, ssplits, sbands, slog, sresolved))
+							rule.map_override = sresolved;
+					}
 				}
 				if (sc.has_child("label"))
 				{
@@ -1143,4 +1389,117 @@ std::vector<VR::ProfileDB::Summary> VR::ProfileDB::ListProfiles()
 	}
 	std::sort(out.begin(), out.end(), [](const Summary& a, const Summary& b) { return a.serial < b.serial; });
 	return out;
+}
+
+static int CountMultibandResolveMismatches(bool log)
+{
+	using VR::ProfileDB::StereoBand;
+	using VR::ProfileDB::StereoLogParams;
+	using VR::ProfileDB::StereoMap;
+	using VR::ProfileDB::StereoResolvedMap;
+
+	int fail = 0;
+	const auto check = [&](bool ok, const char* name) {
+		if (!ok)
+		{
+			++fail;
+			if (log)
+				Console.WriteLn("(VR) multiband resolve self-test FAIL: %s", name);
+		}
+	};
+	const auto approxEq = [](float a, float b) { return std::abs(a - b) < 1e-6f; };
+	constexpr float kPad = -std::numeric_limits<float>::max();
+
+	const auto evalBand = [](const StereoResolvedMap& m, u32 i, float q) {
+		return m.bias[i] + m.sep[i] * (1.0f - m.conv[i] * q);
+	};
+	const auto selectBand = [](const StereoResolvedMap& m, float q) -> u32 {
+		if (q >= m.split_q[0]) return 0;
+		if (q >= m.split_q[1]) return 1;
+		if (q >= m.split_q[2]) return 2;
+		return 3;
+	};
+	const auto resolve = [](StereoMap map, const std::vector<float>& splits,
+							 const std::vector<StereoBand>& bands,
+							 const std::optional<StereoLogParams>& lp, StereoResolvedMap& out) {
+		return resolveDepthMap("SELFTEST", "self-test", map, splits, bands, lp, out);
+	};
+	const std::optional<StereoLogParams> kNoLog;
+
+	StereoResolvedMap m;
+
+	check(resolve(StereoMap::Linear, {}, {}, kNoLog, m), "linear resolves");
+	check(m.map == StereoMap::Linear && m.band_count == 1, "linear -> Linear, 1 band");
+
+	const std::vector<StereoBand> two = {{6.0f, 0.008f}, {40.0f, 0.012f}};
+	check(resolve(StereoMap::Bands, {8.0f}, two, kNoLog, m), "2-band resolves");
+	check(m.map == StereoMap::Bands && m.band_count == 2, "2-band -> Bands, 2 bands");
+	check(approxEq(m.split_q[0], 0.125f), "2-band split_q = 1/w");
+	check(approxEq(m.bias[0], 0.0f), "bias[0] == 0");
+	check(approxEq(m.bias[1], 0.050f), "2-band bias[1] == 0.050 (hand-computed)");
+	check(approxEq(evalBand(m, 0, 0.125f), 0.002f), "2-band d at split == 0.002");
+	check(approxEq(evalBand(m, 0, 0.125f), evalBand(m, 1, 0.125f)), "2-band continuous at split");
+
+	check(m.split_q[1] == kPad && m.split_q[2] == kPad, "2-band pads split_q with -FLT_MAX");
+	check(approxEq(m.conv[2], m.conv[1]) && approxEq(m.conv[3], m.conv[1]), "2-band pads conv from last band");
+	check(approxEq(m.sep[2], m.sep[1]) && approxEq(m.sep[3], m.sep[1]), "2-band pads sep from last band");
+	check(approxEq(m.bias[2], m.bias[1]) && approxEq(m.bias[3], m.bias[1]), "2-band pads bias from last band");
+
+	check(selectBand(m, 1.0f) == 0, "select: q above split -> band 0");
+	check(selectBand(m, 0.01f) == 1, "select: q below split -> band 1 (pad falls through)");
+
+	const std::vector<StereoBand> three = {{1.0f, 0.010f}, {10.0f, 0.012f}, {100.0f, 0.014f}};
+	check(resolve(StereoMap::Bands, {2.0f, 8.0f}, three, kNoLog, m), "3-band resolves");
+	check(m.band_count == 3, "3-band count");
+	check(approxEq(m.split_q[0], 0.5f) && approxEq(m.split_q[1], 0.125f), "3-band w->q values");
+	check(m.split_q[0] > m.split_q[1], "3-band split_q DESCENDING (w ascending inverts)");
+	check(m.split_q[2] == kPad, "3-band pads the unused split only");
+	check(approxEq(evalBand(m, 0, m.split_q[0]), evalBand(m, 1, m.split_q[0])), "3-band continuous at split 0");
+	check(approxEq(evalBand(m, 1, m.split_q[1]), evalBand(m, 2, m.split_q[1])), "3-band continuous at split 1");
+	check(selectBand(m, 0.01f) == 2, "3-band select: far q -> band 2");
+
+	const auto rejects = [&](const char* name, StereoMap map, const std::vector<float>& sp,
+							  const std::vector<StereoBand>& bd, const std::optional<StereoLogParams>& lp) {
+		StereoResolvedMap r;
+		const bool ok = resolve(map, sp, bd, lp, r);
+		check(!ok && r.map == StereoMap::Linear && r.band_count == 1, name);
+	};
+	rejects("reject: splits not strictly ascending", StereoMap::Bands, {8.0f, 2.0f}, three, kNoLog);
+	rejects("reject: duplicate split", StereoMap::Bands, {8.0f, 8.0f}, three, kNoLog);
+	rejects("reject: split <= 0", StereoMap::Bands, {0.0f}, two, kNoLog);
+	rejects("reject: negative split", StereoMap::Bands, {-1.0f}, two, kNoLog);
+	rejects("reject: band/split count mismatch", StereoMap::Bands, {2.0f, 8.0f}, two, kNoLog);
+	rejects("reject: too many splits", StereoMap::Bands, {1.0f, 2.0f, 3.0f, 4.0f},
+		{{1.0f, 0.01f}, {2.0f, 0.01f}, {3.0f, 0.01f}, {4.0f, 0.01f}, {5.0f, 0.01f}}, kNoLog);
+	rejects("reject: empty bands", StereoMap::Bands, {}, {}, kNoLog);
+	rejects("reject: sep <= 0 (zero)", StereoMap::Bands, {8.0f}, {{6.0f, 0.0f}, {40.0f, 0.012f}}, kNoLog);
+	rejects("reject: sep < 0", StereoMap::Bands, {8.0f}, {{6.0f, -0.008f}, {40.0f, 0.012f}}, kNoLog);
+	rejects("reject: conv < 0 (inverts depth)", StereoMap::Bands, {8.0f}, {{-1.0f, 0.008f}, {40.0f, 0.012f}}, kNoLog);
+	rejects("reject: log without a log: block", StereoMap::Log, {}, {}, kNoLog);
+	rejects("reject: log w0 <= 0", StereoMap::Log, {}, {}, StereoLogParams{0.0f, 100.0f, 0.02f});
+	rejects("reject: log w1 <= w0", StereoMap::Log, {}, {}, StereoLogParams{100.0f, 100.0f, 0.02f});
+	rejects("reject: log dfar < 0", StereoMap::Log, {}, {}, StereoLogParams{100.0f, 200.0f, -0.01f});
+
+	check(resolve(StereoMap::Bands, {8.0f}, {{0.0f, 0.008f}, {40.0f, 0.012f}}, kNoLog, m),
+		"conv == 0 is accepted");
+
+	check(resolve(StereoMap::Log, {}, {}, StereoLogParams{2000.0f, 22000.0f, 0.02f}, m), "log resolves");
+	check(m.map == StereoMap::Log, "log -> Log");
+	check(approxEq(m.log_w0, 2000.0f) && approxEq(m.log_w1, 22000.0f) && approxEq(m.log_dfar, 0.02f),
+		"log anchors carried through");
+	check(m.split_q[0] == kPad && m.split_q[1] == kPad && m.split_q[2] == kPad, "log pads every split");
+
+	check(resolve(StereoMap::Bands, {2.0f}, {{0.0f, 0.05f}, {0.0f, 0.05f}}, kNoLog, m),
+		"over-budget map still resolves");
+	check(m.map == StereoMap::Bands, "over-budget map stays Bands (warn, never clamp)");
+	check(resolve(StereoMap::Log, {}, {}, StereoLogParams{100.0f, 200.0f, 0.5f}, m),
+		"over-budget log still resolves");
+	check(m.map == StereoMap::Log, "over-budget log stays Log");
+
+	return fail;
+}
+
+bool VR::ProfileDB::SelfTestMultibandResolve()
+{
+	return CountMultibandResolveMismatches(false) == 0;
 }

@@ -6282,11 +6282,55 @@ void GSRendererHW::DetermineVSConfig(GSTextureCache::Target* rt, float rtscale, 
 			DevCon.WriteLn("(VR) uniform-Q draw pinned: Q=%f verts=%u",
 				m_vertex->buff[0].RGBAQ.Q, static_cast<unsigned>(m_vertex->next));
 	}
+	const bool vr_engaged = st.enabled && !vr_pin_screen;
+	const float vr_eye_sign = vr_multiview_target ? 1.0f : VR::StereoState::GetCurrentEyeSign();
 	m_conf.cb_vs.vr_stereo =
-		(st.enabled && !vr_pin_screen) ?
-			GSVector2(st.separation * (vr_multiview_target ? 1.0f : VR::StereoState::GetCurrentEyeSign()),
-				st.convergence) :
+		vr_engaged ?
+			GSVector2(st.separation * vr_eye_sign, st.convergence) :
 			GSVector2(0.0f, 0.0f);
+	// Multiband map (bands/log). Every field is written on EVERY draw — m_conf
+	// persists across draws, so a stale band block from a previous draw would
+	// otherwise leak into a pinned/disabled one. The linear/disabled arm zeroes
+	// the whole block, which keeps the widened shader guard
+	// (vr_stereo.x != 0 || vr_map_mode != 0) provably unreachable in the
+	// off-state — the same byte-identical invariant as vr_stereo itself. Note
+	// pin_uniform_q pins a draw out of the BAND path too: a uniform-Q overlay
+	// draw is screen-space regardless of which map the profile runs.
+	if (vr_engaged && st.map != VR::StereoState::Params::Map::Linear)
+	{
+		m_conf.cb_vs.vr_map_mode = static_cast<u32>(st.map);
+		m_conf.cb_vs.vr_band_count = st.band_count;
+		// Bands ride UNSIGNED (the shader clamps the magnitude first, then
+		// applies the sign from vr_splits.w — see MULTIBAND-CONTRACT §6 /
+		// GSDevice.h). Multiview keeps w = 1.0 and signs via gl_ViewIndex.
+		m_conf.cb_vs.vr_splits = GSVector4(st.split_q[0], st.split_q[1], st.split_q[2], vr_eye_sign);
+		if (st.map == VR::StereoState::Params::Map::Log)
+		{
+			// Log map: band[0] = {w0, w1, dfar}; the shader ignores the rest.
+			m_conf.cb_vs.vr_band[0] = GSVector4(st.log_w0, st.log_w1, st.log_dfar, 0.0f);
+			m_conf.cb_vs.vr_band[1] = GSVector4::zero();
+			m_conf.cb_vs.vr_band[2] = GSVector4::zero();
+			m_conf.cb_vs.vr_band[3] = GSVector4::zero();
+		}
+		else
+		{
+			// Resolve already applied the padding rule (unused slots = copy of
+			// the last valid band), so the shader's compare chain needs no
+			// count check.
+			for (u32 i = 0; i < 4; i++)
+				m_conf.cb_vs.vr_band[i] = GSVector4(st.conv[i], st.sep[i], st.bias[i], 0.0f);
+		}
+	}
+	else
+	{
+		m_conf.cb_vs.vr_map_mode = 0;
+		m_conf.cb_vs.vr_band_count = 0;
+		m_conf.cb_vs.vr_splits = GSVector4::zero();
+		m_conf.cb_vs.vr_band[0] = GSVector4::zero();
+		m_conf.cb_vs.vr_band[1] = GSVector4::zero();
+		m_conf.cb_vs.vr_band[2] = GSVector4::zero();
+		m_conf.cb_vs.vr_band[3] = GSVector4::zero();
+	}
 	if (vr_multiview_target)
 	{
 		static bool s_logged_mv_draw = false;
@@ -6299,6 +6343,7 @@ void GSRendererHW::DetermineVSConfig(GSTextureCache::Target* rt, float rtscale, 
 	}
 #else
 	m_conf.cb_vs.vr_stereo = GSVector2(0.0f, 0.0f);
+	m_conf.cb_vs.vr_map_mode = 0; // keeps the widened shader guard unreachable (band fields are never written in non-VR builds)
 #endif
 
 	m_conf.vs.iip = !IsFlatShaded();

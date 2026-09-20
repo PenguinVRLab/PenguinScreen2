@@ -6122,10 +6122,20 @@ void GSRendererHW::DetermineVSConfig(GSTextureCache::Target* rt, float rtscale, 
 		const double qh_qmin = static_cast<double>(m_vt.m_min.t.z);
 		const double qh_qmax = static_cast<double>(m_vt.m_max.t.z);
 		const int qh_vpp = GSUtil::GetClassVertexCount(m_vt.m_primclass);
+		double qh_density = -1.0;
+		if (qh_class == VR::DrawClass::Displaced && qh_area > 0.0)
+		{
+			const double qh_tex_w = static_cast<double>(m_vt.m_max.t.x) - static_cast<double>(m_vt.m_min.t.x);
+			const double qh_tex_h = static_cast<double>(m_vt.m_max.t.y) - static_cast<double>(m_vt.m_min.t.y);
+			const double qh_qmid = 0.5 * (qh_qmin + qh_qmax);
+			if (qh_tex_w > 0.0 && qh_tex_h > 0.0 && qh_qmid > 0.0)
+				qh_density = (qh_tex_w * qh_tex_h) / (qh_qmid * qh_qmid) / qh_area;
+		}
 		VR::DepthHistogram& qh = VR::GlobalDepthHistogram();
 		qh.NoteTargetSize(unscaled_size.x, unscaled_size.y);
 		qh.AddDraw((qh_target_area > 0.0) ? (qh_area / qh_target_area) : 0.0, qh_qmin, qh_qmax,
-			(qh_vpp > 0) ? (m_index->tail / static_cast<u32>(qh_vpp)) : 0u, m_vertex->next, qh_class);
+			(qh_vpp > 0) ? (m_index->tail / static_cast<u32>(qh_vpp)) : 0u, m_vertex->next, qh_class,
+			qh_density);
 	}
 #else
 	m_conf.cb_vs.vr_stereo = GSVector2(0.0f, 0.0f);

@@ -17,6 +17,21 @@ namespace VR
 		bool g_qhist_armed = false;
 	}
 
+	namespace detail
+	{
+		static std::string s_qhist_live_dir;
+	}
+
+	void SetQhistLiveDir(std::string dir)
+	{
+		detail::s_qhist_live_dir = std::move(dir);
+	}
+
+	const std::string& QhistLiveDir()
+	{
+		return detail::s_qhist_live_dir;
+	}
+
 	void ArmDepthHistogram(bool armed)
 	{
 		detail::g_qhist_armed = armed;
@@ -39,6 +54,21 @@ namespace VR
 	double DepthHistogram::Bucket::MeanQ() const
 	{
 		return (coverage > 0.0) ? (q_moment / coverage) : 0.0;
+	}
+
+	void DepthHistogram::Bucket::AddRegime(double area_fraction, double density)
+	{
+		if (density < 0.0 || !std::isfinite(density) || !(area_fraction > 0.0))
+			return;
+		density_moment += area_fraction * density;
+		density_cov += area_fraction;
+		if (area_fraction > dom_coverage)
+			dom_coverage = area_fraction;
+	}
+
+	double DepthHistogram::Bucket::MeanDensity() const
+	{
+		return (density_cov > 0.0) ? (density_moment / density_cov) : -1.0;
 	}
 
 	u64 DepthHistogram::Census::Total() const
@@ -75,7 +105,8 @@ namespace VR
 		*this = DepthHistogram{};
 	}
 
-	void DepthHistogram::AddDraw(double area_fraction, double q_min, double q_max, u32 prims, u32 verts, DrawClass cls)
+	void DepthHistogram::AddDraw(double area_fraction, double q_min, double q_max, u32 prims, u32 verts, DrawClass cls,
+		double texel_density)
 	{
 		switch (cls)
 		{
@@ -124,6 +155,7 @@ namespace VR
 			const int idx = BinIndexForW(w);
 			Bucket& b = (idx < 0) ? near_overflow : ((idx >= kBinCount) ? far_overflow : bins[static_cast<size_t>(idx)]);
 			b.Add(area_fraction, q_min, prims, verts);
+			b.AddRegime(area_fraction, texel_density);
 			return;
 		}
 
@@ -135,6 +167,7 @@ namespace VR
 				return;
 			const double f = (qb - qa) / dq;
 			b.Add(area_fraction * f, 0.5 * (qa + qb), 0, 0);
+			b.AddRegime(area_fraction * f, texel_density);
 		};
 
 		slice_add(far_overflow, q_min, std::min(q_max, q_far_edge));
@@ -435,7 +468,7 @@ namespace VR
 	{
 		const Summary s = ComputeSummary();
 
-		std::vector<double> cov(kBinCount), qm(kBinCount);
+		std::vector<double> cov(kBinCount), qm(kBinCount), den(kBinCount), dom(kBinCount);
 		std::vector<u64> pr(kBinCount), ve(kBinCount);
 		for (int i = 0; i < kBinCount; i++)
 		{
@@ -443,6 +476,8 @@ namespace VR
 			qm[static_cast<size_t>(i)] = bins[static_cast<size_t>(i)].q_moment;
 			pr[static_cast<size_t>(i)] = bins[static_cast<size_t>(i)].prims;
 			ve[static_cast<size_t>(i)] = bins[static_cast<size_t>(i)].verts;
+			den[static_cast<size_t>(i)] = bins[static_cast<size_t>(i)].MeanDensity();
+			dom[static_cast<size_t>(i)] = bins[static_cast<size_t>(i)].dom_coverage;
 		}
 
 		std::string o;
@@ -462,6 +497,10 @@ namespace VR
 
 		o += "  \"bins\": {\n";
 		AppendNumArray(o, "coverage", cov.data(), cov.size(), "    ");
+		o += ",\n";
+		AppendNumArray(o, "density", den.data(), den.size(), "    ");
+		o += ",\n";
+		AppendNumArray(o, "dom_coverage", dom.data(), dom.size(), "    ");
 		o += ",\n";
 		AppendU64Array(o, "prims", pr.data(), pr.size(), "    ");
 		o += ",\n";

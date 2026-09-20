@@ -5,6 +5,7 @@
 #include "VR/StereoState.h"
 #include "VR/VRProfileDB.h"
 #include "VR/SplitState.h"
+#include "VR/SeatSession.h"
 #include "VR/XRCompositor.h"
 #include "VR/XRSession.h"
 
@@ -500,6 +501,72 @@ namespace VR
 		s_launch_requested_vr = requested;
 	}
 
+	static int s_launch_seat = 1;
+
+	void SetLaunchSeat(int seat)
+	{
+		s_launch_seat = seat;
+	}
+
+	int GetLaunchSeat()
+	{
+		return s_launch_seat;
+	}
+
+	static int s_seatcast_target = 0;
+
+	void SetSeatCastTarget(int seat)
+	{
+		s_seatcast_target = seat;
+	}
+
+	int SeatCastTarget()
+	{
+		return s_seatcast_target;
+	}
+
+	bool SeatCastArmed()
+	{
+		return s_seatcast_target > 0;
+	}
+
+	static std::string NthColonEntry(const std::string& reg, int idx)
+	{
+		size_t pos = 0;
+		while (idx > 0 && pos != std::string::npos)
+		{
+			pos = reg.find(':', pos);
+			if (pos != std::string::npos)
+				pos++;
+			idx--;
+		}
+		if (pos == std::string::npos)
+			return {};
+		const size_t end = reg.find(':', pos);
+		return reg.substr(pos, end == std::string::npos ? std::string::npos : end - pos);
+	}
+
+	std::string ResolveSeatRuntimeJson(int seat)
+	{
+		std::string json;
+		if (seat >= 2)
+			json = NthColonEntry(EmuConfig.VR.XrSeatRuntimeJsons, seat - 2);
+		if (json.empty())
+		{
+			const char* env = std::getenv("XR_RUNTIME_JSON");
+			if (env)
+				json = env;
+		}
+		return json;
+	}
+
+	std::string ResolveSeatRuntimeDir(int seat)
+	{
+		if (seat <= 1)
+			return {};
+		return NthColonEntry(EmuConfig.VR.XrSeatRuntimeDirs, seat - 2);
+	}
+
 	bool LaunchRequestedVR()
 	{
 		return s_launch_requested_vr;
@@ -555,6 +622,9 @@ namespace VR
 	{
 		if (!XRSession::HasSession())
 			return;
+
+		if (SeatCastArmed() && !SeatSession::Running())
+			SeatSession::Start(SeatCastTarget());
 
 		XRSession::PumpEvents();
 

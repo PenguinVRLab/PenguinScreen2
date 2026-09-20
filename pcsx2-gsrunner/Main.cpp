@@ -46,6 +46,7 @@
 #include "pcsx2/PerformanceMetrics.h"
 #include "pcsx2/VMManager.h"
 #ifdef ENABLE_VR
+#include "pcsx2/VR/DepthHistogram.h"
 #include "pcsx2/VR/VRProfileDB.h"
 #endif
 
@@ -83,6 +84,15 @@ static std::string s_output_prefix;
 static s32 s_loop_count = 1;
 static std::optional<bool> s_use_window;
 static bool s_no_console = false;
+#ifdef ENABLE_VR
+// PCSX2-VR (-qhist): destination for the depth-distribution artifact
+// (docs/features/depth-allocation-architecture.md §4). Empty = disarmed. A FLAG
+// ONLY — there is deliberately no env-var path, because ambient arming is how VR
+// itself ended up armed by XR_RUNTIME_JSON (H-12 lineage): an env var set once in
+// a shell turns every later run into a measurement run nobody asked for, and the
+// artifact it drops looks exactly like one that was asked for.
+static std::string s_qhist_path;
+#endif
 
 // Owned by the GS thread.
 static u32 s_dump_frame_number = 0;
@@ -514,6 +524,13 @@ static void PrintCommandLineHelp(const char* progname)
 	std::fprintf(stderr, "  -logfile <filename>: Writes emu log to filename.\n");
 	std::fprintf(stderr, "  -noshadercache: Disables the shader cache (useful for parallel runs).\n");
 	std::fprintf(stderr, "  -perf: Enable frame timing performance stats.\n");
+#ifdef ENABLE_VR
+	std::fprintf(stderr, "  -qhist <file>: (VR) Write the scene depth distribution (log2(w) histogram) to <file> at\n"
+						 "    shutdown. Flag only -- there is no env-var equivalent, on purpose. If the\n"
+						 "    GSRendererHW measurement hook is not applied, the artifact is still written\n"
+						 "    but every census counter is zero; tools/vr/depth_histogram.py REFUSES that\n"
+						 "    file rather than reporting it, so an unwired build is loud, not silently green.\n");
+#endif
 	std::fprintf(stderr, "  --: Signals that no more arguments will follow and the remaining\n"
 						 "    parameters make up the filename. Use when the filename contains\n"
 						 "    spaces or starts with a dash.\n");
@@ -660,6 +677,15 @@ bool GSRunner::ParseCommandLineArgs(int argc, char* argv[], VMBootParameters& pa
 				Console.WriteLn("Looping dump playback %d times.", s_loop_count);
 				continue;
 			}
+#ifdef ENABLE_VR
+			else if (CHECK_ARG_PARAM("-qhist"))
+			{
+				s_qhist_path = StringUtil::StripWhitespace(argv[++i]);
+				VR::ArmDepthHistogram(!s_qhist_path.empty());
+				Console.WriteLn("(VR) Depth histogram armed, writing '%s' at shutdown.", s_qhist_path.c_str());
+				continue;
+			}
+#endif
 			else if (CHECK_ARG_PARAM("-renderer"))
 			{
 				const char* rname = argv[++i];
@@ -973,8 +999,49 @@ static void CPUThreadMain(VMBootParameters* params, std::atomic<int>* ret)
 			}
 			while (VMManager::GetState() == VMState::Running)
 				VMManager::Execute();
+#ifdef ENABLE_VR
+			// PCSX2-VR (-qhist): the artifact's KEY must be captured HERE, while the
+			// replayer still exists — GSDumpReplayer::Get{DumpSerial,DumpCRC,FrameNumber}
+			// are all gone after Shutdown(). The WRITE is deliberately left until after
+			// Shutdown() instead, because AddDraw() runs on the GS thread with no lock
+			// (see DepthHistogram.h's threading contract) and the accumulator may only be
+			// read once that thread is provably stopped. Splitting the two is the whole
+			// reason this is not one call.
+			const bool qhist_armed = VR::DepthHistogramArmed() && !s_qhist_path.empty();
+			if (qhist_armed)
+			{
+				VR::DepthHistogram& h = VR::GlobalDepthHistogram();
+				h.key.serial = GSDumpReplayer::GetDumpSerial();
+				h.key.crc = fmt::format("0x{:08x}", GSDumpReplayer::GetDumpCRC());
+				h.key.dump = std::string(Path::GetFileName(params->filename));
+				h.key.frame = GSDumpReplayer::GetFrameNumber();
+				h.key.widescreen_hack = EmuConfig.EnableWideScreenPatches;
+			}
+#endif
 			VMManager::Shutdown(false);
 			GSRunner::DumpStats();
+#ifdef ENABLE_VR
+			if (qhist_armed)
+			{
+				const VR::DepthHistogram& h = VR::GlobalDepthHistogram();
+				std::string err;
+				if (!h.WriteJson(s_qhist_path, &err))
+				{
+					// A measurement run that cannot write its measurement must not
+					// exit 0 — a silent miss here is indistinguishable from a clean
+					// run to every script downstream.
+					Console.ErrorFmt("(VR) -qhist: {}", err);
+					std::fputs(fmt::format("(VR) -qhist: {}\n", err).c_str(), stderr);
+					VMManager::Internal::CPUThreadShutdown();
+					GSRunner::StopPlatformMessagePump();
+					return;
+				}
+				Console.WriteLnFmt("(VR) -qhist: wrote '{}' ({} draws: {} displaced, {} mono-centre, {} fst-excluded, "
+								   "{} uniform-Q pinned, {} stereo-off, {} accurate-stq flagged).",
+					s_qhist_path, h.census.Total(), h.census.displaced, h.census.mono_centre, h.census.fst_excluded,
+					h.census.uniform_q_pinned, h.census.stereo_off, h.census.accurate_stq_flagged);
+			}
+#endif
 			ret->store(EXIT_SUCCESS);
 		}
 	}
@@ -1024,6 +1091,55 @@ int main(int argc, char* argv[])
 			Console.ErrorFmt("(VR) {} invalid VR profile file(s) — refusing to run. Fix or remove them.", issues.size());
 			std::fflush(stderr);
 			return EXIT_FAILURE;
+		}
+
+		// STEREO DEPTH RAILS — non-fatal, but they must be SEEN.
+		//
+		// Same sink problem as the block above, same remedy. These profiles are
+		// VALID (nothing above refused them); the finding is that their authored
+		// depth is at or past the limit of what an eye can fuse. That must never
+		// stop a run — a sweep of a known-imperfect profile is a legitimate thing
+		// to do, and half the shipped catalog is knowingly over the mean-IPD wall
+		// — so this prints and continues, it does not return EXIT_FAILURE.
+		//
+		// BOUNDED ON PURPOSE. Every finding is emitted through Console (so the
+		// complete list is always in emulog.txt) but only the MAP and SCENE
+		// findings are printed individually here. Those are the unregistered,
+		// freshly-authored sites — the multiband path, which is exactly where the
+		// AC5 cockpit defect lived. The plain base-scalar findings are catalog-
+		// wide debt already tracked by the CI grandfather register
+		// (tests/ctest/core/vr_profile_tests.cpp), and reprinting seventeen of
+		// them on every headless run is how a rail teaches people to skim past it.
+		{
+			const auto& findings = VR::ProfileDB::StereoRailFindings();
+			size_t scalar_div = 0, scalar_gap = 0;
+			const VR::ProfileDB::StereoRailFinding* worst = nullptr;
+			for (const auto& f : findings)
+			{
+				if (f.from_map)
+				{
+					std::fputs(fmt::format("{}\n", f.message).c_str(), stderr);
+					continue;
+				}
+				if (f.rail == VR::ProfileDB::StereoRail::Divergence)
+					scalar_div++;
+				else
+					scalar_gap++;
+				if (!worst || f.arcmin > worst->arcmin)
+					worst = &f;
+			}
+			if (scalar_div || scalar_gap)
+			{
+				std::fputs(fmt::format("(VR) stereo depth rails: {} profile(s) past the narrow-IPD divergence "
+									   "wall and {} past the 20' fixation-gap advisory on their base "
+									   "separation (worst: {} at {:.1f}'). Full list in emulog.txt; the debt "
+									   "register is in tests/ctest/core/vr_profile_tests.cpp.\n",
+					scalar_div, scalar_gap, worst ? worst->serial : std::string("-"),
+					worst ? worst->arcmin : 0.0f)
+							   .c_str(),
+					stderr);
+			}
+			std::fflush(stderr);
 		}
 	}
 #endif

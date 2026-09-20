@@ -113,6 +113,46 @@ float vr_stereo_disp(float q)
 }
 #endif
 
+#if VS_FST
+// PCSX2-VR (HUD collimation): the ONE displacement a UV/FST draw can carry.
+//
+// WHY: everything above is a function of q, and FST draws have no meaningful q —
+// which is why they are compile-excluded from vr_stereo_disp. The consequence is
+// that every UV draw renders at EXACTLY zero disparity, i.e. pinned on the screen
+// plane. For text you READ that is correct. For symbology you AIM THROUGH (a gun
+// reticle, a target designator bracket) it is wrong: the bracket sits on the glass
+// while the jet it encloses sits ~80 arcmin behind it, so the two can never be
+// fused at once. Real combat HUDs solve this by COLLIMATING the symbology to
+// optical infinity, so symbol and target share one vergence. This is that.
+//
+// A CONSTANT, not a depth map. Collimation has no q dependence by construction —
+// the whole point is that the symbol adopts ONE authored depth (the far field it
+// must agree with), so a single NDC number is the complete mechanism. It rides in
+// vr_band[0].w, which is spare in every map mode (bands: {conv,sep,bias,-}; log:
+// {w0,w1,dfar,-}), so no constant-buffer layout changes and no new shader
+// permutation — VSSelector is a full 8 bits (GSDevice.h:676-704).
+//
+// EYE SIGN, the one place it is decided for FST: the same convention as the
+// linear path. Under multiview the CB carries the UNSIGNED magnitude and
+// gl_ViewIndex supplies the sign here; otherwise the CPU has already baked the
+// sign in (and a mono-centre target gets 0, so this never runs there — see
+// GSRendererHW::DetermineVSConfig). Positive = left eye left, right eye right =
+// uncrossed disparity = BEHIND the screen, matching vr_stereo_disp's sign.
+//
+// OFF-STATE: vr_band[0].w is 0 in every existing path (both the band fill and the
+// zeroing arm write w = 0.0f explicitly), so the guard at each call site is
+// unreachable unless a profile opts in. Non-VR builds never write it at all.
+float vr_collimate_signed()
+{
+	#if VS_MULTIVIEW
+		float vr_coll_sign = (gl_ViewIndex == 0) ? -1.0f : 1.0f;
+	#else
+		float vr_coll_sign = 1.0f;
+	#endif
+	return vr_coll_sign * vr_band[0].w;
+}
+#endif
+
 #if VS_EXPAND == VS_EXPAND_NONE
 
 layout(location = 0) in vec2 a_st;
@@ -164,6 +204,16 @@ void main()
 			#endif
 			gl_Position.x += vr_eye_sign * vr_stereo_disp(a_q);
 		}
+	#endif
+
+	// PCSX2-VR (HUD collimation): the FST sibling of the block above. Deliberately
+	// a SEPARATE #if rather than an #else on it, so the bit-exactness-critical text
+	// above is untouched by this feature. Guarded on the constant itself: 0 (every
+	// profile that has not opted in, every disabled/mono draw, every non-VR build)
+	// leaves gl_Position exactly as the line above produced it.
+	#if VS_FST
+		if (vr_band[0].w != 0.0f)
+			gl_Position.x += vr_collimate_signed();
 	#endif
 
 	#if VS_TME
@@ -572,6 +622,14 @@ void main()
 			#endif
 			gl_Position.x += vr_eye_sign * vr_stereo_disp(vtx.t.w);
 		}
+	#endif
+
+	// PCSX2-VR (HUD collimation): same constant, applied post-expansion. AC5's
+	// reticle and target brackets are SPRITE-class draws, so on a backend that
+	// VS-expands sprites this is the path that actually runs for them.
+	#if VS_FST
+		if (vr_band[0].w != 0.0f)
+			gl_Position.x += vr_collimate_signed();
 	#endif
 
 	vsOut.t = vtx.t;

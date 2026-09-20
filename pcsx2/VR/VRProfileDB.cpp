@@ -107,6 +107,30 @@ static std::optional<VR::ProfileDB::StereoMap> parseStereoMap(const std::string_
 
 static constexpr float kStereoBudgetNdc = 0.02f;
 
+static constexpr float kProfilePi = 3.14159265358979323846f;
+static constexpr float kRadToArcmin = 60.0f * 180.0f / kProfilePi;
+
+static constexpr float kRefIpdMetres = 0.06336f;
+static constexpr float kNarrowIpdMetres = 0.053f;
+static constexpr float kShipScreenDistanceM = 2.0f;
+static constexpr float kShipScreenArcDeg = 100.0f;
+
+static constexpr float kFixationGapArcmin = 20.0f;
+
+static float arcminPerNdc(float screen_arc_deg)
+{
+	return screen_arc_deg * 60.0f;
+}
+
+static float divergenceArcmin(float ipd_m, float screen_distance_m)
+{
+	if (!(screen_distance_m > 0.0f))
+		screen_distance_m = kShipScreenDistanceM;
+	return (ipd_m / screen_distance_m) * kRadToArcmin;
+}
+
+static std::vector<VR::ProfileDB::StereoRailFinding> s_rail_findings;
+
 static bool resolveDepthMap(const std::string_view serial, const char* where,
 	VR::ProfileDB::StereoMap map, const std::vector<float>& splits_w,
 	const std::vector<VR::ProfileDB::StereoBand>& bands,
@@ -221,7 +245,130 @@ static bool resolveDepthMap(const std::string_view serial, const char* where,
 							   "exceeds the {} NDC comfort budget; rendering as authored.",
 				serial, where, d, i, splits_w[i], kStereoBudgetNdc);
 	}
+
+	{
+		const float d_inf = VR::ProfileDB::EvalDisparity(out, 0.0f, 0.0f, 0.0f);
+		if (d_inf > kStereoBudgetNdc)
+			Console.WarningFmt("(VR) ProfileDB: Serial '{}' {}: displacement {} AT INFINITY (q = 0, the "
+							   "map's maximum) exceeds the {} NDC comfort budget; rendering as authored.",
+				serial, where, d_inf, kStereoBudgetNdc);
+	}
 	return true;
+}
+
+u32 VR::ProfileDB::SelectBand(const StereoResolvedMap& map, float q)
+{
+
+	if (q >= map.split_q[0])
+		return 0;
+	if (q >= map.split_q[1])
+		return 1;
+	if (q >= map.split_q[2])
+		return 2;
+	return 3;
+}
+
+float VR::ProfileDB::EvalBand(const StereoResolvedMap& map, u32 band, float q)
+{
+
+	return map.bias[band] + map.sep[band] * (1.0f - map.conv[band] * q);
+}
+
+float VR::ProfileDB::EvalDisparity(const StereoResolvedMap& map, float separation, float convergence, float q)
+{
+	if (map.map == StereoMap::Linear)
+	{
+
+		return separation * std::max(0.0f, 1.0f - convergence * q);
+	}
+
+	if (map.map == StereoMap::Log)
+	{
+
+		const float w = 1.0f / std::max(q, 1e-8f);
+		const float t = std::clamp(std::log(w / map.log_w0) / std::log(map.log_w1 / map.log_w0), 0.0f, 1.0f);
+		return map.log_dfar * t;
+	}
+
+	return std::max(0.0f, EvalBand(map, SelectBand(map, q), q));
+}
+
+static float maxDisplacementNdc(const VR::ProfileDB::StereoResolvedMap& map, float separation, float convergence)
+{
+	float d = VR::ProfileDB::EvalDisparity(map, separation, convergence, 0.0f);
+	for (u32 i = 0; i + 1 < map.band_count && i < 3; i++)
+		d = std::max(d, VR::ProfileDB::EvalDisparity(map, separation, convergence, map.split_q[i]));
+	return d;
+}
+
+static void railAtInfinity(const std::string_view serial, const std::string& site,
+	const VR::ProfileDB::StereoResolvedMap& map, float separation, float convergence,
+	bool from_map, float arcmin_per_ndc, float screen_distance_m)
+{
+	using VR::ProfileDB::StereoRail;
+
+	const float d_ndc = maxDisplacementNdc(map, separation, convergence);
+	const float arcmin = d_ndc * arcmin_per_ndc;
+	const std::string display = StringUtil::toUpper(serial);
+	const float wall_arcmin = divergenceArcmin(kNarrowIpdMetres, screen_distance_m);
+
+	if (arcmin > wall_arcmin)
+	{
+
+		const float mean_wall = divergenceArcmin(kRefIpdMetres, screen_distance_m);
+		std::string msg = fmt::format(
+			"(VR) ProfileDB: {} {}: {:.1f} arcmin of disparity at infinity EXCEEDS the {:.1f} arcmin "
+			"divergence wall at a {:.0f} mm IPD ({:.4f} NDC at {:.0f} arcmin/NDC; the {:.0f} mm "
+			"population-mean wall is {:.1f}'). The two eye images of distant content sit further apart "
+			"than a narrow-IPD viewer's pupils, so they cannot be fused and the far field doubles. "
+			"Rendering as authored.",
+			display, site, arcmin, wall_arcmin, kNarrowIpdMetres * 1000.0f, d_ndc, arcmin_per_ndc,
+			kRefIpdMetres * 1000.0f, mean_wall);
+		Console.Warning(msg);
+		s_rail_findings.push_back({StereoRail::Divergence, display, site, arcmin, from_map, std::move(msg)});
+	}
+
+	else if (arcmin > kFixationGapArcmin)
+	{
+		std::string msg = fmt::format(
+			"(VR) ProfileDB: {} {}: {:.1f} arcmin at infinity is {:.1f}x Panum's fusional area ({:.0f} "
+			"arcmin). Every UV/FST draw renders at EXACTLY zero disparity (tfx.glsl :150, :563), so this "
+			"is also the worst-case step between a HUD/reticle/target bracket and the world drawn behind "
+			"it. ADVISORY: it only bites if this game draws symbology over distant content.",
+			display, site, arcmin, arcmin / kFixationGapArcmin, kFixationGapArcmin);
+		Console.Warning(msg);
+		s_rail_findings.push_back({StereoRail::FixationGap, display, site, arcmin, from_map, std::move(msg)});
+	}
+}
+
+static void railProfile(const std::string_view serial, const VR::ProfileDB::Profile& p)
+{
+	if (!p.stereo.has_value())
+		return;
+	const VR::ProfileDB::StereoParams& st = p.stereo.value();
+
+	const float arc_deg = p.screen_arc_deg.value_or(kShipScreenArcDeg);
+	const float dist_m = p.screen_distance.value_or(kShipScreenDistanceM);
+	const float arcmin_per_ndc = arcminPerNdc(arc_deg);
+
+	railAtInfinity(serial, "stereo", st.resolved, st.separation, st.convergence,
+		st.resolved.map != VR::ProfileDB::StereoMap::Linear, arcmin_per_ndc, dist_m);
+
+	for (size_t i = 0; i < st.scenes.size(); i++)
+	{
+		const VR::ProfileDB::StereoSceneRule& r = st.scenes[i];
+		const float sep = r.separation.value_or(st.separation);
+		const float conv = r.convergence.value_or(st.convergence);
+		const bool has_override = r.map_override.has_value();
+		const VR::ProfileDB::StereoResolvedMap& m = has_override ? r.map_override.value() : st.resolved;
+
+		if (!has_override && !r.separation.has_value() && !r.convergence.has_value())
+			continue;
+
+		railAtInfinity(serial,
+			fmt::format("stereo scene[{}]{}", i, r.label.empty() ? "" : fmt::format(" ({})", r.label)),
+			m, sep, conv, true, arcmin_per_ndc, dist_m);
+	}
 }
 
 static std::optional<u32> parseHexU32(const std::string_view str)
@@ -870,6 +1017,274 @@ static std::optional<VR::ProfileDB::CameraProfile> parseCamera(const std::string
 	return cam;
 }
 
+static constexpr float kMaxCollimateDisparity = 0.01815f;
+
+static constexpr float kSoftCollimateDisparity = 0.0135f;
+
+static void warnUnknownKeys(const std::string_view serial, const ryml::ConstNodeRef& node,
+	const char* where, std::initializer_list<const char*> known)
+{
+	for (const ryml::ConstNodeRef& c : node.children())
+	{
+		if (!c.has_key())
+			continue;
+		const std::string_view k(c.key().data(), c.key().size());
+		bool found = false;
+		for (const char* kn : known)
+		{
+			if (StringUtil::compareNoCase(k, kn))
+			{
+				found = true;
+				break;
+			}
+		}
+		if (!found)
+		{
+			Console.WarningFmt("(VR) ProfileDB: Serial '{}' has an unknown key '{}' in {}; IGNORING it. "
+							   "Check the spelling against bin/resources/vr-profiles/README.md — an ignored "
+							   "constraint silently widens the rule.",
+				serial, k, where);
+		}
+	}
+}
+
+static void readOptionalS32(const std::string_view serial, const ryml::ConstNodeRef& node,
+	const char* key, const char* what, s32& dst)
+{
+	if (!node.has_child(key))
+		return;
+	const std::optional<s32> v = StringUtil::FromChars<s32>(nodeVal(node[key]));
+	if (v.has_value())
+		dst = v.value();
+	else
+		Console.WarningFmt("(VR) ProfileDB: Serial '{}' has an invalid {}; keeping the default.", serial, what);
+}
+
+static void readTriState(const std::string_view serial, const ryml::ConstNodeRef& node,
+	const char* key, const char* what, s8& dst)
+{
+	if (!node.has_child(key))
+		return;
+	const std::string_view v = nodeVal(node[key]);
+	if (StringUtil::compareNoCase(v, "true"))
+		dst = 1;
+	else if (StringUtil::compareNoCase(v, "false"))
+		dst = 0;
+	else if (StringUtil::compareNoCase(v, "any"))
+		dst = -1;
+	else
+		Console.WarningFmt("(VR) ProfileDB: Serial '{}' has an invalid {} (true|false|any); keeping the default.", serial, what);
+}
+
+static std::optional<VR::ProfileDB::HudCollimate> parseHudCollimate(
+	const std::string_view serial, const ryml::ConstNodeRef& node, u32 max_rules)
+{
+	using namespace VR::ProfileDB;
+
+	warnUnknownKeys(serial, node, "stereo.hudCollimate", {"disparity", "rules"});
+
+	HudCollimate hc;
+	readOptionalFloat(serial, node, "disparity", "stereo.hudCollimate.disparity", hc.disparity);
+	if (!std::isfinite(hc.disparity) || hc.disparity == 0.0f)
+	{
+		Console.WarningFmt("(VR) ProfileDB: Serial '{}' has stereo.hudCollimate with a missing/zero/non-finite "
+						   "disparity; ignoring the block (nothing would be displaced).",
+			serial);
+		return std::nullopt;
+	}
+	if (std::fabs(hc.disparity) > kMaxCollimateDisparity)
+	{
+
+		Console.ErrorFmt("(VR) ProfileDB: Serial '{}' stereo.hudCollimate.disparity {:.4f} exceeds the hard "
+						 "divergence limit {:.4f} NDC at the shipped screen geometry; IGNORING the block. "
+						 "Author it to the disparity of the depth the symbology must agree with.",
+			serial, hc.disparity, kMaxCollimateDisparity);
+		return std::nullopt;
+	}
+	if (std::fabs(hc.disparity) > kSoftCollimateDisparity)
+	{
+		Console.WarningFmt("(VR) ProfileDB: Serial '{}' stereo.hudCollimate.disparity {:.4f} is above the "
+						   "small-IPD comfort ceiling {:.4f} NDC (53 mm wearers); keeping it, but expect "
+						   "strain reports.",
+			serial, hc.disparity, kSoftCollimateDisparity);
+	}
+	if (hc.disparity < 0.0f)
+	{
+		Console.WarningFmt("(VR) ProfileDB: Serial '{}' stereo.hudCollimate.disparity is NEGATIVE, which places "
+						   "the symbology IN FRONT of the screen (crossed disparity). Intended only for "
+						   "deliberately near overlays — aim symbology wants a positive value.",
+			serial);
+	}
+
+	if (!node.has_child("rules") || !node["rules"].is_seq())
+	{
+		Console.WarningFmt("(VR) ProfileDB: Serial '{}' has stereo.hudCollimate with no `rules:` list; ignoring "
+						   "the block. There is deliberately no 'match every UV draw' shorthand — that would "
+						   "move the HUD text and menus too.",
+			serial);
+		return std::nullopt;
+	}
+
+	for (const ryml::ConstNodeRef& rn : node["rules"].children())
+	{
+		if (!rn.is_map())
+		{
+			Console.WarningFmt("(VR) ProfileDB: Serial '{}' has a stereo.hudCollimate rule that is not a map; skipping it.", serial);
+			continue;
+		}
+		if (hc.rules.size() >= max_rules)
+		{
+			Console.WarningFmt("(VR) ProfileDB: Serial '{}' has more than {} stereo.hudCollimate rules; ignoring the rest.", serial, max_rules);
+			break;
+		}
+		warnUnknownKeys(serial, rn, "a stereo.hudCollimate rule",
+			{"label", "prim", "tme", "abe", "minWidth", "maxWidth", "minHeight", "maxHeight", "regionPct", "uvRect"});
+
+		CollimateRule r;
+		if (rn.has_child("label"))
+		{
+			const std::string_view lv = nodeVal(rn["label"]);
+			r.label.assign(lv.data(), lv.size());
+		}
+		if (rn.has_child("prim"))
+		{
+			const std::string_view p = nodeVal(rn["prim"]);
+
+			if (StringUtil::compareNoCase(p, "point"))
+				r.prim = 0;
+			else if (StringUtil::compareNoCase(p, "line"))
+				r.prim = 1;
+			else if (StringUtil::compareNoCase(p, "triangle"))
+				r.prim = 2;
+			else if (StringUtil::compareNoCase(p, "sprite"))
+				r.prim = 3;
+			else if (StringUtil::compareNoCase(p, "any"))
+				r.prim = -1;
+			else
+				Console.WarningFmt("(VR) ProfileDB: Serial '{}' has an invalid stereo.hudCollimate rule prim "
+								   "(point|line|triangle|sprite|any); keeping 'any'.", serial);
+		}
+		readTriState(serial, rn, "tme", "stereo.hudCollimate rule tme", r.tme);
+		readTriState(serial, rn, "abe", "stereo.hudCollimate rule abe", r.abe);
+		readOptionalS32(serial, rn, "minWidth", "stereo.hudCollimate rule minWidth", r.min_w);
+		readOptionalS32(serial, rn, "maxWidth", "stereo.hudCollimate rule maxWidth", r.max_w);
+		readOptionalS32(serial, rn, "minHeight", "stereo.hudCollimate rule minHeight", r.min_h);
+		readOptionalS32(serial, rn, "maxHeight", "stereo.hudCollimate rule maxHeight", r.max_h);
+
+		if (rn.has_child("regionPct") && rn["regionPct"].is_seq() && rn["regionPct"].num_children() == 4)
+		{
+			float v[4] = {};
+			u32 i = 0;
+			bool ok = true;
+			for (const ryml::ConstNodeRef& c : rn["regionPct"].children())
+			{
+				const std::optional<float> pv = StringUtil::FromChars<float>(nodeVal(c));
+				if (!pv.has_value() || !std::isfinite(pv.value()))
+				{
+					ok = false;
+					break;
+				}
+				v[i++] = pv.value();
+			}
+			if (ok && v[2] > v[0] && v[3] > v[1] && v[0] >= 0.0f && v[1] >= 0.0f && v[2] <= 1.0f && v[3] <= 1.0f)
+			{
+				r.rx0 = v[0];
+				r.ry0 = v[1];
+				r.rx1 = v[2];
+				r.ry1 = v[3];
+			}
+			else
+			{
+				Console.WarningFmt("(VR) ProfileDB: Serial '{}' has an invalid stereo.hudCollimate rule regionPct "
+								   "(want [x0, y0, x1, y1] fractions in 0..1 with x1 > x0 and y1 > y0); ignoring "
+								   "the region — the rule is now WIDER than authored.", serial);
+			}
+		}
+		else if (rn.has_child("regionPct"))
+		{
+			Console.WarningFmt("(VR) ProfileDB: Serial '{}' has a stereo.hudCollimate rule regionPct that is not a "
+							   "4-element sequence; ignoring the region — the rule is now WIDER than authored.", serial);
+		}
+
+		if (rn.has_child("uvRect") && rn["uvRect"].is_seq() && rn["uvRect"].num_children() == 4)
+		{
+			float v[4] = {};
+			u32 i = 0;
+			bool ok = true;
+			for (const ryml::ConstNodeRef& c : rn["uvRect"].children())
+			{
+				const std::optional<float> pv = StringUtil::FromChars<float>(nodeVal(c));
+				if (!pv.has_value() || !std::isfinite(pv.value()))
+				{
+					ok = false;
+					break;
+				}
+				v[i++] = pv.value();
+			}
+			if (ok && v[2] > v[0] && v[3] > v[1] && v[0] >= 0.0f && v[1] >= 0.0f)
+			{
+				r.tu0 = v[0];
+				r.tv0 = v[1];
+				r.tu1 = v[2];
+				r.tv1 = v[3];
+			}
+			else
+			{
+				Console.WarningFmt("(VR) ProfileDB: Serial '{}' has an invalid stereo.hudCollimate rule uvRect "
+								   "(want [u0, v0, u1, v1] texels >= 0 with u1 > u0 and v1 > v0); ignoring the "
+								   "UV constraint — the rule is now WIDER than authored.", serial);
+			}
+		}
+		else if (rn.has_child("uvRect"))
+		{
+			Console.WarningFmt("(VR) ProfileDB: Serial '{}' has a stereo.hudCollimate rule uvRect that is not a "
+							   "4-element sequence; ignoring the UV constraint — the rule is now WIDER than authored.", serial);
+		}
+
+		const bool has_extent = (r.min_w > 0 || r.max_w > 0 || r.min_h > 0 || r.max_h > 0);
+		const bool has_region = (r.rx1 > r.rx0 && r.ry1 > r.ry0);
+		const bool has_uv = (r.tu1 > r.tu0 && r.tv1 > r.tv0);
+		if (r.prim < 0 && r.abe < 0 && !has_extent && !has_region && !has_uv)
+		{
+			Console.WarningFmt("(VR) ProfileDB: Serial '{}' has a stereo.hudCollimate rule '{}' with no "
+							   "discriminating constraint (prim/abe/extent/regionPct/uvRect all unset); skipping "
+							   "it. An unconstrained rule would collimate HUD text and menus too.",
+				serial, r.label.empty() ? std::string_view("<unlabelled>") : std::string_view(r.label));
+			continue;
+		}
+
+		if (!has_extent && !has_region && !has_uv)
+		{
+			Console.WarningFmt("(VR) ProfileDB: Serial '{}' stereo.hudCollimate rule '{}' has NO geometric "
+							   "constraint (extent, regionPct and uvRect are all unset), so it matches every "
+							   "draw carrying that render state — on a 2D HUD that is most of the HUD, text "
+							   "and menus included. If a key was misspelled, the unknown-key warning above "
+							   "names it.",
+				serial, r.label.empty() ? std::string_view("<unlabelled>") : std::string_view(r.label));
+		}
+		if (r.max_w > 0 && r.min_w > r.max_w)
+		{
+			Console.WarningFmt("(VR) ProfileDB: Serial '{}' stereo.hudCollimate rule '{}' has minWidth > maxWidth; "
+							   "skipping it (it can never match).", serial, r.label);
+			continue;
+		}
+		if (r.max_h > 0 && r.min_h > r.max_h)
+		{
+			Console.WarningFmt("(VR) ProfileDB: Serial '{}' stereo.hudCollimate rule '{}' has minHeight > maxHeight; "
+							   "skipping it (it can never match).", serial, r.label);
+			continue;
+		}
+		hc.rules.push_back(std::move(r));
+	}
+
+	if (hc.rules.empty())
+	{
+		Console.WarningFmt("(VR) ProfileDB: Serial '{}' has stereo.hudCollimate with no usable rule; ignoring the block.", serial);
+		return std::nullopt;
+	}
+	return hc;
+}
+
 bool VR::ProfileDB::parseProfile(const std::string_view serial, const ryml::NodeRef& node, Profile& out)
 {
 	out.serial.assign(serial.data(), serial.size());
@@ -928,9 +1343,25 @@ bool VR::ProfileDB::parseProfile(const std::string_view serial, const ryml::Node
 				sp.uv_draws = pol.value();
 			else
 				Console.WarningFmt("(VR) ProfileDB: Serial '{}' has an invalid stereo.uvDraws; using 'screen'.", serial);
+
+			static bool s_uv_draws_notice_logged = false;
+			if (!s_uv_draws_notice_logged)
+			{
+				s_uv_draws_notice_logged = true;
+				Console.WarningFmt("(VR) ProfileDB: stereo.uvDraws (first seen on '{}') is INFORMATIONAL ONLY in "
+								   "this build: the UV/FST displacement exclusion is unconditional, so neither "
+								   "'screen' nor 'world' changes any rendering. Keep it authored — do not tune "
+								   "with it, and do not explain a stereo result by it.",
+					serial);
+			}
 		}
 		if (snode.has_child("pinUniformQ"))
 			sp.pin_uniform_q = StringUtil::compareNoCase(nodeVal(snode["pinUniformQ"]), "true");
+
+		if (snode.has_child("hudCollimate") && snode["hudCollimate"].is_map())
+			sp.hud_collimate = parseHudCollimate(serial, snode["hudCollimate"], kMaxCollimateRules);
+		else if (snode.has_child("hudCollimate"))
+			Console.WarningFmt("(VR) ProfileDB: Serial '{}' has a stereo.hudCollimate that is not a map; ignoring it.", serial);
 
 		parseAuthoredDepthMap(serial, "stereo", snode, sp.map, sp.splits, sp.bands, sp.log_params);
 		if (!resolveDepthMap(serial, "stereo", sp.map, sp.splits, sp.bands, sp.log_params, sp.resolved))
@@ -1051,6 +1482,8 @@ bool VR::ProfileDB::parseProfile(const std::string_view serial, const ryml::Node
 
 	if (node.has_child("notes"))
 		out.notes.assign(nodeVal(node["notes"]));
+
+	railProfile(serial, out);
 
 	return true;
 }
@@ -1267,6 +1700,7 @@ static void loadScanned(const ScanResult& sr)
 	Common::Timer timer;
 	s_profiles.clear();
 	s_load_issues.clear();
+	s_rail_findings.clear();
 
 	if (sr.shipped == ShippedSource::Legacy)
 	{
@@ -1337,6 +1771,13 @@ const std::vector<VR::ProfileDB::LoadIssue>& VR::ProfileDB::ValidateAtLaunch()
 	return s_load_issues;
 }
 
+const std::vector<VR::ProfileDB::StereoRailFinding>& VR::ProfileDB::StereoRailFindings()
+{
+
+	EnsureLoaded();
+	return s_rail_findings;
+}
+
 const VR::ProfileDB::Profile* VR::ProfileDB::Lookup(const std::string_view serial, u32 crc)
 {
 	EnsureLoaded();
@@ -1361,6 +1802,7 @@ void VR::ProfileDB::Reset()
 	std::lock_guard lock(s_load_mutex);
 	s_profiles.clear();
 	s_load_issues.clear();
+	s_rail_findings.clear();
 	s_stamp = LoadStamp{};
 	s_loaded = false;
 }
@@ -1411,13 +1853,10 @@ static int CountMultibandResolveMismatches(bool log)
 	constexpr float kPad = -std::numeric_limits<float>::max();
 
 	const auto evalBand = [](const StereoResolvedMap& m, u32 i, float q) {
-		return m.bias[i] + m.sep[i] * (1.0f - m.conv[i] * q);
+		return VR::ProfileDB::EvalBand(m, i, q);
 	};
 	const auto selectBand = [](const StereoResolvedMap& m, float q) -> u32 {
-		if (q >= m.split_q[0]) return 0;
-		if (q >= m.split_q[1]) return 1;
-		if (q >= m.split_q[2]) return 2;
-		return 3;
+		return VR::ProfileDB::SelectBand(m, q);
 	};
 	const auto resolve = [](StereoMap map, const std::vector<float>& splits,
 							 const std::vector<StereoBand>& bands,
@@ -1458,6 +1897,30 @@ static int CountMultibandResolveMismatches(bool log)
 	check(approxEq(evalBand(m, 1, m.split_q[1]), evalBand(m, 2, m.split_q[1])), "3-band continuous at split 1");
 	check(selectBand(m, 0.01f) == 2, "3-band select: far q -> band 2");
 
+	check(approxEq(VR::ProfileDB::EvalDisparity(m, 0.0f, 0.0f, 0.01f),
+			  std::max(0.0f, evalBand(m, selectBand(m, 0.01f), 0.01f))),
+		"EvalDisparity == max(0, EvalBand(SelectBand(q), q))");
+	check(approxEq(VR::ProfileDB::EvalDisparity(m, 0.0f, 0.0f, 0.0f), m.bias[2] + m.sep[2]),
+		"EvalDisparity at q=0 == bias[last] + sep[last] (the at-infinity rail value)");
+
+	check(evalBand(m, 0, 2.0f) < 0.0f, "raw band 0 is negative at q=2 (the clamp check has power)");
+	check(VR::ProfileDB::EvalDisparity(m, 0.0f, 0.0f, 2.0f) == 0.0f, "bands deep-window clamp pins near content to 0");
+
+	check(approxEq(VR::ProfileDB::EvalDisparity(m, 999.0f, 999.0f, 0.0f),
+			  VR::ProfileDB::EvalDisparity(m, 0.0f, 0.0f, 0.0f)),
+		"bands mode ignores the scalar separation/convergence pair");
+
+	{
+		StereoResolvedMap lin;
+		check(lin.map == StereoMap::Linear, "default StereoResolvedMap is Linear");
+		check(approxEq(VR::ProfileDB::EvalDisparity(lin, 0.02f, 6.0f, 0.0f), 0.02f),
+			"linear d(inf) == separation");
+		check(approxEq(VR::ProfileDB::EvalDisparity(lin, 0.02f, 6.0f, 1.0f / 12.0f), 0.01f),
+			"linear d at q = 1/(2*conv) == sep/2");
+		check(VR::ProfileDB::EvalDisparity(lin, 0.02f, 6.0f, 1.0f) == 0.0f,
+			"linear deep-window clamp pins near content to 0");
+	}
+
 	const auto rejects = [&](const char* name, StereoMap map, const std::vector<float>& sp,
 							  const std::vector<StereoBand>& bd, const std::optional<StereoLogParams>& lp) {
 		StereoResolvedMap r;
@@ -1488,6 +1951,10 @@ static int CountMultibandResolveMismatches(bool log)
 	check(approxEq(m.log_w0, 2000.0f) && approxEq(m.log_w1, 22000.0f) && approxEq(m.log_dfar, 0.02f),
 		"log anchors carried through");
 	check(m.split_q[0] == kPad && m.split_q[1] == kPad && m.split_q[2] == kPad, "log pads every split");
+
+	check(approxEq(VR::ProfileDB::EvalDisparity(m, 0.0f, 0.0f, 1.0f / 2000.0f), 0.0f), "log d(w0) == 0");
+	check(approxEq(VR::ProfileDB::EvalDisparity(m, 0.0f, 0.0f, 1.0f / 22000.0f), 0.02f), "log d(w1) == dfar");
+	check(approxEq(VR::ProfileDB::EvalDisparity(m, 0.0f, 0.0f, 0.0f), 0.02f), "log d(inf) == dfar");
 
 	check(resolve(StereoMap::Bands, {2.0f}, {{0.0f, 0.05f}, {0.0f, 0.05f}}, kNoLog, m),
 		"over-budget map still resolves");

@@ -18,6 +18,7 @@
 #include "GS/Renderers/Vulkan/GSDeviceVK.h"
 
 #include "common/Console.h"
+#include "common/StringUtil.h"
 
 #include "fmt/format.h"
 
@@ -27,6 +28,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
+#include <string>
 #include <vector>
 
 namespace VR
@@ -215,6 +217,65 @@ namespace VR
 			dst.log_w1 = src.log_w1;
 			dst.log_dfar = src.log_dfar;
 		}
+
+		void CopyCollimate(StereoState::Params& dst, const ProfileDB::StereoParams& src)
+		{
+			static_assert(ProfileDB::kMaxCollimateRules == StereoState::Params::MAX_COLLIMATE_RULES,
+				"The authored rule cap and the GS snapshot's fixed array must agree — otherwise a "
+				"profile's last rules are parsed and then silently dropped on the way to the shader");
+			dst.collimate_disparity = 0.0f;
+			dst.collimate_rule_count = 0;
+			if (!src.hud_collimate.has_value())
+				return;
+
+			const ProfileDB::HudCollimate& hc = src.hud_collimate.value();
+			dst.collimate_disparity = hc.disparity;
+			for (const ProfileDB::CollimateRule& r : hc.rules)
+			{
+				if (dst.collimate_rule_count >= StereoState::Params::MAX_COLLIMATE_RULES)
+					break;
+				StereoState::Params::CollimateRule& o = dst.collimate_rules[dst.collimate_rule_count++];
+				o.prim = r.prim;
+				o.tme = r.tme;
+				o.abe = r.abe;
+				o.min_w = r.min_w;
+				o.max_w = r.max_w;
+				o.min_h = r.min_h;
+				o.max_h = r.max_h;
+				o.rx0 = r.rx0;
+				o.ry0 = r.ry0;
+				o.rx1 = r.rx1;
+				o.ry1 = r.ry1;
+				o.tu0 = r.tu0;
+				o.tv0 = r.tv0;
+				o.tu1 = r.tu1;
+				o.tv1 = r.tv1;
+				StringUtil::Strlcpy(o.label, r.label, sizeof(o.label));
+			}
+		}
+
+		std::string FormatStereoMap(const ProfileDB::StereoResolvedMap& map, float separation, float convergence)
+		{
+			const float d_inf = ProfileDB::EvalDisparity(map, separation, convergence, 0.0f);
+			if (map.map == ProfileDB::StereoMap::Log)
+			{
+				return fmt::format("log w {:.4g}->{:.4g} dfar {:.4g} | d(inf) {:.4f}",
+					map.log_w0, map.log_w1, map.log_dfar, d_inf);
+			}
+
+			std::string out = fmt::format("bands({})", map.band_count);
+			for (u32 i = 0; i + 1 < map.band_count && i < 3; i++)
+			{
+				out += fmt::format("{}{:.4g}", (i == 0) ? " splits w[" : ", ",
+					(map.split_q[i] != 0.0f) ? (1.0f / map.split_q[i]) : 0.0f);
+			}
+			if (map.band_count > 1)
+				out += "]";
+			for (u32 i = 0; i < map.band_count && i < 4; i++)
+				out += fmt::format(" | c{:.4g}/s{:.4g}", map.conv[i], map.sep[i]);
+			out += fmt::format(" | d(inf) {:.4f}", d_inf);
+			return out;
+		}
 	}
 
 	void UpdateSettings()
@@ -262,6 +323,8 @@ namespace VR
 									: StereoState::Params::UvPolicy::Screen;
 			stereo.pin_uniform_q = profile->stereo->pin_uniform_q;
 
+			CopyCollimate(stereo, *profile->stereo);
+
 			CopyResolvedMap(stereo, profile->stereo->resolved);
 			from_profile = true;
 		}
@@ -274,27 +337,31 @@ namespace VR
 		else
 			StereoState::Publish(stereo);
 
+		ProfileDB::StereoResolvedMap osd_map;
+		if (from_profile)
+			osd_map = profile->stereo->resolved;
+
 		static bool s_osd_enabled = false;
-		static float s_osd_separation = 0.0f;
-		static float s_osd_convergence = 0.0f;
-		if (stereo.enabled != s_osd_enabled ||
-			(stereo.enabled &&
-				(stereo.separation != s_osd_separation || stereo.convergence != s_osd_convergence)))
+		static std::string s_osd_text;
+		std::string osd_text;
+		if (stereo.enabled)
+		{
+			const char* provenance = from_profile ? " (game profile)" : "";
+			osd_text = (osd_map.map == ProfileDB::StereoMap::Linear)
+
+			               ? fmt::format("Stereo: separation {:.3f}, convergence {:.4g}{}", stereo.separation,
+			                     stereo.convergence, provenance)
+			               : fmt::format("Stereo: {}{}",
+			                     FormatStereoMap(osd_map, stereo.separation, stereo.convergence), provenance);
+		}
+		if (stereo.enabled != s_osd_enabled || (stereo.enabled && osd_text != s_osd_text))
 		{
 			if (stereo.enabled)
-			{
-				Host::AddKeyedOSDMessage("VRStereo",
-					fmt::format("Stereo: separation {:.3f}, convergence {:.4g}{}", stereo.separation,
-						stereo.convergence, from_profile ? " (game profile)" : ""),
-					5.0f);
-			}
+				Host::AddKeyedOSDMessage("VRStereo", osd_text, 5.0f);
 			else if (s_osd_enabled)
-			{
 				Host::AddKeyedOSDMessage("VRStereo", "Stereo: off", 3.0f);
-			}
 			s_osd_enabled = stereo.enabled;
-			s_osd_separation = stereo.separation;
-			s_osd_convergence = stereo.convergence;
+			s_osd_text = std::move(osd_text);
 		}
 
 		if (enable_changed)
@@ -385,6 +452,8 @@ namespace VR
 		                       StereoState::Params::UvPolicy::Screen;
 		stereo.pin_uniform_q = base.pin_uniform_q;
 
+		CopyCollimate(stereo, base);
+
 		CopyResolvedMap(stereo, base.resolved);
 		if (match >= 0)
 		{
@@ -400,11 +469,19 @@ namespace VR
 
 		if (match >= 0)
 		{
-			const std::string& label = base.scenes[static_cast<size_t>(match)].label;
+			const ProfileDB::StereoSceneRule& matched = base.scenes[static_cast<size_t>(match)];
+			const std::string& label = matched.label;
+
+			const bool scene_map = matched.map_override.has_value();
+			const ProfileDB::StereoResolvedMap& eff = scene_map ? *matched.map_override : base.resolved;
+			const std::string body =
+				(eff.map == ProfileDB::StereoMap::Linear)
+
+					? fmt::format("sep {:.3f}, conv {:.4g}", stereo.separation, stereo.convergence)
+					: fmt::format("{} - {}", FormatStereoMap(eff, stereo.separation, stereo.convergence),
+						  scene_map ? "scene map" : "base map");
 			Host::AddKeyedOSDMessage("VRStereoScene",
-				fmt::format("Stereo scene: {} (sep {:.3f}, conv {:.4g})",
-					label.empty() ? "override" : label, stereo.separation, stereo.convergence),
-				3.0f);
+				fmt::format("Stereo scene: {} ({})", label.empty() ? "override" : label, body), 3.0f);
 		}
 		else if (s_scene_memo_valid)
 		{

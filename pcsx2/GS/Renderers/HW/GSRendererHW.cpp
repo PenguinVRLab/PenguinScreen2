@@ -12,6 +12,7 @@
 #include "common/StringUtil.h"
 #include <bit>
 #ifdef ENABLE_VR
+#include "VR/DepthHistogram.h"
 #include "VR/StereoState.h"
 #endif
 
@@ -6346,6 +6347,208 @@ void GSRendererHW::DetermineVSConfig(GSTextureCache::Target* rt, float rtscale, 
 		m_conf.cb_vs.vr_band[2] = GSVector4::zero();
 		m_conf.cb_vs.vr_band[3] = GSVector4::zero();
 	}
+	// PCSX2-VR (HUD collimation): the ONE displacement a UV/FST draw can carry.
+	//
+	// Everything above is a function of Q, and FST draws have none — so the tfx VS
+	// compile-excludes them and they render at EXACTLY zero disparity, welded to
+	// the screen plane. Right for text you READ; wrong for symbology you AIM
+	// THROUGH. MEASURED on AC5 (owner's own capture, replayed through the real
+	// render path): the jet 80.5', the red designator bracket drawn AROUND it
+	// +0.0002 — the two eye images of an 8 px jet land 8.0 px apart with a bracket
+	// pinned at 0 between them, so there is nothing to fuse. No band value repairs
+	// it: bias[2] is fixed by the field-validated near bands and is algebraically
+	// independent of band 2's sep, so d(inf) floors at 27'.
+	//
+	// Real combat HUDs are COLLIMATED to optical infinity so symbol and target
+	// share one vergence. This is that, as a constant.
+	//
+	// WHY THE VALUE IS WRITTEN UNCONDITIONALLY: m_conf.cb_vs deliberately survives
+	// ResetStates() (:9497-9500), so a field written only on SOME draws leaks into
+	// the next one. Same discipline as the band block above.
+	//
+	// GATES, in order of what each one protects:
+	//   - vr_engaged: stereo on, this draw not pinned, and NOT a mono-centre
+	//     target. That last one is the eye-sign answer for the non-multiview path:
+	//     a 1-layer target's content is broadcast to both eyes by PromoteToStereo,
+	//     so it must stay the CENTRE image; there is no eye to sign for, and
+	//     collimating it would shift both eyes identically (a lateral HUD offset
+	//     with no depth). Multiview targets take vr_eye_sign = 1.0 here and the
+	//     shader signs from gl_ViewIndex; the interleave debug path bakes ±1, the
+	//     same convention as vr_stereo.x.
+	//   - PRIM->FST: this is the FST-only treatment. A non-FST draw already gets
+	//     real depth from the map and must not get a constant on top.
+	//   - collimate_disparity != 0: the profile opt-in. Zero for every game that
+	//     has not authored the block, which is what keeps the shader guard
+	//     unreachable and the off-state byte-identical.
+	float vr_collimate = 0.0f;
+	if (vr_engaged && PRIM->FST && st.collimate_disparity != 0.0f)
+	{
+		// Draw signature. Deliberately NOT keyed on TBP: a texture base pointer
+		// rots across builds and frames, and a rule keyed on one fails SILENTLY —
+		// how uvDraws and pinUniformQ both became dead letters. These are render
+		// states the draw itself declares, plus where/how big it lands.
+		const int rw = m_r.width();
+		const int rh = m_r.height();
+		int matched = -1;
+		for (u32 i = 0; i < st.collimate_rule_count && matched < 0; i++)
+		{
+			const VR::StereoState::Params::CollimateRule& r = st.collimate_rules[i];
+			if (r.prim >= 0 && static_cast<int>(m_vt.m_primclass) != static_cast<int>(r.prim))
+				continue;
+			if (r.tme >= 0 && (PRIM->TME ? 1 : 0) != static_cast<int>(r.tme))
+				continue;
+			if (r.abe >= 0 && (PRIM->ABE ? 1 : 0) != static_cast<int>(r.abe))
+				continue;
+			if ((r.min_w > 0 && rw < r.min_w) || (r.max_w > 0 && rw > r.max_w))
+				continue;
+			if ((r.min_h > 0 && rh < r.min_h) || (r.max_h > 0 && rh > r.max_h))
+				continue;
+			// Region: the draw rect must be CONTAINED. This is what keeps the
+			// speed/altitude tapes, the radar and the mission text out — aim
+			// symbology lives in the aiming area, chrome lives at the edges.
+			// Authored as FRACTIONS of the target's unscaled size, so it does not
+			// rot when the game changes output mode; resolved against
+			// unscaled_size (not rtsize) because m_r is in unscaled guest px.
+			if (r.rx1 > r.rx0)
+			{
+				const float w = static_cast<float>(unscaled_size.x);
+				if (static_cast<float>(m_r.x) < r.rx0 * w || static_cast<float>(m_r.z) > r.rx1 * w)
+					continue;
+			}
+			if (r.ry1 > r.ry0)
+			{
+				const float h = static_cast<float>(unscaled_size.y);
+				if (static_cast<float>(m_r.y) < r.ry0 * h || static_cast<float>(m_r.w) > r.ry1 * h)
+					continue;
+			}
+			// UV rect: the draw's texel bbox must be CONTAINED. This is the key
+			// that works on a game which BATCHES symbology — it describes WHAT is
+			// sampled, so it is invariant to how many targets are on screen and to
+			// where they are, which neither the extent nor the region is. m_vt's
+			// .t is texel space for an FST draw, and this whole block is FST-only.
+			if (r.tu1 > r.tu0)
+			{
+				if (m_vt.m_min.t.x < r.tu0 || m_vt.m_max.t.x > r.tu1)
+					continue;
+			}
+			if (r.tv1 > r.tv0)
+			{
+				if (m_vt.m_min.t.y < r.tv0 || m_vt.m_max.t.y > r.tv1)
+					continue;
+			}
+			matched = static_cast<int>(i);
+		}
+
+		if (matched >= 0)
+			vr_collimate = st.collimate_disparity * vr_eye_sign;
+
+		// SELF-REPORTING, because a classifier that never fires is the failure
+		// mode this whole schema was designed against (pinUniformQ has shipped
+		// `true` on KF4 for a year while provably never matching a draw). Both
+		// counters are GS-thread-only, like s_logged_mv_draw below.
+		static u64 s_coll_considered = 0;
+		static u64 s_coll_matched = 0;
+		static bool s_coll_dead_warned = false;
+		s_coll_considered++;
+		if (matched >= 0)
+		{
+			if (s_coll_matched++ == 0)
+			{
+				DevCon.WriteLn("(VR) HUD collimation: rule %d ('%s') FIRST MATCH after %llu FST draws — "
+							   "prim=%d tme=%d abe=%d r=%d,%d-%d,%d (%dx%d) uv=%.1f,%.1f-%.1f,%.1f d=%+.4f",
+					matched, st.collimate_rules[matched].label,
+					static_cast<unsigned long long>(s_coll_considered),
+					static_cast<int>(m_vt.m_primclass), PRIM->TME ? 1 : 0, PRIM->ABE ? 1 : 0,
+					m_r.x, m_r.y, m_r.z, m_r.w, rw, rh,
+					m_vt.m_min.t.x, m_vt.m_min.t.y, m_vt.m_max.t.x, m_vt.m_max.t.y, vr_collimate);
+			}
+		}
+		else if (!s_coll_dead_warned && s_coll_considered > 20000)
+		{
+			// ~a few seconds of gameplay with zero matches means the rule does not
+			// describe this game's draws. Say so ONCE, loudly, instead of letting
+			// the author believe a dead rule is working.
+			s_coll_dead_warned = true;
+			Console.WarningFmt("(VR) HUD collimation: {} rule(s) authored, but NOT ONE of {} UV/FST draws has "
+							   "matched. The rule does not describe this game's symbology — re-derive it with "
+							   "PCSX2_VR_HUDCOLL=1 (per-draw signature census).",
+				st.collimate_rule_count, s_coll_considered);
+		}
+
+		// The calibration lane: dump every candidate's signature so a rule can be
+		// derived from a replay without guessing. Mirrors PCSX2_VR_PINQ1.
+		static const bool s_coll_census = (std::getenv("PCSX2_VR_HUDCOLL") != nullptr);
+		if (s_coll_census)
+		{
+			// `fb` is what regionPct is a fraction OF — printed so an author can
+			// convert a measured rect straight into a rule without guessing the
+			// game's output size.
+			DevCon.WriteLn("(VR) HUDCOLL %s prim=%d tme=%d abe=%d r=%d,%d-%d,%d (%dx%d) fb=%dx%d "
+						   "pct=%.3f,%.3f-%.3f,%.3f tbp=0x%x",
+				(matched >= 0) ? "MATCH  " : "nomatch",
+				static_cast<int>(m_vt.m_primclass), PRIM->TME ? 1 : 0, PRIM->ABE ? 1 : 0,
+				m_r.x, m_r.y, m_r.z, m_r.w, rw, rh,
+				unscaled_size.x, unscaled_size.y,
+				static_cast<float>(m_r.x) / static_cast<float>(std::max(unscaled_size.x, 1)),
+				static_cast<float>(m_r.y) / static_cast<float>(std::max(unscaled_size.y, 1)),
+				static_cast<float>(m_r.z) / static_cast<float>(std::max(unscaled_size.x, 1)),
+				static_cast<float>(m_r.w) / static_cast<float>(std::max(unscaled_size.y, 1)),
+				PRIM->TME ? m_cached_ctx.TEX0.TBP0 : 0);
+
+			// EXTENDED census (2026-08-14). The line above can only ever justify a
+			// rule the CURRENT schema can express — state + rect + region — and on
+			// AC5 that provably is not enough: the target brackets are BATCHED, so
+			// the draw rect is the bounding box of every bracket on screen, not one
+			// bracket. Everything a future discriminator might key on goes here, so
+			// the choice is made from data instead of guessed:
+			//   nv/ni  — vertex/index counts; ni/2 = sprite count, which is how a
+			//            batch is told from a single element at all.
+			//   uv     — the ST/texel rect (WHAT is drawn, not WHERE), the
+			//            semantically right key for an atlas HUD.
+			//   psm/tw/th/tbw — which atlas, and how big.
+			//   abcd/fix, ate/atst/aref, zte/ztst — blend + test state.
+			//   sc     — scissor; a HUD pass often narrows it.
+			const GIFRegTEX0& t0 = m_cached_ctx.TEX0;
+			DevCon.WriteLn("(VR) HUDCOLL2 nv=%u ni=%u uv=%.1f,%.1f-%.1f,%.1f tw=%d th=%d psm=0x%x tbw=%u "
+						   "abcd=%u%u%u%u fix=%u ate=%u atst=%u aref=%u zte=%u ztst=%u sc=%u,%u-%u,%u",
+				m_vertex->next, m_index->tail,
+				m_vt.m_min.t.x, m_vt.m_min.t.y, m_vt.m_max.t.x, m_vt.m_max.t.y,
+				1 << t0.TW, 1 << t0.TH, static_cast<u32>(t0.PSM), static_cast<u32>(t0.TBW),
+				static_cast<u32>(m_context->ALPHA.A), static_cast<u32>(m_context->ALPHA.B),
+				static_cast<u32>(m_context->ALPHA.C), static_cast<u32>(m_context->ALPHA.D),
+				static_cast<u32>(m_context->ALPHA.FIX),
+				static_cast<u32>(m_cached_ctx.TEST.ATE), static_cast<u32>(m_cached_ctx.TEST.ATST),
+				static_cast<u32>(m_cached_ctx.TEST.AREF), static_cast<u32>(m_cached_ctx.TEST.ZTE),
+				static_cast<u32>(m_cached_ctx.TEST.ZTST),
+				static_cast<u32>(m_context->SCISSOR.SCAX0), static_cast<u32>(m_context->SCISSOR.SCAY0),
+				static_cast<u32>(m_context->SCISSOR.SCAX1), static_cast<u32>(m_context->SCISSOR.SCAY1));
+
+			// PER-PRIMITIVE geometry. This is the line that settles the batching
+			// question: if one 133x133 draw is really five 12x10 brackets, only the
+			// individual sprites show it. Sprite class only (2 indices per sprite)
+			// and capped, because a world batch can be thousands.
+			if (m_vt.m_primclass == GS_SPRITE_CLASS && m_index->tail <= 128)
+			{
+				const int ofx = static_cast<int>(m_context->XYOFFSET.OFX);
+				const int ofy = static_cast<int>(m_context->XYOFFSET.OFY);
+				for (u32 vi = 0; vi + 1 < m_index->tail; vi += 2)
+				{
+					const GSVertex& va = m_vertex->buff[m_index->buff[vi]];
+					const GSVertex& vb = m_vertex->buff[m_index->buff[vi + 1]];
+					DevCon.WriteLn("(VR) HUDCOLLV s=%u xy=%d,%d-%d,%d uv=%.1f,%.1f-%.1f,%.1f rgba=%02x%02x%02x%02x",
+						vi / 2,
+						(static_cast<int>(va.XYZ.X) - ofx) >> 4, (static_cast<int>(va.XYZ.Y) - ofy) >> 4,
+						(static_cast<int>(vb.XYZ.X) - ofx) >> 4, (static_cast<int>(vb.XYZ.Y) - ofy) >> 4,
+						static_cast<float>(va.U) / 16.0f, static_cast<float>(va.V) / 16.0f,
+						static_cast<float>(vb.U) / 16.0f, static_cast<float>(vb.V) / 16.0f,
+						static_cast<u32>(vb.RGBAQ.R), static_cast<u32>(vb.RGBAQ.G),
+						static_cast<u32>(vb.RGBAQ.B), static_cast<u32>(vb.RGBAQ.A));
+				}
+			}
+		}
+	}
+	m_conf.cb_vs.vr_band[0].w = vr_collimate;
+
 	if (vr_multiview_target)
 	{
 		static bool s_logged_mv_draw = false;
@@ -6356,9 +6559,52 @@ void GSRendererHW::DetermineVSConfig(GSTextureCache::Target* rt, float rtscale, 
 				m_conf.cb_vs.vr_stereo.x, m_conf.cb_vs.vr_stereo.y);
 		}
 	}
+	// PCSX2-VR (qhist): the depth-distribution measurement tap — Layer 0 of
+	// docs/features/depth-allocation-architecture.md §4. It sits HERE, at the tail
+	// of the CB fill and inside the same #ifdef, on purpose: every predicate below
+	// is the one the constant buffer was just filled from, so the histogram's
+	// inclusion rule is the shader's gate BY CONSTRUCTION rather than by a
+	// re-derivation that can drift. Measuring anywhere else describes a different
+	// draw set than stereo actually sees, and a distribution of the wrong draws is
+	// worse than no distribution because it looks fine.
+	//
+	// Disarmed cost: one global bool load. Nothing below runs.
+	if (VR::DepthHistogramArmed()) [[unlikely]]
+	{
+		// Class precedence, first match wins. FST/untextured comes before anything
+		// that reads q because the vertex trace ZEROES m_min.t/m_max.t for those —
+		// their Q is a valid-looking zero. The sticky-global hazard comes next: the
+		// trace ran before RGBAQ.Q was rewritten to 1.0, so a post-flip sprite is
+		// classified varying-Q and RENDERED uniform-Q, and its q is a value we know
+		// is wrong. Count it, never bin it.
+		const bool qh_fst_excluded = !PRIM->TME || PRIM->FST;
+		const bool qh_stq_hazard = m_vt.m_accurate_stq && m_vt.m_primclass == GS_SPRITE_CLASS && !qh_fst_excluded;
+		const VR::DrawClass qh_class = !st.enabled ? VR::DrawClass::StereoOff :
+		                               qh_fst_excluded ? VR::DrawClass::FstExcluded :
+		                               qh_stq_hazard ? VR::DrawClass::AccurateStqFlagged :
+		                               vr_pin_screen ? VR::DrawClass::UniformQPinned :
+		                               vr_mono_centre ? VR::DrawClass::MonoCentre :
+		                                                VR::DrawClass::Displaced;
+		// Coverage in UNSCALED guest pixels over the UNSCALED target area — never
+		// the upscaled sizes, or the artifact stops being comparable across
+		// upscale settings. Weighting is by AREA, not prim count: KF4's sky is a
+		// 63-vertex mesh covering half the screen (correction #5).
+		const GSVector4i qh_r = m_r.rintersect(m_context->scissor.in);
+		const double qh_target_area = static_cast<double>(unscaled_size.x) * static_cast<double>(unscaled_size.y);
+		const double qh_area = qh_r.rempty() ? 0.0 :
+		                                       (static_cast<double>(qh_r.width()) * static_cast<double>(qh_r.height()));
+		const double qh_qmin = static_cast<double>(m_vt.m_min.t.z); // q INTERVAL, not midpoint: the
+		const double qh_qmax = static_cast<double>(m_vt.m_max.t.z); // accumulator spreads uniformly in q (schema 2)
+		const int qh_vpp = GSUtil::GetClassVertexCount(m_vt.m_primclass);
+		VR::DepthHistogram& qh = VR::GlobalDepthHistogram();
+		qh.NoteTargetSize(unscaled_size.x, unscaled_size.y);
+		qh.AddDraw((qh_target_area > 0.0) ? (qh_area / qh_target_area) : 0.0, qh_qmin, qh_qmax,
+			(qh_vpp > 0) ? (m_index->tail / static_cast<u32>(qh_vpp)) : 0u, m_vertex->next, qh_class);
+	}
 #else
 	m_conf.cb_vs.vr_stereo = GSVector2(0.0f, 0.0f);
 	m_conf.cb_vs.vr_map_mode = 0; // keeps the widened shader guard unreachable (band fields are never written in non-VR builds)
+	m_conf.cb_vs.vr_band[0].w = 0.0f; // HUD collimation off; the FST guard in tfx.glsl is likewise unreachable
 #endif
 
 	m_conf.vs.iip = !IsFlatShaded();
@@ -8785,7 +9031,36 @@ __ri void GSRendererHW::HandleTextureHazards(const GSTextureCache::Target* rt, c
 	const GSVector2i scaled_copy_size = GSVector2i(static_cast<int>(std::ceil(static_cast<float>(copy_size.x) * scale)),
 		static_cast<int>(std::ceil(static_cast<float>(copy_size.y) * scale)));
 	const bool clear = src_target->m_texture->IsRenderTarget();
-	src_copy.reset(g_gs_device->CreateCompatible(src_target->m_texture, scaled_copy_size, clear));
+	// PCSX2-VR (ISS-031/037): the tex-is-fb HAZARD COPY matches the source target's layer
+	// count, so a promoted 2-layer stereo target gets a 2-layer snapshot and each eye's blur
+	// feeds back from its OWN eye.
+	//
+	// This is the site that exposed the deferred-clear/layer-proxy root cause now fixed in
+	// GSTextureVK::GetLayerProxyTexture. For the record, because three separate theories died
+	// here first: the snapshot's layers were always filled CORRECTLY (per-layer readback of
+	// the real game path shows layer 0 and layer 1 both populated and matching the source
+	// exactly). The damage happened afterwards, at bind time — the parent texture still
+	// carried State::Cleared because only the proxies had been marked dirty, so
+	// PSSetShaderResource's CommitClear() blanked the whole image right before the draw
+	// sampled it. The turn-blur then blended 50/50 against black: a uniform halving per blit
+	// (38.2 -> 19.3 -> ...) with page-column edges — ISS-037's darkening and ISS-031's seams,
+	// one fault, both symptoms.
+	//
+	// Refuted along the way, so nobody re-runs them: (1) "a 2-layer copy leaves layer 1
+	// empty" — false, readback proves both layers populated; (2) the mono-utility-render-pass
+	// /multiview-framebuffer mismatch (VUID-00904) — fires zero times, render-pass
+	// compatibility excludes the view mask; (3) the array-sampling path (ps.tex_in_array) —
+	// forcing it off with PCSX2_VR_NO_TEX_ARRAY=1 leaves the damage bit-identical; (4) pool
+	// aliasing of the snapshot onto the live target — distinct VkImages every time.
+	//
+	// The mono path is unaffected: a 1-layer source yields copy_layers == 1 and the loop below
+	// runs exactly once with the plain textures, byte-identical to the pre-VR path.
+	// PCSX2_VR_HAZARD_1L=1 forces the old 1-layer fallback (darkening/seams fixed but the
+	// right eye duplicates the left) if a regression ever needs bisecting against it.
+	static const bool s_vr_hazard_1l = (std::getenv("PCSX2_VR_HAZARD_1L") != nullptr);
+	const u32 copy_layers = s_vr_hazard_1l ? 1u : src_target->m_texture->GetArrayLayers();
+	src_copy.reset(g_gs_device->FetchSurface(src_target->m_texture->GetUsage(), scaled_copy_size.x,
+		scaled_copy_size.y, 1, src_target->m_texture->GetFormat(), clear, true, copy_layers));
 	if (!src_copy) [[unlikely]]
 	{
 		Console.Error("HW: Failed to allocate %dx%d texture for hazard copy", scaled_copy_size.x, scaled_copy_size.y);
@@ -8794,47 +9069,105 @@ __ri void GSRendererHW::HandleTextureHazards(const GSTextureCache::Target* rt, c
 		return;
 	}
 
-	if (m_downscale_source)
+	// PCSX2-VR (KF4 hunt): env-gated instrumentation of this exact lifecycle. Answers, as
+	// logged fact rather than inference, (a) which fill path runs, (b) whether the snapshot's
+	// layer 1 actually ends up populated in the REAL game path — the isolated self-test says
+	// the proxy plumbing is sound, so the failure has to be visible somewhere here.
+	static const bool s_vr_hazard_probe = (std::getenv("PCSX2_VR_HAZARD_PROBE") != nullptr);
+	if (s_vr_hazard_probe) [[unlikely]]
 	{
-		// Can't use box filtering on depth (yet), or fractional scales.
-		if (src_target->m_texture->IsDepthStencil() || std::floor(src_target->GetScale()) != src_target->GetScale())
+		Console.WriteLn("(VR) PROBE hazard: src_layers=%u copy_layers=%u %dx%d fmt=%d downscale=%s depth=%s scale=%.3f",
+			src_target->m_texture->GetArrayLayers(), copy_layers, scaled_copy_size.x, scaled_copy_size.y,
+			static_cast<int>(src_target->m_texture->GetFormat()), m_downscale_source ? "yes" : "no",
+			src_target->m_texture->IsDepthStencil() ? "yes" : "no", src_target->GetScale());
+		g_gs_device->VRProbeLayers(src_target->m_texture, "src_target(before-fill)");
+	}
+
+	// Fill EVERY layer of the snapshot (see the note above the allocation). For a
+	// 1-layer copy this runs exactly once with the plain textures, i.e. byte-identical
+	// to the pre-VR path. For a 2-layer copy it drives the 1-layer proxy views, so the
+	// left eye's snapshot is filled from layer 0 and the right eye's from layer 1.
+	for (u32 copy_layer = 0; copy_layer < copy_layers; copy_layer++)
+	{
+		GSTexture* const copy_src = (copy_layers > 1) ?
+			src_target->m_texture->GetLayerProxyTexture(copy_layer) : src_target->m_texture;
+		GSTexture* const copy_dst = (copy_layers > 1) ?
+			src_copy->GetLayerProxyTexture(copy_layer) : src_copy.get();
+
+		if (m_downscale_source)
 		{
-			GSVector4 src_rect = GSVector4(tmm.coverage) / GSVector4(GSVector4i::loadh(src_unscaled_size).zwzw());
-			const GSVector4 dst_rect = GSVector4(tmm.coverage);
-			g_gs_device->StretchRectAuto(src_target->m_texture, src_rect, src_copy.get(), dst_rect, Nearest);
+			// Can't use box filtering on depth (yet), or fractional scales.
+			if (src_target->m_texture->IsDepthStencil() || std::floor(src_target->GetScale()) != src_target->GetScale())
+			{
+				GSVector4 src_rect = GSVector4(tmm.coverage) / GSVector4(GSVector4i::loadh(src_unscaled_size).zwzw());
+				const GSVector4 dst_rect = GSVector4(tmm.coverage);
+				if (s_vr_hazard_probe) [[unlikely]]
+				{
+					Console.WriteLn("(VR) PROBE fill: layer %u path=StretchRectAuto(downscale-depth/frac) "
+									"src_layers=%u dst_layers=%u sRect=%.4f,%.4f-%.4f,%.4f dRect=%.1f,%.1f-%.1f,%.1f",
+						copy_layer, copy_src->GetArrayLayers(), copy_dst->GetArrayLayers(), src_rect.x, src_rect.y,
+						src_rect.z, src_rect.w, dst_rect.x, dst_rect.y, dst_rect.z, dst_rect.w);
+				}
+				g_gs_device->StretchRectAuto(copy_src, src_rect, copy_dst, dst_rect, Nearest);
+			}
+			else
+			{
+				// When using native HPO, the top-left column/row of pixels are often not drawn. Clamp these away to avoid sampling black,
+				// causing bleeding into the edges of the downsampled texture.
+				const u32 downsample_factor = static_cast<u32>(src_target->GetScale());
+				const GSVector2i clamp_min = (GSConfig.UserHacks_HalfPixelOffset != GSHalfPixelOffset::Native) ?
+				                                 GSVector2i(0, 0) :
+				                                 GSVector2i(downsample_factor, downsample_factor);
+				GSVector4i copy_rect = tmm.coverage;
+				if (target_region)
+				{
+					copy_rect += GSVector4i(source_region.GetMinX(), source_region.GetMinY()).xyxy();
+				}
+				const GSVector4 dRect = GSVector4((copy_rect + GSVector4i(-1, 1).xxyy()).rintersect(src_target->GetUnscaledRect()));
+				if (s_vr_hazard_probe) [[unlikely]]
+				{
+					Console.WriteLn("(VR) PROBE fill: layer %u path=FilteredDownsampleTexture factor=%u "
+									"src_layers=%u dst_layers=%u dRect=%.1f,%.1f-%.1f,%.1f",
+						copy_layer, downsample_factor, copy_src->GetArrayLayers(), copy_dst->GetArrayLayers(),
+						dRect.x, dRect.y, dRect.z, dRect.w);
+				}
+				g_gs_device->FilteredDownsampleTexture(copy_src, copy_dst, downsample_factor, clamp_min, dRect);
+			}
 		}
 		else
 		{
-			// When using native HPO, the top-left column/row of pixels are often not drawn. Clamp these away to avoid sampling black,
-			// causing bleeding into the edges of the downsampled texture.
-			const u32 downsample_factor = static_cast<u32>(src_target->GetScale());
-			const GSVector2i clamp_min = (GSConfig.UserHacks_HalfPixelOffset != GSHalfPixelOffset::Native) ?
-			                                 GSVector2i(0, 0) :
-			                                 GSVector2i(downsample_factor, downsample_factor);
-			GSVector4i copy_rect = tmm.coverage;
-			if (target_region)
+			// NOTE: copy_range must NOT be mutated here — this block now runs once per
+			// layer, and an in-place adjustment would be applied twice on a 2-layer
+			// snapshot. Derive a per-iteration local instead.
+			const GSVector4i offset = copy_range - GSVector4i(copy_dst_offset).xyxy();
+			// Adjust for bilinear, must be done after calculating offset.
+			GSVector4i bilinear_range = copy_range + GSVector4i(-1, -1, 1, 1);
+			bilinear_range = bilinear_range.rintersect(src_bounds);
+
+			const GSVector4 src_rect = GSVector4(bilinear_range) / GSVector4(src_unscaled_size).xyxy();
+			const GSVector4 dst_rect = (GSVector4(bilinear_range) - GSVector4(offset).xyxy()) * scale;
+
+			if (s_vr_hazard_probe) [[unlikely]]
 			{
-				copy_rect += GSVector4i(source_region.GetMinX(), source_region.GetMinY()).xyxy();
+				Console.WriteLn("(VR) PROBE fill: layer %u path=StretchRectAuto(plain) src_layers=%u dst_layers=%u "
+								"sRect=%.4f,%.4f-%.4f,%.4f dRect=%.1f,%.1f-%.1f,%.1f",
+					copy_layer, copy_src->GetArrayLayers(), copy_dst->GetArrayLayers(), src_rect.x, src_rect.y,
+					src_rect.z, src_rect.w, dst_rect.x, dst_rect.y, dst_rect.z, dst_rect.w);
 			}
-			const GSVector4 dRect = GSVector4((copy_rect + GSVector4i(-1, 1).xxyy()).rintersect(src_target->GetUnscaledRect()));
-			g_gs_device->FilteredDownsampleTexture(src_target->m_texture, src_copy.get(), downsample_factor, clamp_min, dRect);
+			g_gs_device->StretchRectAuto(copy_src, src_rect, copy_dst, dst_rect, Nearest);
 		}
 	}
-	else
+
+	// THE decisive measurement: is the real snapshot's layer 1 populated after the fill?
+	// Probed TWICE — if the instrument were destructive (the CommitClear(cmdbuf) trap that
+	// produced last run's phantom), PROBE2 would read zero where PROBE1 read content. Equal,
+	// non-zero readings prove the probe observes without mutating.
+	if (s_vr_hazard_probe) [[unlikely]]
 	{
-		const GSVector4i offset = copy_range - GSVector4i(copy_dst_offset).xyxy();
-		// Adjust for bilinear, must be done after calculating offset.
-		copy_range.x -= 1;
-		copy_range.y -= 1;
-		copy_range.z += 1;
-		copy_range.w += 1;
-		copy_range = copy_range.rintersect(src_bounds);
-
-		const GSVector4 src_rect = GSVector4(copy_range) / GSVector4(src_unscaled_size).xyxy();
-		const GSVector4 dst_rect = (GSVector4(copy_range) - GSVector4(offset).xyxy()) * scale;
-
-		g_gs_device->StretchRectAuto(src_target->m_texture, src_rect, src_copy.get(), dst_rect, Nearest);
+		g_gs_device->VRProbeLayers(src_copy.get(), "src_copy(after-fill)");
+		g_gs_device->VRProbeLayers(src_copy.get(), "src_copy(after-fill-PROBE2)");
 	}
+
 	m_conf.tex = src_copy.get();
 }
 
@@ -9425,6 +9758,18 @@ __ri void GSRendererHW::DrawPrims(GSTextureCache::Target* rt, GSTextureCache::Ta
 
 	const GSDrawingEnvironment& env = *m_draw_env;
 
+	// PCSX2-VR (ISS-039): `tex` is a raw Source* that stays live for this whole function —
+	// EmulateTextureSampler() reads tex->m_texture into m_conf.tex and HandleTextureHazards()
+	// takes it too, both AFTER the VR promotion block below, and promotion invalidates
+	// sources through the texture cache. Register it so SourceMap::RemoveAt can prove
+	// whether that free-under-a-live-draw window is ever actually taken (H-11: the check has
+	// to be able to fire). RAII because DrawPrims has early returns.
+	struct InFlightSourceScope
+	{
+		explicit InFlightSourceScope(GSTextureCache::Source* s) { g_texture_cache->SetDrawInFlightSource(s); }
+		~InFlightSourceScope() { g_texture_cache->SetDrawInFlightSource(nullptr); }
+	} inflight_source_scope(tex);
+
 	DATEOptions date_options;
 	date_options.enabled = rt && m_cached_ctx.TEST.DATE && m_cached_ctx.FRAME.PSM != PSMCT24;
 	date_options.primid = false;
@@ -9434,7 +9779,33 @@ __ri void GSRendererHW::DrawPrims(GSTextureCache::Target* rt, GSTextureCache::Ta
 	ResetStates();
 
 	m_conf.cb_vs.texture_offset = {};
-	m_conf.ps.scanmsk = env.SCANMSK.MSK;
+	// ISS-031/037 DIAGNOSTIC (PCSX2_VR_NO_SCANMSK=1): force the scanline mask off.
+	// SCANMSK makes a draw skip alternate scanlines, so the un-drawn rows keep what
+	// was already in the render target — i.e. the PREVIOUS FRAME. That is frame
+	// feedback, and KF4 turns it on whenever the VIEW TURNS (any direction, pad or
+	// head) — the owner's exact trigger for the progressive darkening. If that
+	// feedback read returns black/wrong content, sustained turning converges the
+	// image to black. Forcing the mask off makes every row draw every frame, which
+	// removes the feedback entirely. Diagnostic lane only (it also removes the
+	// game's intended blur); default off.
+	static const bool s_no_scanmsk = (std::getenv("PCSX2_VR_NO_SCANMSK") != nullptr);
+	m_conf.ps.scanmsk = s_no_scanmsk ? 0 : env.SCANMSK.MSK;
+	// ISS-031/037 census: log every draw's scanmsk + shape while CHAINLOG is set.
+	{
+		static const bool s_census2 = (std::getenv("PCSX2_VR_CHAINLOG") != nullptr);
+		if (s_census2)
+		{
+			Console.WriteLn("(VR) DRAWCENSUS msk=%u rtL=%u tme=%d fst=%d prim=%d abe=%d r=%d,%d-%d,%d fbp=0x%x tbp=0x%x srcT=%d srcL=%u",
+				env.SCANMSK.MSK,
+				(rt && rt->m_texture) ? rt->m_texture->GetArrayLayers() : 0,
+				PRIM->TME ? 1 : 0, PRIM->FST ? 1 : 0,
+				static_cast<int>(m_vt.m_primclass), PRIM->ABE ? 1 : 0,
+				m_r.x, m_r.y, m_r.z, m_r.w,
+				m_cached_ctx.FRAME.Block(), PRIM->TME ? m_cached_ctx.TEX0.TBP0 : 0,
+				(tex && tex->m_from_target) ? 1 : 0,
+				(tex && tex->m_texture) ? tex->m_texture->GetArrayLayers() : 0);
+		}
+	}
 #ifdef ENABLE_VR
 	// PCSX2-VR (M4.3): a multiview framebuffer needs BOTH attachments 2-layer. Scanout
 	// promotion makes the display rt stereo; pair-promote whichever side lags so the
@@ -9480,6 +9851,16 @@ __ri void GSRendererHW::DrawPrims(GSTextureCache::Target* rt, GSTextureCache::Ta
 			Console.Warning("(VR) Stereo rt with temporary-Z depth — this draw combination is "
 							"not yet layer-consistent (Phase A); expect right-eye depth artifacts here.");
 		}
+	}
+
+	// PCSX2-VR (ISS-039): opt-in fault injection, one shot. Frees the in-flight source right
+	// where a promotion would, so SRCGUARD is shown to fire on a genuinely dangling `tex`
+	// (H-11 power test). Never enabled in normal runs.
+	{
+		static const bool s_srcguard_selftest = (std::getenv("PCSX2_VR_SRCGUARD_SELFTEST") != nullptr);
+		static bool s_selftest_done = false;
+		if (s_srcguard_selftest && !s_selftest_done && tex && tex->m_from_target)
+			s_selftest_done = g_texture_cache->ForceKillInFlightSourceForSelfTest();
 	}
 #endif
 	m_conf.rt = rt ? rt->m_texture : nullptr;

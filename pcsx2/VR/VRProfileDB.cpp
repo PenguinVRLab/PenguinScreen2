@@ -34,6 +34,8 @@ namespace VR::ProfileDB
 
 static constexpr char VRPROFILES_YAML_FILE_NAME[] = "vr-profiles.yaml";
 static constexpr char VRPROFILES_DIR_NAME[] = "vr-profiles";
+static constexpr char VRPROFILES_SEED_FILE_NAME[] = "SLUS-20851.yaml";
+static constexpr char VRPROFILES_SEED_MARKER[] = "# seeded-from-shipped-sig: ";
 
 static std::unordered_map<std::string, VR::ProfileDB::Profile> s_profiles;
 static std::vector<VR::ProfileDB::LoadIssue> s_load_issues;
@@ -761,8 +763,10 @@ static std::optional<VR::ProfileDB::SplitParams> parseSplit(
 			sp.mode = SplitParams::Mode::Duo;
 		else if (StringUtil::compareNoCase(v, "mirror"))
 			sp.mode = SplitParams::Mode::Mirror;
+		else if (StringUtil::compareNoCase(v, "local"))
+			sp.mode = SplitParams::Mode::Local;
 		else
-			return reject(fmt::format("mode '{}' is not focus|duo|mirror", v));
+			return reject(fmt::format("mode '{}' is not focus|duo|mirror|local", v));
 	}
 
 	if (snode.has_child("sideScale"))
@@ -1658,6 +1662,16 @@ bool VR::ProfileDB::parseProfile(const std::string_view serial, const ryml::Node
 	if (node.has_child("screen") && node["screen"].is_map())
 	{
 		const ryml::ConstNodeRef scr = node["screen"];
+		if (scr.has_child("follow"))
+		{
+			const std::string_view v = nodeVal(scr["follow"]);
+			if (StringUtil::compareNoCase(v, "head"))
+				out.screen_follow_head = true;
+			else if (StringUtil::compareNoCase(v, "world"))
+				out.screen_follow_head = false;
+			else
+				Console.WarningFmt("(VR) ProfileDB: Serial '{}' has screen.follow '{}' (not head|world); ignoring it.", serial, v);
+		}
 		if (scr.has_child("distance"))
 		{
 			const std::optional<float> v = StringUtil::FromChars<float>(nodeVal(scr["distance"]));
@@ -1814,19 +1828,124 @@ static u32 loadProfileFile(const std::string& path, LoadTier tier,
 	return loaded;
 }
 
+static u64 fnv1aString(std::string_view s)
+{
+	constexpr u64 kPrime = 1099511628211ull;
+	u64 h = 1469598103934665603ull;
+	for (const unsigned char c : s)
+		h = (h ^ c) * kPrime;
+	return h;
+}
+
+static std::optional<std::string> findShippedProfileFile(const char* file_name)
+{
+	const std::string dir(Path::Combine(EmuFolders::Resources, VRPROFILES_DIR_NAME));
+	if (!FileSystem::DirectoryExists(dir.c_str()))
+		return std::nullopt;
+
+	FileSystem::FindResultsArray files;
+	if (!FileSystem::FindFiles(dir.c_str(), file_name,
+			FILESYSTEM_FIND_FILES | FILESYSTEM_FIND_RECURSIVE | FILESYSTEM_FIND_SORT_BY_NAME, &files) ||
+		files.empty())
+	{
+		return std::nullopt;
+	}
+	return files.front().FileName;
+}
+
+static void ensureUserFolderSeed(const std::string& dir)
+{
+	const std::optional<std::string> src_path = findShippedProfileFile(VRPROFILES_SEED_FILE_NAME);
+	if (!src_path.has_value())
+		return;
+
+	const std::optional<std::string> src_text = FileSystem::ReadFileToString(src_path->c_str());
+	if (!src_text.has_value())
+		return;
+
+	const u64 src_sig = fnv1aString(src_text.value());
+	const std::string dest(Path::Combine(dir, VRPROFILES_SEED_FILE_NAME));
+
+	if (FileSystem::FileExists(dest.c_str()))
+	{
+		const std::optional<std::string> have = FileSystem::ReadFileToString(dest.c_str());
+		if (!have.has_value())
+			return;
+		const size_t at = have->find(VRPROFILES_SEED_MARKER);
+		if (at == std::string::npos)
+			return;
+		const u64 was = StringUtil::FromChars<u64>(
+			std::string_view(*have).substr(at + (sizeof(VRPROFILES_SEED_MARKER) - 1), 16), 16)
+							.value_or(src_sig);
+		if (was != src_sig)
+		{
+			Console.WarningFmt(
+				"(VR) ProfileDB: '{}' in your profiles folder was seeded from an OLDER shipped "
+				"profile and still overrides it. Delete it to take the updated one, or re-apply "
+				"your edits on top of a fresh copy.",
+				VRPROFILES_SEED_FILE_NAME);
+		}
+		return;
+	}
+
+	const std::string header = fmt::format(
+		"# ─────────────────────────────────────────────────────────────────────\n"
+		"# A WORKING EXAMPLE, and it is LIVE — this file overrides the shipped\n"
+		"# profile for this game right now. It was copied here unchanged on first\n"
+		"# use so you have something real to edit.\n"
+		"#\n"
+		"# TRY IT: change `separation` below, save, boot the game. The emulog says\n"
+		"#   \"user profile overrides shipped '{}'\"\n"
+		"# on every launch while this file exists — that line is how you confirm\n"
+		"# your copy, not ours, is in effect.\n"
+		"#\n"
+		"# TO GO BACK: delete this file. Nothing else to undo.\n"
+		"#\n"
+		"# Because it overrides, it also FREEZES this game at the values below: a\n"
+		"# later update to the shipped profile will not reach you until you delete\n"
+		"# this file. You will be warned in the log if that happens.\n"
+		"{}{:016x}\n"
+		"# ─────────────────────────────────────────────────────────────────────\n",
+		StringUtil::toLower(std::string(Path::StripExtension(VRPROFILES_SEED_FILE_NAME))),
+		VRPROFILES_SEED_MARKER, src_sig);
+
+	if (FileSystem::WriteStringToFile(dest.c_str(), header + src_text.value()))
+	{
+		Console.WriteLnFmt("(VR) ProfileDB: seeded the user profiles folder with a live copy of '{}' "
+						   "(edit it to customise; delete it to revert).",
+			VRPROFILES_SEED_FILE_NAME);
+	}
+}
+
 static void ensureUserFolderReadme(const std::string& dir)
 {
 	const std::string readme(Path::Combine(dir, "README.txt"));
 	if (FileSystem::FileExists(readme.c_str()))
-		return;
-	static constexpr char text[] =
+	{
+		const std::optional<std::string> have = FileSystem::ReadFileToString(readme.c_str());
+		if (!have.has_value() || have->rfind("VR profiles", 0) != 0 ||
+			have->find(VRPROFILES_SEED_FILE_NAME) != std::string::npos)
+		{
+			return;
+		}
+	}
+	const std::string text = fmt::format(
 		"VR profiles — user folder\n"
 		"=========================\n"
 		"One game per file (SLUS-12345.yaml). Files here OVERRIDE the shipped\n"
 		"profile for the same serial, per file. To customize a shipped game,\n"
 		"copy its file from the install's resources/vr-profiles/ folder here\n"
 		"and edit the copy. Every file is checked at launch; invalid files\n"
-		"are reported in a dialog naming the file and the reason.\n";
+		"are reported in a dialog naming the file and the reason.\n"
+		"\n"
+		"{} was placed here for you on first use: a live, unmodified copy\n"
+		"of the shipped profile, so you have a real working example to edit.\n"
+		"It is ACTIVE - it overrides the shipped one for that game. Edit a\n"
+		"value, boot the game, and the emulog line\n"
+		"  \"user profile overrides shipped '{}'\"\n"
+		"confirms your copy is the one in effect. Delete the file to revert.\n",
+		VRPROFILES_SEED_FILE_NAME,
+		StringUtil::toLower(std::string(Path::StripExtension(VRPROFILES_SEED_FILE_NAME))));
 	FileSystem::WriteStringToFile(readme.c_str(), text);
 }
 
@@ -1861,6 +1980,7 @@ static ScanResult scanProfiles()
 	if (!EmuFolders::VRProfiles.empty() && FileSystem::DirectoryExists(EmuFolders::VRProfiles.c_str()))
 	{
 		ensureUserFolderReadme(EmuFolders::VRProfiles);
+		ensureUserFolderSeed(EmuFolders::VRProfiles);
 		if (FileSystem::FindFiles(EmuFolders::VRProfiles.c_str(), "*.yaml",
 				FILESYSTEM_FIND_FILES | FILESYSTEM_FIND_RECURSIVE | FILESYSTEM_FIND_SORT_BY_NAME, &files))
 		{

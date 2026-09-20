@@ -46,7 +46,8 @@ namespace VR::SplitState
 				}
 				snap.local_view = sp->local_view;
 				snap.local_pad_port = sp->local_pad_port;
-				snap.mode = (sp->mode == ProfileDB::SplitParams::Mode::Duo) ? 1 : 0;
+				snap.mode = (sp->mode == ProfileDB::SplitParams::Mode::Duo) ? 1 :
+				            (sp->mode == ProfileDB::SplitParams::Mode::Local) ? 2 : 0;
 				snap.side_scale = sp->side_scale;
 				snap.side_angle_deg = sp->side_angle_deg;
 				snap.stereo_on = sp->stereo_on;

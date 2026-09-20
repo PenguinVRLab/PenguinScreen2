@@ -298,14 +298,16 @@ namespace VR
 		float screen_distance = new_settings.ScreenDistance;
 		float screen_height = new_settings.ScreenHeight;
 		float screen_arc = new_settings.ScreenArcDeg;
+		bool screen_follow_head = false;
 		if (profile)
 		{
 			screen_distance = profile->screen_distance.value_or(screen_distance);
 			screen_height = profile->screen_height.value_or(screen_height);
 			screen_arc = profile->screen_arc_deg.value_or(screen_arc);
+			screen_follow_head = profile->screen_follow_head.value_or(false);
 		}
 		XRCompositor::UpdateScreenParams(screen_distance, screen_height, screen_arc,
-			new_settings.ScreenVerticalOffset);
+			new_settings.ScreenVerticalOffset, screen_follow_head);
 
 		StereoState::Params stereo;
 		stereo.separation = new_settings.StereoSeparation;

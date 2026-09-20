@@ -256,13 +256,22 @@ u8 PadDualshock2::Poll(u8 commandByte)
 			return buttons & 0xff;
 		case 5:
 #ifdef ENABLE_VR
-			if (this->unifiedSlot == 0 && !VR::SplitState::Active())
-				return VR::PadLook::ApplyRx(GetPressure(Inputs::PAD_R_RIGHT));
+			if (this->unifiedSlot == 0)
+			{
+				const u8 rx = VR::SplitState::Active()
+								  ? GetPressure(Inputs::PAD_R_RIGHT)
+								  : VR::PadLook::ApplyRx(GetPressure(Inputs::PAD_R_RIGHT));
+				return VR::PadLook::ProbeStick(VR::PadLook::StickAxis::RX, rx);
+			}
 #endif
 			return GetPressure(Inputs::PAD_R_RIGHT);
 		case 6:
 			return GetPressure(Inputs::PAD_R_UP);
 		case 7:
+#ifdef ENABLE_VR
+			if (this->unifiedSlot == 0)
+				return VR::PadLook::ProbeStick(VR::PadLook::StickAxis::LX, GetPressure(Inputs::PAD_L_RIGHT));
+#endif
 			return GetPressure(Inputs::PAD_L_RIGHT);
 		case 8:
 			g_Sio0.SetAcknowledge(false);

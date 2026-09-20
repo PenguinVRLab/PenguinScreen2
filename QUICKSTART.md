@@ -166,6 +166,12 @@ the IP each time? You never need this script.
 > bitrate and unpair live. It attaches to the running link — it won't start a
 > second one.
 
+**If the picture goes bad** — smearing or corrupted blocks, especially right
+after a connection drop or a "connection reset" — **restart the WiVRn app on
+the headset FIRST**, then reconnect. A broken session can leave the headset's
+video decoder wedged in a state no PC-side restart can reach; closing and
+reopening the headset app is the actual fix, and it takes ten seconds.
+
 ---
 
 ## 5. Playing — views, comfort, recenter

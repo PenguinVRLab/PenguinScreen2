@@ -11,5 +11,13 @@ namespace VR::PadLook
 
 	u8 ApplyRx(u8 real);
 
+	enum class StickAxis
+	{
+		LX,
+		RX,
+	};
+
+	u8 ProbeStick(StickAxis axis, u8 real);
+
 	void UpdateRecenterChord(bool l1, bool r1, bool l3, bool r3);
 }

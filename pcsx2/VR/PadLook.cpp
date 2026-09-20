@@ -227,6 +227,51 @@ namespace VR::PadLook
 			std::memory_order_relaxed);
 	}
 
+	u8 ProbeStick(StickAxis axis, u8 real)
+	{
+		struct Probe
+		{
+			int axis = -1;
+			u8 value = 0x80;
+
+			Probe()
+			{
+				const char* e = std::getenv("PCSX2_VR_PADSTICK");
+				if (!e || !*e)
+					return;
+				const bool is_lx = (e[0] == 'l' || e[0] == 'L') && (e[1] == 'x' || e[1] == 'X');
+				const bool is_rx = (e[0] == 'r' || e[0] == 'R') && (e[1] == 'x' || e[1] == 'X');
+				if ((!is_lx && !is_rx) || e[2] != ':')
+				{
+					Console.Error("(VR) PCSX2_VR_PADSTICK: expected <lx|rx>:<byte>, got '%s' — probe inert.", e);
+					return;
+				}
+				const long v = std::strtol(e + 3, nullptr, 0);
+				if (v < 0 || v > 255)
+				{
+					Console.Error("(VR) PCSX2_VR_PADSTICK: byte %ld out of range 0..255 — probe inert.", v);
+					return;
+				}
+				axis = static_cast<int>(is_lx ? StickAxis::LX : StickAxis::RX);
+				value = static_cast<u8>(v);
+				Console.WriteLn("(VR) padStick PROBE ARMED: %s forced to 0x%02X (headless stick-hold; no VR state armed).",
+					is_lx ? "LX" : "RX", value);
+			}
+		};
+		static const Probe s_probe;
+
+		if (s_probe.axis != static_cast<int>(axis))
+			return real;
+
+		static std::atomic<u64> s_hits{0};
+		if (s_hits.fetch_add(1, std::memory_order_relaxed) == 0)
+		{
+			Console.WriteLn("(VR) padStick PROBE FIRED on %s — this poll site returned the forced byte.",
+				axis == StickAxis::LX ? "LX" : "RX");
+		}
+		return s_probe.value;
+	}
+
 	u8 ApplyRx(u8 real)
 	{
 		if (Sequencer::Get().Armed()) [[unlikely]]

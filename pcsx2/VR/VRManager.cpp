@@ -325,8 +325,8 @@ namespace VR
 			from_profile = true;
 		}
 
-		stereo.enabled = new_settings.Enable && new_settings.StereoMode &&
-						 (from_profile || !new_settings.StereoUseProfile);
+		stereo.enabled = StereoGateOpen(new_settings.Enable, LaunchRequestedVR(), StereoRenderArmed(),
+			new_settings.StereoMode, from_profile || !new_settings.StereoUseProfile);
 
 		if (MTGS::IsOpen())
 			MTGS::RunOnGSThread([stereo]() { StereoState::Publish(stereo); });
@@ -376,7 +376,8 @@ namespace VR
 	void ApplySceneStereo()
 	{
 		const Pcsx2Config::VROptions& cfg = EmuConfig.VR;
-		if (!cfg.Enable || !cfg.StereoMode || !cfg.StereoUseProfile)
+		if (!StereoGateOpen(cfg.Enable, LaunchRequestedVR(), StereoRenderArmed(), cfg.StereoMode,
+				cfg.StereoUseProfile))
 		{
 			s_scene_published = -1;
 			s_scene_memo_valid = false;
@@ -483,13 +484,33 @@ namespace VR
 		s_scene_pending_count = 0;
 	}
 
+	bool EffectiveVREnabled(bool cfg_enable)
+	{
+		return cfg_enable || LaunchRequestedVR();
+	}
+
+	static bool s_launch_requested_vr = false;
+
+	static bool s_stereo_render_armed = false;
+
+	void SetLaunchRequestedVR(bool requested)
+	{
+		s_launch_requested_vr = requested;
+	}
+
 	bool LaunchRequestedVR()
 	{
-		static const bool requested = []() {
-			const char* v = std::getenv("XR_RUNTIME_JSON");
-			return v != nullptr && v[0] != '\0';
-		}();
-		return requested;
+		return s_launch_requested_vr;
+	}
+
+	void SetStereoRenderArmed(bool armed)
+	{
+		s_stereo_render_armed = armed;
+	}
+
+	bool StereoRenderArmed()
+	{
+		return s_launch_requested_vr || s_stereo_render_armed;
 	}
 
 	bool WantsVR()
@@ -497,7 +518,7 @@ namespace VR
 		if (!LaunchRequestedVR())
 			return false;
 		std::lock_guard lock(s_settings_mutex);
-		return s_settings.Enable;
+		return EffectiveVREnabled(s_settings.Enable);
 	}
 
 	bool IsSessionActive()
@@ -510,7 +531,7 @@ namespace VR
 		bool enabled;
 		{
 			std::lock_guard lock(s_settings_mutex);
-			enabled = s_settings.Enable;
+			enabled = EffectiveVREnabled(s_settings.Enable);
 		}
 		if (!enabled)
 			return SessionStatus::DisabledInConfig;

@@ -17,6 +17,27 @@ namespace VR::StereoState
 
 		bool pin_uniform_q = false;
 
+		float collimate_disparity = 0.0f;
+
+		struct CollimateRule
+		{
+			s8 prim = -1;
+			s8 tme = 1;
+			s8 abe = -1;
+			s32 min_w = 0;
+			s32 max_w = 0;
+			s32 min_h = 0;
+			s32 max_h = 0;
+
+			float rx0 = 0.0f, ry0 = 0.0f, rx1 = 0.0f, ry1 = 0.0f;
+
+			float tu0 = 0.0f, tv0 = 0.0f, tu1 = 0.0f, tv1 = 0.0f;
+			char label[16] = {};
+		};
+		static constexpr u32 MAX_COLLIMATE_RULES = 4;
+		CollimateRule collimate_rules[MAX_COLLIMATE_RULES] = {};
+		u32 collimate_rule_count = 0;
+
 		enum class Map : u32
 		{
 			Linear = 0,

@@ -60,6 +60,12 @@ namespace VR::ProfileDB
 		float log_dfar = 0.0f;
 	};
 
+	u32 SelectBand(const StereoResolvedMap& map, float q);
+
+	float EvalBand(const StereoResolvedMap& map, u32 band, float q);
+
+	float EvalDisparity(const StereoResolvedMap& map, float separation, float convergence, float q);
+
 	struct StereoSceneRule
 	{
 		u32 ee_address = 0;
@@ -73,6 +79,31 @@ namespace VR::ProfileDB
 		std::string label;
 	};
 
+	struct CollimateRule
+	{
+		s8 prim = -1;
+		s8 tme = 1;
+		s8 abe = -1;
+		s32 min_w = 0;
+		s32 max_w = 0;
+		s32 min_h = 0;
+		s32 max_h = 0;
+
+		float rx0 = 0.0f, ry0 = 0.0f, rx1 = 0.0f, ry1 = 0.0f;
+
+		float tu0 = 0.0f, tv0 = 0.0f, tu1 = 0.0f, tv1 = 0.0f;
+		std::string label;
+	};
+
+	static constexpr u32 kMaxCollimateRules = 4;
+
+	struct HudCollimate
+	{
+
+		float disparity = 0.0f;
+		std::vector<CollimateRule> rules;
+	};
+
 	struct StereoParams
 	{
 		float separation = 0.0f;
@@ -82,6 +113,8 @@ namespace VR::ProfileDB
 		bool pin_uniform_q = false;
 
 		std::vector<StereoSceneRule> scenes;
+
+		std::optional<HudCollimate> hud_collimate;
 
 		StereoMap map = StereoMap::Linear;
 		std::vector<float> splits;
@@ -268,6 +301,27 @@ namespace VR::ProfileDB
 	};
 
 	const std::vector<LoadIssue>& ValidateAtLaunch();
+
+	enum class StereoRail
+	{
+
+		Divergence,
+
+		FixationGap,
+	};
+
+	struct StereoRailFinding
+	{
+		StereoRail rail = StereoRail::Divergence;
+		std::string serial;
+		std::string site;
+		float arcmin = 0.0f;
+		bool from_map = false;
+
+		std::string message;
+	};
+
+	const std::vector<StereoRailFinding>& StereoRailFindings();
 
 	struct Summary
 	{

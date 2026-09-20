@@ -16,6 +16,19 @@ SLUS-20851:
     separation: 0.008
     convergence: 6.0
     uvDraws: screen
+    hudCollimate:
+      disparity: 0.0135
+      rules:
+        - label: target-box
+          prim: sprite
+          tme: true
+          abe: true
+          uvRect: [73.5, 78.5, 91.5, 114.5]
+        - label: target-lock
+          prim: sprite
+          tme: true
+          abe: true
+          uvRect: [145.5, 78.5, 163.5, 96.5]
     scenes:
       - when: { address: 0x00959C0C, equals: 2, width: 1 }
         separation: 0.012
@@ -25,7 +38,7 @@ SLUS-20851:
         bands:
           - { conv: 2.0, sep: 0.008 }
           - { conv: 2.0, sep: 0.006 }
-          - { conv: 8.0, sep: 0.012 }
+          - { conv: 8.0, sep: 0.0090 }
   camera:
     base:
       pattern: "00 00 20 44 00 00 ?? 43 ?? ?? ?? ?? ?? ?? ?? ?? 00 00 ?? ?? 00 00 00 00 00 02 C0 01 00 00 80 3F FF FF 7F 4B 00 00 00 00 00 02 C0 01 00 00"

@@ -45,6 +45,7 @@ namespace VR::XRCompositor
 			float height = 1.4f;
 			float arc_deg = 0.0f;
 			float voffset = 0.0f;
+			bool follow_head = false;
 		};
 		std::mutex s_screen_mutex;
 		ScreenParams s_screen_params;
@@ -851,6 +852,10 @@ namespace VR::XRCompositor
 			const XrQuaternionf anchor_quat = {
 				0.0f, std::sin(s.screen_anchor_yaw * 0.5f), 0.0f, std::cos(s.screen_anchor_yaw * 0.5f)};
 
+			const bool follow = sp.follow_head && (s.view_space != XR_NULL_HANDLE);
+			const XrSpace layer_space = follow ? s.view_space : XRSession::GetSpace();
+			const XrQuaternionf follow_quat = {0.0f, 0.0f, 0.0f, 1.0f};
+
 			const auto make_layer = [&](u32 chain_idx, XrEyeVisibility vis) {
 				const XrSwapchainSubImage sub_image = {
 					s.chains[chain_idx].swapchain,
@@ -860,11 +865,19 @@ namespace VR::XRCompositor
 				{
 					XrCompositionLayerCylinderKHR& cyl = cyls[layer_count];
 					cyl.layerFlags = 0;
-					cyl.space = XRSession::GetSpace();
+					cyl.space = layer_space;
 					cyl.eyeVisibility = vis;
 					cyl.subImage = sub_image;
-					cyl.pose.orientation = anchor_quat;
-					cyl.pose.position = {s.screen_anchor_x, s.screen_anchor_y + voffset, s.screen_anchor_z};
+					if (follow)
+					{
+						cyl.pose.orientation = follow_quat;
+						cyl.pose.position = {0.0f, voffset, 0.0f};
+					}
+					else
+					{
+						cyl.pose.orientation = anchor_quat;
+						cyl.pose.position = {s.screen_anchor_x, s.screen_anchor_y + voffset, s.screen_anchor_z};
+					}
 					cyl.radius = distance;
 					cyl.centralAngle = arc_deg * (3.14159265f / 180.0f);
 					cyl.aspectRatio = aspect;
@@ -874,13 +887,21 @@ namespace VR::XRCompositor
 				{
 					XrCompositionLayerQuad& quad = quads[layer_count];
 					quad.layerFlags = 0;
-					quad.space = XRSession::GetSpace();
+					quad.space = layer_space;
 					quad.eyeVisibility = vis;
 					quad.subImage = sub_image;
-					quad.pose.orientation = anchor_quat;
-					quad.pose.position = {s.screen_anchor_x - distance * ayaw_sin,
-						s.screen_anchor_y + voffset,
-						s.screen_anchor_z - distance * ayaw_cos};
+					if (follow)
+					{
+						quad.pose.orientation = follow_quat;
+						quad.pose.position = {0.0f, voffset, -distance};
+					}
+					else
+					{
+						quad.pose.orientation = anchor_quat;
+						quad.pose.position = {s.screen_anchor_x - distance * ayaw_sin,
+							s.screen_anchor_y + voffset,
+							s.screen_anchor_z - distance * ayaw_cos};
+					}
 					quad.size = {height * aspect, height};
 					layers[layer_count] = reinterpret_cast<const XrCompositionLayerBaseHeader*>(&quad);
 				}
@@ -919,7 +940,7 @@ namespace VR::XRCompositor
 				}
 				const float extra_yaw = is_local ? 0.0f :
 					eff_side_deg * (3.14159265f / 180.0f);
-				const float yaw = s.screen_anchor_yaw + extra_yaw;
+				const float yaw = (follow ? 0.0f : s.screen_anchor_yaw) + extra_yaw;
 				const XrQuaternionf vp_quat = {
 					0.0f, std::sin(yaw * 0.5f), 0.0f, std::cos(yaw * 0.5f)};
 				const float ysin = std::sin(yaw);
@@ -930,11 +951,13 @@ namespace VR::XRCompositor
 				{
 					XrCompositionLayerCylinderKHR& cyl = cyls[layer_count];
 					cyl.layerFlags = 0;
-					cyl.space = XRSession::GetSpace();
+					cyl.space = layer_space;
 					cyl.eyeVisibility = vis;
 					cyl.subImage = sub_image;
 					cyl.pose.orientation = vp_quat;
-					cyl.pose.position = {s.screen_anchor_x, s.screen_anchor_y + voffset, s.screen_anchor_z};
+					cyl.pose.position = follow ?
+						XrVector3f{0.0f, voffset, 0.0f} :
+						XrVector3f{s.screen_anchor_x, s.screen_anchor_y + voffset, s.screen_anchor_z};
 					cyl.radius = distance;
 					cyl.centralAngle = arc_deg * (3.14159265f / 180.0f) * shape_scale;
 					cyl.aspectRatio = rect_aspect;
@@ -944,13 +967,15 @@ namespace VR::XRCompositor
 				{
 					XrCompositionLayerQuad& quad = quads[layer_count];
 					quad.layerFlags = 0;
-					quad.space = XRSession::GetSpace();
+					quad.space = layer_space;
 					quad.eyeVisibility = vis;
 					quad.subImage = sub_image;
 					quad.pose.orientation = vp_quat;
-					quad.pose.position = {s.screen_anchor_x - distance * ysin,
-						s.screen_anchor_y + voffset,
-						s.screen_anchor_z - distance * ycos};
+					quad.pose.position = follow ?
+						XrVector3f{-distance * ysin, voffset, -distance * ycos} :
+						XrVector3f{s.screen_anchor_x - distance * ysin,
+							s.screen_anchor_y + voffset,
+							s.screen_anchor_z - distance * ycos};
 					quad.size = {vp_width, vp_phys_height};
 					layers[layer_count] = reinterpret_cast<const XrCompositionLayerBaseHeader*>(&quad);
 				}
@@ -1015,6 +1040,8 @@ namespace VR::XRCompositor
 				const bool split_stereo = stereo && split_snap.stereo_on && l0 && l1;
 				for (int vp = 0; vp < 2; vp++)
 				{
+					if (split_snap.mode == 2 && vp != split_snap.local_view)
+						continue;
 					if (split_stereo)
 					{
 						make_split_layer(0, XR_EYE_VISIBILITY_LEFT, vp);
@@ -1167,10 +1194,11 @@ namespace VR::XRCompositor
 	void EndOfFrame(GSTexture* , u32 ) {}
 #endif
 
-	void UpdateScreenParams(float distance_m, float height_m, float arc_deg, float vertical_offset_m)
+	void UpdateScreenParams(float distance_m, float height_m, float arc_deg, float vertical_offset_m,
+		bool follow_head)
 	{
 		std::lock_guard<std::mutex> lock(s_screen_mutex);
-		s_screen_params = {distance_m, height_m, arc_deg, vertical_offset_m};
+		s_screen_params = {distance_m, height_m, arc_deg, vertical_offset_m, follow_head};
 	}
 
 	void RequestScreenReanchor()

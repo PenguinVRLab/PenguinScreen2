@@ -14,10 +14,204 @@
 #ifdef ENABLE_VR
 #include "VR/DepthHistogram.h"
 #include "VR/StereoState.h"
+#include <algorithm>
+#include <cmath>
+#include <cstdlib>
 #endif
 
 using PS_ATST  = GSShader::PS_ATST;
 using PS_AFAIL = GSShader::PS_AFAIL;
+
+#ifdef ENABLE_VR
+namespace
+{
+	struct VRZQDepthFit
+	{
+		static constexpr u32 CAPACITY = 4096;
+		u32 n = 0;
+		u32 dropped = 0;
+		float m[CAPACITY];
+		float a[CAPACITY];
+		float zr[CAPACITY];
+		float qr[CAPACITY];
+		float scratch[CAPACITY];
+
+		bool valid = false;
+		float a0 = 0.0f;
+		float beta = 0.0f;
+		float r2 = 0.0f;
+		float agree = 0.0f;
+		u32 fit_draws = 0;
+
+		u64 frames_fitted = 0;
+		u64 frames_rejected = 0;
+		bool warned = false;
+		bool warned_dropped = false;
+
+		__fi void AddDraw(float slope, float intercept, float z_rep, float q_rep)
+		{
+			if (n >= CAPACITY)
+			{
+				dropped++;
+				return;
+			}
+			m[n] = slope;
+			a[n] = intercept;
+			zr[n] = z_rep;
+			qr[n] = q_rep;
+			n++;
+		}
+
+		__fi void ResetFrame()
+		{
+			n = 0;
+			dropped = 0;
+		}
+	};
+
+	VRZQDepthFit s_vr_zqfit;
+
+	constexpr u32 VR_ZQFIT_MIN_DRAWS = 16;
+
+	constexpr double VR_ZQFIT_GAUGE_LO = 0.98630;
+	constexpr double VR_ZQFIT_GAUGE_HI = 1.01390;
+
+	float VRZQFitEnvFloat(const char* name, float dflt, float lo, float hi)
+	{
+		const char* env = std::getenv(name);
+		if (!env)
+			return dflt;
+		const float v = static_cast<float>(std::atof(env));
+		return (v >= lo && v <= hi) ? v : dflt;
+	}
+
+	float VRZQFitMinAgree() { static const float v = VRZQFitEnvFloat("PCSX2_VR_ZFIT_MINAGREE", 0.70f, 0.0f, 1.0f); return v; }
+	float VRZQFitMinR2()    { static const float v = VRZQFitEnvFloat("PCSX2_VR_ZFIT_MINR2", 0.90f, 0.0f, 1.0f); return v; }
+
+	bool VRZQFitVerbose()
+	{
+		static const bool s_verbose = (std::getenv("PCSX2_VR_ZFIT") != nullptr);
+		return s_verbose;
+	}
+
+	void VRZQDepthFitEndOfFrame()
+	{
+		VRZQDepthFit& f = s_vr_zqfit;
+		const u32 n = f.n;
+
+		if (n < VR_ZQFIT_MIN_DRAWS)
+		{
+			if (VRZQFitVerbose() && n > 0)
+				Console.WriteLn("(VR) ZFIT draws=%u < %u — keeping previous fit (valid=%d a0=%.9f beta=%.1f)",
+					n, VR_ZQFIT_MIN_DRAWS, f.valid ? 1 : 0, f.a0, f.beta);
+			f.ResetFrame();
+			return;
+		}
+
+		if (f.dropped > 0 && !f.warned_dropped)
+		{
+			f.warned_dropped = true;
+			Console.WarningFmt("(VR) Z-driven depth: {} eligible draw(s) over the {}-line fit buffer were "
+							   "DROPPED this frame. The fit is still a median of {} draws and remains "
+							   "usable, but it no longer sees the whole frame — raise VRZQDepthFit::CAPACITY "
+							   "if this persists. Reported once per run.",
+				f.dropped, VRZQDepthFit::CAPACITY, VRZQDepthFit::CAPACITY);
+		}
+
+		std::copy(f.m, f.m + n, f.scratch);
+		std::nth_element(f.scratch, f.scratch + (n / 2), f.scratch + n);
+		const double m_ref = static_cast<double>(f.scratch[n / 2]);
+		std::copy(f.a, f.a + n, f.scratch);
+		std::nth_element(f.scratch, f.scratch + (n / 2), f.scratch + n);
+		const double a_ref = static_cast<double>(f.scratch[n / 2]);
+
+		double zlo = f.zr[0], zhi = f.zr[0];
+		for (u32 i = 1; i < n; i++)
+		{
+			zlo = std::min(zlo, static_cast<double>(f.zr[i]));
+			zhi = std::max(zhi, static_cast<double>(f.zr[i]));
+		}
+		const double tol = 0.05 * std::max(std::abs(a_ref), std::max(zhi - zlo, 1.0));
+		u32 agreeing = 0;
+		for (u32 i = 0; i < n; i++)
+			agreeing += (std::abs(static_cast<double>(f.a[i]) - a_ref) <= tol) ? 1u : 0u;
+		const double agree = static_cast<double>(agreeing) / static_cast<double>(n);
+
+		double ssr = 0.0, sq = 0.0, sqq = 0.0;
+		u32 gauge_n = 0;
+		const double lo_m = m_ref * VR_ZQFIT_GAUGE_LO, hi_m = m_ref * VR_ZQFIT_GAUGE_HI;
+		for (u32 i = 0; i < n; i++)
+		{
+			const double mi = static_cast<double>(f.m[i]);
+			if (m_ref <= 0.0 || mi < lo_m || mi > hi_m)
+				continue;
+			const double q = static_cast<double>(f.qr[i]);
+			const double qh = m_ref * (static_cast<double>(f.zr[i]) - a_ref);
+			ssr += (q - qh) * (q - qh);
+			sq += q;
+			sqq += q * q;
+			gauge_n++;
+		}
+		double r2 = 0.0;
+		if (gauge_n >= 2)
+		{
+			const double sst = sqq - (sq * sq) / static_cast<double>(gauge_n);
+			r2 = (sst > 0.0) ? (1.0 - ssr / sst) : 0.0;
+		}
+
+		const char* reason =
+			(m_ref <= 0.0)                            ? "slope <= 0 (z and q disagree in sign)" :
+			(agree < static_cast<double>(VRZQFitMinAgree())) ? "z-intercepts do not agree — this game's Z is not affine in 1/w" :
+			(gauge_n < 2)                             ? "no reference gauge (fewer than 2 draws at the median slope)" :
+			(r2 < static_cast<double>(VRZQFitMinR2())) ? "R2 below threshold" :
+			                                            nullptr;
+
+		if (reason)
+		{
+			const bool was_valid = f.valid;
+			f.valid = false;
+			f.frames_rejected++;
+			if (!f.warned || was_valid)
+			{
+				f.warned = true;
+				Console.WarningFmt("(VR) Z-driven depth: fit REFUSED — {} (draws={}, intercept agreement={:.3f}, "
+								   "gauge draws={}, R2={:.6f}, slope={:.6e}, A={:.1f}). Falling back to the "
+								   "RGBAQ.Q domain for the next frame; co-located layers may separate again "
+								   "while this holds.",
+					reason, n, agree, gauge_n, r2, m_ref, a_ref);
+			}
+			else if (VRZQFitVerbose())
+			{
+				Console.WriteLn("(VR) ZFIT REFUSED %s draws=%u agree=%.3f gauge=%u r2=%.6f m=%.6e A=%.1f",
+					reason, n, agree, gauge_n, r2, m_ref, a_ref);
+			}
+		}
+		else
+		{
+			const bool first = (f.frames_fitted == 0);
+			f.valid = true;
+			f.a0 = static_cast<float>(a_ref * 0x1p-32);
+			f.beta = static_cast<float>(m_ref * 0x1p32);
+			f.r2 = static_cast<float>(r2);
+			f.agree = static_cast<float>(agree);
+			f.fit_draws = n;
+			f.frames_fitted++;
+			f.warned = false;
+			if (VRZQFitVerbose())
+				Console.WriteLn("(VR) ZFIT draws=%u agree=%.3f gauge=%u R2=%.6f m=%.6e A=%.1f -> a0=%.9f beta=%.1f "
+								"q_hat[z=%.0f..%.0f]=%.3f..%.3f dropped=%u",
+					n, agree, gauge_n, r2, m_ref, a_ref, f.a0, f.beta, zlo, zhi,
+					m_ref * (zlo - a_ref), m_ref * (zhi - a_ref), f.dropped);
+			else if (first)
+				Console.WriteLn("(VR) Z-driven depth: first accepted fit — draws=%u intercept agreement=%.3f "
+								"R2=%.6f (slope %.6e, A %.1f). Displacement now evaluates over screen Z.",
+					n, agree, r2, m_ref, a_ref);
+		}
+
+		f.ResetFrame();
+	}
+}
+#endif
 
 GSRendererHW::GSRendererHW()
 	: GSRenderer()
@@ -99,6 +293,10 @@ void GSRendererHW::UpdateSettings(const Pcsx2Config::GSOptions& old_config)
 
 void GSRendererHW::VSync(u32 field, bool registers_written, bool idle_frame)
 {
+#ifdef ENABLE_VR
+	VRZQDepthFitEndOfFrame();
+#endif
+
 	if (GSConfig.LoadTextureReplacements)
 		GSTextureReplacements::ProcessAsyncLoadedTextures();
 
@@ -5097,6 +5295,29 @@ void GSRendererHW::EmulateZbuffer(const GSTextureCache::Target* ds)
 	if (ds && m_cached_ctx.TEST.ZTE)
 	{
 		m_conf.depth.ztst = m_cached_ctx.TEST.ZTST;
+
+		static const char* s_fza_env = std::getenv("PCSX2_VR_FORCE_ZALWAYS");
+		static const bool s_force_zalways = (s_fza_env != nullptr);
+		static const std::string s_fza_abcd = s_fza_env ? std::string(s_fza_env) : std::string();
+		if (s_force_zalways && PRIM->TME && !PRIM->FST &&
+			m_vt.m_primclass == GS_TRIANGLE_CLASS &&
+			m_r.width() <= 24 && m_r.height() <= 24 && m_cached_ctx.TEST.ZTST != ZTST_ALWAYS &&
+			(s_fza_abcd.size() != 4 ||
+				(s_fza_abcd[0] == static_cast<char>('0' + m_context->ALPHA.A) &&
+					s_fza_abcd[1] == static_cast<char>('0' + m_context->ALPHA.B) &&
+					s_fza_abcd[2] == static_cast<char>('0' + m_context->ALPHA.C) &&
+					s_fza_abcd[3] == static_cast<char>('0' + m_context->ALPHA.D))))
+		{
+			static u64 s_forced = 0;
+			if (s_forced++ == 0)
+			{
+				Console.WriteLn("(VR) FORCE_ZALWAYS: FIRST decal-shaped draw forced ZTST %u -> ALWAYS "
+								"(r=%d,%d-%d,%d %dx%d fbp=0x%x)",
+					static_cast<u32>(m_cached_ctx.TEST.ZTST), m_r.x, m_r.y, m_r.z, m_r.w,
+					m_r.width(), m_r.height(), m_cached_ctx.FRAME.Block());
+			}
+			m_conf.depth.ztst = ZTST_ALWAYS;
+		}
 		if (m_cached_ctx.ZBUF.ZMSK || (PRIM->AA1 && m_vt.m_primclass == GS_LINE_CLASS))
 		{
 			m_conf.depth.zwe = false;
@@ -5825,6 +6046,55 @@ void GSRendererHW::DetermineVSConfig(GSTextureCache::Target* rt, float rtscale, 
 	}
 	m_conf.cb_vs.vr_band[0].w = vr_collimate;
 
+	const bool vr_z_globally_constrained =
+		(m_cached_ctx.TEST.ZTE != 0 && m_cached_ctx.TEST.ZTST > ZTST_ALWAYS);
+
+	if (st.z_driven_depth && vr_engaged && vr_z_globally_constrained)
+	{
+		const bool vr_fit_q_trustworthy =
+			PRIM->TME && !PRIM->FST &&
+			!(m_vt.m_accurate_stq && m_vt.m_primclass == GS_SPRITE_CLASS);
+		if (vr_fit_q_trustworthy && !m_vt.m_eq.z && !m_vt.m_eq.q)
+		{
+			const double zlo = static_cast<double>(m_vt.m_min.p.z);
+			const double zhi = static_cast<double>(m_vt.m_max.p.z);
+			const double qlo = static_cast<double>(m_vt.m_min.t.z);
+			const double qhi = static_cast<double>(m_vt.m_max.t.z);
+			const double dz = zhi - zlo;
+			const double dq = qhi - qlo;
+			if (dz > 0.0 && dq > 0.0 && qlo > 0.0 && (dq / qhi) > 1e-3)
+			{
+				const double slope = dq / dz;
+				const double intercept = zlo - qlo / slope;
+				if (std::isfinite(slope) && std::isfinite(intercept))
+				{
+					s_vr_zqfit.AddDraw(static_cast<float>(slope), static_cast<float>(intercept),
+						static_cast<float>(zhi), static_cast<float>(qhi));
+				}
+			}
+		}
+	}
+
+	const bool vr_zq_apply =
+		vr_engaged && st.z_driven_depth && s_vr_zqfit.valid && vr_z_globally_constrained;
+	m_conf.cb_vs.vr_band[1].w = vr_zq_apply ? s_vr_zqfit.a0 : 0.0f;
+	m_conf.cb_vs.vr_band[2].w = vr_zq_apply ? s_vr_zqfit.beta : 0.0f;
+	m_conf.cb_vs.vr_band[3].w = vr_zq_apply ? 1.0f : 0.0f;
+
+	if (vr_zq_apply && VRZQFitVerbose()) [[unlikely]]
+	{
+		const float zhi = m_vt.m_max.p.z * 0x1p-32f;
+		const float qhi = m_vt.m_max.t.z;
+		const float qhat = s_vr_zqfit.beta * (zhi - s_vr_zqfit.a0);
+		Console.WriteLn("(VR) ZFITD prim=%d tme=%d fst=%d abcd=%u%u%u%u r=%d,%d-%d,%d nv=%u z=%.0f "
+						"q=%.6f qhat=%.6f ratio=%.4f",
+			static_cast<int>(m_vt.m_primclass), PRIM->TME ? 1 : 0, PRIM->FST ? 1 : 0,
+			static_cast<u32>(m_context->ALPHA.A), static_cast<u32>(m_context->ALPHA.B),
+			static_cast<u32>(m_context->ALPHA.C), static_cast<u32>(m_context->ALPHA.D),
+			m_r.x, m_r.y, m_r.z, m_r.w, m_vertex->next,
+			m_vt.m_max.p.z, qhi, qhat, (qhi != 0.0f) ? (qhat / qhi) : 0.0f);
+	}
+
 	if (vr_multiview_target)
 	{
 		static bool s_logged_mv_draw = false;
@@ -5861,6 +6131,9 @@ void GSRendererHW::DetermineVSConfig(GSTextureCache::Target* rt, float rtscale, 
 	m_conf.cb_vs.vr_stereo = GSVector2(0.0f, 0.0f);
 	m_conf.cb_vs.vr_map_mode = 0;
 	m_conf.cb_vs.vr_band[0].w = 0.0f;
+	m_conf.cb_vs.vr_band[1].w = 0.0f;
+	m_conf.cb_vs.vr_band[2].w = 0.0f;
+	m_conf.cb_vs.vr_band[3].w = 0.0f;
 #endif
 
 	m_conf.vs.iip = !IsFlatShaded();
@@ -8517,6 +8790,72 @@ __ri void GSRendererHW::DrawPrims(GSTextureCache::Target* rt, GSTextureCache::Ta
 				m_cached_ctx.FRAME.Block(), PRIM->TME ? m_cached_ctx.TEX0.TBP0 : 0,
 				(tex && tex->m_from_target) ? 1 : 0,
 				(tex && tex->m_texture) ? tex->m_texture->GetArrayLayers() : 0);
+		}
+
+		static const bool s_zqcensus = (std::getenv("PCSX2_VR_ZQCENSUS") != nullptr);
+		if (s_zqcensus)
+		{
+			float qmin = std::numeric_limits<float>::max();
+			float qmax = -std::numeric_limits<float>::max();
+			u32 zmin = std::numeric_limits<u32>::max();
+			u32 zmax = 0;
+			for (u32 ii = 0; ii < m_index->tail; ii++)
+			{
+				const GSVertex& v = m_vertex->buff[m_index->buff[ii]];
+				qmin = std::min(qmin, v.RGBAQ.Q);
+				qmax = std::max(qmax, v.RGBAQ.Q);
+				zmin = std::min(zmin, static_cast<u32>(v.XYZ.Z));
+				zmax = std::max(zmax, static_cast<u32>(v.XYZ.Z));
+			}
+			if (m_index->tail == 0)
+			{
+				qmin = qmax = 0.0f;
+				zmin = 0;
+			}
+
+			Console.WriteLn("(VR) ZQCENSUS f=%d prim=%d tme=%d fst=%d abe=%d r=%d,%d-%d,%d (%dx%d) "
+							"fbp=0x%x fpsm=0x%x rtL=%u tbp=0x%x nv=%u ni=%u "
+							"zte=%u ztst=%u zmsk=%u zbp=0x%x zpsm=0x%x date=%u "
+							"ate=%u atst=%u aref=%u afail=%u "
+							"abcd=%u%u%u%u fix=%u "
+							"q=%.6f..%.6f qconst=%d z=%u..%u "
+							"eqz=%u eqq=%u eqstq=%u pz=%.1f..%.1f tz=%.6f..%.6f",
+				g_perfmon.GetFrame(),
+				static_cast<int>(m_vt.m_primclass), PRIM->TME ? 1 : 0, PRIM->FST ? 1 : 0,
+				PRIM->ABE ? 1 : 0,
+				m_r.x, m_r.y, m_r.z, m_r.w, m_r.width(), m_r.height(),
+				m_cached_ctx.FRAME.Block(), static_cast<u32>(m_cached_ctx.FRAME.PSM),
+				(rt && rt->m_texture) ? rt->m_texture->GetArrayLayers() : 0,
+				PRIM->TME ? m_cached_ctx.TEX0.TBP0 : 0,
+				m_vertex->next, m_index->tail,
+				static_cast<u32>(m_cached_ctx.TEST.ZTE), static_cast<u32>(m_cached_ctx.TEST.ZTST),
+				static_cast<u32>(m_cached_ctx.ZBUF.ZMSK), m_cached_ctx.ZBUF.Block(),
+				static_cast<u32>(m_cached_ctx.ZBUF.PSM), static_cast<u32>(m_cached_ctx.TEST.DATE),
+				static_cast<u32>(m_cached_ctx.TEST.ATE), static_cast<u32>(m_cached_ctx.TEST.ATST),
+				static_cast<u32>(m_cached_ctx.TEST.AREF), static_cast<u32>(m_cached_ctx.TEST.AFAIL),
+				static_cast<u32>(m_context->ALPHA.A), static_cast<u32>(m_context->ALPHA.B),
+				static_cast<u32>(m_context->ALPHA.C), static_cast<u32>(m_context->ALPHA.D),
+				static_cast<u32>(m_context->ALPHA.FIX),
+				qmin, qmax, (qmin == qmax) ? 1 : 0, zmin, zmax,
+				static_cast<u32>(m_vt.m_eq.z), static_cast<u32>(m_vt.m_eq.q),
+				static_cast<u32>(m_vt.m_eq.stq),
+				m_vt.m_min.p.z, m_vt.m_max.p.z,
+				m_vt.m_min.t.z, m_vt.m_max.t.z);
+
+			if (m_index->tail > 0 && m_index->tail <= 16)
+			{
+				const int ofx = static_cast<int>(m_context->XYOFFSET.OFX);
+				const int ofy = static_cast<int>(m_context->XYOFFSET.OFY);
+				for (u32 ii = 0; ii < m_index->tail; ii++)
+				{
+					const GSVertex& v = m_vertex->buff[m_index->buff[ii]];
+					Console.WriteLn("(VR) ZQV i=%u xy=%d,%d z=%u q=%.6f st=%.5f,%.5f a=%u",
+						ii,
+						(static_cast<int>(v.XYZ.X) - ofx) >> 4, (static_cast<int>(v.XYZ.Y) - ofy) >> 4,
+						static_cast<u32>(v.XYZ.Z), v.RGBAQ.Q, v.ST.S, v.ST.T,
+						static_cast<u32>(v.RGBAQ.A));
+				}
+			}
 		}
 	}
 #ifdef ENABLE_VR

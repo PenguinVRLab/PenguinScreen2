@@ -52,8 +52,12 @@ layout(location = 0) out VSOutput
 } vsOut;
 
 #if !VS_FST
-float vr_stereo_disp(float q)
+float vr_stereo_disp(float q_in, float z_norm)
 {
+	float q = q_in;
+	if (vr_band[3].w != 0.0f)
+		q = max(vr_band[2].w * (z_norm - vr_band[1].w), 0.0f);
+
 	if (vr_map_mode == 0u)
 	{
 		return vr_stereo.x * max(0.0f, 1.0f - vr_stereo.y * q);
@@ -116,7 +120,7 @@ void main()
 			#else
 				float vr_eye_sign = 1.0f;
 			#endif
-			gl_Position.x += vr_eye_sign * vr_stereo_disp(a_q);
+			gl_Position.x += vr_eye_sign * vr_stereo_disp(a_q, gl_Position.z);
 		}
 	#endif
 
@@ -472,7 +476,7 @@ void main()
 			#else
 				float vr_eye_sign = 1.0f;
 			#endif
-			gl_Position.x += vr_eye_sign * vr_stereo_disp(vtx.t.w);
+			gl_Position.x += vr_eye_sign * vr_stereo_disp(vtx.t.w, gl_Position.z);
 		}
 	#endif
 

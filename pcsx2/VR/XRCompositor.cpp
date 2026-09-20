@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0
 
 #include "VR/XRCompositor.h"
+#include "VR/SplitState.h"
 #include "VR/HeadPose.h"
 #include "VR/VRInternal.h"
 #include "VR/XRSession.h"
@@ -818,11 +819,15 @@ namespace VR::XRCompositor
 			}
 		}
 
-		XrCompositionLayerQuad quads[2] = {{XR_TYPE_COMPOSITION_LAYER_QUAD}, {XR_TYPE_COMPOSITION_LAYER_QUAD}};
-		XrCompositionLayerCylinderKHR cyls[2] = {
-			{XR_TYPE_COMPOSITION_LAYER_CYLINDER_KHR}, {XR_TYPE_COMPOSITION_LAYER_CYLINDER_KHR}};
-		const XrCompositionLayerBaseHeader* layers[2] = {};
+		XrCompositionLayerQuad quads[5] = {{XR_TYPE_COMPOSITION_LAYER_QUAD}, {XR_TYPE_COMPOSITION_LAYER_QUAD},
+			{XR_TYPE_COMPOSITION_LAYER_QUAD}, {XR_TYPE_COMPOSITION_LAYER_QUAD}, {XR_TYPE_COMPOSITION_LAYER_QUAD}};
+		XrCompositionLayerCylinderKHR cyls[5] = {
+			{XR_TYPE_COMPOSITION_LAYER_CYLINDER_KHR}, {XR_TYPE_COMPOSITION_LAYER_CYLINDER_KHR},
+			{XR_TYPE_COMPOSITION_LAYER_CYLINDER_KHR}, {XR_TYPE_COMPOSITION_LAYER_CYLINDER_KHR},
+			{XR_TYPE_COMPOSITION_LAYER_CYLINDER_KHR}};
+		const XrCompositionLayerBaseHeader* layers[5] = {};
 		u32 layer_count = 0;
+		bool cl_split = false;
 		if (!force_zero_layers)
 		{
 			ScreenParams sp;
@@ -878,9 +883,95 @@ namespace VR::XRCompositor
 				layer_count++;
 			};
 
+			const SplitState::Snapshot split_snap = SplitState::Get();
+			cl_split = split_snap.split_active;
+			const auto make_split_layer = [&](u32 chain_idx, XrEyeVisibility vis, int viewport) {
+				const s32 full_w = static_cast<s32>(s.swapchain_width);
+				const s32 full_h = static_cast<s32>(s.swapchain_height);
+				s32 rx = static_cast<s32>(split_snap.rect_x[viewport] * full_w);
+				s32 ry = static_cast<s32>(split_snap.rect_y[viewport] * full_h);
+				s32 rw = static_cast<s32>(split_snap.rect_w[viewport] * full_w);
+				s32 rh = static_cast<s32>(split_snap.rect_h[viewport] * full_h);
+				rx += 1; ry += 1; rw -= 2; rh -= 2;
+				if (rw < 2 || rh < 2)
+					return;
+				const XrSwapchainSubImage sub_image = {
+					s.chains[chain_idx].swapchain, {{rx, ry}, {rw, rh}}, 0};
+				const float rect_aspect = static_cast<float>(rw) / static_cast<float>(rh);
+				const bool is_local = (viewport == split_snap.local_view);
+				const bool focus = (split_snap.mode == 0);
+				const float shape_scale = (is_local || !focus) ? 1.0f : split_snap.side_scale;
+				const float mirror_width = height * aspect;
+				const float local_half_deg = curved ? (0.5f * arc_deg) :
+					(std::atan((0.5f * mirror_width) / distance) * (180.0f / 3.14159265f));
+				const float side_half_deg = curved ? (0.5f * arc_deg * shape_scale) :
+					(std::atan((0.5f * mirror_width * shape_scale) / distance) * (180.0f / 3.14159265f));
+				float eff_side_deg = split_snap.side_angle_deg;
+				if (!is_local)
+				{
+					const float min_sep = local_half_deg + side_half_deg + 2.0f;
+					if (std::fabs(eff_side_deg) < min_sep)
+						eff_side_deg = (eff_side_deg < 0.0f) ? -min_sep : min_sep;
+				}
+				const float extra_yaw = is_local ? 0.0f :
+					eff_side_deg * (3.14159265f / 180.0f);
+				const float yaw = s.screen_anchor_yaw + extra_yaw;
+				const XrQuaternionf vp_quat = {
+					0.0f, std::sin(yaw * 0.5f), 0.0f, std::cos(yaw * 0.5f)};
+				const float ysin = std::sin(yaw);
+				const float ycos = std::cos(yaw);
+				const float vp_width = mirror_width * shape_scale;
+				const float vp_phys_height = vp_width / rect_aspect;
+				if (curved)
+				{
+					XrCompositionLayerCylinderKHR& cyl = cyls[layer_count];
+					cyl.layerFlags = 0;
+					cyl.space = XRSession::GetSpace();
+					cyl.eyeVisibility = vis;
+					cyl.subImage = sub_image;
+					cyl.pose.orientation = vp_quat;
+					cyl.pose.position = {s.screen_anchor_x, s.screen_anchor_y + voffset, s.screen_anchor_z};
+					cyl.radius = distance;
+					cyl.centralAngle = arc_deg * (3.14159265f / 180.0f) * shape_scale;
+					cyl.aspectRatio = rect_aspect;
+					layers[layer_count] = reinterpret_cast<const XrCompositionLayerBaseHeader*>(&cyl);
+				}
+				else
+				{
+					XrCompositionLayerQuad& quad = quads[layer_count];
+					quad.layerFlags = 0;
+					quad.space = XRSession::GetSpace();
+					quad.eyeVisibility = vis;
+					quad.subImage = sub_image;
+					quad.pose.orientation = vp_quat;
+					quad.pose.position = {s.screen_anchor_x - distance * ysin,
+						s.screen_anchor_y + voffset,
+						s.screen_anchor_z - distance * ycos};
+					quad.size = {vp_width, vp_phys_height};
+					layers[layer_count] = reinterpret_cast<const XrCompositionLayerBaseHeader*>(&quad);
+				}
+				layer_count++;
+			};
+
 			const bool l0 = s.chains[0].ever_released;
 			const bool l1 = s.chains[1].ever_released;
-			if (stereo && l0 && l1)
+			if (split_snap.split_active && (l0 || l1))
+			{
+				const bool split_stereo = stereo && split_snap.stereo_on && l0 && l1;
+				for (int vp = 0; vp < 2; vp++)
+				{
+					if (split_stereo)
+					{
+						make_split_layer(0, XR_EYE_VISIBILITY_LEFT, vp);
+						make_split_layer(1, XR_EYE_VISIBILITY_RIGHT, vp);
+					}
+					else
+					{
+						make_split_layer(l0 ? 0 : 1, XR_EYE_VISIBILITY_BOTH, vp);
+					}
+				}
+			}
+			else if (stereo && l0 && l1)
 			{
 				make_layer(0, XR_EYE_VISIBILITY_LEFT);
 				make_layer(1, XR_EYE_VISIBILITY_RIGHT);
@@ -893,9 +984,10 @@ namespace VR::XRCompositor
 
 		if (s_chainlog)
 		{
-			const char* branch = force_zero_layers ? "Z" :
+			const char* branch = (layer_count == 0) ? "Z" :
+				cl_split ? "SP" :
 				(layer_count == 2) ? "S" :
-				(layer_count == 1) ? (s.chains[0].ever_released ? "B0" : "B1") : "Z";
+				(s.chains[0].ever_released ? "B0" : "B1");
 			GSTextureVK* cur = static_cast<GSTextureVK*>(current);
 			Console.WriteLn("(VR) CHAINLOG v=%llu render=%d cur=%s%ux%u/%uL layered=%d stereo=%d "
 							"c0={r=%d er=%d wp=%d} c1={r=%d er=%d wp=%d} branch=%s layers=%u",

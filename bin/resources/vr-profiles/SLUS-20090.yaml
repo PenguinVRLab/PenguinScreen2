@@ -13,6 +13,12 @@ SLUS-20090:
   crcs: [0xB4A004F2]
   tier: stereo
   stereo: { separation: 0.02, convergence: 2.0, uvDraws: screen, pinUniformQ: true }
+  split:
+    layout: horizontal
+    active: { address: 0x003A2A34, atLeast: 2, width: 4 }
+    localView: 0
+    localPadPort: 0
+    mode: focus
   camera:
     base: { pointer: 0x003A40A4 }
     guards:

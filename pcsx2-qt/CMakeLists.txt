@@ -177,9 +177,6 @@ target_sources(pcsx2-qt PRIVATE
 	Settings/USBBindingWidget_GunCon2.ui
 	Settings/USBBindingWidget_RyojouhenCon.ui
 	Settings/USBBindingWidget_ShinkansenCon.ui
-	Settings/VRSettingsWidget.cpp
-	Settings/VRSettingsWidget.h
-	Settings/VRSettingsWidget.ui
 	Debugger/AnalysisOptionsDialog.cpp
 	Debugger/AnalysisOptionsDialog.h
 	Debugger/AnalysisOptionsDialog.ui
@@ -273,6 +270,21 @@ target_sources(pcsx2-qt PRIVATE
 	Tools/InputRecording/InputRecordingViewer.ui
 	resources/resources.qrc
 )
+
+# The VR settings page is a VR feature and must not be compiled into a no-VR
+# build: its body calls VR::GetSessionStatus() and VR::ProfileDB::ListProfiles(),
+# which live in pcsx2/VR/* and are only compiled when ENABLE_VR is on. Every
+# USE of the widget in SettingsWindow.cpp was already guarded — only this source
+# listing was not, so -DENABLE_VR=OFF compiled all 922 objects and then failed
+# at the final link with two undefined symbols. Mirrors the same conditional
+# pcsx2/CMakeLists.txt already uses for the VR sources themselves.
+if(ENABLE_VR)
+	target_sources(pcsx2-qt PRIVATE
+		Settings/VRSettingsWidget.cpp
+		Settings/VRSettingsWidget.h
+		Settings/VRSettingsWidget.ui
+	)
+endif()
 
 if (NOT APPLE)
     target_sources(pcsx2-qt PRIVATE

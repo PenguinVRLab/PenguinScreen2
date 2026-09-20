@@ -9,9 +9,6 @@
 
 class DockDropIndicator;
 
-// This switches between our custom drop indicators and KDDockWidget's built-in
-// ones on the fly depending on whether or not we have a windowing system that
-// supports compositing.
 class DockDropIndicatorProxy : public KDDockWidgets::Core::ClassicIndicatorWindowViewInterface
 {
 public:
@@ -42,9 +39,6 @@ private:
 	KDDockWidgets::Core::ClassicDropIndicatorOverlay* m_classic_indicators = nullptr;
 };
 
-// Our default custom drop indicator implementation. This fits in with PCSX2's
-// themes a lot better, but doesn't support windowing systems where compositing
-// is disabled (it would show a black screen).
 class DockDropIndicatorWindow : public QWidget, public KDDockWidgets::Core::ClassicIndicatorWindowViewInterface
 {
 	Q_OBJECT
@@ -86,9 +80,6 @@ protected:
 	void paintEvent(QPaintEvent* event) override;
 };
 
-// An alternative drop indicator design that can be enabled from the settings
-// menu. For this one we don't need to worry about whether compositing is
-// supported since it doesn't create its own window.
 class DockSegmentedDropIndicatorOverlay : public KDDockWidgets::QtWidgets::SegmentedDropIndicatorOverlay
 {
 	Q_OBJECT

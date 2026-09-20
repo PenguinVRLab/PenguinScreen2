@@ -22,7 +22,6 @@
 
 #include <mutex>
 
-// Need a lock so the other threads don't try to write to a deleting window.
 LogWindow* g_log_window;
 static std::mutex s_log_mutex;
 
@@ -70,7 +69,6 @@ void LogWindow::updateSettings()
 				g_log_window->reattachToMainWindow();
 		}
 
-		// Update level.
 		if (new_enabled)
 			Log::SetHostOutputLevel(GetWindowLogLevel(), &LogWindow::logCallback);
 
@@ -108,7 +106,6 @@ void LogWindow::destroy()
 
 void LogWindow::reattachToMainWindow()
 {
-	// Skip when maximized.
 	if (g_main_window->windowState() & (Qt::WindowMaximized | Qt::WindowFullScreen))
 		return;
 
@@ -161,7 +158,6 @@ void LogWindow::createUi()
 	QMenu* settings_menu = menu->addMenu(tr("&Settings"));
 
 #if 0
-	// TODO: These are duplicated with the main window...
 	action = settings_menu->addAction(tr("Log To &System Console"));
 	action->setCheckable(true);
 	SettingWidgetBinder::BindWidgetToBoolSetting(nullptr, action, "Logging", "EnableSystemConsole", false);
@@ -190,8 +186,6 @@ void LogWindow::createUi()
 	SettingWidgetBinder::BindWidgetToBoolSetting(nullptr, action, "Logging", "ShowEESIOInput", false);
 
 	settings_menu->addSeparator();
-
-	// TODO: Log Level
 
 	m_text = new QPlainTextEdit(this);
 	m_text->setReadOnly(true);
@@ -278,7 +272,6 @@ void LogWindow::logCallback(LOGLEVEL level, ConsoleColors color, std::string_vie
 	if (!g_log_window)
 		return;
 
-	// I don't like the memory allocations here either...
 	QString qmessage;
 	qmessage.reserve(message.length() + 1);
 	qmessage.append(QUtf8StringView(message.data(), message.length()));
@@ -321,56 +314,54 @@ void LogWindow::appendMessage(quint32 level, quint32 color, const QString& messa
 
 	{
 		static constexpr const QColor qcolors[2][ConsoleColors_Count] = {
-			// Light theme
 			{
-				QColor(0, 0, 0), // Color_Default
-				QColor(0, 0, 0), // Color_Black
-				QColor(128, 0, 0), // Color_Red
-				QColor(0, 128, 0), // Color_Green
-				QColor(0, 0, 128), // Color_Blue
-				QColor(160, 0, 160), // Color_Magenta
-				QColor(160, 120, 0), // Color_Orange
-				QColor(108, 108, 108), // Color_Gray
+				QColor(0, 0, 0),
+				QColor(0, 0, 0),
+				QColor(128, 0, 0),
+				QColor(0, 128, 0),
+				QColor(0, 0, 128),
+				QColor(160, 0, 160),
+				QColor(160, 120, 0),
+				QColor(108, 108, 108),
 
-				QColor(128, 180, 180), // Color_Cyan
-				QColor(180, 180, 128), // Color_Yellow
-				QColor(160, 160, 160), // Color_White
+				QColor(128, 180, 180),
+				QColor(180, 180, 128),
+				QColor(160, 160, 160),
 
-				QColor(0, 0, 0), // Color_StrongBlack
-				QColor(128, 0, 0), // Color_StrongRed
-				QColor(0, 128, 0), // Color_StrongGreen
-				QColor(0, 0, 128), // Color_StrongBlue
-				QColor(160, 0, 160), // Color_StrongMagenta
-				QColor(160, 120, 0), // Color_StrongOrange
-				QColor(108, 108, 108), // Color_StrongGray
+				QColor(0, 0, 0),
+				QColor(128, 0, 0),
+				QColor(0, 128, 0),
+				QColor(0, 0, 128),
+				QColor(160, 0, 160),
+				QColor(160, 120, 0),
+				QColor(108, 108, 108),
 
-				QColor(128, 180, 180), // Color_StrongCyan
-				QColor(180, 180, 128), // Color_StrongYellow
-				QColor(160, 160, 160), // Color_StrongWhite
+				QColor(128, 180, 180),
+				QColor(180, 180, 128),
+				QColor(160, 160, 160),
 			},
-			// Dark theme
 			{
-				QColor(208, 208, 208), // Color_Default
-				QColor(255, 255, 255), // Color_Black
-				QColor(180, 0, 0), // Color_Red
-				QColor(0, 160, 0), // Color_Green
-				QColor(32, 32, 204), // Color_Blue
-				QColor(160, 0, 160), // Color_Magenta
-				QColor(160, 120, 0), // Color_Orange
-				QColor(128, 128, 128), // Color_Gray
-				QColor(128, 180, 180), // Color_Cyan
-				QColor(180, 180, 128), // Color_Yellow
-				QColor(160, 160, 160), // Color_White
-				QColor(255, 255, 255), // Color_StrongBlack
-				QColor(180, 0, 0), // Color_StrongRed
-				QColor(0, 160, 0), // Color_StrongGreen
-				QColor(32, 32, 204), // Color_StrongBlue
-				QColor(160, 0, 160), // Color_StrongMagenta
-				QColor(160, 120, 0), // Color_StrongOrange
-				QColor(128, 128, 128), // Color_StrongGray
-				QColor(128, 180, 180), // Color_StrongCyan
-				QColor(180, 180, 128), // Color_StrongYellow
-				QColor(160, 160, 160), // Color_StrongWhite
+				QColor(208, 208, 208),
+				QColor(255, 255, 255),
+				QColor(180, 0, 0),
+				QColor(0, 160, 0),
+				QColor(32, 32, 204),
+				QColor(160, 0, 160),
+				QColor(160, 120, 0),
+				QColor(128, 128, 128),
+				QColor(128, 180, 180),
+				QColor(180, 180, 128),
+				QColor(160, 160, 160),
+				QColor(255, 255, 255),
+				QColor(180, 0, 0),
+				QColor(0, 160, 0),
+				QColor(32, 32, 204),
+				QColor(160, 0, 160),
+				QColor(160, 120, 0),
+				QColor(128, 128, 128),
+				QColor(128, 180, 180),
+				QColor(180, 180, 128),
+				QColor(160, 160, 160),
 			},
 		};
 
@@ -389,7 +380,6 @@ void LogWindow::appendMessage(quint32 level, quint32 color, const QString& messa
 
 		const bool dark = static_cast<u32>(QtHost::IsDarkApplicationTheme());
 
-		// message has \n already
 		format.setForeground(QBrush(qcolors[static_cast<u32>(dark)][color]));
 		temp_cursor.setCharFormat(format);
 		temp_cursor.insertText(message);
@@ -404,7 +394,6 @@ void LogWindow::appendMessage(quint32 level, quint32 color, const QString& messa
 		}
 		else
 		{
-			// Can't let changing the cursor affect the scroll bar...
 			const int pos = scrollbar->sliderPosition();
 			m_text->setTextCursor(temp_cursor);
 			scrollbar->setSliderPosition(pos);
@@ -458,7 +447,6 @@ void LogWindow::onInputEntered()
 
 				if (window->m_local_echo)
 				{
-					// appendMessage expects a newline to be at the end of the string
 					QString text = QString::fromStdString(str);
 					window->appendMessage(0, 0, window->m_newline_on_enter ? text : (text + '\n'));
 				}

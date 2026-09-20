@@ -13,14 +13,12 @@
 #include <mutex>
 
 #ifdef _WIN32
-#include <io.h> // _mktemp_s
+#include <io.h>
 #else
-#include <stdlib.h> // mktemp
+#include <stdlib.h>
 #include <unistd.h>
 #endif
 
-// To prevent races between saving and loading settings, particularly with game settings,
-// we only allow one ini to be parsed at any point in time.
 static std::mutex s_ini_load_save_mutex;
 
 static std::FILE* GetTemporaryFile(std::string* temporary_filename, const std::string& original_filename,
@@ -108,7 +106,6 @@ bool INISettingsInterface::Save(Error* error)
 		{
 			Error::SetStringFmt(error, "INI SaveFile() failed: {}", static_cast<int>(err));
 
-			// remove temporary file
 			FileSystem::DeleteFilePath(temp_filename.c_str());
 		}
 		else if (!FileSystem::RenamePath(temp_filename.c_str(), m_filename.c_str(), error))
@@ -361,7 +358,7 @@ std::vector<std::pair<std::string, std::string>> INISettingsInterface::GetKeyVal
 		std::list<Entry> values;
 		for (Entry& key : keys)
 		{
-			if (!m_ini.GetAllValues(section, key.pItem, values)) // [[unlikely]]
+			if (!m_ini.GetAllValues(section, key.pItem, values))
 			{
 				Console.Error("Got no values for a key returned from GetAllKeys!");
 				continue;

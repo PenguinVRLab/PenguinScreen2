@@ -3,7 +3,6 @@
 
 #pragma once
 
-// The full suite of hardware APIs:
 #include "Counters.h"
 #include "GS.h"
 #include "Hw.h"

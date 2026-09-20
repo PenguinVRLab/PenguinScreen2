@@ -17,14 +17,11 @@
 
 #if defined(ARCH_X86)
 
-// Can't stick them in structs because it breaks calling convention things, yay
 using r128 = __m128i;
 
-// Calling convention setting, yay
 #define RETURNS_R128 r128 __vectorcall
 #define TAKES_R128 __vectorcall
 
-// And since we can't stick them in structs, we get lots of static methods, yay!
 [[maybe_unused]] __fi static r128 r128_load(const void* ptr)
 {
 	return _mm_load_si128(reinterpret_cast<const r128*>(ptr));
@@ -45,7 +42,6 @@ using r128 = __m128i;
 	return _mm_setzero_si128();
 }
 
-/// Expects that r64 came from r64-handling code, and not from a recompiler or something
 [[maybe_unused]] __fi static r128 r128_from_u64_dup(u64 val)
 {
 	return _mm_set1_epi64x(val);
@@ -145,7 +141,6 @@ using r128 = uint32x4_t;
 	return vmovq_n_u32(0);
 }
 
-/// Expects that r64 came from r64-handling code, and not from a recompiler or something
 [[maybe_unused]] __fi static r128 r128_from_u64_dup(u64 val)
 {
 	return vreinterpretq_u32_u64(vdupq_n_u64(val));

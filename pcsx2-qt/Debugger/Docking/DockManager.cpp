@@ -65,9 +65,6 @@ void DockManager::configureDockingSystem()
 		KDDockWidgets::Config::Flag_AllowReorderTabs |
 		KDDockWidgets::Config::Flag_TitleBarIsFocusable);
 
-	// We set this flag regardless of whether or not the windowing system
-	// supports compositing since it's only used by the built-in docking
-	// indicator, and we only fall back to that if compositing is disabled.
 	config.setInternalFlags(KDDockWidgets::Config::InternalFlag_DisableTranslucency);
 
 	config.setDockWidgetFactoryFunc(&DockManager::dockWidgetFactory);
@@ -97,8 +94,6 @@ bool DockManager::deleteLayout(DockLayout::Index layout_index)
 	m_layouts.at(layout_index).deleteFile();
 	m_layouts.erase(m_layouts.begin() + layout_index);
 
-	// All the layouts after the one being deleted have been shifted over by
-	// one, so adjust the current layout index accordingly.
 	if (m_current_layout > layout_index && m_current_layout != DockLayout::INVALID_INDEX)
 		m_current_layout--;
 
@@ -127,8 +122,6 @@ void DockManager::switchToLayout(DockLayout::Index layout_index, bool blink_tab)
 			layout.save(m_current_layout);
 		}
 
-		// Clear out the existing positions of toolbars so they don't affect
-		// where new toolbars appear for other layouts.
 		if (g_debugger_window)
 			g_debugger_window->clearToolBarState();
 
@@ -153,7 +146,6 @@ void DockManager::switchToLayout(DockLayout::Index layout_index, bool blink_tab)
 
 bool DockManager::switchToLayoutWithCPU(BreakPointCpu cpu, bool blink_tab)
 {
-	// Don't interrupt the user if the current layout already has the right CPU.
 	if (m_current_layout != DockLayout::INVALID_INDEX && m_layouts.at(m_current_layout).cpu() == cpu)
 	{
 		switchToLayout(m_current_layout, blink_tab);
@@ -176,7 +168,6 @@ void DockManager::loadLayouts()
 {
 	m_layouts.clear();
 
-	// Load the layouts.
 	FileSystem::FindResultsArray files;
 	FileSystem::FindFiles(
 		EmuFolders::DebuggerLayouts.c_str(),
@@ -196,7 +187,6 @@ void DockManager::loadLayouts()
 
 		DockLayout& layout = m_layouts.at(index);
 
-		// Try to make sure the layout has a unique name.
 		const QString& name = layout.name();
 		QString new_name = name;
 		if (result == DockLayout::SUCCESS || result == DockLayout::DEFAULT_LAYOUT_HASH_MISMATCH)
@@ -219,8 +209,6 @@ void DockManager::loadLayouts()
 		{
 			deleteLayout(index);
 
-			// Only delete the file if we've identified that it's actually a
-			// layout file.
 			if (result == DockLayout::MAJOR_VERSION_MISMATCH || result == DockLayout::CONFLICTING_NAME)
 				FileSystem::DeleteFilePath(ffd.FileName.c_str());
 
@@ -236,7 +224,6 @@ void DockManager::loadLayouts()
 		indices_last_session.emplace_back(index_last_session);
 	}
 
-	// Make sure the layouts remain in the same order they were in previously.
 	std::vector<size_t> layout_indices;
 	for (size_t i = 0; i < m_layouts.size(); i++)
 		layout_indices.emplace_back(i);
@@ -265,8 +252,6 @@ void DockManager::loadLayouts()
 	else
 		updateLayoutSwitcher();
 
-	// Make sure the indices in the existing layout files match up with the
-	// indices of any new layouts.
 	if (order_changed)
 		saveLayouts();
 }
@@ -361,8 +346,6 @@ void DockManager::createWindowsMenu(QMenu* menu)
 
 	DockLayout& layout = m_layouts.at(m_current_layout);
 
-	// Create a menu that allows for multiple dock widgets of the same type to
-	// be opened.
 	QMenu* add_another_menu = menu->addMenu(tr("Add Another..."));
 
 	std::vector<DebuggerView*> add_another_widgets;
@@ -420,7 +403,6 @@ void DockManager::createWindowsMenu(QMenu* menu)
 	std::vector<DebuggerViewToggle> toggles;
 	std::set<std::string> toggle_types;
 
-	// Create a menu item for each open debugger view.
 	for (const auto& [unique_name, widget] : layout.debuggerViews())
 	{
 		QAction* action = new QAction(menu);
@@ -442,7 +424,6 @@ void DockManager::createWindowsMenu(QMenu* menu)
 		toggle_types.emplace(widget->metaObject()->className());
 	}
 
-	// Create menu items to open debugger views without any open instances.
 	for (const auto& [type, desc] : DockTables::DEBUGGER_VIEWS)
 	{
 		if (!toggle_types.contains(type))
@@ -513,8 +494,6 @@ void DockManager::updateLayoutSwitcher()
 
 void DockManager::newLayoutClicked()
 {
-	// The plus button has just been made the current tab, so set it back to the
-	// one corresponding to the current layout again.
 	if (m_menu_bar)
 		m_menu_bar->onCurrentLayoutChanged(m_current_layout);
 
@@ -554,7 +533,6 @@ void DockManager::newLayoutClicked()
 
 				DockLayout::Index old_layout = m_current_layout;
 
-				// Freeze the current layout so we can copy the geometry.
 				switchToLayout(DockLayout::INVALID_INDEX);
 
 				new_layout = createLayout(dialog->name(), dialog->cpu(), false, m_layouts.at(old_layout));
@@ -692,8 +670,6 @@ void DockManager::layoutSwitcherTabMoved(DockLayout::Index from_index, DockLayou
 {
 	if (from_index >= m_layouts.size() || to_index >= m_layouts.size())
 	{
-		// This happens when the user tries to move a layout to the right of the
-		// plus button.
 		updateLayoutSwitcher();
 		return;
 	}
@@ -799,8 +775,6 @@ void DockManager::updateTheme()
 		for (const auto& [unique_name, widget] : layout.debuggerViews())
 			widget->updateStyleSheet();
 
-	// KDDockWidgets::QtWidgets::TabBar sets its own style to a subclass of
-	// QProxyStyle in its constructor, so we need to update that here.
 	for (KDDockWidgets::Core::Group* group : KDDockWidgets::DockRegistry::self()->groups())
 	{
 		auto tab_bar = static_cast<KDDockWidgets::QtWidgets::TabBar*>(group->tabBar()->view());
@@ -833,7 +807,6 @@ void DockManager::setLayoutLocked(bool locked, bool save_setting)
 		auto stack = static_cast<KDDockWidgets::QtWidgets::Stack*>(group->stack()->view());
 		stack->setTabsClosable(!m_layout_locked);
 
-		// HACK: Make sure the sizes of the tabs get updated.
 		if (stack->tabBar()->count() > 0)
 			stack->tabBar()->setTabText(0, stack->tabBar()->tabText(0));
 	}
@@ -885,7 +858,6 @@ bool DockManager::dragAboutToStart(KDDockWidgets::Core::Draggable* draggable)
 	if (draggable->isInProgrammaticDrag())
 		return true;
 
-	// Allow floating windows to be dragged around even if the layout is locked.
 	if (draggable->isWindow())
 		return true;
 

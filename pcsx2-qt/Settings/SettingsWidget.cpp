@@ -40,13 +40,11 @@ QWidget* SettingsWidget::addTab(QString name, QWidget* contents, bool custom_mar
 
 	m_tab_widget->addTab(scroll_area, name);
 
-	// Only show the tab bar if there's more than one tab to choose from.
 	if (m_tab_widget->count() == 1)
 		m_tab_widget->tabBar()->setVisible(false);
 	else if ((m_tab_widget->count() == 2))
 		m_tab_widget->tabBar()->setVisible(true);
 
-	// Automatically setup the margins on the tab contents and headers.
 	if (m_tab_widget->count() == 1)
 	{
 		if (!custom_margins)

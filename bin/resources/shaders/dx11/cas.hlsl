@@ -37,8 +37,6 @@ AF3 CasLoad(ASU2 p)
   return InputTexture.Load(int3(srcOffset, 0) + int3(p, 0)).rgb;
 }
 
-// Lets you transform input from the load into a linear color space between 0 and 1. See ffx_cas.h
-// In this case, our input is already linear and between 0 and 1
 void CasInput(inout AF1 r, inout AF1 g, inout AF1 b) {}
 
 #include "ffx_cas.h"
@@ -46,7 +44,6 @@ void CasInput(inout AF1 r, inout AF1 g, inout AF1 b) {}
 [numthreads(64, 1, 1)]
 void main(uint3 LocalThreadId : SV_GroupThreadID, uint3 WorkGroupId : SV_GroupID)
 {
-  // Do remapping of local xy in workgroup for a more PS-like swizzle pattern.
   AU2 gxy = ARmp8x8(LocalThreadId.x) + AU2(WorkGroupId.x << 4u, WorkGroupId.y << 4u);
 
 #if CAS_SHARPEN_ONLY
@@ -55,7 +52,6 @@ void main(uint3 LocalThreadId : SV_GroupThreadID, uint3 WorkGroupId : SV_GroupID
   const bool sharpenOnly = false;
 #endif
 
-  // Filter.
   AF3 c = (float3)0.0f;
 
   CasFilter(c.r, c.g, c.b, gxy, const0, const1, sharpenOnly);

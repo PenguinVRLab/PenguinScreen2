@@ -3,8 +3,6 @@
 
 #pragma once
 
-// This file provides the same information as svnrev.h except you don't need to
-// recompile each object file using it when said information is updated.
 namespace BuildVersion
 {
 	extern const char* GitTag;
@@ -15,4 +13,4 @@ namespace BuildVersion
 	extern const char* GitRev;
 	extern const char* GitHash;
 	extern const char* GitDate;
-} // namespace BuildVersion
+}

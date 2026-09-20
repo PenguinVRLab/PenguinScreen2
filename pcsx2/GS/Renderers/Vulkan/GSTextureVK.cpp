@@ -35,20 +35,20 @@ static constexpr const VkComponentMapping s_identity_swizzle{VK_COMPONENT_SWIZZL
 static VkImageLayout GetVkImageLayout(GSTextureVK::Layout layout)
 {
 	static constexpr std::array<VkImageLayout, static_cast<u32>(GSTextureVK::Layout::Count)> s_vk_layout_mapping = {{
-		VK_IMAGE_LAYOUT_UNDEFINED, // Undefined
-		VK_IMAGE_LAYOUT_PREINITIALIZED, // Preinitialized
-		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, // ColorAttachment
-		VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, // DepthStencilAttachment
-		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, // ShaderReadOnly
-		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, // ClearDst
-		VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, // TransferSrc
-		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, // TransferDst
-		VK_IMAGE_LAYOUT_GENERAL, // TransferSelf
-		VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, // PresentSrc
-		VK_IMAGE_LAYOUT_GENERAL, // FeedbackLoop
-		VK_IMAGE_LAYOUT_GENERAL, // ReadWriteImage
-		VK_IMAGE_LAYOUT_GENERAL, // ComputeReadWriteImage
-		VK_IMAGE_LAYOUT_GENERAL, // General
+		VK_IMAGE_LAYOUT_UNDEFINED,
+		VK_IMAGE_LAYOUT_PREINITIALIZED,
+		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+		VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		VK_IMAGE_LAYOUT_GENERAL,
+		VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+		VK_IMAGE_LAYOUT_GENERAL,
+		VK_IMAGE_LAYOUT_GENERAL,
+		VK_IMAGE_LAYOUT_GENERAL,
+		VK_IMAGE_LAYOUT_GENERAL,
 	}};
 	return (layout == GSTextureVK::Layout::FeedbackLoop && GSDeviceVK::GetInstance()->UseFeedbackLoopLayout()) ?
 	           VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT :
@@ -89,8 +89,6 @@ std::unique_ptr<GSTextureVK> GSTextureVK::Create(Usage usage, Format format, int
 
 	const VkFormat vk_format = GSDeviceVK::GetInstance()->LookupNativeFormat(format);
 
-	// PCSX2-VR (M4.3-pre): array-layer textures (layers > 1) back multiview stereo render
-	// targets. arrayLayers carries the eye count and the primary view becomes a 2D_ARRAY.
 	VkImageCreateInfo ici = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO, nullptr, 0, VK_IMAGE_TYPE_2D, vk_format,
 		{static_cast<u32>(width), static_cast<u32>(height), 1}, static_cast<u32>(levels), static_cast<u32>(layers),
 		VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_TILING_OPTIMAL};
@@ -108,7 +106,6 @@ std::unique_ptr<GSTextureVK> GSTextureVK::Create(Usage usage, Format format, int
 
 	if (format == Format::UNorm8)
 	{
-		// for r8 textures, swizzle it across all 4 components. the shaders depend on it being in alpha.. why?
 		static constexpr const VkComponentMapping r8_swizzle = {
 			VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_R };
 		vci.components = r8_swizzle;
@@ -138,7 +135,6 @@ std::unique_ptr<GSTextureVK> GSTextureVK::Create(Usage usage, Format format, int
 		ici.usage |= VK_IMAGE_USAGE_STORAGE_BIT;
 	}
 
-	// Use dedicated allocations for typical RT size
 	if (IsRenderTargetOrDepthStencil(usage) && width >= 512 && height >= 448)
 		aci.flags |= VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
 
@@ -147,7 +143,6 @@ std::unique_ptr<GSTextureVK> GSTextureVK::Create(Usage usage, Format format, int
 	VkResult res = vmaCreateImage(GSDeviceVK::GetInstance()->GetAllocator(), &ici, &aci, &image, &allocation, nullptr);
 	if (aci.flags & VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT && res != VK_SUCCESS)
 	{
-		// try without dedicated allocation
 		aci.flags &= ~VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
 		res = vmaCreateImage(GSDeviceVK::GetInstance()->GetAllocator(), &ici, &aci, &image, &allocation, nullptr);
 	}
@@ -179,7 +174,6 @@ std::unique_ptr<GSTextureVK> GSTextureVK::Create(Usage usage, Format format, int
 std::unique_ptr<GSTextureVK> GSTextureVK::Adopt(
 	VkImage image, Usage usage, Format format, int width, int height, int levels, VkFormat vk_format)
 {
-	// Only need to create the image view, this is mainly for swap chains.
 	const VkImageViewCreateInfo view_info = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, nullptr, 0, image,
 		VK_IMAGE_VIEW_TYPE_2D, vk_format, s_identity_swizzle,
 		{IsDepthStencil(usage) ?
@@ -187,7 +181,6 @@ std::unique_ptr<GSTextureVK> GSTextureVK::Adopt(
 				static_cast<VkImageAspectFlags>(VK_IMAGE_ASPECT_COLOR_BIT),
 			0u, static_cast<u32>(levels), 0u, 1u}};
 
-	// Memory is managed by the owner of the image.
 	VkImageView view = VK_NULL_HANDLE;
 	VkResult res = vkCreateImageView(GSDeviceVK::GetInstance()->GetDevice(), &view_info, nullptr, &view);
 	if (res != VK_SUCCESS)
@@ -214,7 +207,6 @@ VkImageView GSTextureVK::GetLayerView(u32 layer)
 		IsDepthStencil() ? static_cast<VkImageAspectFlags>(VK_IMAGE_ASPECT_DEPTH_BIT) :
 						   static_cast<VkImageAspectFlags>(VK_IMAGE_ASPECT_COLOR_BIT);
 
-	// Single-layer 2D view selecting one array slice, mirroring the primary view's swizzle.
 	VkImageViewCreateInfo vci = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, nullptr, 0, m_image, VK_IMAGE_VIEW_TYPE_2D,
 		m_vk_format, s_identity_swizzle, {aspect, 0, static_cast<u32>(m_mipmap_levels), layer, 1u}};
 	if (m_format == Format::UNorm8)
@@ -238,35 +230,11 @@ VkImageView GSTextureVK::GetLayerView(u32 layer)
 
 GSTexture* GSTextureVK::GetLayerProxyTexture(u32 layer)
 {
-	// Mono textures (and proxies themselves) alias to the texture itself, which makes
-	// per-layer loops in backend-agnostic code a no-op on every non-stereo path.
 	if (m_array_layers <= 1 || IsLayerProxy())
 		return this;
 
 	pxAssert(layer < m_array_layers);
 
-	// PCSX2-VR (KF4 root cause, 2026-08-13): materialize any DEFERRED CLEAR before handing
-	// out per-layer access.
-	//
-	// GSTexture::m_state lives on each object and a proxy is its own object, so a write
-	// through a proxy marks only the PROXY dirty — the parent stays State::Cleared with a
-	// clear still "pending". The next parent-level CommitClear() (PSSetShaderResource does
-	// one on every bind, GSDeviceVK.cpp:6271) then executes that stale clear and blanks the
-	// whole image, destroying everything the per-layer writes just put there.
-	//
-	// That is the KF4 darkening + seams: the 2-layer hazard snapshot was filled correctly
-	// through proxies (both layers verified populated by readback), then wiped to black at
-	// bind time, so the self-referential turn-blur blended 50/50 against black — a uniform
-	// halving per blit (38.2 -> 19.3 -> ...), with page-column edges. MEASURED: forcing the
-	// parent dirty after the fill restores the reference numbers exactly.
-	//
-	// A deferred clear is simply not expressible once a texture is addressed per layer
-	// (clearing "only the layers nobody wrote" is not a thing the tracker can represent), so
-	// this is the last point where the clear can still be applied coherently: every layer
-	// gets the clear colour, then per-layer writes land on top. CommitClear() early-outs
-	// unless a clear really is pending, so the cost on the common path is one branch — and
-	// it fixes every proxy consumer at once (stretch/merge/interlace/FXAA/shade-boost/
-	// resize/snapshot), not just the call site that exposed it.
 	CommitClear();
 
 	if (m_layer_proxies.empty())
@@ -276,9 +244,8 @@ GSTexture* GSTextureVK::GetLayerProxyTexture(u32 layer)
 	{
 		VkImageView view = GetLayerView(layer);
 		if (view == VK_NULL_HANDLE)
-			return this; // degrade to whole-texture semantics rather than crash
+			return this;
 
-		// Non-owning alias: parent's image, the parent-owned layer view, no allocation.
 		std::unique_ptr<GSTextureVK> proxy(new GSTextureVK(
 			m_usage, m_format, m_size.x, m_size.y, m_mipmap_levels, 1, m_image, VK_NULL_HANDLE, view, m_vk_format));
 		proxy->m_proxy_parent = this;
@@ -293,10 +260,6 @@ void GSTextureVK::Destroy(bool defer)
 {
 	GSDeviceVK::GetInstance()->UnbindTexture(this);
 
-	// PCSX2-VR (M4.3): layer proxies reference our image and layer views — tear them down
-	// (their framebuffers) before the views/image go away. A proxy itself owns ONLY its
-	// framebuffers; the view belongs to the parent's m_layer_views and the image/allocation
-	// to the parent, so both are skipped below via IsLayerProxy().
 	for (std::unique_ptr<GSTextureVK>& proxy : m_layer_proxies)
 	{
 		if (proxy)
@@ -330,7 +293,7 @@ void GSTextureVK::Destroy(bool defer)
 
 	if (m_view != VK_NULL_HANDLE)
 	{
-		if (!IsLayerProxy()) // a proxy's view is the parent's layer view — not ours to destroy
+		if (!IsLayerProxy())
 		{
 			if (defer)
 				GSDeviceVK::GetInstance()->DeferImageViewDestruction(m_view);
@@ -340,7 +303,6 @@ void GSTextureVK::Destroy(bool defer)
 		m_view = VK_NULL_HANDLE;
 	}
 
-	// PCSX2-VR (M4.3-pre): release any lazily-created per-layer views.
 	for (VkImageView layer_view : m_layer_views)
 	{
 		if (layer_view == VK_NULL_HANDLE)
@@ -352,7 +314,6 @@ void GSTextureVK::Destroy(bool defer)
 	}
 	m_layer_views.clear();
 
-	// If we don't have device memory allocated, the image is not owned by us (e.g. swapchain)
 	if (m_allocation != VK_NULL_HANDLE)
 	{
 		if (defer)
@@ -370,15 +331,6 @@ void GSTextureVK::Destroy(bool defer)
 
 VkImageLayout GSTextureVK::GetVkLayout() const
 {
-	// PCSX2-VR (ISS-031/037): MUST go through GetLayout(), which resolves a layer
-	// proxy to its parent. A proxy aliases the parent's VkImage but is a separate
-	// GSTextureVK, and TransitionToLayout() deliberately delegates to the parent —
-	// so a proxy's own m_layout NEVER leaves Undefined. Reading the raw member here
-	// handed VK_IMAGE_LAYOUT_UNDEFINED to every consumer of a proxy: descriptor
-	// writes (sampling an image declared UNDEFINED yields UNDEFINED CONTENTS) and
-	// vkCmdCopyImage src/dst layouts (a copy from/to UNDEFINED may legally discard
-	// the contents, at tile granularity). Layer proxies exist only for 2-layer
-	// (stereo) targets, which is why mono was always clean.
 	return GetVkImageLayout(GetLayout());
 }
 
@@ -391,7 +343,6 @@ VkCommandBuffer GSTextureVK::GetCommandBufferForUpdate()
 {
 	if (!IsTexture() || m_use_fence_counter == GSDeviceVK::GetInstance()->GetCurrentFenceCounter())
 	{
-		// Console.WriteLn("Texture update within frame, can't use do beforehand");
 		GSDeviceVK::GetInstance()->EndRenderPass();
 		return GSDeviceVK::GetInstance()->GetCurrentCommandBuffer();
 	}
@@ -412,9 +363,6 @@ VkBuffer GSTextureVK::AllocateUploadStagingBuffer(const void* data, u32 pitch, u
 	const VkBufferCreateInfo bci = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, nullptr, 0, static_cast<VkDeviceSize>(size),
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_SHARING_MODE_EXCLUSIVE, 0, nullptr};
 
-	// Don't worry about setting the coherent bit for this upload, the main reason we had
-	// that set in StreamBuffer was for MoltenVK, which would upload the whole buffer on
-	// smaller uploads, but we're writing to the whole thing anyway.
 	VmaAllocationCreateInfo aci = {};
 	aci.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
 	aci.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
@@ -429,10 +377,8 @@ VkBuffer GSTextureVK::AllocateUploadStagingBuffer(const void* data, u32 pitch, u
 		return VK_NULL_HANDLE;
 	}
 
-	// Immediately queue it for freeing after the command buffer finishes, since it's only needed for the copy.
 	GSDeviceVK::GetInstance()->DeferBufferDestruction(buffer, allocation);
 
-	// And write the data.
 	CopyTextureDataForUpload(ai.pMappedData, data, pitch, upload_pitch, height);
 	vmaFlushAllocation(GSDeviceVK::GetInstance()->GetAllocator(), allocation, 0, size);
 	return buffer;
@@ -470,8 +416,6 @@ bool GSTextureVK::Update(const GSVector4i& r, const void* data, int pitch, int l
 	const u32 upload_pitch = Common::AlignUpPow2(pitch, GSDeviceVK::GetInstance()->GetBufferCopyRowPitchAlignment());
 	const u32 required_size = CalcUploadSize(height, upload_pitch);
 
-	// If the texture is larger than half our streaming buffer size, use a separate buffer.
-	// Otherwise allocation will either fail, or require lots of cmdbuffer submissions.
 	VkBuffer buffer;
 	u32 buffer_offset;
 	if (required_size > (GSDeviceVK::GetInstance()->GetTextureUploadBuffer().GetCurrentSize() / 2))
@@ -514,11 +458,9 @@ bool GSTextureVK::Update(const GSVector4i& r, const void* data, int pitch, int l
 	const VkCommandBuffer cmdbuf = GetCommandBufferForUpdate();
 	GL_PUSH("GSTextureVK::Update({%d,%d} %dx%d Lvl:%u", r.x, r.y, r.width(), r.height(), layer);
 
-	// first time the texture is used? don't leave it undefined
 	if (m_layout == Layout::Undefined)
 		TransitionToLayout(cmdbuf, Layout::TransferDst);
 
-	// if we're an rt and have been cleared, and the full rect isn't being uploaded, do the clear
 	if (IsRenderTarget())
 	{
 		if (!r.eq(GSVector4i(0, 0, m_size.x, m_size.y)))
@@ -543,14 +485,12 @@ bool GSTextureVK::Map(GSMap& m, const GSVector4i* r, int layer)
 	if (layer >= m_mipmap_levels || IsCompressedFormat())
 		return false;
 
-	// map for writing
 	m_map_area = r ? *r : GetRect();
 	m_map_level = layer;
 
 	m.pitch = Common::AlignUpPow2(
 		CalcUploadPitch(m_map_area.width()), GSDeviceVK::GetInstance()->GetBufferCopyRowPitchAlignment());
 
-	// see note in Update() for the reason why.
 	const u32 required_size = CalcUploadSize(m_map_area.height(), m.pitch);
 	VKStreamBuffer& buffer = GSDeviceVK::GetInstance()->GetTextureUploadBuffer();
 	if (required_size >= (buffer.GetCurrentSize() / 2))
@@ -580,7 +520,6 @@ bool GSTextureVK::Map(GSMap& m, const GSVector4i* r, int layer)
 
 void GSTextureVK::Unmap()
 {
-	// this can't handle blocks/compressed formats at the moment.
 	pxAssert(m_map_level < m_mipmap_levels && !IsCompressedFormat());
 	g_perfmon.Put(GSPerfMon::TextureUploads, 1);
 
@@ -597,11 +536,9 @@ void GSTextureVK::Unmap()
 	GL_PUSH("GSTextureVK::Update({%d,%d} %dx%d Lvl:%u", m_map_area.x, m_map_area.y, m_map_area.width(),
 		m_map_area.height(), m_map_level);
 
-	// first time the texture is used? don't leave it undefined
 	if (m_layout == Layout::Undefined)
 		TransitionToLayout(cmdbuf, Layout::TransferDst);
 
-	// if we're an rt and have been cleared, and the full rect isn't being uploaded, do the clear
 	if (IsRenderTarget())
 	{
 		if (!m_map_area.eq(GSVector4i(0, 0, m_size.x, m_size.y)))
@@ -638,10 +575,10 @@ void GSTextureVK::GenerateMipmap()
 		TransitionSubresourcesToLayout(cmdbuf, dst_level, 1, m_layout, Layout::TransferDst);
 
 		const VkImageBlit blit = {
-			{VK_IMAGE_ASPECT_COLOR_BIT, static_cast<u32>(src_level), 0u, 1u}, // srcSubresource
-			{{0, 0, 0}, {src_width, src_height, 1}}, // srcOffsets
-			{VK_IMAGE_ASPECT_COLOR_BIT, static_cast<u32>(dst_level), 0u, 1u}, // dstSubresource
-			{{0, 0, 0}, {dst_width, dst_height, 1}} // dstOffsets
+			{VK_IMAGE_ASPECT_COLOR_BIT, static_cast<u32>(src_level), 0u, 1u},
+			{{0, 0, 0}, {src_width, src_height, 1}},
+			{VK_IMAGE_ASPECT_COLOR_BIT, static_cast<u32>(dst_level), 0u, 1u},
+			{{0, 0, 0}, {dst_width, dst_height, 1}}
 		};
 
 		vkCmdBlitImage(cmdbuf, m_image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, m_image,
@@ -704,7 +641,7 @@ void GSTextureVK::CommitClear(VkCommandBuffer cmdbuf)
 
 void GSTextureVK::OverrideImageLayout(Layout new_layout)
 {
-	if (m_proxy_parent) // proxies share the parent's layout state
+	if (m_proxy_parent)
 	{
 		m_proxy_parent->OverrideImageLayout(new_layout);
 		return;
@@ -721,8 +658,6 @@ void GSTextureVK::TransitionToLayout(VkCommandBuffer command_buffer, Layout new_
 {
 	if (m_proxy_parent) [[unlikely]]
 	{
-		// Proxies share the parent's layout: barrier the WHOLE image (the parent's
-		// subresource range spans all layers), keeping one coherent layout state.
 		m_proxy_parent->TransitionToLayout(command_buffer, new_layout);
 		return;
 	}
@@ -738,13 +673,6 @@ void GSTextureVK::TransitionToLayout(VkCommandBuffer command_buffer, Layout new_
 void GSTextureVK::TransitionSubresourcesToLayout(
 	VkCommandBuffer command_buffer, int start_level, int num_levels, Layout old_layout, Layout new_layout)
 {
-	// Windows RDNA2 drivers don't always correctly transition the layout(?) when ROV is involved.
-	// ReadWriteImage -> Feedback transitions are broken.
-	// ReadWriteImage -> Read only layout  -> Feedback transitions are broken.
-	// ReadWriteImage -> General layout    -> Feedback transitions are broken.
-	// ReadWriteImage -> Write only layout -> Feedback transitions works fine.
-	// Not every broken transition gives broken rendering, the Shadow of the colossus eagle dump is fine after the 1st frame.
-	// Transition to a write only layout using an extra barrier, then to feedback fixes this issue.
 	if (old_layout == Layout::ReadWriteImage && new_layout != Layout::ColorAttachment && new_layout != Layout::ReadWriteImage)
 	{
 		GL_INS("VK: Doing extra transition for broken RDNA2 feedback transitions");
@@ -763,68 +691,55 @@ void GSTextureVK::TransitionSubresourcesToLayout(
 		aspect = VK_IMAGE_ASPECT_COLOR_BIT;
 	}
 
-	// PCSX2-VR (M4.3-pre): cover every array layer so multiview (2-layer) targets transition
-	// correctly. m_array_layers is 1 for normal textures, so single-layer behavior is unchanged.
 	VkImageMemoryBarrier barrier = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, nullptr, 0, 0, GetVkImageLayout(old_layout),
 		GetVkImageLayout(new_layout), VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, m_image,
 		{aspect, static_cast<u32>(start_level), static_cast<u32>(num_levels), GetBaseArrayLayer(), m_array_layers}};
 
-	// srcStageMask -> Stages that must complete before the barrier
-	// dstStageMask -> Stages that must wait for after the barrier before beginning
 	VkPipelineStageFlags srcStageMask, dstStageMask;
 	switch (old_layout)
 	{
 		case Layout::Undefined:
-			// Layout undefined therefore contents undefined, and we don't care what happens to it.
 			barrier.srcAccessMask = 0;
 			srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
 			break;
 
 		case Layout::Preinitialized:
-			// Image has been pre-initialized by the host, so ensure all writes have completed.
 			barrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
 			srcStageMask = VK_PIPELINE_STAGE_HOST_BIT;
 			break;
 
 		case Layout::ColorAttachment:
-			// Image was being used as a color attachment, so ensure all writes have completed.
 			barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 			srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 			break;
 
 		case Layout::DepthStencilAttachment:
-			// Image was being used as a depthstencil attachment, so ensure all writes have completed.
 			barrier.srcAccessMask =
 				VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 			srcStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
 			break;
 
 		case Layout::ShaderReadOnly:
-			// Image was being used as a shader resource, make sure all reads have finished.
 			barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
 			srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 			break;
 
 		case Layout::ClearDst:
-			// Image was being used as a clear destination, ensure all writes have finished.
 			barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 			srcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
 			break;
 
 		case Layout::TransferSrc:
-			// Image was being used as a copy source, ensure all reads have finished.
 			barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 			srcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
 			break;
 
 		case Layout::TransferDst:
-			// Image was being used as a copy destination, ensure all writes have finished.
 			barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 			srcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
 			break;
 
 		case Layout::TransferSelf:
-			// Image was being used as a copy source and destination, ensure all reads and writes have finished.
 			barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
 			srcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;
 			break;
@@ -928,7 +843,6 @@ void GSTextureVK::TransitionSubresourcesToLayout(
 	}
 	vkCmdPipelineBarrier(command_buffer, srcStageMask, dstStageMask, 0, 0, nullptr, 0, nullptr, 1, &barrier);
 
-	// Count as a UAV barrier if we transition to/from UAV.
 	if (IsRenderTargetOrDepthStencil() &&
 		(old_layout == Layout::ReadWriteImage || new_layout == Layout::ReadWriteImage))
 	{
@@ -952,16 +866,6 @@ VkFramebuffer GSTextureVK::GetLinkedFramebuffer(GSTextureVK* depth_texture, bool
 			return fb;
 	}
 
-	// PCSX2-VR (ISS-031/037): the framebuffer must be built against a render pass whose
-	// MULTIVIEW-ness matches the one used at draw time, or the two are incompatible —
-	// VUID-VkRenderPassBeginInfo-renderPass-00904: "The first uses Multiview (has
-	// non-zero viewMasks) while the second one does not" — and every stereo draw is
-	// then undefined (observed: 954 validation errors with stereo on vs 1 with it off,
-	// including sampled images reported in VK_IMAGE_LAYOUT_UNDEFINED). The draw path
-	// selects its render pass with pipe.vs.multiview, which is set when the target is a
-	// 2-layer array, so derive the identical condition from the attachments here.
-	// Mono targets keep multiview=false and the precreated mono render-pass array, so
-	// the stereo-off path stays byte-identical.
 	const bool multiview =
 		(GetArrayLayers() > 1) || (depth_texture && depth_texture->GetArrayLayers() > 1);
 
@@ -998,7 +902,6 @@ GSDownloadTextureVK::GSDownloadTextureVK(u32 width, u32 height, GSTexture::Forma
 
 GSDownloadTextureVK::~GSDownloadTextureVK()
 {
-	// Buffer was created mapped, no need to manually unmap.
 	if (m_buffer != VK_NULL_HANDLE)
 		GSDeviceVK::GetInstance()->DeferBufferDestruction(m_buffer, m_allocation);
 }
@@ -1074,20 +977,18 @@ void GSDownloadTextureVK::CopyFromTexture(
 	image_copy.imageOffset = {src.left, src.top, 0};
 	image_copy.imageExtent = {static_cast<u32>(src.width()), static_cast<u32>(src.height()), 1u};
 
-	// do the copy
 	vkCmdCopyImageToBuffer(cmdbuf, vkTex->GetImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, m_buffer, 1, &image_copy);
 
-	// flush gpu cache
 	const VkBufferMemoryBarrier buffer_info = {
-		VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER, // VkStructureType    sType
-		nullptr, // const void*        pNext
-		VK_ACCESS_TRANSFER_WRITE_BIT, // VkAccessFlags      srcAccessMask
-		VK_ACCESS_HOST_READ_BIT, // VkAccessFlags      dstAccessMask
-		VK_QUEUE_FAMILY_IGNORED, // uint32_t           srcQueueFamilyIndex
-		VK_QUEUE_FAMILY_IGNORED, // uint32_t           dstQueueFamilyIndex
-		m_buffer, // VkBuffer           buffer
-		0, // VkDeviceSize       offset
-		copy_size // VkDeviceSize       size
+		VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+		nullptr,
+		VK_ACCESS_TRANSFER_WRITE_BIT,
+		VK_ACCESS_HOST_READ_BIT,
+		VK_QUEUE_FAMILY_IGNORED,
+		VK_QUEUE_FAMILY_IGNORED,
+		m_buffer,
+		0,
+		copy_size
 	};
 	vkCmdPipelineBarrier(
 		cmdbuf, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 0, nullptr, 1, &buffer_info, 0, nullptr);
@@ -1102,7 +1003,6 @@ void GSDownloadTextureVK::CopyFromTexture(
 
 bool GSDownloadTextureVK::Map(const GSVector4i& read_rc)
 {
-	// Always mapped, but we might need to invalidate the cache.
 	if (m_needs_cache_invalidate)
 	{
 		u32 copy_offset, copy_size, copy_rows;
@@ -1116,7 +1016,6 @@ bool GSDownloadTextureVK::Map(const GSVector4i& read_rc)
 
 void GSDownloadTextureVK::Unmap()
 {
-	// Always mapped.
 }
 
 void GSDownloadTextureVK::Flush()
@@ -1129,7 +1028,6 @@ void GSDownloadTextureVK::Flush()
 	if (GSDeviceVK::GetInstance()->GetCompletedFenceCounter() >= m_copy_fence_counter)
 		return;
 
-	// Need to execute command buffer.
 	if (GSDeviceVK::GetInstance()->GetCurrentFenceCounter() == m_copy_fence_counter)
 	{
 		if (GSDeviceVK::GetInstance()->InRenderPass())

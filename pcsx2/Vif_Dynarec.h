@@ -19,19 +19,15 @@ _vifT extern void dVifUnpack(const u8* data, bool isFill);
 
 struct nVifStruct
 {
-	// Buffer for partial transfers (should always be first to ensure alignment)
-	// Maximum buffer size is 256 (vifRegs.Num max range) * 16 (quadword)
 	alignas(16) u8 buffer[256*16];
-	u32            bSize; // Size of 'buffer'
+	u32            bSize;
 
-	// VIF0 or VIF1 - provided for debugging helpfulness only, and is generally unused.
-	// (templates are used for most or all VIF indexing)
 	u32                     idx;
 
-	u8*                     recWritePtr; // current write pos into the reserve
+	u8*                     recWritePtr;
 	u8*                     recEndPtr;
 
-	HashBucket              vifBlocks;   // Vif Blocks
+	HashBucket              vifBlocks;
 
 
 	nVifStruct() = default;
@@ -40,7 +36,7 @@ struct nVifStruct
 extern void resetNewVif(int idx);
 
 alignas(16) extern nVifStruct nVif[2];
-alignas(16) extern nVifCall nVifUpk[(2 * 2 * 16) * 4]; // ([USN][Masking][Unpack Type]) [curCycle]
-alignas(16) extern u32      nVifMask[3][4][4];         // [MaskNumber][CycleNumber][Vector]
+alignas(16) extern nVifCall nVifUpk[(2 * 2 * 16) * 4];
+alignas(16) extern u32      nVifMask[3][4][4];
 
-static constexpr bool newVifDynaRec = 1; // Use code in Vif_Dynarec.inl
+static constexpr bool newVifDynaRec = 1;

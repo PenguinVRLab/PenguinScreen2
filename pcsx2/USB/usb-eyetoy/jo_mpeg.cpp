@@ -33,7 +33,6 @@
 
 #include "jo_mpeg.h"
 
-// Huffman tables
 static const unsigned char s_jo_HTDC_Y[9][2] = {{4,3}, {0,2}, {1,2}, {5,3}, {6,3}, {14,4}, {30,5}, {62,6}, {126,7}};
 static const unsigned char s_jo_HTDC_C[9][2] = {{0,2}, {1,2}, {2,2}, {6,3}, {14,4}, {30,5}, {62,6}, {126,7}, {254,8}};
 static const unsigned char s_jo_HTAC[32][40][2] = {
@@ -67,7 +66,6 @@ static void jo_writeBits(jo_bits_t *b, int value, int count) {
 	b->buf |= value << (24 - b->cnt);
 	while(b->cnt >= 8) {
 		unsigned char c = (b->buf >> 16) & 255;
-		//putc(c, b->fp);
 		*(b->buf_ptr) = c & 0xff;
 		b->buf_ptr++;
 		b->buf <<= 8;
@@ -85,34 +83,31 @@ static void jo_DCT(float *d0, float *d1, float *d2, float *d3, float *d4, float 
 	float tmp3 = *d3 + *d4;
 	float tmp4 = *d3 - *d4;
 
-	// Even part
-	float tmp10 = tmp0 + tmp3;	// phase 2
+	float tmp10 = tmp0 + tmp3;
 	float tmp13 = tmp0 - tmp3;
 	float tmp11 = tmp1 + tmp2;
 	float tmp12 = tmp1 - tmp2;
 
-	*d0 = tmp10 + tmp11; 		// phase 3
+	*d0 = tmp10 + tmp11;
 	*d4 = tmp10 - tmp11;
 
-	float z1 = (tmp12 + tmp13) * 0.707106781f; // c4
-	*d2 = tmp13 + z1; 		// phase 5
+	float z1 = (tmp12 + tmp13) * 0.707106781f;
+	*d2 = tmp13 + z1;
 	*d6 = tmp13 - z1;
 
-	// Odd part
-	tmp10 = tmp4 + tmp5; 		// phase 2
+	tmp10 = tmp4 + tmp5;
 	tmp11 = tmp5 + tmp6;
 	tmp12 = tmp6 + tmp7;
 
-	// The rotator is modified from fig 4-8 to avoid extra negations.
-	float z5 = (tmp10 - tmp12) * 0.382683433f; // c6
-	float z2 = tmp10 * 0.541196100f + z5; // c2-c6
-	float z4 = tmp12 * 1.306562965f + z5; // c2+c6
-	float z3 = tmp11 * 0.707106781f; // c4
+	float z5 = (tmp10 - tmp12) * 0.382683433f;
+	float z2 = tmp10 * 0.541196100f + z5;
+	float z4 = tmp12 * 1.306562965f + z5;
+	float z3 = tmp11 * 0.707106781f;
 
-	float z11 = tmp7 + z3;		// phase 5
+	float z11 = tmp7 + z3;
 	float z13 = tmp7 - z3;
 
-	*d5 = z13 + z2;			// phase 6
+	*d5 = z13 + z2;
 	*d3 = z13 - z2;
 	*d1 = z11 + z4;
 	*d7 = z11 - z4;
@@ -144,7 +139,7 @@ static int jo_processDU(jo_bits_t *bits, float A[64], const unsigned char htdc[9
 	jo_writeBits(bits, aDC, size);
 
 	int endpos = 63;
-	for(; (endpos>0)&&(Q[endpos]==0); --endpos) { /* do nothing */ }
+	for(; (endpos>0)&&(Q[endpos]==0); --endpos) { }
 	for(int i = 1; i <= endpos;) {
 		int run = 0;
 		while (i < endpos && Q[i] == 0) {
@@ -210,11 +205,11 @@ unsigned long jo_write_mpeg(unsigned char *mpeg_buf, const unsigned char *raw, i
 	for (int vblock = 0; vblock < (height+15)/16; vblock++) {
 		for (int hblock = 0; hblock < (width+15)/16; hblock++) {
 			if (vblock == 0 && hblock == 0) {
-				jo_writeBits(&bits, 0b01, 2); // macroblock_type = intra+quant
-				jo_writeBits(&bits, 8, 5); // quantiser_scale_code = 8
+				jo_writeBits(&bits, 0b01, 2);
+				jo_writeBits(&bits, 8, 5);
 			} else {
-				jo_writeBits(&bits, 0b1, 1); // macroblock_address_increment
-				jo_writeBits(&bits, 0b1, 1); // macroblock_type = intra
+				jo_writeBits(&bits, 0b1, 1);
+				jo_writeBits(&bits, 0b1, 1);
 			}
 
 			float Y[256], CBx[256], CRx[256];
@@ -235,7 +230,6 @@ unsigned long jo_write_mpeg(unsigned char *mpeg_buf, const unsigned char *raw, i
 					CBx[i] = (-0.299f*r - 0.587f*g + 0.886f*b) * (224.f/255) + 128;
 					CRx[i] = (0.701f*r - 0.587f*g - 0.114f*b) * (224.f/255) + 128;
 				}
-				// Downsample Cb,Cr (420 format)
 				for (int i=0; i<64; ++i) {
 					int j =(i&7)*2 + (i&56)*4;
 					CB[i] = (CBx[j] + CBx[j+1] + CBx[j+16] + CBx[j+17]) * 0.25f;
@@ -261,7 +255,6 @@ unsigned long jo_write_mpeg(unsigned char *mpeg_buf, const unsigned char *raw, i
 					CBx[i] = (-0.299f*r - 0.587f*g + 0.886f*b) * (224.f/255) + 128;
 					CRx[i] = (0.701f*r - 0.587f*g - 0.114f*b) * (224.f/255) + 128;
 				}
-				// Downsample Cb,Cr (420 format)
 				for (int i=0; i<64; ++i) {
 					int j =(i&7)*2 + (i&56)*4;
 					CB[i] = (CBx[j] + CBx[j+1] + CBx[j+16] + CBx[j+17]) * 0.25f;
@@ -307,7 +300,6 @@ unsigned long jo_write_mpeg(unsigned char *mpeg_buf, const unsigned char *raw, i
 	}
 	jo_writeBits(&bits, 0, 7);
 
-	// End of Sequence
 	*(bits.buf_ptr++) = 0x00;
 	*(bits.buf_ptr++) = 0x00;
 	*(bits.buf_ptr++) = 0x01;

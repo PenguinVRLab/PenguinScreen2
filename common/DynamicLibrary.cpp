@@ -97,7 +97,6 @@ bool DynamicLibrary::Open(const char* filename, Error* error)
 	if (!m_handle)
 	{
 #ifdef __APPLE__
-		// On MacOS, try searching in Frameworks.
 		if (!Path::IsAbsolute(filename))
 		{
 			std::optional<std::string> bundle_path = CocoaTools::GetBundlePath();

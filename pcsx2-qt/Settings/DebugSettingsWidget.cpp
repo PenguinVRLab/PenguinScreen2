@@ -30,9 +30,6 @@ DebugSettingsWidget::DebugSettingsWidget(SettingsWindow* settings_dialog, QWidge
 	setupTab(m_gs, tr("GS"));
 	m_logging_tab = setupTab(m_logging, tr("Logging"));
 
-	//////////////////////////////////////////////////////////////////////////
-	// User Interface Settings
-	//////////////////////////////////////////////////////////////////////////
 	if (!dialog()->isPerGameSettings())
 	{
 		SettingWidgetBinder::BindWidgetToIntSetting(
@@ -77,10 +74,6 @@ DebugSettingsWidget::DebugSettingsWidget(SettingsWindow* settings_dialog, QWidge
 		setTabVisible(m_user_interface_tab, false);
 	}
 
-	//////////////////////////////////////////////////////////////////////////
-	// Analysis Settings
-	//////////////////////////////////////////////////////////////////////////
-
 	SettingWidgetBinder::BindWidgetToEnumSetting(
 		sif, m_analysis.analysisCondition, "Debugger/Analysis", "RunCondition",
 		Pcsx2Config::DebugAnalysisOptions::RunConditionNames, DebugAnalysisCondition::IF_DEBUGGER_IS_OPEN);
@@ -99,9 +92,6 @@ DebugSettingsWidget::DebugSettingsWidget(SettingsWindow* settings_dialog, QWidge
 	m_analysis.analysisSettings->layout()->setContentsMargins(0, 0, 0, 0);
 	m_analysis.analysisSettings->layout()->addWidget(m_analysis_settings);
 
-	//////////////////////////////////////////////////////////////////////////
-	// GS Settings
-	//////////////////////////////////////////////////////////////////////////
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_gs.dumpGSData, "EmuCore/GS", "DumpGSData", false);
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_gs.saveRT, "EmuCore/GS", "SaveRT", false);
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_gs.saveFrame, "EmuCore/GS", "SaveFrame", false);
@@ -126,9 +116,6 @@ DebugSettingsWidget::DebugSettingsWidget(SettingsWindow* settings_dialog, QWidge
 	onDrawDumpingChanged();
 
 #ifdef PCSX2_DEVBUILD
-	//////////////////////////////////////////////////////////////////////////
-	// Logging Settings
-	//////////////////////////////////////////////////////////////////////////
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_logging.chkEnable, "EmuCore/TraceLog", "Enabled", false);
 	dialog()->registerWidgetHelp(m_logging.chkEnable, tr("Enable Trace Logging"), tr("Unchecked"), tr("Globally enable / disable trace logging."));
 

@@ -38,33 +38,33 @@ bool SettingsLoadWrapper::IsSaving() const
 	return false;
 }
 
-void SettingsLoadWrapper::Entry(const char* section, const char* var, int& value, const int defvalue /*= 0*/)
+void SettingsLoadWrapper::Entry(const char* section, const char* var, int& value, const int defvalue )
 {
 	value = m_si.GetIntValue(section, var, defvalue);
 }
 
-void SettingsLoadWrapper::Entry(const char* section, const char* var, uint& value, const uint defvalue /*= 0*/)
+void SettingsLoadWrapper::Entry(const char* section, const char* var, uint& value, const uint defvalue )
 {
 	value = m_si.GetUIntValue(section, var, defvalue);
 }
 
-void SettingsLoadWrapper::Entry(const char* section, const char* var, bool& value, const bool defvalue /*= false*/)
+void SettingsLoadWrapper::Entry(const char* section, const char* var, bool& value, const bool defvalue )
 {
 	value = m_si.GetBoolValue(section, var, defvalue);
 }
 
-void SettingsLoadWrapper::Entry(const char* section, const char* var, float& value, const float defvalue /*= 0.0*/)
+void SettingsLoadWrapper::Entry(const char* section, const char* var, float& value, const float defvalue )
 {
 	value = m_si.GetFloatValue(section, var, defvalue);
 }
 
-void SettingsLoadWrapper::Entry(const char* section, const char* var, std::string& value, const std::string& default_value /*= std::string()*/)
+void SettingsLoadWrapper::Entry(const char* section, const char* var, std::string& value, const std::string& default_value )
 {
 	if (!m_si.GetStringValue(section, var, &value) && &value != &default_value)
 		value = default_value;
 }
 
-void SettingsLoadWrapper::Entry(const char* section, const char* var, SmallStringBase& value, std::string_view default_value /* = std::string_view() */)
+void SettingsLoadWrapper::Entry(const char* section, const char* var, SmallStringBase& value, std::string_view default_value )
 {
 	if (!m_si.GetStringValue(section, var, &value) && value.data() != default_value.data())
 		value = default_value;
@@ -93,12 +93,12 @@ void SettingsLoadWrapper::_EnumEntry(const char* section, const char* var, int& 
 	}
 }
 
-bool SettingsLoadWrapper::EntryBitBool(const char* section, const char* var, bool value, const bool defvalue /*= false*/)
+bool SettingsLoadWrapper::EntryBitBool(const char* section, const char* var, bool value, const bool defvalue )
 {
 	return m_si.GetBoolValue(section, var, defvalue);
 }
 
-int SettingsLoadWrapper::EntryBitfield(const char* section, const char* var, int value, const int defvalue /*= 0*/)
+int SettingsLoadWrapper::EntryBitfield(const char* section, const char* var, int value, const int defvalue )
 {
 	return m_si.GetIntValue(section, var, defvalue);
 }
@@ -118,43 +118,43 @@ bool SettingsSaveWrapper::IsSaving() const
 	return true;
 }
 
-void SettingsSaveWrapper::Entry(const char* section, const char* var, int& value, const int defvalue /*= 0*/)
+void SettingsSaveWrapper::Entry(const char* section, const char* var, int& value, const int defvalue )
 {
 	m_si.SetIntValue(section, var, value);
 }
 
-void SettingsSaveWrapper::Entry(const char* section, const char* var, uint& value, const uint defvalue /*= 0*/)
+void SettingsSaveWrapper::Entry(const char* section, const char* var, uint& value, const uint defvalue )
 {
 	m_si.SetUIntValue(section, var, value);
 }
 
-void SettingsSaveWrapper::Entry(const char* section, const char* var, bool& value, const bool defvalue /*= false*/)
+void SettingsSaveWrapper::Entry(const char* section, const char* var, bool& value, const bool defvalue )
 {
 	m_si.SetBoolValue(section, var, value);
 }
 
-void SettingsSaveWrapper::Entry(const char* section, const char* var, float& value, const float defvalue /*= 0.0*/)
+void SettingsSaveWrapper::Entry(const char* section, const char* var, float& value, const float defvalue )
 {
 	m_si.SetFloatValue(section, var, value);
 }
 
-void SettingsSaveWrapper::Entry(const char* section, const char* var, std::string& value, const std::string& default_value /*= std::string()*/)
+void SettingsSaveWrapper::Entry(const char* section, const char* var, std::string& value, const std::string& default_value )
 {
 	m_si.SetStringValue(section, var, value.c_str());
 }
 
-void SettingsSaveWrapper::Entry(const char* section, const char* var, SmallStringBase& value, std::string_view default_value /* = std::string_view() */)
+void SettingsSaveWrapper::Entry(const char* section, const char* var, SmallStringBase& value, std::string_view default_value )
 {
 	m_si.SetStringValue(section, var, value.c_str());
 }
 
-bool SettingsSaveWrapper::EntryBitBool(const char* section, const char* var, bool value, const bool defvalue /*= false*/)
+bool SettingsSaveWrapper::EntryBitBool(const char* section, const char* var, bool value, const bool defvalue )
 {
 	m_si.SetBoolValue(section, var, value);
 	return value;
 }
 
-int SettingsSaveWrapper::EntryBitfield(const char* section, const char* var, int value, const int defvalue /*= 0*/)
+int SettingsSaveWrapper::EntryBitfield(const char* section, const char* var, int value, const int defvalue )
 {
 	m_si.SetIntValue(section, var, value);
 	return value;
@@ -182,43 +182,43 @@ bool SettingsClearWrapper::IsSaving() const
 	return true;
 }
 
-void SettingsClearWrapper::Entry(const char* section, const char* var, int& value, const int defvalue /*= 0*/)
+void SettingsClearWrapper::Entry(const char* section, const char* var, int& value, const int defvalue )
 {
 	m_si.DeleteValue(section, var);
 }
 
-void SettingsClearWrapper::Entry(const char* section, const char* var, uint& value, const uint defvalue /*= 0*/)
+void SettingsClearWrapper::Entry(const char* section, const char* var, uint& value, const uint defvalue )
 {
 	m_si.DeleteValue(section, var);
 }
 
-void SettingsClearWrapper::Entry(const char* section, const char* var, bool& value, const bool defvalue /*= false*/)
+void SettingsClearWrapper::Entry(const char* section, const char* var, bool& value, const bool defvalue )
 {
 	m_si.DeleteValue(section, var);
 }
 
-void SettingsClearWrapper::Entry(const char* section, const char* var, float& value, const float defvalue /*= 0.0*/)
+void SettingsClearWrapper::Entry(const char* section, const char* var, float& value, const float defvalue )
 {
 	m_si.DeleteValue(section, var);
 }
 
-void SettingsClearWrapper::Entry(const char* section, const char* var, std::string& value, const std::string& default_value /*= std::string()*/)
+void SettingsClearWrapper::Entry(const char* section, const char* var, std::string& value, const std::string& default_value )
 {
 	m_si.DeleteValue(section, var);
 }
 
-void SettingsClearWrapper::Entry(const char* section, const char* var, SmallStringBase& value, std::string_view default_value /* = std::string_view() */)
+void SettingsClearWrapper::Entry(const char* section, const char* var, SmallStringBase& value, std::string_view default_value )
 {
 	m_si.DeleteValue(section, var);
 }
 
-bool SettingsClearWrapper::EntryBitBool(const char* section, const char* var, bool value, const bool defvalue /*= false*/)
+bool SettingsClearWrapper::EntryBitBool(const char* section, const char* var, bool value, const bool defvalue )
 {
 	m_si.DeleteValue(section, var);
 	return defvalue;
 }
 
-int SettingsClearWrapper::EntryBitfield(const char* section, const char* var, int value, const int defvalue /*= 0*/)
+int SettingsClearWrapper::EntryBitfield(const char* section, const char* var, int value, const int defvalue )
 {
 	m_si.DeleteValue(section, var);
 	return defvalue;

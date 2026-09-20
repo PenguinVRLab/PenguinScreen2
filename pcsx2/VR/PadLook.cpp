@@ -18,7 +18,6 @@ namespace VR::PadLook
 {
 	namespace
 	{
-
 		std::atomic<int> s_rx_offset{0};
 	}
 
@@ -27,7 +26,6 @@ namespace VR::PadLook
 		if (!std::isfinite(deflection))
 			deflection = 0.0f;
 		deflection = std::clamp(deflection, -1.0f, 1.0f);
-
 		s_rx_offset.store(-static_cast<int>(std::lround(deflection * 127.0f)),
 			std::memory_order_relaxed);
 	}
@@ -42,7 +40,6 @@ namespace VR::PadLook
 
 	void UpdateRecenterChord(bool l1, bool r1, bool l3, bool r3)
 	{
-
 		static bool s_chord_was_held = false;
 		const bool held = l1 && r1 && l3 && r3;
 		if (held && !s_chord_was_held && XRSession::IsSessionRunning())

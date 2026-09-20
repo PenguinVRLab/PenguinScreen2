@@ -47,7 +47,6 @@ public:
 	bool RemoveFromStringList(const char* section, const char* key, const char* item) override;
 	bool AddToStringList(const char* section, const char* key, const char* item) override;
 
-	// default parameter overloads
 	using SettingsInterface::GetBoolValue;
 	using SettingsInterface::GetDoubleValue;
 	using SettingsInterface::GetFloatValue;

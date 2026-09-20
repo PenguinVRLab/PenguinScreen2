@@ -27,7 +27,6 @@ bool PadBase::Freeze(StateWrapper& sw)
 	if (!sw.DoMarker("PadBase"))
 		return false;
 
-	// Protected PadBase members
 	sw.Do(&unifiedSlot);
 	sw.Do(&isInConfig);
 	sw.Do(&currentMode);

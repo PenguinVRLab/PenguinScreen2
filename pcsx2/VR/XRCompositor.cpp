@@ -26,7 +26,6 @@
 #include <vector>
 
 #ifdef ENABLE_VULKAN
-
 #define XR_USE_GRAPHICS_API_VULKAN
 #include <openxr/openxr_platform.h>
 #endif
@@ -35,7 +34,6 @@ namespace VR::XRCompositor
 {
 	namespace
 	{
-
 		struct ScreenParams
 		{
 			float distance = 2.0f;
@@ -54,7 +52,6 @@ namespace VR::XRCompositor
 #ifdef ENABLE_VULKAN
 	namespace
 	{
-
 		constexpr int64_t ONE_SECOND_NS = 1000000000;
 		constexpr u32 NUM_CMD_BUFFERS = 2;
 
@@ -77,7 +74,6 @@ namespace VR::XRCompositor
 				XrSwapchain swapchain = XR_NULL_HANDLE;
 				std::vector<XrSwapchainImageVulkan2KHR> images;
 				bool ever_released = false;
-
 				bool wait_pending = false;
 				uint32_t pending_index = 0;
 			};
@@ -107,7 +103,6 @@ namespace VR::XRCompositor
 			bool warned_release = false;
 			bool warned_fence_timeout = false;
 			bool warned_swapchain = false;
-
 			VkFormat swapchain_format = VK_FORMAT_R8G8B8A8_SRGB;
 		} s;
 
@@ -164,7 +159,6 @@ namespace VR::XRCompositor
 
 		void DestroySwapchains()
 		{
-
 			WaitAllFences();
 			for (auto& chain : s.chains)
 			{
@@ -283,7 +277,6 @@ namespace VR::XRCompositor
 			}
 
 			VkCommandBuffer cmd = s.cmd_buffers[i];
-
 			VkCommandBufferBeginInfo bi = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
 			bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 			VkResult vr = vkBeginCommandBuffer(cmd, &bi);
@@ -300,7 +293,6 @@ namespace VR::XRCompositor
 				VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
 			VkImageCopy region = {};
-
 			region.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, src_layer, 1};
 			region.srcOffset = {0, 0, 0};
 			region.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
@@ -338,7 +330,6 @@ namespace VR::XRCompositor
 			uint32_t index = 0;
 			if (chain.wait_pending)
 			{
-
 				index = chain.pending_index;
 			}
 			else
@@ -363,7 +354,6 @@ namespace VR::XRCompositor
 			XrResult res = xrWaitSwapchainImage(chain.swapchain, &wi);
 			if (res == XR_TIMEOUT_EXPIRED)
 			{
-
 				if (!s.warned_wait_timeout)
 				{
 					s.warned_wait_timeout = true;
@@ -373,7 +363,6 @@ namespace VR::XRCompositor
 			}
 			if (XR_FAILED(res))
 			{
-
 				if (!s.warned_wait_fail)
 				{
 					s.warned_wait_fail = true;
@@ -410,7 +399,6 @@ namespace VR::XRCompositor
 				case AspectRatioType::R16_9:
 					return 16.0f / 9.0f;
 				default:
-
 					return (s.swapchain_height > 0)
 							   ? static_cast<float>(s.swapchain_width) / static_cast<float>(s.swapchain_height)
 							   : 4.0f / 3.0f;
@@ -427,7 +415,6 @@ namespace VR::XRCompositor
 			{
 				if (!XRSession::IsSessionRunning())
 				{
-
 					std::this_thread::sleep_for(std::chrono::milliseconds(20));
 					continue;
 				}
@@ -467,7 +454,6 @@ namespace VR::XRCompositor
 			const XrResult res = xrBeginFrame(session, &bi);
 			if (res == XR_ERROR_SESSION_NOT_RUNNING)
 			{
-
 				s.begin_owed = false;
 				return true;
 			}
@@ -576,7 +562,6 @@ namespace VR::XRCompositor
 		}
 		else if (has_unorm)
 		{
-
 			s.swapchain_format = VK_FORMAT_R8G8B8A8_UNORM;
 			Console.Warning("(VR) Runtime offers no VK_FORMAT_R8G8B8A8_SRGB swapchain; using UNORM. "
 							"Brightness/gamma may be off on this runtime.");
@@ -666,7 +651,6 @@ namespace VR::XRCompositor
 			std::lock_guard<std::mutex> lock(s.frame_mutex);
 			s.has_pending_frame = false;
 		}
-
 		{
 			XrReferenceSpaceCreateInfo rsci = {XR_TYPE_REFERENCE_SPACE_CREATE_INFO};
 			rsci.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_VIEW;
@@ -715,7 +699,6 @@ namespace VR::XRCompositor
 		const XrSession session = XRSession::GetSession();
 
 		XrFrameBeginInfo bi = {XR_TYPE_FRAME_BEGIN_INFO};
-
 		static const bool s_fault_begin1 = [] {
 			const char* v = std::getenv("PCSX2_VR_XRFAULT");
 			return v && std::strcmp(v, "begin1") == 0;
@@ -779,7 +762,6 @@ namespace VR::XRCompositor
 			{
 				const float qx = loc.pose.orientation.x, qy = loc.pose.orientation.y;
 				const float qz = loc.pose.orientation.z, qw = loc.pose.orientation.w;
-
 				const float fx = -2.0f * (qw * qy + qz * qx);
 				const float fz = -(1.0f - 2.0f * (qx * qx + qy * qy));
 				if ((fx * fx + fz * fz) > 1.0e-4f)
@@ -800,7 +782,6 @@ namespace VR::XRCompositor
 		const bool layered = current && (static_cast<GSTextureVK*>(current)->GetArrayLayers() >= 2);
 		const bool stereo = layered || (eye != MonoEye);
 		bool force_zero_layers = false;
-
 		static const bool s_chainlog = (std::getenv("PCSX2_VR_CHAINLOG") != nullptr);
 		static u64 s_chainlog_visit = 0;
 		int cl_copy[2] = {-1, -1};
@@ -821,7 +802,6 @@ namespace VR::XRCompositor
 							s.chains[l].ever_released = true;
 						else if (r == CopyResult::TimeoutZeroLayer && !s.chains[l].ever_released)
 							force_zero_layers = true;
-
 					}
 				}
 				else
@@ -834,10 +814,8 @@ namespace VR::XRCompositor
 						chain.ever_released = true;
 					else if (r == CopyResult::TimeoutZeroLayer && !chain.ever_released)
 						force_zero_layers = true;
-
 				}
 			}
-
 		}
 
 		XrCompositionLayerQuad quads[2] = {{XR_TYPE_COMPOSITION_LAYER_QUAD}, {XR_TYPE_COMPOSITION_LAYER_QUAD}};
@@ -872,12 +850,10 @@ namespace VR::XRCompositor
 				if (curved)
 				{
 					XrCompositionLayerCylinderKHR& cyl = cyls[layer_count];
-
 					cyl.layerFlags = 0;
 					cyl.space = XRSession::GetSpace();
 					cyl.eyeVisibility = vis;
 					cyl.subImage = sub_image;
-
 					cyl.pose.orientation = anchor_quat;
 					cyl.pose.position = {s.screen_anchor_x, s.screen_anchor_y + voffset, s.screen_anchor_z};
 					cyl.radius = distance;
@@ -892,7 +868,6 @@ namespace VR::XRCompositor
 					quad.space = XRSession::GetSpace();
 					quad.eyeVisibility = vis;
 					quad.subImage = sub_image;
-
 					quad.pose.orientation = anchor_quat;
 					quad.pose.position = {s.screen_anchor_x - distance * ayaw_sin,
 						s.screen_anchor_y + voffset,
@@ -918,7 +893,6 @@ namespace VR::XRCompositor
 
 		if (s_chainlog)
 		{
-
 			const char* branch = force_zero_layers ? "Z" :
 				(layer_count == 2) ? "S" :
 				(layer_count == 1) ? (s.chains[0].ever_released ? "B0" : "B1") : "Z";
@@ -1020,7 +994,6 @@ namespace VR::XRCompositor
 		}
 		else
 		{
-
 			for (u32 i = 0; i < NUM_CMD_BUFFERS; i++)
 				s.fences[i] = VK_NULL_HANDLE;
 		}
@@ -1036,7 +1009,6 @@ namespace VR::XRCompositor
 		Console.WriteLn("(VR) Compositor shut down.");
 	}
 #else
-
 	bool Initialize()
 	{
 		Console.Error("(VR) Compositor requires the Vulkan renderer; running flat.");
@@ -1045,7 +1017,7 @@ namespace VR::XRCompositor
 
 	void Shutdown() {}
 
-	void EndOfFrame(GSTexture*, u32) {}
+	void EndOfFrame(GSTexture* , u32 ) {}
 #endif
 
 	void UpdateScreenParams(float distance_m, float height_m, float arc_deg, float vertical_offset_m)

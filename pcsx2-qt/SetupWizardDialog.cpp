@@ -208,21 +208,15 @@ void SetupWizardDialog::setupLanguagePage()
 	connect(
 		m_ui.language, &QComboBox::currentIndexChanged, this, &SetupWizardDialog::languageChanged);
 
-	// Auto-update removed (2026-07-19): this product does not phone home. The
-	// upstream "CheckAtStartup" bind + its wizard checkbox are gone; the updater
-	// is already inert in this build (AutoUpdaterDialog::isSupported() is false
-	// off an AppImage), and we don't advertise an update server we never use.
 }
 
 void SetupWizardDialog::themeChanged()
 {
-	// Main window gets recreated at the end here anyway, so it's fine to just yolo it.
 	QtHost::UpdateApplicationTheme();
 }
 
 void SetupWizardDialog::languageChanged()
 {
-	// Skip the recreation, since we don't have many dynamic UI elements.
 	QtHost::InstallTranslator(this);
 	m_ui.retranslateUi(this);
 }
@@ -233,10 +227,6 @@ void SetupWizardDialog::setupBIOSPage()
 		m_ui.openBiosSearchDirectory, m_ui.resetBiosSearchDirectory, "Folders", "Bios",
 		Path::Combine(EmuFolders::DataRoot, "bios"));
 
-	// Drop-a-file-and-done: watch the BIOS directory so an image copied in
-	// while this page is open appears without pressing Refresh. The timer
-	// coalesces bursts of directory events (and lets a partial copy finish
-	// before the list re-scans).
 	m_bios_refresh_timer = new QTimer(this);
 	m_bios_refresh_timer->setSingleShot(true);
 	m_bios_refresh_timer->setInterval(750);
@@ -255,8 +245,6 @@ void SetupWizardDialog::setupBIOSPage()
 
 void SetupWizardDialog::refreshBiosList()
 {
-	// populateList() pumps the event loop; the latch keeps a timer/watcher
-	// firing inside it from re-entering and double-filling the list.
 	if (m_refreshing_bios_list)
 		return;
 	m_refreshing_bios_list = true;
@@ -265,15 +253,11 @@ void SetupWizardDialog::refreshBiosList()
 	const QString directory = m_ui.biosSearchDirectory->text();
 	BIOSSettingsWidget::populateList(m_ui.biosList, directory.toStdString());
 
-	// Follow the configured directory (it can change via the line edit).
 	if (!m_bios_dir_watcher->directories().isEmpty())
 		m_bios_dir_watcher->removePaths(m_bios_dir_watcher->directories());
 	if (QDir(directory).exists())
 		m_bios_dir_watcher->addPath(directory);
 
-	// If nothing is configured yet and exactly one valid image was found,
-	// select it — selection writes the setting, so a single dropped file
-	// needs no further clicks.
 	if (m_ui.biosList->topLevelItemCount() == 1 && !m_ui.biosList->currentItem() &&
 		Host::GetBaseStringSettingValue("Filenames", "BIOS").empty())
 	{
@@ -318,10 +302,8 @@ void SetupWizardDialog::onDirectoryListContextMenuRequested(const QPoint& point)
 	const int row = selection[0].row();
 
 	QMenu menu;
-	//: Part of the right-click menu for game directory entries
 	menu.addAction(tr("Remove"), [this]() { onRemoveSearchDirectoryButtonClicked(); });
 	menu.addSeparator();
-	//: Part of the right-click menu for game directory entries
 	menu.addAction(tr("Open Directory..."),
 		[this, row]() { QtUtils::OpenURL(this, QUrl::fromLocalFile(m_ui.searchDirectoryList->item(row, 0)->text())); });
 	menu.exec(m_ui.searchDirectoryList->mapToGlobal(point));
@@ -457,7 +439,6 @@ void SetupWizardDialog::setupControllerPage()
 			[this, port, label = w.mapping_result]() { openAutomaticMappingMenu(port, label); });
 	}
 
-	// Trigger enumeration to populate the device list.
 	connect(g_emu_thread, &EmuThread::onInputDevicesEnumerated, this, &SetupWizardDialog::onInputDevicesEnumerated);
 	connect(g_emu_thread, &EmuThread::onInputDeviceConnected, this, &SetupWizardDialog::onInputDeviceConnected);
 	connect(g_emu_thread, &EmuThread::onInputDeviceDisconnected, this, &SetupWizardDialog::onInputDeviceDisconnected);
@@ -484,10 +465,6 @@ void SetupWizardDialog::setupRetroAchievementsPage()
 	connect(m_ui.raViewProfileButton, &QPushButton::clicked, this, &SetupWizardDialog::onRetroAchievementsViewProfilePressed);
 	refreshRetroAchievementsLoginState();
 
-	// PCSX2-VR: RetroAchievements is force-disabled in this build (see
-	// AchievementsOptions::LoadSave) — make the wizard page inert so a first-run
-	// user can't sign in to a service this build won't use. Mirrors the greyed
-	// settings page; the feature returns once the fork is registered with RA.
 	m_ui.raEnableAchievements->setChecked(false);
 	m_ui.raEnableAchievements->setEnabled(false);
 	m_ui.raHardcoreMode->setEnabled(false);
@@ -502,8 +479,6 @@ void SetupWizardDialog::setupCompletePage()
 	const bool can_create_shortcuts = true;
 	m_ui.addToApplicationMenu->setText(tr("Add PenguinScreen2 to the Start Menu"));
 #elif defined(__linux__)
-	// Only offer shortcuts for the AppImage since Flatpak creates its own launcher, and
-	// third-party builds (AUR, COPR, etc.) ship their own .desktop file.
 	const bool can_create_shortcuts = QtUtils::IsRunningInAppImage();
 #else
 	const bool can_create_shortcuts = false;
@@ -551,7 +526,6 @@ void SetupWizardDialog::onRetroAchievementsLoginLogoutPressed()
 
 	refreshRetroAchievementsLoginState();
 
-	// Login can enable achievements, keep the checkbox state in sync.
 	if (!m_ui.raEnableAchievements->isChecked() &&
 		Host::GetBaseBoolSettingValue("Achievements", "Enabled", false))
 	{
@@ -583,7 +557,6 @@ void SetupWizardDialog::openAutomaticMappingMenu(u32 port, QLabel* update_label)
 
 	for (const QPair<QString, QString>& dev : m_device_list)
 	{
-		// we set it as data, because the device list could get invalidated while the menu is up
 		QAction* action = menu.addAction(QStringLiteral("%1 (%2)").arg(dev.first).arg(dev.second));
 		action->setData(dev.first);
 		connect(action, &QAction::triggered, this, [this, port, update_label, action]() {

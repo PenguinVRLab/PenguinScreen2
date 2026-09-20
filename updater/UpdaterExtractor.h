@@ -95,7 +95,6 @@ static inline bool ExtractUpdater(const char* archive_path, const char* destinat
 		filename_buffer.resize(filename_len);
 		filename_len = SzArEx_GetFileNameUtf16(&archive, file_index, filename_buffer.data());
 
-		// TODO: This won't work on Linux (4-byte wchar_t).
 		const std::string filename(StringUtil::WideStringToUTF8String(reinterpret_cast<wchar_t*>(filename_buffer.data())));
 		if (filename != UPDATER_EXECUTABLE)
 			continue;
@@ -110,9 +109,9 @@ static inline bool ExtractUpdater(const char* archive_path, const char* destinat
 		return false;
 	}
 
-	UInt32 block_index = 0xFFFFFFFF; /* it can have any value before first call (if outBuffer = 0) */
-	Byte* out_buffer = 0; /* it must be 0 before first call for each new archive. */
-	size_t out_buffer_size = 0; /* it can have any value before first call (if outBuffer = 0) */
+	UInt32 block_index = 0xFFFFFFFF;
+	Byte* out_buffer = 0;
+	size_t out_buffer_size = 0;
 	ScopedGuard out_buffer_guard([&out_buffer]() {
 		if (out_buffer)
 			ISzAlloc_Free(&g_Alloc, out_buffer);

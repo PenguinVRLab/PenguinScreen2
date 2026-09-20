@@ -3,7 +3,6 @@
 
 // The code has been designed for 64Mb flash and uses as file support the second memory card
 #include <stdio.h>
-//#include <winsock2.h>
 #include "DEV9.h"
 
 #define PAGE_SIZE_BITS 9
@@ -24,10 +23,10 @@ static void xfromman_call20_calculateXors(unsigned char buffer[128], unsigned ch
 static void calculateECC(u8 page[PAGE_SIZE_ECC])
 {
 	memset(page + PAGE_SIZE, 0x00, ECC_SIZE);
-	xfromman_call20_calculateXors(page + 0 * (PAGE_SIZE >> 2), page + PAGE_SIZE + 0 * 3); //(ECC_SIZE>>2));
-	xfromman_call20_calculateXors(page + 1 * (PAGE_SIZE >> 2), page + PAGE_SIZE + 1 * 3); //(ECC_SIZE>>2));
-	xfromman_call20_calculateXors(page + 2 * (PAGE_SIZE >> 2), page + PAGE_SIZE + 2 * 3); //(ECC_SIZE>>2));
-	xfromman_call20_calculateXors(page + 3 * (PAGE_SIZE >> 2), page + PAGE_SIZE + 3 * 3); //(ECC_SIZE>>2));
+	xfromman_call20_calculateXors(page + 0 * (PAGE_SIZE >> 2), page + PAGE_SIZE + 0 * 3);
+	xfromman_call20_calculateXors(page + 1 * (PAGE_SIZE >> 2), page + PAGE_SIZE + 1 * 3);
+	xfromman_call20_calculateXors(page + 2 * (PAGE_SIZE >> 2), page + PAGE_SIZE + 2 * 3);
+	xfromman_call20_calculateXors(page + 3 * (PAGE_SIZE >> 2), page + PAGE_SIZE + 3 * 3);
 }
 
 static const char* getCmdName(u32 cmd)
@@ -123,7 +122,7 @@ u32 FLASHread32(u32 addr, int size)
 				address += PAGE_SIZE;
 				address %= CARD_SIZE;
 				memcpy(data, file + (address >> PAGE_SIZE_BITS) * PAGE_SIZE_ECC, PAGE_SIZE);
-				calculateECC(data); // calculate ECC; should be in the file already
+				calculateECC(data);
 				ctrl |= FLASH_PP_READY;
 			}
 
@@ -145,14 +144,14 @@ u32 FLASHread32(u32 addr, int size)
 			if (cmd == SM_CMD_READID)
 			{
 				DevCon.WriteLn("DEV9: *FLASH ID %dbit read 0x%08lX", size * 8, id);
-				return id; //0x98=Toshiba/0xEC=Samsung maker code should be returned first
+				return id;
 			}
 			else if (cmd == SM_CMD_GETSTATUS)
 			{
-				value = 0x80 | ((ctrl & 1) << 6); // 0:0=pass, 6:ready/busy, 7:1=not protected
+				value = 0x80 | ((ctrl & 1) << 6);
 				DevCon.WriteLn("DEV9: *FLASH STATUS %dbit read 0x%08lX", size * 8, value);
 				return value;
-			} //else fall off
+			}
 			return 0;
 
 		default:
@@ -171,7 +170,7 @@ void FLASHwrite32(u32 addr, u32 value, int size)
 			DevCon.WriteLn("DEV9: *FLASH DATA %dbit write 0x%08lX %s", size * 8, value, (ctrl & FLASH_PP_WRITE) ? "WRITE_ENABLE" : "WRITE_DISABLE");
 			memcpy(&data[counter], &value, size);
 			counter += size;
-			counter %= PAGE_SIZE_ECC; //should not get past the last byte, but at the end
+			counter %= PAGE_SIZE_ECC;
 			break;
 
 		case FLASH_R_CMD:
@@ -188,13 +187,13 @@ void FLASHwrite32(u32 addr, u32 value, int size)
 				if ((value != SM_CMD_PROGRAMPAGE) && (value != SM_CMD_RESET))
 				{
 					DevCon.WriteLn("DEV9: *FLASH CMD %dbit write %s ILLEGAL after WRITEDATA cmd - IGNORED", size * 8, getCmdName(value));
-					ctrl &= ~FLASH_PP_READY; //go busy, reset is needed
+					ctrl &= ~FLASH_PP_READY;
 					break;
 				}
 			}
 			DevCon.WriteLn("DEV9: *FLASH CMD %dbit write %s", size * 8, getCmdName(value));
 			switch (value)
-			{ // A8 bit is encoded in READ cmd;)
+			{
 				case SM_CMD_READ1:
 					counter = 0;
 					if (cmd != SM_CMD_GETSTATUS)
@@ -227,12 +226,11 @@ void FLASHwrite32(u32 addr, u32 value, int size)
 					address = counter;
 					addrbyte = 1;
 					break;
-				case SM_CMD_PROGRAMPAGE: //fall
+				case SM_CMD_PROGRAMPAGE:
 				case SM_CMD_ERASECONFIRM:
 					ctrl &= ~FLASH_PP_READY;
 					calculateECC(data);
 					memcpy(file + (address / PAGE_SIZE) * PAGE_SIZE_ECC, data, PAGE_SIZE_ECC);
-					/*write2file*/
 					ctrl |= FLASH_PP_READY;
 					break;
 				case SM_CMD_GETSTATUS:
@@ -244,7 +242,7 @@ void FLASHwrite32(u32 addr, u32 value, int size)
 					break;
 				default:
 					ctrl &= ~FLASH_PP_READY;
-					return; //ignore any other command; go busy, reset is needed
+					return;
 			}
 			cmd = value;
 			break;
@@ -255,15 +253,15 @@ void FLASHwrite32(u32 addr, u32 value, int size)
 			addrbyte++;
 			DevCon.WriteLn("DEV9: *FLASH ADDR = 0x%08lX (addrbyte=%d)", address, addrbyte);
 			if (!(value & 0x100))
-			{ // address is complete
+			{
 				if ((cmd == SM_CMD_READ1) || (cmd == SM_CMD_READ2) || (cmd == SM_CMD_READ3))
 				{
 					ctrl &= ~FLASH_PP_READY;
 					memcpy(data, file + (address >> PAGE_SIZE_BITS) * PAGE_SIZE_ECC, PAGE_SIZE);
-					calculateECC(data); // calculate ECC; should be in the file already
+					calculateECC(data);
 					ctrl |= FLASH_PP_READY;
 				}
-				addrbyte = 0; // address reset
+				addrbyte = 0;
 				{
 					const u32 blocks = address / BLOCK_SIZE;
 					u32 pages = address - (blocks * BLOCK_SIZE);

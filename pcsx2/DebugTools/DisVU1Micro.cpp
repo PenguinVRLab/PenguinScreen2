@@ -8,14 +8,12 @@ static char ostr[1024];
 #define ostrA (ostr + std::strlen(ostr))
 #define ostrAL (std::size(ostr) - std::strlen(ostr))
 
-// Type deffinition of our functions
 #define DisFInterface  (u32 code, u32 pc)
 #define DisFInterfaceT (u32, u32)
 #define DisFInterfaceN (code, pc)
 
 typedef char* (*TdisR5900F)DisFInterface;
 
-// These macros are used to assemble the disassembler functions
 #define MakeDisF(fn, b) \
 	char* fn DisFInterface { \
 		if( !!CpuVU1->IsInterpreter ) std::snprintf(ostr, std::size(ostr), "%8.8x %8.8x:", pc, code); \
@@ -24,10 +22,9 @@ typedef char* (*TdisR5900F)DisFInterface;
 		return ostr; \
 	}
 
-//Lower/Upper instructions can use that..
-#define _Ft_ ((code >> 16) & 0x1F)  // The rt part of the instruction register
-#define _Fs_ ((code >> 11) & 0x1F)  // The rd part of the instruction register
-#define _Fd_ ((code >>  6) & 0x1F)  // The sa part of the instruction register
+#define _Ft_ ((code >> 16) & 0x1F)
+#define _Fs_ ((code >> 11) & 0x1F)
+#define _Fd_ ((code >>  6) & 0x1F)
 #define _It_ (_Ft_ & 15)
 #define _Is_ (_Fs_ & 15)
 #define _Id_ (_Fd_ & 15)
@@ -96,11 +93,6 @@ typedef char* (*TdisR5900F)DisFInterface;
 #define _Fsf_ ((code >> 21) & 0x03)
 #define _Ftf_ ((code >> 23) & 0x03)
 
-/*********************************************************
-* Unknown instruction (would generate an exception)       *
-* Format:  ?                                             *
-*********************************************************/
-//extern char* disNULL DisFInterface;
 static MakeDisF(disNULL,		dName("*** Bad OP ***");)
 
 #include "DisVUmicro.h"

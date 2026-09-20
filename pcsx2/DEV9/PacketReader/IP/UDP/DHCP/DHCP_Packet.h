@@ -16,20 +16,17 @@ namespace PacketReader::IP::UDP::DHCP
 		u8 hardwareType;
 		u8 hardwareAddressLength;
 		u8 hops;
-		u32 transactionID; //xid
+		u32 transactionID;
 		u16 seconds;
 		u16 flags;
 		IP_Address clientIP{};
 		IP_Address yourIP{};
 		IP_Address serverIP{};
 		IP_Address gatewayIP{};
-		u8 clientHardwareAddress[16]{}; //always 16 bytes, regardless of HardwareAddressLength
-		//192 bytes of padding
+		u8 clientHardwareAddress[16]{};
 		u32 magicCookie;
-		//Assumes ownership of ptrs assigned to it
 		std::vector<BaseOption*> options;
 
-		//used by GetLength & WriteBytes
 		int maxLength = 576;
 
 		DHCP_Packet() {}
@@ -42,4 +39,4 @@ namespace PacketReader::IP::UDP::DHCP
 
 		virtual ~DHCP_Packet();
 	};
-} // namespace PacketReader::IP::UDP::DHCP
+}

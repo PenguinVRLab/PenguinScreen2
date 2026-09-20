@@ -14,7 +14,6 @@ namespace PacketReader
 		null = 0x0000,
 		IPv4 = 0x0800,
 		ARP = 0x0806,
-		//Tags extend the ether header length
 		VlanQTag = 0x8100,
 		VlanServiceQTag = 0x88A8,
 		VlanDoubleQTag = 0x9100
@@ -28,12 +27,10 @@ namespace PacketReader
 
 		u16 protocol = 0;
 		int headerLength = 14;
-		//Length
 	private:
 		std::unique_ptr<Payload> payload;
 
 	public:
-		//Takes ownership of payload
 		EthernetFrame(Payload* data);
 		EthernetFrame(NetPacket* pkt);
 
@@ -41,4 +38,4 @@ namespace PacketReader
 
 		void WritePacket(NetPacket* pkt);
 	};
-} // namespace PacketReader
+}

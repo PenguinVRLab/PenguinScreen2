@@ -31,5 +31,5 @@ namespace usb_mic
 			uint32_t SetBuffer(int16_t* inBuf, uint32_t inFrames) override { return inFrames; }
 			void SetResampling(int samplerate) override {}
 		};
-	} // namespace audiodev_noop
-} // namespace usb_mic
+	}
+}

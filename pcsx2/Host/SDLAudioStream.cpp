@@ -29,7 +29,7 @@ namespace
 
 		SDL_AudioStream* m_stream = nullptr;
 	};
-} // namespace
+}
 
 static bool InitializeSDLAudio(Error* error)
 {
@@ -37,10 +37,8 @@ static bool InitializeSDLAudio(Error* error)
 	if (initialized)
 		return true;
 
-	// Set the name that shows up in the audio mixers on some platforms
 	SDL_SetHint("SDL_AUDIO_DEVICE_APP_NAME", "PenguinScreen2");
 
-	// May as well keep it alive until the process exits.
 	if (!SDL_InitSubSystem(SDL_INIT_AUDIO))
 	{
 		Error::SetStringFmt(error, "SDL_InitSubSystem(SDL_INIT_AUDIO) failed: {}", SDL_GetError());
@@ -82,21 +80,15 @@ bool SDLAudioStream::OpenDevice(bool stretch_enabled, Error* error)
 	pxAssert(!IsOpen());
 
 	static constexpr const std::array<SampleReader, static_cast<size_t>(AudioExpansionMode::Count)> sample_readers = {{
-		// Disabled
 		&StereoSampleReaderImpl,
-		// StereoLFE
 		&SampleReaderImpl<AudioExpansionMode::StereoLFE, READ_CHANNEL_FRONT_LEFT, READ_CHANNEL_FRONT_RIGHT,
 			READ_CHANNEL_LFE>,
-		// Quadraphonic
 		&SampleReaderImpl<AudioExpansionMode::Quadraphonic, READ_CHANNEL_FRONT_LEFT, READ_CHANNEL_FRONT_RIGHT,
 			READ_CHANNEL_REAR_LEFT, READ_CHANNEL_REAR_RIGHT>,
-		// QuadraphonicLFE
 		&SampleReaderImpl<AudioExpansionMode::QuadraphonicLFE, READ_CHANNEL_FRONT_LEFT, READ_CHANNEL_FRONT_RIGHT,
 			READ_CHANNEL_LFE, READ_CHANNEL_REAR_LEFT, READ_CHANNEL_REAR_RIGHT>,
-		// Surround51
 		&SampleReaderImpl<AudioExpansionMode::Surround51, READ_CHANNEL_FRONT_LEFT, READ_CHANNEL_FRONT_RIGHT,
 			READ_CHANNEL_FRONT_CENTER, READ_CHANNEL_LFE, READ_CHANNEL_REAR_LEFT, READ_CHANNEL_REAR_RIGHT>,
-		// Surround71
 		&SampleReaderImpl<AudioExpansionMode::Surround71, READ_CHANNEL_FRONT_LEFT, READ_CHANNEL_FRONT_RIGHT,
 			READ_CHANNEL_FRONT_CENTER, READ_CHANNEL_LFE, READ_CHANNEL_SIDE_LEFT, READ_CHANNEL_SIDE_RIGHT,
 			READ_CHANNEL_REAR_LEFT, READ_CHANNEL_REAR_RIGHT>,

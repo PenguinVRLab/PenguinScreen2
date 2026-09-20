@@ -48,7 +48,6 @@ ControllerSettingsWindow::ControllerSettingsWindow()
 	connect(g_emu_thread, &EmuThread::onInputDeviceDisconnected, this, &ControllerSettingsWindow::onInputDeviceDisconnected);
 	connect(g_emu_thread, &EmuThread::onVibrationMotorsEnumerated, this, &ControllerSettingsWindow::onVibrationMotorsEnumerated);
 
-	// trigger a device enumeration to populate the device list
 	g_emu_thread->enumerateInputDevices();
 	g_emu_thread->enumerateVibrationMotors();
 }
@@ -63,7 +62,6 @@ void ControllerSettingsWindow::setCategory(Category category)
 			m_ui.settingsCategory->setCurrentRow(0);
 			break;
 
-			// TODO: These will need to take multitap into consideration in the future.
 		case Category::FirstControllerSettings:
 			m_ui.settingsCategory->setCurrentRow(1);
 			break;
@@ -113,7 +111,6 @@ void ControllerSettingsWindow::onNewProfileClicked()
 	INISettingsInterface temp_si(std::move(profile_path));
 	if (res == QMessageBox::Yes)
 	{
-		// copy from global or the current profile
 		if (!m_profile_interface)
 		{
 			const int hkres = QMessageBox::question(this, tr("Create Input Profile"),
@@ -126,14 +123,12 @@ void ControllerSettingsWindow::onNewProfileClicked()
 			if (copy_hotkey_bindings)
 				temp_si.SetBoolValue("Pad", "UseProfileHotkeyBindings", true);
 
-			// from global
 			auto lock = Host::GetSettingsLock();
 			Pad::CopyConfiguration(&temp_si, *Host::Internal::GetBaseSettingsLayer(), true, true, copy_hotkey_bindings);
 			USB::CopyConfiguration(&temp_si, *Host::Internal::GetBaseSettingsLayer(), true, true);
 		}
 		else
 		{
-			// from profile
 			const bool copy_hotkey_bindings = m_profile_interface->GetBoolValue("Pad", "UseProfileHotkeyBindings", false);
 			temp_si.SetBoolValue("Pad", "UseProfileHotkeyBindings", copy_hotkey_bindings);
 			Pad::CopyConfiguration(&temp_si, *m_profile_interface, true, true, copy_hotkey_bindings);
@@ -173,7 +168,6 @@ void ControllerSettingsWindow::onApplyProfileClicked()
 
 	g_emu_thread->applySettings();
 
-	// make it visible
 	switchProfile({});
 }
 
@@ -236,7 +230,6 @@ void ControllerSettingsWindow::onDeleteProfileClicked()
 		return;
 	}
 
-	// switch back to global
 	refreshProfileList();
 	switchProfile({});
 }
@@ -257,7 +250,6 @@ void ControllerSettingsWindow::onRestoreDefaultsClicked()
 		return;
 	}
 
-	// actually restore it
 	{
 		auto lock = Host::GetSettingsLock();
 		VMManager::SetDefaultSettings(*Host::Internal::GetBaseSettingsLayer(), false, false, true, true, false);
@@ -266,7 +258,6 @@ void ControllerSettingsWindow::onRestoreDefaultsClicked()
 
 	g_emu_thread->applySettings();
 
-	// reload all settings
 	switchProfile({});
 }
 
@@ -423,7 +414,6 @@ void ControllerSettingsWindow::createWidgets()
 	m_hotkey_settings = nullptr;
 
 	{
-		// global settings
 		QListWidgetItem* item = new QListWidgetItem();
 		item->setText(tr("Global Settings"));
 		item->setIcon(QIcon::fromTheme("settings-3-line"));
@@ -436,13 +426,10 @@ void ControllerSettingsWindow::createWidgets()
 			m_global_settings->addDeviceToList(dev.first, dev.second);
 	}
 
-	// load mtap settings
 	const std::array<bool, 2> mtap_enabled = {{getBoolValue("Pad", "MultitapPort1", false), getBoolValue("Pad", "MultitapPort2", false)}};
 
-	// we reorder things a little to make it look less silly for mtap
 	static constexpr const std::array<u32, MAX_PORTS> mtap_port_order = {{0, 2, 3, 4, 1, 5, 6, 7}};
 
-	// create the ports
 	for (u32 global_slot : mtap_port_order)
 	{
 		const bool is_mtap_port = sioPadIsMultitapSlot(global_slot);
@@ -459,12 +446,10 @@ void ControllerSettingsWindow::createWidgets()
 		QListWidgetItem* item = new QListWidgetItem();
 		if (mtap_enabled[port])
 		{
-			//: Controller Port is an official term from Sony. Find the official translation for your language inside the console's manual.
 			item->setText(tr("Controller Port %1%2\n%3").arg(port + 1).arg(s_mtap_slot_names[slot]).arg(display_name));
 		}
 		else
 		{
-			//: Controller Port is an official term from Sony. Find the official translation for your language inside the console's manual.
 			item->setText(tr("Controller Port %1\n%2").arg(port + 1).arg(display_name));
 		}
 		item->setIcon(m_port_bindings[global_slot]->getIcon());
@@ -472,7 +457,6 @@ void ControllerSettingsWindow::createWidgets()
 		m_ui.settingsCategory->addItem(item);
 	}
 
-	// USB ports
 	for (u32 port = 0; port < USB::NUM_PORTS; port++)
 	{
 		m_usb_bindings[port] = new USBDeviceWidget(m_ui.settingsContainer, this, port);
@@ -488,7 +472,6 @@ void ControllerSettingsWindow::createWidgets()
 		m_ui.settingsCategory->addItem(item);
 	}
 
-	// only add hotkeys if we're editing global settings
 	if (!m_profile_interface || m_profile_interface->GetBoolValue("Pad", "UseProfileHotkeyBindings", false))
 	{
 		QListWidgetItem* item = new QListWidgetItem();
@@ -521,12 +504,10 @@ void ControllerSettingsWindow::updateListDescription(u32 global_slot, Controller
 
 			if (mtap_enabled)
 			{
-				//: Controller Port is an official term from Sony. Find the official translation for your language inside the console's manual.
 				item->setText(tr("Controller Port %1%2\n%3").arg(port + 1).arg(s_mtap_slot_names[slot]).arg(display_name));
 			}
 			else
 			{
-				//: Controller Port is an official term from Sony. Find the official translation for your language inside the console's manual.
 				item->setText(tr("Controller Port %1\n%2").arg(port + 1).arg(display_name));
 			}
 			item->setIcon(widget->getIcon());
@@ -559,7 +540,6 @@ void ControllerSettingsWindow::refreshProfileList()
 
 	QSignalBlocker sb(m_ui.currentProfile);
 	m_ui.currentProfile->clear();
-	//: "Shared" refers here to the shared input profile.
 	m_ui.currentProfile->addItem(tr("Shared"));
 	if (isEditingGlobalSettings())
 		m_ui.currentProfile->setCurrentIndex(0);

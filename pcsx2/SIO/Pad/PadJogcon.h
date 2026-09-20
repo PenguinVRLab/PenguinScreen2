@@ -10,29 +10,25 @@ class PadJogcon final : public PadBase
 public:
 	enum Inputs
 	{
-		PAD_UP, // Directional pad up
-		PAD_RIGHT, // Directional pad right
-		PAD_DOWN, // Directional pad down
-		PAD_LEFT, // Directional pad left
-		PAD_TRIANGLE, // Triangle button
-		PAD_CIRCLE, // Circle button
-		PAD_CROSS, // Cross button
-		PAD_SQUARE, // Square button
-		PAD_SELECT, // Select button
-		PAD_START, // Start button
-		PAD_L1, // L1 button
-		PAD_L2, // L2 button
-		PAD_R1, // R1 button
-		PAD_R2, // R2 button
+		PAD_UP,
+		PAD_RIGHT,
+		PAD_DOWN,
+		PAD_LEFT,
+		PAD_TRIANGLE,
+		PAD_CIRCLE,
+		PAD_CROSS,
+		PAD_SQUARE,
+		PAD_SELECT,
+		PAD_START,
+		PAD_L1,
+		PAD_L2,
+		PAD_R1,
+		PAD_R2,
 
-		// This workaround is necessary because InputRecorder doesn't support custom Pads beside DS2:
-		// https://github.com/PCSX2/pcsx2/blob/ded55635c105c547756f5369b998297f602ada2f/pcsx2/Recording/PadData.cpp#L42-L61
-		// We need to consider and avoid the DS2's indexes that aren't saved in InputRecorder
-		// and we also have to use DS2's analog indexes for our analog axes.
 		PADDING1, PADDING2, PADDING3, PADDING4,
 
-		PAD_DIAL_LEFT, // Dial (Left)
-		PAD_DIAL_RIGHT, // Dial (Right)
+		PAD_DIAL_LEFT,
+		PAD_DIAL_RIGHT,
 		LENGTH,
 	};
 
@@ -48,27 +44,24 @@ private:
 	std::array<float, 2> vibrationScale = {1.0f, 1.0f};
 	float dialDeadzone = 0.0f;
 	float dialScale = 1.0f;
-	// Used to store the last vibration mapping request the PS2 made for the small motor.
 	u8 smallMotorLastConfig = 0xff;
-	// Used to store the last vibration mapping request the PS2 made for the large motor.
 	u8 largeMotorLastConfig = 0xff;
 
-	// Since we reordered the buttons for better UI, we need to remap them here.
 	static constexpr std::array<u8, Inputs::LENGTH> bitmaskMapping = {{
-		12, // PAD_UP
-		13, // PAD_RIGHT
-		14, // PAD_DOWN
-		15, // PAD_LEFT
-		4, // PAD_TRIANGLE
-		5, // PAD_CIRCLE
-		6, // PAD_CROSS
-		7, // PAD_SQUARE
-		8, // PAD_SELECT
-		11, // PAD_START
-		2, // PAD_L1
-		0, // PAD_L2
-		3, // PAD_R1
-		1, // PAD_R2
+		12,
+		13,
+		14,
+		15,
+		4,
+		5,
+		6,
+		7,
+		8,
+		11,
+		2,
+		0,
+		3,
+		1,
 	}};
 
 	void ConfigLog();

@@ -28,13 +28,13 @@ namespace GameDatabaseSchema
 	static const char* getHWFixName(GSHWFixId id);
 	static std::optional<GSHWFixId> parseHWFixName(const std::string_view name);
 	static bool isUserHackHWFix(GSHWFixId id);
-} // namespace GameDatabaseSchema
+}
 
 namespace GameDatabase
 {
 	static void parseAndInsert(const std::string_view serial, const ryml::NodeRef& node);
 	static void initDatabase();
-} // namespace GameDatabase
+}
 
 static constexpr char GAMEDB_YAML_FILE_NAME[] = "GameIndex.yaml";
 
@@ -190,7 +190,6 @@ void GameDatabase::parseAndInsert(const std::string_view serial, const ryml::Nod
 		}
 	}
 
-	// Validate game fixes, invalid ones will be dropped!
 	if (node.has_child("gameFixes") && node["gameFixes"].has_children())
 	{
 		for (const auto& n : node["gameFixes"].children())
@@ -198,7 +197,6 @@ void GameDatabase::parseAndInsert(const std::string_view serial, const ryml::Nod
 			bool fixValidated = false;
 			auto fix = std::string(n.val().str, n.val().len);
 
-			// Enum values don't end with Hack, but gamedb does, so remove it before comparing.
 			if (fix.ends_with("Hack"))
 			{
 				fix.erase(fix.size() - 4);
@@ -283,8 +281,6 @@ void GameDatabase::parseAndInsert(const std::string_view serial, const ryml::Nod
 		}
 	}
 
-	// Memory Card Filters - Store as a vector to allow flexibility in the future
-	// - currently they are used as a '\n' delimited string in the app
 	if (node.has_child("memcardFilters") && node["memcardFilters"].has_children())
 	{
 		for (const auto& n : node["memcardFilters"].children())
@@ -294,12 +290,10 @@ void GameDatabase::parseAndInsert(const std::string_view serial, const ryml::Nod
 		}
 	}
 
-	// Game Patches
 	if (node.has_child("patches") && node["patches"].has_children())
 	{
 		for (const auto& n : node["patches"].children())
 		{
-			// use a crc of 0 for default patches
 			const std::string_view crc_str(n.key().str, n.key().len);
 			const std::optional<u32> crc = (StringUtil::compareNoCase(crc_str, "default")) ? std::optional<u32>(0) : StringUtil::FromChars<u32>(crc_str, 16);
 			if (!crc.has_value())
@@ -442,7 +436,6 @@ bool GameDatabaseSchema::isUserHackHWFix(GSHWFixId id)
 
 void GameDatabaseSchema::GameEntry::applyGameFixes(Pcsx2Config& config, bool applyAuto) const
 {
-	// Only apply core game fixes if the user has enabled them.
 	if (!applyAuto)
 		Console.Warning("GameDB: Game Fixes are disabled");
 
@@ -540,7 +533,6 @@ void GameDatabaseSchema::GameEntry::applyGameFixes(Pcsx2Config& config, bool app
 			Console.Warning("GameDB: Skipping changing VU1 clamp mode [mode=%d]", clampMode);
 	}
 
-	// TODO - config - this could be simplified with maps instead of bitfields and enums
 	for (const auto& it : speedHacks)
 	{
 		if (!applyAuto)
@@ -549,14 +541,11 @@ void GameDatabaseSchema::GameEntry::applyGameFixes(Pcsx2Config& config, bool app
 				Pcsx2Config::SpeedhackOptions::GetSpeedHackName(it.first), it.second);
 			continue;
 		}
-		// Legacy note - speedhacks are setup in the GameDB as integer values, but
-		// are effectively booleans like the gamefixes
 		config.Speedhacks.Set(it.first, it.second);
 		Console.WriteLn("GameDB: Setting Speedhack '%s' to [mode=%d]",
 			Pcsx2Config::SpeedhackOptions::GetSpeedHackName(it.first), it.second);
 	}
 
-	// TODO - config - this could be simplified with maps instead of bitfields and enums
 	for (const GamefixId id : gameFixes)
 	{
 		if (!applyAuto)
@@ -564,11 +553,9 @@ void GameDatabaseSchema::GameEntry::applyGameFixes(Pcsx2Config& config, bool app
 			Console.Warning("GameDB: Skipping Gamefix: %s", Pcsx2Config::GamefixOptions::GetGameFixName(id));
 			continue;
 		}
-		// if the fix is present, it is said to be enabled
 		config.Gamefixes.Set(id, true);
 		Console.WriteLn("GameDB: Enabled Gamefix: %s", Pcsx2Config::GamefixOptions::GetGameFixName(id));
 
-		// The LUT is only used for 1 game so we allocate it only when the gamefix is enabled (save 4MB)
 		if (id == Fix_GoemonTlbMiss && true)
 			vtlb_Alloc_Ppmap();
 	}
@@ -701,7 +688,6 @@ void GameDatabaseSchema::GameEntry::applyGSHardwareFixes(Pcsx2Config::GSOptions&
 {
 	std::string disabled_fixes;
 
-	// Only apply GS HW fixes if the user hasn't manually enabled HW fixes.
 	const bool apply_auto_fixes = !config.ManualUserHacks;
 	const bool is_sw_renderer = EmuConfig.GS.Renderer == GSRendererType::SW;
 	if (!apply_auto_fixes)
@@ -884,7 +870,6 @@ void GameDatabaseSchema::GameEntry::applyGSHardwareFixes(Pcsx2Config::GSOptions&
 
 			case GSHWFixId::GPUPaletteConversion:
 			{
-				// if 2, enable paltex when preloading is full, otherwise leave as-is
 				if (value > 1)
 					config.GPUPaletteConversion = (config.TexturePreloading == TexturePreloadingLevel::Full) ? true : config.GPUPaletteConversion;
 				else
@@ -998,7 +983,6 @@ void GameDatabaseSchema::GameEntry::applyGSHardwareFixes(Pcsx2Config::GSOptions&
 		Console.WriteLn("GameDB: Enabled GS Hardware Fix: %s to [mode=%d]", getHWFixName(id), value);
 	}
 
-	// fixup skipdraw range just in case the db has a bad range (but the linter should catch this)
 	config.SkipDrawEnd = std::max(config.SkipDrawStart, config.SkipDrawEnd);
 
 	if (!is_sw_renderer && !disabled_fixes.empty())
@@ -1044,10 +1028,6 @@ void GameDatabase::initDatabase()
 	{
 		auto serial = StringUtil::toLower(std::string(n.key().str, n.key().len));
 
-		// Serials and CRCs must be inserted as lower-case, as that is how they are retrieved
-		// this is because the application may pass a lowercase CRC or serial along
-		//
-		// However, YAML's keys are as expected case-sensitive, so we have to explicitly do our own duplicate checking
 		if (s_game_db.count(serial) == 1)
 		{
 			Console.ErrorFmt("GameDB: Duplicate serial '{}' found in GameDB. Skipping, Serials are case-insensitive!", serial);
@@ -1251,7 +1231,6 @@ const GameDatabase::HashDatabaseEntry* GameDatabase::lookupHash(
 		return nullptr;
 	}
 
-	// match the first track, for DVDs this will be all there is anyway
 	const auto data_iter = s_track_hash_to_entry_map.find(tracks[0]);
 	if (data_iter == s_track_hash_to_entry_map.end())
 	{
@@ -1260,7 +1239,6 @@ const GameDatabase::HashDatabaseEntry* GameDatabase::lookupHash(
 		return nullptr;
 	}
 
-	// make sure they're not missing the data track
 	const GameDatabase::HashDatabaseEntry* candidate = &s_hash_database[data_iter->second];
 	if (getTrackIndex(candidate->tracks.data(), candidate->tracks.size(), tracks[0]) != 0)
 	{
@@ -1269,11 +1247,9 @@ const GameDatabase::HashDatabaseEntry* GameDatabase::lookupHash(
 		return nullptr;
 	}
 
-	// first track is okay!
 	tracks_matched[0] = true;
 	match_error->clear();
 
-	// now check any audio tracks...
 	bool all_okay = true;
 	for (size_t track = 1; track < num_tracks; track++)
 	{
@@ -1288,7 +1264,6 @@ const GameDatabase::HashDatabaseEntry* GameDatabase::lookupHash(
 			continue;
 		}
 
-		// same game?
 		if (audio_iter->second != data_iter->second)
 		{
 			fmt::format_to(std::back_inserter(*match_error),
@@ -1299,7 +1274,6 @@ const GameDatabase::HashDatabaseEntry* GameDatabase::lookupHash(
 			continue;
 		}
 
-		// make sure it's the correct track number
 		if (getTrackIndex(candidate->tracks.data(), candidate->tracks.size(), tracks[track]) != track)
 		{
 			fmt::format_to(std::back_inserter(*match_error),

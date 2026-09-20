@@ -23,11 +23,9 @@
 static QString GetDocFileUrl(std::string_view name)
 {
 #ifdef _WIN32
-	// Windows uses the docs directory in bin.
 	const std::string path = Path::Combine(EmuFolders::AppRoot,
 		TinyString::from_format("docs" FS_OSPATH_SEPARATOR_STR "{}", name));
 #else
-	// Linux/Mac has this in the Resources directory.
 	const std::string path = Path::Combine(EmuFolders::Resources,
 		TinyString::from_format("docs" FS_OSPATH_SEPARATOR_STR "{}", name));
 #endif
@@ -82,9 +80,6 @@ QString AboutDialog::getGitHubRepositoryUrl()
 
 QString AboutDialog::getLicenseUrl()
 {
-	// GPL.txt ships in-tree (and in the flatpak's resources/docs); the .html
-	// variant only exists in upstream's pandoc release CI, which never runs
-	// for this fork's builds — linking it left a dead link (strict-review #6).
 	return GetDocFileUrl("GPL.txt");
 }
 

@@ -383,7 +383,6 @@ namespace usb_eyetoy
 			[captureDelegate shutdown];
 			[output setSampleBufferDelegate:nil queue:nil];
 
-			// Release the dispatch queue
 			if (captureQueue)
 			{
 				dispatch_release(captureQueue);
@@ -392,7 +391,6 @@ namespace usb_eyetoy
 
 			@autoreleasepool
 			{
-				// Stop, then remove inputs/outputs, then release references
 				if (session)
 				{
 					if ([session isRunning])
@@ -422,7 +420,7 @@ namespace usb_eyetoy
 		{
 			m_mirroring_enabled = state;
 		}
-	} // namespace macos_api
+	}
 
 	std::vector<std::pair<std::string, std::string>> VideoDevice::GetDeviceList()
 	{
@@ -434,4 +432,4 @@ namespace usb_eyetoy
 		return std::make_unique<macos_api::AVFCapture>();
 	}
 
-} // namespace usb_eyetoy
+}

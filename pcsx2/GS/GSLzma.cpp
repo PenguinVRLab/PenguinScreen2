@@ -38,14 +38,12 @@ bool GSDumpFile::GetPreviewImageFromDump(const char* filename, u32* width, u32* 
 	u32 crc;
 	if (!dump->Read(&crc, sizeof(crc)) || crc != 0xFFFFFFFFu)
 	{
-		// not new header dump, so no preview
 		return false;
 	}
 
 	u32 header_size;
 	if (!dump->Read(&header_size, sizeof(header_size)) || header_size < sizeof(GSDumpHeader))
 	{
-		// doesn't have the screenshot fields
 		return false;
 	}
 
@@ -59,7 +57,6 @@ bool GSDumpFile::GetPreviewImageFromDump(const char* filename, u32* width, u32* 
 		header.screenshot_size < (header.screenshot_width * header.screenshot_height * sizeof(u32)) ||
 		(static_cast<u64>(header.screenshot_offset) + header.screenshot_size) > header_size)
 	{
-		// doesn't have a screenshot
 		return false;
 	}
 
@@ -86,7 +83,6 @@ bool GSDumpFile::ReadFile(Error* error)
 		return false;
 	}
 
-	// Pull serial out of new header, if present.
 	if (m_crc == 0xFFFFFFFFu)
 	{
 		GSDumpHeader header;
@@ -112,7 +108,6 @@ bool GSDumpFile::ReadFile(Error* error)
 				m_serial.assign(reinterpret_cast<const char*>(m_state_data.data()) + header.serial_offset, header.serial_size);
 		}
 
-		// Read the real state data
 		m_state_data.resize(header.state_size);
 		if (Read(m_state_data.data(), header.state_size) != header.state_size)
 		{
@@ -128,8 +123,6 @@ bool GSDumpFile::ReadFile(Error* error)
 		return false;
 	}
 
-	// read all the packet data in
-	// TODO: make this suck less by getting the full/extracted size and preallocating
 	for (;;)
 	{
 		const size_t packet_data_size = m_packet_data.size();
@@ -210,9 +203,6 @@ bool GSDumpFile::ReadFile(Error* error)
 		{
 			if (remaining < packet.length)
 			{
-				// There's apparently some "bad" dumps out there that are missing bytes on the end..
-				// The "safest" option here is to discard the last packet, since that has less risk
-				// of leaving the GS in the middle of a command.
 				Console.Error("(GSDump) Dropping last packet of %u bytes (we only have %u bytes)",
 					static_cast<u32>(packet.length), static_cast<u32>(remaining));
 				break;
@@ -231,8 +221,6 @@ bool GSDumpFile::ReadFile(Error* error)
 
 	return true;
 }
-
-/******************************************************************/
 
 static std::once_flag s_lzma_crc_table_init;
 
@@ -342,7 +330,6 @@ namespace
 				ISzAlloc_Free(&g_Alloc, look_stream.buf);
 		};
 
-		// Read blocks
 		CXzs xzs;
 		Xzs_Construct(&xzs);
 		const ScopedGuard xzs_guard([&xzs]() {
@@ -378,7 +365,7 @@ namespace
 				out_block.file_offset = src_offset;
 				out_block.stream_offset = m_stream_size;
 				out_block.compressed_size = std::min<size_t>(Common::AlignUpPow2(block.totalSize, 4),
-					static_cast<size_t>(file_size - static_cast<s64>(src_offset))); // LZMA blocks are 4 byte aligned?
+					static_cast<size_t>(file_size - static_cast<s64>(src_offset)));
 				out_block.uncompressed_size = block.unpackSize;
 				out_block.stream_flags = stream.flags;
 				m_stream_size += out_block.uncompressed_size;
@@ -466,8 +453,6 @@ namespace
 		return size - remain;
 	}
 
-	/******************************************************************/
-
 	class GSDumpDecompressZst final : public GSDumpFile
 	{
 		static constexpr u32 INPUT_BUFFER_SIZE = 512 * _1kb;
@@ -524,7 +509,6 @@ namespace
 		ZSTD_outBuffer outbuf = {m_area, OUTPUT_BUFFER_SIZE, 0};
 		while (outbuf.pos == 0)
 		{
-			// Nothing left in the input buffer. Read data from the file
 			if (m_inbuf.pos == m_inbuf.size && !std::feof(m_fp.get()))
 			{
 				m_inbuf.size = fread(const_cast<void*>(m_inbuf.src), 1, INPUT_BUFFER_SIZE, m_fp.get());
@@ -578,8 +562,6 @@ namespace
 		return off;
 	}
 
-	/******************************************************************/
-
 	class GSDumpRaw final : public GSDumpFile
 	{
 	public:
@@ -616,9 +598,7 @@ namespace
 
 		return ret;
 	}
-} // namespace
-
-/******************************************************************/
+}
 
 std::unique_ptr<GSDumpFile> GSDumpFile::OpenGSDump(const char* filename, Error* error)
 {

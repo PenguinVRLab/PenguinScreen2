@@ -6,7 +6,6 @@
 #include "R5900OpcodeTables.h"
 #include "R5900.h"
 
-// TODO(Stenzek): Move headers to common code.
 #include "x86/iR5900AritImm.h"
 #include "x86/iR5900Arit.h"
 #include "x86/iR5900MultDiv.h"
@@ -23,9 +22,7 @@ namespace R5900
 {
 	namespace Opcodes
 	{
-		// Generates an entry for the given opcode name.
-		// Assumes the default function naming schemes for interpreter and recompiler  functions.
-#ifdef _M_X86 // TODO(Stenzek): Remove me once EE/VU/IOP recs are added.
+#ifdef _M_X86
 	#	define MakeOpcode( name, cycles, flags ) \
 		static const OPCODE name = { \
 			#name, \
@@ -126,10 +123,6 @@ namespace R5900
 			NULL \
 		}
 
-		// We're working on new hopefully better cycle ratios, but they're still a WIP.
-		// And yes this whole thing is an ugly hack.  I'll clean it up once we have
-		// a better idea how exactly the cycle ratios will work best.
-
 		namespace Cycles
 		{
 			static const int Default = 9;
@@ -155,12 +148,8 @@ namespace R5900
 		MakeOpcode( COP0_Unknown, Default, 0 );
 		MakeOpcode( COP1_Unknown, Default, 0 );
 
-		// Class Subset Opcodes
-		// (not really opcodes, but rather entire subsets of other opcode classes)
-
 		MakeOpcodeClass( SPECIAL );
 		MakeOpcodeClass( REGIMM );
-		//MakeOpcodeClass( COP2 );
 		MakeOpcodeClass( MMI );
 		MakeOpcodeClass( MMI0 );
 		MakeOpcodeClass( MMI2 );
@@ -170,8 +159,6 @@ namespace R5900
 		MakeOpcodeClass( COP0 );
 		MakeOpcodeClass( COP1 );
 
-		// Misc Junk
-
 		MakeOpcode( COP2, Default, 0 );
 
 		MakeOpcode( CACHE, Default, 0 );
@@ -179,8 +166,6 @@ namespace R5900
 		MakeOpcode( SYSCALL, Default, IS_BRANCH|BRANCHTYPE_SYSCALL );
 		MakeOpcode( BREAK, Default, 0 );
 		MakeOpcode( SYNC, Default, 0 );
-
-		// Branch/Jump Opcodes
 
 		MakeOpcode( J ,   Default, IS_BRANCH|BRANCHTYPE_JUMP );
 		MakeOpcode( JAL,  Default, IS_BRANCH|BRANCHTYPE_JUMP|IS_LINKED );
@@ -216,8 +201,6 @@ namespace R5900
 		MakeOpcode( TLTU, Branch, 0 );
 		MakeOpcode( TEQ, Branch, 0 );
 		MakeOpcode( TNE, Branch, 0 );
-
-		// Arithmetic
 
 		MakeOpcode( MULT, Mult, 0 );
 		MakeOpcode( MULTU, Mult, 0 );
@@ -288,8 +271,6 @@ namespace R5900
 		MakeOpcode( MFLO1, Default, 0 );
 		MakeOpcode( MTLO1, Default, 0 );
 
-		// Loads!
-
 		MakeOpcode( LDL,  Load, IS_MEMORY|IS_LOAD|MEMTYPE_DWORD|IS_LEFT );
 		MakeOpcode( LDR,  Load, IS_MEMORY|IS_LOAD|MEMTYPE_DWORD|IS_RIGHT );
 		MakeOpcode( LQ,   Load, IS_MEMORY|IS_LOAD|MEMTYPE_QWORD );
@@ -305,8 +286,6 @@ namespace R5900
 		MakeOpcode( LQC2, Load, IS_MEMORY|IS_LOAD|MEMTYPE_QWORD );
 		MakeOpcode( LD,   Load, IS_MEMORY|IS_LOAD|MEMTYPE_DWORD );
 
-		// Stores!
-
 		MakeOpcode( SQ,   Store, IS_MEMORY|IS_STORE|MEMTYPE_QWORD );
 		MakeOpcode( SB,   Store, IS_MEMORY|IS_STORE|MEMTYPE_BYTE );
 		MakeOpcode( SH,   Store, IS_MEMORY|IS_STORE|MEMTYPE_HALF );
@@ -319,8 +298,6 @@ namespace R5900
 		MakeOpcode( SQC2, Store, IS_MEMORY|IS_STORE|MEMTYPE_QWORD );
 		MakeOpcode( SD,   Store, IS_MEMORY|IS_STORE|MEMTYPE_DWORD );
 
-
-		// Multimedia Instructions!
 
 		MakeOpcodeM( PLZCW, MMI_Default, 0 );
 		MakeOpcodeM( PMFHL, MMI_Default, 0 );
@@ -417,9 +394,6 @@ namespace R5900
 		MakeOpcodeM( PCPYH, MMI_Default, 0 );
 		MakeOpcodeM( PEXCW, MMI_Default, 0 );
 
-		//////////////////////////////////////////////////////////
-		// COP0 Instructions
-
 		MakeOpcodeClass( COP0_C0 );
 		MakeOpcodeClass( COP0_BC0 );
 
@@ -439,12 +413,9 @@ namespace R5900
 		MakeOpcode0( EI, CopDefault, 0 );
 		MakeOpcode0( DI, CopDefault, 0 );
 
-		//////////////////////////////////////////////////////////
-		// COP1 Instructions!
-
 		MakeOpcodeClass( COP1_BC1 );
 		MakeOpcodeClass( COP1_S );
-		MakeOpcodeClass( COP1_W );		// contains CVT_S instruction *only*
+		MakeOpcodeClass( COP1_W );
 
 		MakeOpcode1( MFC1, CopDefault, 0 );
 		MakeOpcode1( CFC1, CopDefault, 0 );
@@ -650,7 +621,7 @@ namespace R5900
 			COP1_Unknown,COP1_Unknown,COP1_Unknown,COP1_Unknown,COP1_Unknown,COP1_Unknown,COP1_Unknown,COP1_Unknown,
 		};
 
-	}	// end namespace R5900::OpcodeTables
+	}
 
 	namespace Opcodes
 	{
@@ -674,13 +645,8 @@ namespace R5900
 		const OPCODE& Class_COP1_S(u32 op) { return tbl_COP1_S[op & 0x3F]; }
 		const OPCODE& Class_COP1_W(u32 op) { return tbl_COP1_W[op & 0x3F]; }
 
-		// These are for future use when the COP2 tables are completed.
-		//const OPCODE& Class_COP2() { return tbl_COP2[_Rs_]; }
-		//const OPCODE& Class_COP2_BC2() { return tbl_COP2_BC2[_Rt_]; }
-		//const OPCODE& Class_COP2_SPECIAL() { return tbl_COP2_SPECIAL[_Funct_]; }
-		//const OPCODE& Class_COP2_SPECIAL2() { return tbl_COP2_SPECIAL2[(cpuRegs.code & 0x3) | ((cpuRegs.code >> 4) & 0x7c)]; }
 	}
-}	// end namespace R5900
+}
 
 void (*Int_COP2PrintTable[32])() = {
     COP2_Unknown, QMFC2,        CFC2,         COP2_Unknown, COP2_Unknown, QMTC2,        CTC2,         COP2_Unknown,

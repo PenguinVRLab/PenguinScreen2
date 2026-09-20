@@ -26,7 +26,6 @@
 
 #include "fmt/format.h"
 
-// TODO: FIXME! Should be platform specific.
 #ifdef _WIN32
 #include "common/RedtapeWindows.h"
 #endif
@@ -35,40 +34,22 @@
 
 const CDVD_API* CDVD = nullptr;
 
-// ----------------------------------------------------------------------------
-// diskTypeCached
-// Internal disc type cache, to reduce the overhead of disc type checks, which are
-// performed quite liberally by many games (perhaps intended to keep the PS2 DVD
-// from spinning down due to idle activity?).
-// Cache is set to -1 for init and when the disc is removed/changed, which invokes
-// a new DiskTypeCheck.  All subsequent checks use the non-negative value here.
-//
 static int diskTypeCached = -1;
 
-// used to bridge the gap between the old getBuffer api and the new getBuffer2 api.
 int lastReadSize;
-u32 lastLSN; // needed for block dumping
-
-// Records last read block length for block dumping
-//static int plsn = 0;
+u32 lastLSN;
 
 static OutputIsoFile blockDumpFile;
 
-// Information about tracks on disc
 u8 strack;
 u8 etrack;
 std::array<cdvdTrack, 100> tracks;
 
-// Assertion check for CDVD != NULL (in devel and debug builds), because its handier than
-// relying on DEP exceptions -- and a little more reliable too.
 static void CheckNullCDVD()
 {
 	pxAssertMsg(CDVD, "Invalid CDVD object state (null pointer exception)");
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////
-// Disk Type detection stuff (from cdvdGigaherz)
-//
 static int CheckDiskTypeFS(int baseType)
 {
 	IsoReader isor;
@@ -79,20 +60,17 @@ static int CheckDiskTypeFS(int baseType)
 		{
 			if (StringUtil::ContainsSubString(data, "BOOT2"))
 			{
-				// PS2 DVD/CD.
 				return (baseType == CDVD_TYPE_DETCTCD) ? CDVD_TYPE_PS2CD : CDVD_TYPE_PS2DVD;
 			}
 
 			if (StringUtil::ContainsSubString(data, "BOOT"))
 			{
-				// PSX CD.
 				return CDVD_TYPE_PSCD;
 			}
 
 			return CDVD_TYPE_ILLEGAL;
 		}
 
-		// PS2 Linux disc 2, doesn't have a System.CNF or a normal ELF
 		if (isor.FileExists("P2L_0100.02"))
 			return CDVD_TYPE_PS2DVD;
 
@@ -104,9 +82,9 @@ static int CheckDiskTypeFS(int baseType)
 	}
 
 #ifdef PCSX2_DEVBUILD
-	return CDVD_TYPE_PS2DVD; // need this hack for some homebrew (SMS)
+	return CDVD_TYPE_PS2DVD;
 #endif
-	return CDVD_TYPE_ILLEGAL; // << Only for discs which aren't ps2 at all.
+	return CDVD_TYPE_ILLEGAL;
 }
 
 static int FindDiskType(int mType)
@@ -118,7 +96,7 @@ static int FindDiskType(int mType)
 
 	CDVD->getTN(&tn);
 
-	if (tn.strack != tn.etrack) // multitrack == CD.
+	if (tn.strack != tn.etrack)
 	{
 		iCDType = CDVD_TYPE_DETCTCD;
 	}
@@ -136,12 +114,7 @@ static int FindDiskType(int mType)
 		{
 			if (DoCDVDreadSector(bleh, 16, CDVD_MODE_2048) == 0)
 			{
-				//const cdVolDesc& volDesc = (cdVolDesc&)bleh;
-				//if(volDesc.rootToc.tocSize == 2048)
 
-				//Horrible hack! in CD images position 166 and 171 have block size but not DVD's
-				//It's not always 2048 however (can be 4096)
-				//Test Impossible Mission if thia is changed.
 				if (*(u16*)(bleh + 166) == *(u16*)(bleh + 171))
 					iCDType = CDVD_TYPE_DETCTCD;
 				else
@@ -295,7 +268,6 @@ void CDVDsys_SetFile(CDVD_SourceType srctype, std::string newfile)
 	if (Path::IsAbsolute(newfile))
 	{
 		const auto splitPath = Path::SplitNativePath(newfile);
-		// GetDriveType() Requires trailing backslashes
 		const auto root = fmt::format("{}\\", splitPath.at(0));
 
 		const auto driveType = GetDriveType(StringUtil::UTF8StringToWideString(root).c_str());
@@ -359,7 +331,7 @@ bool DoCDVDopen(Error* error)
 
 	auto CurrentSourceType = enum_cast(m_CurrentSourceType);
 	if (!CDVD->open(m_SourceFilename[CurrentSourceType], error))
-		return false; // error! (handled by caller)
+		return false;
 
 	int cdtype = DoCDVDdetectDiskType();
 
@@ -404,9 +376,6 @@ bool DoCDVDopen(Error* error)
 		int blockofs = 0;
 		uint blocksize = CD_FRAMESIZE_RAW;
 		uint blocks = td.lsn;
-
-		// hack: Because of limitations of the current cdvd design, we can't query the blocksize
-		// of the underlying media.  So lets make a best guess:
 
 		switch (cdtype)
 		{
@@ -468,8 +437,6 @@ s32 DoCDVDreadTrack(u32 lsn, int mode)
 {
 	CheckNullCDVD();
 
-	// TODO: The CDVD api only uses the new getBuffer style. Why is this temp?
-	// lastReadSize is needed for block dumps
 	switch (mode)
 	{
 		case CDVD_MODE_2352:
@@ -486,7 +453,6 @@ s32 DoCDVDreadTrack(u32 lsn, int mode)
 			break;
 	}
 
-	//DevCon.Warning("CDVD readTrack(lsn=%d,mode=%d)",params lsn, lastReadSize);
 	lastLSN = lsn;
 	return CDVD->readTrack(lsn, mode);
 }
@@ -531,12 +497,6 @@ void DoCDVDresetDiskTypeCache()
 {
 	diskTypeCached = -1;
 }
-
-////////////////////////////////////////////////////////
-//
-// CDVD null interface for Run BIOS menu
-
-
 
 static bool NODISCopen(std::string filename, Error* error)
 {
@@ -597,7 +557,7 @@ static s32 NODISCdummyS32()
 	return 0;
 }
 
-static void NODISCnewDiskCB(void (* /* callback */)())
+static void NODISCnewDiskCB(void (* )())
 {
 }
 

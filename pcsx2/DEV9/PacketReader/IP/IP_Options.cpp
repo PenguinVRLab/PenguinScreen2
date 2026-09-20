@@ -49,4 +49,4 @@ namespace PacketReader::IP
 		NetLib::WriteByte08(buffer, offset, GetLength());
 		NetLib::WriteUInt16(buffer, offset, value);
 	}
-} // namespace PacketReader::IP
+}

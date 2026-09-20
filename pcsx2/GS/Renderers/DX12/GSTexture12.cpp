@@ -116,8 +116,6 @@ void GSTexture12::Destroy(bool defer)
 #endif
 }
 
-// For use with non-simultaneous textures only.
-// Simultaneous testures are always D3D12_BARRIER_LAYOUT_COMMON.
 static D3D12_BARRIER_LAYOUT GetD3D12BarrierLayout(GSTexture12::ResourceState state)
 {
 	switch (state)
@@ -202,8 +200,6 @@ std::unique_ptr<GSTexture12> GSTexture12::Create(Usage usage, Format format, int
 
 	if (IsTexture(usage))
 	{
-		// This is a little annoying. basically, to do mipmap generation, we need to be a render target.
-		// If it's a compressed texture, we won't be generating mips anyway, so this should be fine.
 		desc.desc1.Flags |= (levels > 1 && !IsCompressedFormat(format)) ? D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET :
 		                                                                  D3D12_RESOURCE_FLAG_NONE;
 		state = ResourceState::CopyDst;
@@ -215,7 +211,6 @@ std::unique_ptr<GSTexture12> GSTexture12::Create(Usage usage, Format format, int
 
 	if (IsRenderTarget(usage))
 	{
-		// RT's tend to be larger, so we'll keep them committed for speed.
 		pxAssert(levels == 1);
 		desc.desc1.Flags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
 		optimized_clear_value.Format = rtv_format;
@@ -250,13 +245,11 @@ std::unique_ptr<GSTexture12> GSTexture12::Create(Usage usage, Format format, int
 
 	if (IsFeedback(usage) && !dev->UseEnhancedBarriers())
 	{
-		// We need to use an aliased resource for feedback with legacy barriers.
 		const D3D12_RESOURCE_ALLOCATION_INFO allocInfo = dev->GetDevice()->GetResourceAllocationInfo(0, 1, &desc.desc);
 
 		HRESULT hr = dev->GetAllocator()->AllocateMemory(&allocationDesc, &allocInfo, allocation.put());
 		if (FAILED(hr))
 		{
-			// OOM isn't fatal.
 			if (hr != E_OUTOFMEMORY)
 				Console.Error("Allocate texture memory failed: 0x%08X", hr);
 
@@ -267,7 +260,6 @@ std::unique_ptr<GSTexture12> GSTexture12::Create(Usage usage, Format format, int
 			&optimized_clear_value, IID_PPV_ARGS(resource.put()));
 		if (FAILED(hr))
 		{
-			// OOM isn't fatal.
 			if (hr != E_OUTOFMEMORY)
 				Console.Error("Create texture resource 1 failed: 0x%08X", hr);
 
@@ -278,7 +270,6 @@ std::unique_ptr<GSTexture12> GSTexture12::Create(Usage usage, Format format, int
 			&optimized_clear_value, IID_PPV_ARGS(resource_fbl.put()));
 		if (FAILED(hr))
 		{
-			// OOM isn't fatal.
 			if (hr != E_OUTOFMEMORY)
 				Console.Error("Create texture resource 2 failed: 0x%08X", hr);
 
@@ -303,7 +294,6 @@ std::unique_ptr<GSTexture12> GSTexture12::Create(Usage usage, Format format, int
 		}
 		if (FAILED(hr))
 		{
-			// OOM isn't fatal.
 			if (hr != E_OUTOFMEMORY)
 				Console.Error("Create texture failed: 0x%08X", hr);
 
@@ -354,7 +344,6 @@ std::unique_ptr<GSTexture12> GSTexture12::Create(Usage usage, Format format, int
 		return {};
 	}
 
-	// Feedback descriptor used with legacy barriers
 	if (resource_fbl)
 	{
 		pxAssert(!dev->UseEnhancedBarriers());
@@ -516,7 +505,6 @@ const D3D12CommandList& GSTexture12::GetCommandBufferForUpdate()
 	GSDevice12* const dev = GSDevice12::GetInstance();
 	if (!IsTexture() || m_use_fence_counter == dev->GetCurrentFenceValue())
 	{
-		// Console.WriteLn("Texture update within frame, can't use do beforehand");
 		GSDevice12::GetInstance()->EndRenderPass();
 		return dev->GetCommandList();
 	}
@@ -565,8 +553,6 @@ ID3D12Resource* GSTexture12::AllocateUploadStagingBuffer(
 	const D3D12_RANGE write_range = {0, buffer_size};
 	resource->Unmap(0, &write_range);
 
-	// Immediately queue it for freeing after the command buffer finishes, since it's only needed for the copy.
-	// This adds the reference needed to keep the buffer alive.
 	GSDevice12::GetInstance()->DeferResourceDestruction(allocation.get(), resource.get());
 	return resource.get();
 }
@@ -585,7 +571,6 @@ bool GSTexture12::Update(const GSVector4i& r, const void* data, int pitch, int l
 
 	g_perfmon.Put(GSPerfMon::TextureUploads, 1);
 
-	// Footprint and box must be block aligned for compressed textures.
 	const u32 block_size = GetCompressedBlockSize();
 	const u32 width = Common::AlignUpPow2(r.width(), block_size);
 	const u32 height = Common::AlignUpPow2(r.height(), block_size);
@@ -600,8 +585,6 @@ bool GSTexture12::Update(const GSVector4i& r, const void* data, int pitch, int l
 	srcloc.PlacedFootprint.Footprint.Format = m_dxgi_format;
 	srcloc.PlacedFootprint.Footprint.RowPitch = upload_pitch;
 
-	// If the texture is larger than half our streaming buffer size, use a separate buffer.
-	// Otherwise allocation will either fail, or require lots of cmdbuffer submissions.
 	if (required_size > (GSDevice12::GetInstance()->GetTextureStreamBuffer().GetSize() / 2))
 	{
 		srcloc.pResource = AllocateUploadStagingBuffer(data, pitch, upload_pitch, height);
@@ -633,13 +616,11 @@ bool GSTexture12::Update(const GSVector4i& r, const void* data, int pitch, int l
 	const D3D12CommandList& cmdlist = GetCommandBufferForUpdate();
 	GL_PUSH("GSTexture12::Update({%d,%d} %dx%d Lvl:%u", r.x, r.y, r.width(), r.height(), layer);
 
-	// first time the texture is used? don't leave it undefined
 	if (m_resource_state == GSTexture12::ResourceState::Undefined)
 		TransitionToState(cmdlist, GSTexture12::ResourceState::CopyDst);
 	else if (m_resource_state != GSTexture12::ResourceState::CopyDst)
 		TransitionSubresourceToState(cmdlist, layer, m_resource_state, GSTexture12::ResourceState::CopyDst);
 
-	// if we're an rt and have been cleared, and the full rect isn't being uploaded, do the clear
 	if (IsRenderTarget())
 	{
 		if (!r.eq(GSVector4i(0, 0, m_size.x, m_size.y)))
@@ -671,12 +652,10 @@ bool GSTexture12::Map(GSMap& m, const GSVector4i* r, int layer)
 	if (layer >= m_mipmap_levels || IsCompressedFormat())
 		return false;
 
-	// map for writing
 	m_map_area = r ? *r : GetRect();
 	m_map_level = layer;
 	m.pitch = Common::AlignUpPow2(CalcUploadPitch(m_map_area.width()), D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
 
-	// see note in Update() for the reason why.
 	const u32 required_size = CalcUploadSize(m_map_area.height(), m.pitch);
 	D3D12StreamBuffer& buffer = GSDevice12::GetInstance()->GetTextureStreamBuffer();
 	if (required_size >= (buffer.GetSize() / 2))
@@ -696,7 +675,6 @@ bool GSTexture12::Map(GSMap& m, const GSVector4i* r, int layer)
 
 void GSTexture12::Unmap()
 {
-	// this can't handle blocks/compressed formats at the moment.
 	pxAssert(m_map_level < m_mipmap_levels && !IsCompressedFormat());
 	g_perfmon.Put(GSPerfMon::TextureUploads, 1);
 
@@ -712,13 +690,11 @@ void GSTexture12::Unmap()
 	GL_PUSH("GSTexture12::Update({%d,%d} %dx%d Lvl:%u", m_map_area.x, m_map_area.y, m_map_area.width(),
 		m_map_area.height(), m_map_level);
 
-	// first time the texture is used? don't leave it undefined
 	if (m_resource_state == ResourceState::Undefined)
 		TransitionToState(cmdlist, ResourceState::CopyDst);
 	else if (m_resource_state != ResourceState::CopyDst)
 		TransitionSubresourceToState(cmdlist, m_map_level, m_resource_state, ResourceState::CopyDst);
 
-	// if we're an rt and have been cleared, and the full rect isn't being uploaded, do the clear
 	if (IsRenderTarget())
 	{
 		if (!m_map_area.eq(GSVector4i(0, 0, m_size.x, m_size.y)))
@@ -805,10 +781,6 @@ void GSTexture12::TransitionSubresourceToState(const D3D12CommandList& cmdlist, 
 {
 	if (GSDevice12::GetInstance()->UseEnhancedBarriers())
 	{
-		// Read only depth requires special handling as we might want to write stencil.
-		// We need to transition subresources separately, requiring 2 barriers
-		// Handling it here allows us to batch those barriers.
-		// Other transitions only need the one barrier.
 		D3D12_TEXTURE_BARRIER barriers[2] = {{D3D12_BARRIER_SYNC_NONE, D3D12_BARRIER_SYNC_NONE,
 			D3D12_BARRIER_ACCESS_COMMON, D3D12_BARRIER_ACCESS_COMMON,
 			D3D12_BARRIER_LAYOUT_COMMON, D3D12_BARRIER_LAYOUT_COMMON,
@@ -982,7 +954,7 @@ void GSTexture12::TransitionSubresourceToState(const D3D12CommandList& cmdlist, 
 				barriers[1].AccessAfter = barriers[0].AccessAfter;
 				barriers[1].SyncAfter = barriers[0].SyncAfter;
 			}
-			else // after_state == ResourceState::DepthReadStencil
+			else
 			{
 				barriers[1].LayoutBefore = barriers[0].LayoutBefore;
 				barriers[1].AccessBefore = barriers[0].AccessBefore;
@@ -995,10 +967,6 @@ void GSTexture12::TransitionSubresourceToState(const D3D12CommandList& cmdlist, 
 	}
 	else
 	{
-		// Read only depth requires special handling as we might want to write stencil.
-		// We need to transition subresources separately, requiring 2 barriers.
-		// Handling it here allows us to batch those barriers.
-		// Other transitions only need the one barrier.
 		D3D12_RESOURCE_BARRIER barriers[2] = {{D3D12_RESOURCE_BARRIER_TYPE_TRANSITION, D3D12_RESOURCE_BARRIER_FLAG_NONE,
 			{{m_resource.get(), static_cast<u32>(level), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COMMON}}}};
 
@@ -1044,7 +1012,6 @@ void GSTexture12::TransitionSubresourceToState(const D3D12CommandList& cmdlist, 
 				break;
 			case ResourceState::CASShaderUAV:
 			case ResourceState::PixelShaderUAV:
-				// Handled in after_state cases.
 				if (after_state == ResourceState::CASShaderUAV || after_state == ResourceState::PixelShaderUAV)
 					break;
 
@@ -1097,9 +1064,7 @@ void GSTexture12::TransitionSubresourceToState(const D3D12CommandList& cmdlist, 
 			case ResourceState::PixelShaderUAV:
 				if (before_state == ResourceState::CASShaderUAV || before_state == ResourceState::PixelShaderUAV)
 				{
-					// No state transition, but probably want a barrier instead.
 					barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
-					// pResource is a common initial member, so no need to set again.
 				}
 				else
 					barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
@@ -1116,14 +1081,13 @@ void GSTexture12::TransitionSubresourceToState(const D3D12CommandList& cmdlist, 
 			barriers[1].Flags = barriers[0].Flags;
 			if (before_state == ResourceState::DepthReadStencil)
 				barriers[1].Transition.StateAfter = barriers[0].Transition.StateAfter;
-			else // after_state == ResourceState::DepthReadStencil
+			else
 				barriers[1].Transition.StateBefore = barriers[0].Transition.StateBefore;
 		}
 
 		cmdlist.list4->ResourceBarrier(num_barriers, barriers);
 	}
 
-	// Count as a UAV barrier if we transition to/from UAV.
 	if (IsRenderTargetOrDepthStencil() &&
 		(before_state == ResourceState::PixelShaderUAV || after_state == ResourceState::PixelShaderUAV))
 	{
@@ -1255,7 +1219,6 @@ void GSDownloadTexture12::CopyFromTexture(
 	if (old_layout != GSTexture12::ResourceState::CopySrc)
 		tex12->TransitionSubresourceToState(cmdlist, src_level, old_layout, GSTexture12::ResourceState::CopySrc);
 
-	// TODO: Rules for depth buffers here?
 	const D3D12_BOX srcbox{static_cast<UINT>(src.left), static_cast<UINT>(src.top), 0u, static_cast<UINT>(src.right),
 		static_cast<UINT>(src.bottom), 1u};
 	cmdlist.list4->CopyTextureRegion(&dstloc, 0, 0, 0, &srcloc, &srcbox);
@@ -1272,7 +1235,6 @@ bool GSDownloadTexture12::Map(const GSVector4i& read_rc)
 	if (IsMapped())
 		return true;
 
-	// Never populated?
 	if (!m_current_pitch)
 		return false;
 
@@ -1311,7 +1273,6 @@ void GSDownloadTexture12::Flush()
 	if (dev->GetCompletedFenceValue() >= m_copy_fence_value)
 		return;
 
-	// Need to execute command buffer.
 	if (dev->GetCurrentFenceValue() == m_copy_fence_value)
 		dev->ExecuteCommandListForReadback();
 	else

@@ -15,112 +15,112 @@
 #include <cmath>
 
 static const char* s_axis_setting_names[XInputSource::NUM_AXES] = {
-	"LeftX", // AXIS_LEFTX
-	"LeftY", // AXIS_LEFTY
-	"RightX", // AXIS_RIGHTX
-	"RightY", // AXIS_RIGHTY
-	"LeftTrigger", // AXIS_TRIGGERLEFT
-	"RightTrigger", // AXIS_TRIGGERRIGHT
+	"LeftX",
+	"LeftY",
+	"RightX",
+	"RightY",
+	"LeftTrigger",
+	"RightTrigger",
 };
 static const char* s_axis_names[XInputSource::NUM_AXES] = {
-	"Left X", // AXIS_LEFTX
-	"Left Y", // AXIS_LEFTY
-	"Right X", // AXIS_RIGHTX
-	"Right Y", // AXIS_RIGHTY
-	"Left Trigger", // AXIS_TRIGGERLEFT
-	"Right Trigger", // AXIS_TRIGGERRIGHT
+	"Left X",
+	"Left Y",
+	"Right X",
+	"Right Y",
+	"Left Trigger",
+	"Right Trigger",
 };
 static constexpr const char* s_axis_icons[][2] = {
-	{ICON_PF_LEFT_ANALOG_LEFT, ICON_PF_LEFT_ANALOG_RIGHT}, // AXIS_LEFTX
-	{ICON_PF_LEFT_ANALOG_UP, ICON_PF_LEFT_ANALOG_DOWN}, // AXIS_LEFTY
-	{ICON_PF_RIGHT_ANALOG_LEFT, ICON_PF_RIGHT_ANALOG_RIGHT}, // AXIS_RIGHTX
-	{ICON_PF_RIGHT_ANALOG_UP, ICON_PF_RIGHT_ANALOG_DOWN}, // AXIS_RIGHTY
-	{nullptr, ICON_PF_LEFT_TRIGGER_PULL}, // AXIS_TRIGGERLEFT
-	{nullptr, ICON_PF_RIGHT_TRIGGER_PULL}, // AXIS_TRIGGERRIGHT
+	{ICON_PF_LEFT_ANALOG_LEFT, ICON_PF_LEFT_ANALOG_RIGHT},
+	{ICON_PF_LEFT_ANALOG_UP, ICON_PF_LEFT_ANALOG_DOWN},
+	{ICON_PF_RIGHT_ANALOG_LEFT, ICON_PF_RIGHT_ANALOG_RIGHT},
+	{ICON_PF_RIGHT_ANALOG_UP, ICON_PF_RIGHT_ANALOG_DOWN},
+	{nullptr, ICON_PF_LEFT_TRIGGER_PULL},
+	{nullptr, ICON_PF_RIGHT_TRIGGER_PULL},
 };
 static const GenericInputBinding s_xinput_generic_binding_axis_mapping[][2] = {
-	{GenericInputBinding::LeftStickLeft, GenericInputBinding::LeftStickRight}, // AXIS_LEFTX
-	{GenericInputBinding::LeftStickUp, GenericInputBinding::LeftStickDown}, // AXIS_LEFTY
-	{GenericInputBinding::RightStickLeft, GenericInputBinding::RightStickRight}, // AXIS_RIGHTX
-	{GenericInputBinding::RightStickUp, GenericInputBinding::RightStickDown}, // AXIS_RIGHTY
-	{GenericInputBinding::Unknown, GenericInputBinding::L2}, // AXIS_TRIGGERLEFT
-	{GenericInputBinding::Unknown, GenericInputBinding::R2}, // AXIS_TRIGGERRIGHT
+	{GenericInputBinding::LeftStickLeft, GenericInputBinding::LeftStickRight},
+	{GenericInputBinding::LeftStickUp, GenericInputBinding::LeftStickDown},
+	{GenericInputBinding::RightStickLeft, GenericInputBinding::RightStickRight},
+	{GenericInputBinding::RightStickUp, GenericInputBinding::RightStickDown},
+	{GenericInputBinding::Unknown, GenericInputBinding::L2},
+	{GenericInputBinding::Unknown, GenericInputBinding::R2},
 };
 
 static const char* s_button_setting_names[XInputSource::NUM_BUTTONS] = {
-	"DPadUp", // XINPUT_GAMEPAD_DPAD_UP
-	"DPadDown", // XINPUT_GAMEPAD_DPAD_DOWN
-	"DPadLeft", // XINPUT_GAMEPAD_DPAD_LEFT
-	"DPadRight", // XINPUT_GAMEPAD_DPAD_RIGHT
-	"Start", // XINPUT_GAMEPAD_START
-	"Back", // XINPUT_GAMEPAD_BACK
-	"LeftStick", // XINPUT_GAMEPAD_LEFT_THUMB
-	"RightStick", // XINPUT_GAMEPAD_RIGHT_THUMB
-	"LeftShoulder", // XINPUT_GAMEPAD_LEFT_SHOULDER
-	"RightShoulder", // XINPUT_GAMEPAD_RIGHT_SHOULDER
-	"A", // XINPUT_GAMEPAD_A
-	"B", // XINPUT_GAMEPAD_B
-	"X", // XINPUT_GAMEPAD_X
-	"Y", // XINPUT_GAMEPAD_Y
-	"Guide", // XINPUT_GAMEPAD_GUIDE
+	"DPadUp",
+	"DPadDown",
+	"DPadLeft",
+	"DPadRight",
+	"Start",
+	"Back",
+	"LeftStick",
+	"RightStick",
+	"LeftShoulder",
+	"RightShoulder",
+	"A",
+	"B",
+	"X",
+	"Y",
+	"Guide",
 };
 static const char* s_button_names[XInputSource::NUM_BUTTONS] = {
-	"D-Pad Up", // XINPUT_GAMEPAD_DPAD_UP
-	"D-Pad Down", // XINPUT_GAMEPAD_DPAD_DOWN
-	"D-Pad Left", // XINPUT_GAMEPAD_DPAD_LEFT
-	"D-Pad Right", // XINPUT_GAMEPAD_DPAD_RIGHT
-	"Start", // XINPUT_GAMEPAD_START
-	"Back", // XINPUT_GAMEPAD_BACK
-	"Left Stick", // XINPUT_GAMEPAD_LEFT_THUMB
-	"Right Stick", // XINPUT_GAMEPAD_RIGHT_THUMB
-	"Left Shoulder", // XINPUT_GAMEPAD_LEFT_SHOULDER
-	"Right Shoulder", // XINPUT_GAMEPAD_RIGHT_SHOULDER
-	"A", // XINPUT_GAMEPAD_A
-	"B", // XINPUT_GAMEPAD_B
-	"X", // XINPUT_GAMEPAD_X
-	"Y", // XINPUT_GAMEPAD_Y
-	"Guide", // XINPUT_GAMEPAD_GUIDE
+	"D-Pad Up",
+	"D-Pad Down",
+	"D-Pad Left",
+	"D-Pad Right",
+	"Start",
+	"Back",
+	"Left Stick",
+	"Right Stick",
+	"Left Shoulder",
+	"Right Shoulder",
+	"A",
+	"B",
+	"X",
+	"Y",
+	"Guide",
 };
 
 static const u16 s_button_masks[XInputSource::NUM_BUTTONS] = {
 	XINPUT_GAMEPAD_DPAD_UP, XINPUT_GAMEPAD_DPAD_DOWN, XINPUT_GAMEPAD_DPAD_LEFT, XINPUT_GAMEPAD_DPAD_RIGHT, XINPUT_GAMEPAD_START,
 	XINPUT_GAMEPAD_BACK, XINPUT_GAMEPAD_LEFT_THUMB, XINPUT_GAMEPAD_RIGHT_THUMB, XINPUT_GAMEPAD_LEFT_SHOULDER, XINPUT_GAMEPAD_RIGHT_SHOULDER,
 	XINPUT_GAMEPAD_A, XINPUT_GAMEPAD_B, XINPUT_GAMEPAD_X, XINPUT_GAMEPAD_Y,
-	0x400, // XINPUT_GAMEPAD_GUIDE
+	0x400,
 };
 static constexpr const char* s_button_icons[] = {
-	ICON_PF_XBOX_DPAD_UP, // XINPUT_GAMEPAD_DPAD_UP
-	ICON_PF_XBOX_DPAD_DOWN, // XINPUT_GAMEPAD_DPAD_DOWN
-	ICON_PF_XBOX_DPAD_LEFT, // XINPUT_GAMEPAD_DPAD_LEFT
-	ICON_PF_XBOX_DPAD_RIGHT, // XINPUT_GAMEPAD_DPAD_RIGHT
-	ICON_PF_BURGER_MENU, // XINPUT_GAMEPAD_START
-	ICON_PF_SHARE_CAPTURE, // XINPUT_GAMEPAD_BACK
-	ICON_PF_LEFT_ANALOG_CLICK, // XINPUT_GAMEPAD_LEFT_THUMB
-	ICON_PF_RIGHT_ANALOG_CLICK, // XINPUT_GAMEPAD_RIGHT_THUMB
-	ICON_PF_LEFT_SHOULDER_LB, // XINPUT_GAMEPAD_LEFT_SHOULDER
-	ICON_PF_RIGHT_SHOULDER_RB, // XINPUT_GAMEPAD_RIGHT_SHOULDER
-	ICON_PF_BUTTON_A, // XINPUT_GAMEPAD_A
-	ICON_PF_BUTTON_B, // XINPUT_GAMEPAD_B
-	ICON_PF_BUTTON_X, // XINPUT_GAMEPAD_X
-	ICON_PF_BUTTON_Y, // XINPUT_GAMEPAD_Y
-	ICON_PF_XBOX, // XINPUT_GAMEPAD_GUIDE
+	ICON_PF_XBOX_DPAD_UP,
+	ICON_PF_XBOX_DPAD_DOWN,
+	ICON_PF_XBOX_DPAD_LEFT,
+	ICON_PF_XBOX_DPAD_RIGHT,
+	ICON_PF_BURGER_MENU,
+	ICON_PF_SHARE_CAPTURE,
+	ICON_PF_LEFT_ANALOG_CLICK,
+	ICON_PF_RIGHT_ANALOG_CLICK,
+	ICON_PF_LEFT_SHOULDER_LB,
+	ICON_PF_RIGHT_SHOULDER_RB,
+	ICON_PF_BUTTON_A,
+	ICON_PF_BUTTON_B,
+	ICON_PF_BUTTON_X,
+	ICON_PF_BUTTON_Y,
+	ICON_PF_XBOX,
 };
 static const GenericInputBinding s_xinput_generic_binding_button_mapping[] = {
-	GenericInputBinding::DPadUp, // XINPUT_GAMEPAD_DPAD_UP
-	GenericInputBinding::DPadDown, // XINPUT_GAMEPAD_DPAD_DOWN
-	GenericInputBinding::DPadLeft, // XINPUT_GAMEPAD_DPAD_LEFT
-	GenericInputBinding::DPadRight, // XINPUT_GAMEPAD_DPAD_RIGHT
-	GenericInputBinding::Start, // XINPUT_GAMEPAD_START
-	GenericInputBinding::Select, // XINPUT_GAMEPAD_BACK
-	GenericInputBinding::L3, // XINPUT_GAMEPAD_LEFT_THUMB
-	GenericInputBinding::R3, // XINPUT_GAMEPAD_RIGHT_THUMB
-	GenericInputBinding::L1, // XINPUT_GAMEPAD_LEFT_SHOULDER
-	GenericInputBinding::R1, // XINPUT_GAMEPAD_RIGHT_SHOULDER
-	GenericInputBinding::Cross, // XINPUT_GAMEPAD_A
-	GenericInputBinding::Circle, // XINPUT_GAMEPAD_B
-	GenericInputBinding::Square, // XINPUT_GAMEPAD_X
-	GenericInputBinding::Triangle, // XINPUT_GAMEPAD_Y
-	GenericInputBinding::System, // XINPUT_GAMEPAD_GUIDE
+	GenericInputBinding::DPadUp,
+	GenericInputBinding::DPadDown,
+	GenericInputBinding::DPadLeft,
+	GenericInputBinding::DPadRight,
+	GenericInputBinding::Start,
+	GenericInputBinding::Select,
+	GenericInputBinding::L3,
+	GenericInputBinding::R3,
+	GenericInputBinding::L1,
+	GenericInputBinding::R1,
+	GenericInputBinding::Cross,
+	GenericInputBinding::Circle,
+	GenericInputBinding::Square,
+	GenericInputBinding::Triangle,
+	GenericInputBinding::System,
 };
 
 XInputSource::XInputSource() = default;
@@ -129,8 +129,6 @@ XInputSource::~XInputSource() = default;
 
 bool XInputSource::Initialize(SettingsInterface& si, std::unique_lock<std::mutex>& settings_lock)
 {
-	// xinput1_3.dll is flawed and obsolete, but it's also commonly used by wrappers.
-	// For this reason, try to load it *only* from the application directory, and not system32.
 	m_xinput_module = LoadLibraryExW(L"xinput1_3", nullptr, LOAD_LIBRARY_SEARCH_APPLICATION_DIR);
 	if (!m_xinput_module)
 	{
@@ -146,7 +144,6 @@ bool XInputSource::Initialize(SettingsInterface& si, std::unique_lock<std::mutex
 		return false;
 	}
 
-	// Try the hidden version of XInputGetState(), which lets us query the guide button.
 	m_xinput_get_state = reinterpret_cast<decltype(m_xinput_get_state)>(GetProcAddress(m_xinput_module, reinterpret_cast<LPCSTR>(100)));
 	if (!m_xinput_get_state)
 		m_xinput_get_state = reinterpret_cast<decltype(m_xinput_get_state)>(GetProcAddress(m_xinput_module, "XInputGetState"));
@@ -154,7 +151,6 @@ bool XInputSource::Initialize(SettingsInterface& si, std::unique_lock<std::mutex
 	m_xinput_get_capabilities =
 		reinterpret_cast<decltype(m_xinput_get_capabilities)>(GetProcAddress(m_xinput_module, "XInputGetCapabilities"));
 
-	// SCP extension, only exists when the bridge xinput1_3.dll is in use
 	m_xinput_get_extended = reinterpret_cast<decltype(m_xinput_get_extended)>(GetProcAddress(m_xinput_module, "XInputGetExtended"));
 	if (!m_xinput_get_state || !m_xinput_set_state || !m_xinput_get_capabilities)
 	{
@@ -318,13 +314,11 @@ std::optional<InputBindingKey> XInputSource::ParseKeyString(const std::string_vi
 	}
 	else if (binding[0] == '+' || binding[0] == '-')
 	{
-		// likely an axis
 		const std::string_view axis_name(binding.substr(1));
 		for (u32 i = 0; i < std::size(s_axis_setting_names); i++)
 		{
 			if (axis_name == s_axis_setting_names[i])
 			{
-				// found an axis!
 				key.source_subtype = InputSubclass::ControllerAxis;
 				key.data = i;
 				key.modifier = binding[0] == '-' ? InputModifier::Negate : InputModifier::None;
@@ -334,7 +328,6 @@ std::optional<InputBindingKey> XInputSource::ParseKeyString(const std::string_vi
 	}
 	else
 	{
-		// must be a button
 		for (u32 i = 0; i < std::size(s_button_setting_names); i++)
 		{
 			if (binding == s_button_setting_names[i])
@@ -346,7 +339,6 @@ std::optional<InputBindingKey> XInputSource::ParseKeyString(const std::string_vi
 		}
 	}
 
-	// unknown axis/button
 	return std::nullopt;
 }
 
@@ -439,7 +431,6 @@ bool XInputSource::GetGenericBindingMapping(const std::string_view device, Input
 	if (player_id.value() < 0 || player_id.value() >= static_cast<s32>(XUSER_MAX_COUNT))
 		return false;
 
-	// assume all buttons are present.
 	const s32 pid = player_id.value();
 	for (u32 i = 0; i < std::size(s_xinput_generic_binding_axis_mapping); i++)
 	{
@@ -520,7 +511,6 @@ void XInputSource::CheckForStateChanges(u32 index, const XINPUT_STATE& new_state
 			s_xinput_generic_binding_axis_mapping[axis][1]); \
 	}
 
-	// Y axes is inverted in XInput when compared to SDL.
 	CHECK_AXIS(sThumbLX, AXIS_LEFTX, 32768, 32767);
 	CHECK_AXIS(sThumbLY, AXIS_LEFTY, -32768, -32767);
 	CHECK_AXIS(sThumbRX, AXIS_RIGHTX, 32768, 32767);
@@ -634,7 +624,6 @@ void XInputSource::UpdateMotorState(InputBindingKey large_key, InputBindingKey s
 	if (large_key.source_index != small_key.source_index || large_key.source_subtype != InputSubclass::ControllerMotor ||
 		small_key.source_subtype != InputSubclass::ControllerMotor)
 	{
-		// bonkers config where they're mapped to different controllers... who would do such a thing?
 		UpdateMotorState(large_key, large_intensity);
 		UpdateMotorState(small_key, small_intensity);
 		return;

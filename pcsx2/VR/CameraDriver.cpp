@@ -26,7 +26,6 @@ namespace VR::CameraDriver
 {
 	namespace
 	{
-
 		constexpr float PI_F = 3.14159265358979323846f;
 
 		struct EulerAngles
@@ -38,7 +37,6 @@ namespace VR::CameraDriver
 
 		EulerAngles QuaternionToEulerYXZ(float x, float y, float z, float w)
 		{
-
 			const float n2 = x * x + y * y + z * z + w * w;
 			if (!std::isfinite(n2) || n2 < 1e-12f)
 				return EulerAngles{};
@@ -93,13 +91,11 @@ namespace VR::CameraDriver
 			{
 				case ProfileDB::CameraEncoding::F32:
 				{
-
 					memWrite32(address, std::bit_cast<u32>(value));
 					break;
 				}
 				case ProfileDB::CameraEncoding::S16_12:
 				{
-
 					const s32 raw = SaturateRound(value * 4096.0f,
 						std::numeric_limits<s16>::min(), std::numeric_limits<s16>::max());
 					memWrite16(address, static_cast<u16>(static_cast<s16>(raw)));
@@ -107,7 +103,6 @@ namespace VR::CameraDriver
 				}
 				case ProfileDB::CameraEncoding::S32Angle:
 				{
-
 					const s32 raw = SaturateRound(value,
 						std::numeric_limits<s32>::min(), std::numeric_limits<s32>::max());
 					memWrite32(address, static_cast<u32>(raw));
@@ -159,7 +154,6 @@ namespace VR::CameraDriver
 
 		AssembledHook AssembleHook(const ProfileDB::CameraCodeHook& h)
 		{
-
 			const u32 hi = (h.scratch_address + 0x8000u) >> 16;
 			const u32 lo = h.scratch_address & 0xFFFFu;
 			AssembledHook a;
@@ -258,14 +252,11 @@ namespace VR::CameraDriver
 			check(mat_eq(Mat3Mul(I, R), R) && mat_eq(Mat3Mul(R, I), R), "identity multiply");
 			check(mat_eq(Mat3Mul(R, Mat3Transpose(R)), I), "R * transpose(R) == I (orthonormal)");
 			check(mat_eq(Mat3Transpose(Mat3Transpose(R)), R), "transpose involution");
-
 			const Mat3 Y90 = Mat3FromEulerYXZ(PI_F * 0.5f, 0, 0);
 			check(approx(Y90.m[0], 0) && approx(Y90.m[2], 1) && approx(Y90.m[6], -1) && approx(Y90.m[8], 0),
 				"yaw 90° matrix");
-
 			const Mat3 h = Mat3FromEulerYXZ(0.2f, 0, 0);
 			check(mat_eq(Mat3Mul(h, h), Mat3FromEulerYXZ(0.4f, 0, 0)), "yaw half+half == full");
-
 			const Mat3 P90 = Mat3FromEulerYXZ(0, PI_F * 0.5f, 0);
 			check(approx(P90.m[4], 0) && approx(P90.m[5], -1) && approx(P90.m[7], 1) && approx(P90.m[8], 0),
 				"pitch 90° matrix");
@@ -343,9 +334,7 @@ namespace VR::CameraDriver
 
 			const EulerAngles zero = QuaternionToEulerYXZ(0, 0, 0, 0);
 			check(approxEq(zero.yaw, 0) && approxEq(zero.pitch, 0) && approxEq(zero.roll, 0), "zero quat -> identity");
-
 			check(approxEq(QuaternionToEulerYXZ(0, 2 * sh, 0, 2 * ch).yaw, H), "non-unit quat normalized");
-
 			check(std::abs(QuaternionToEulerYXZ(0.7071f, 0, 0, 0.7071f).pitch) <= PI_F * 0.5f + 1e-3f, "pitch gimbal-clamped");
 
 			check(approxEq(Wrap360(30.0f), 30.0f), "wrap 30");
@@ -422,7 +411,6 @@ namespace VR::CameraDriver
 			float v;
 			if (op.compose == ProfileDB::CameraCompose::Anchored)
 			{
-
 				AnchorState& a = s_anchor[op_index];
 				const std::optional<float> game = DecodeGuestValue(address, op.encoding);
 				if (!game.has_value())
@@ -430,14 +418,12 @@ namespace VR::CameraDriver
 				const float head_term = src * op.axis_sign * op.scale;
 				if (!a.has)
 				{
-
 					a.base = game.value() - head_term;
 					a.has = true;
 				}
 				else
 				{
 					float own = game.value() - a.last_written;
-
 					if (op.wrap == ProfileDB::CameraWrap::Deg360)
 						own = std::remainder(own, 360.0f);
 					a.base += own;
@@ -455,7 +441,6 @@ namespace VR::CameraDriver
 			}
 			if (op.compose == ProfileDB::CameraCompose::Delta)
 			{
-
 				if (!s_delta_has[op_index])
 				{
 					s_delta_prev[op_index] = src;
@@ -464,7 +449,6 @@ namespace VR::CameraDriver
 				}
 				float d = src - s_delta_prev[op_index];
 				s_delta_prev[op_index] = src;
-
 				if (op.source == ProfileDB::CameraSource::HeadYaw ||
 					op.source == ProfileDB::CameraSource::HeadPitch ||
 					op.source == ProfileDB::CameraSource::HeadRoll)
@@ -489,7 +473,6 @@ namespace VR::CameraDriver
 		void ApplyMatrixOp(const ProfileDB::CameraMatrixOp& op, size_t op_index, u32 address,
 			u32 transpose_address, const EulerAngles& e)
 		{
-
 			if (op.anchored)
 			{
 				const std::optional<Mat3> guest = ReadGuestMat3(address);
@@ -528,7 +511,6 @@ namespace VR::CameraDriver
 				prev = MatBaseline{e.yaw, e.pitch, e.roll, true};
 				return;
 			}
-
 			const float dyaw = std::remainder(e.yaw - prev.yaw, 2.0f * PI_F) * op.axis_sign_yaw;
 			const float dpitch = std::remainder(e.pitch - prev.pitch, 2.0f * PI_F) * op.axis_sign_pitch;
 			const float droll = std::remainder(e.roll - prev.roll, 2.0f * PI_F) * op.axis_sign_roll;
@@ -576,7 +558,6 @@ namespace VR::CameraDriver
 			std::optional<u32> last_good;
 			for (u32 at = lo; at + n <= hi; at++)
 			{
-
 				if (msk[0] && ram[at] != pat[0])
 					continue;
 
@@ -682,7 +663,6 @@ namespace VR::CameraDriver
 
 			if (s_base.valid && s_base.crc == crc)
 			{
-
 				if (cam.base->has_validate)
 				{
 					const s64 vaddr = static_cast<s64>(s_base.base) - cam.base->base_offset + cam.base->validate_offset;
@@ -772,7 +752,6 @@ namespace VR::CameraDriver
 		{
 			if (s_hooks_installed && s_hooks_crc == crc)
 			{
-
 				bool intact = true;
 				for (size_t i = 0; i < cam.code_hooks.size() && i < s_hook_original.size(); i++)
 				{
@@ -795,7 +774,6 @@ namespace VR::CameraDriver
 				const ProfileDB::CameraCodeHook& h = cam.code_hooks[i];
 				if (!h.enabled)
 					continue;
-
 				const u32 orig = static_cast<u32>(memRead32(h.hook_address));
 				if ((orig >> 26) != 0x03u)
 				{
@@ -908,7 +886,6 @@ namespace VR::CameraDriver
 
 	void Apply()
 	{
-
 		s_vsync_counter++;
 		MaybeRunSelfTest();
 
@@ -918,7 +895,6 @@ namespace VR::CameraDriver
 		const bool vm_live = (vm_state == VMState::Running || vm_state == VMState::Paused);
 		if (!vm_live)
 		{
-
 			s_armed_logged = false;
 			s_silence_applied = false;
 			s_hooks_installed = false;
@@ -970,10 +946,8 @@ namespace VR::CameraDriver
 
 		if (!armed)
 		{
-
 			RestoreSilence(cam, crc);
 			RestoreCodeHooks(cam, crc);
-
 			if (vm_state == VMState::Running)
 			{
 				for (MatAnchor& an : s_mat_anchor)
@@ -1016,7 +990,6 @@ namespace VR::CameraDriver
 			s_ref_w = pose.orientation_w;
 			s_has_reference = true;
 			s_reference_crc = crc;
-
 			ResetDeltaState();
 			DevCon.WriteLn("(VR) CameraDriver: view recentered.");
 		}
@@ -1048,7 +1021,6 @@ namespace VR::CameraDriver
 			{
 				if (!base.has_value())
 				{
-
 					s_delta_has[i] = false;
 					continue;
 				}
@@ -1080,7 +1052,6 @@ namespace VR::CameraDriver
 			if (!op.when.empty() && !GuardListPass(op.when))
 			{
 				s_mat_prev[i].has = false;
-
 				if (s_mat_anchor[i].has)
 				{
 					const std::optional<Mat3> guest = ReadGuestMat3(address);
@@ -1158,13 +1129,11 @@ namespace VR::CameraDriver
 
 	bool SelfTestAssembler()
 	{
-
 		return CountAssemblerMismatches(false) == 0;
 	}
 
 	bool SelfTestMath()
 	{
-
 		return CountMathMismatches(false) == 0;
 	}
 }

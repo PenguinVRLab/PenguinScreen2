@@ -6,10 +6,6 @@
 
 #pragma once
 
-// PINE uses a concept of "slot" to be able to communicate with multiple
-// emulators at the same time, each slot should be unique to each emulator to
-// allow PnP and configurable by the end user so that several runs don't
-// conflict with each others
 #define PINE_DEFAULT_SLOT 28011
 
 namespace PINEServer
@@ -19,4 +15,4 @@ namespace PINEServer
 
 	bool Initialize(int slot = PINE_DEFAULT_SLOT);
 	void Deinitialize();
-} // namespace PINEServer
+}

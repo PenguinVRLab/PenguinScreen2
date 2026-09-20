@@ -214,7 +214,6 @@ public:
 
 	using PSSelector = GSHWDrawConfig::PSSelector;
 
-	// MARK: Permanent resources
 	std::shared_ptr<std::pair<std::mutex, GSDeviceMTL*>> m_backref;
 	GSMTLDevice m_dev;
 	MRCOwned<id<MTLCommandQueue>> m_queue;
@@ -223,7 +222,6 @@ public:
 	MRCOwned<MTLVertexDescriptor*> m_hw_vertex;
 	MTLResourceOptions m_resource_options_shared_wc;
 
-	// Previously in MetalHostDisplay.
 	MRCOwned<NSView*> m_view;
 	MRCOwned<CAMetalLayer*> m_layer;
 	MRCOwned<id<CAMetalDrawable>> m_current_drawable;
@@ -235,11 +233,9 @@ public:
 	double m_last_gpu_time_end = 0;
 	std::mutex m_mtx;
 
-	// Draw IDs are used to make sure we're not clobbering things
 	u64 m_current_draw = 1;
 	std::atomic<u64> m_last_finished_draw{0};
 
-	// Spinning
 	ReadbackSpinManager m_spin_manager;
 	u32 m_encoders_in_current_cmdbuf;
 	u32 m_spin_timer = 0;
@@ -247,7 +243,6 @@ public:
 	MRCOwned<id<MTLBuffer>> m_spin_buffer;
 	MRCOwned<id<MTLFence>> m_spin_fence;
 
-	// Functions and Pipeline States
 	MRCOwned<id<MTLComputePipelineState>> m_cas_pipeline[2];
 	std::vector<MRCOwned<id<MTLRenderPipelineState>>> m_convert_pipeline;
 	MRCOwned<id<MTLRenderPipelineState>> m_present_pipeline[static_cast<int>(PresentShader::Count)];
@@ -291,7 +286,6 @@ public:
 	UploadBuffer m_texture_upload_buf;
 	BufferPair m_vertex_upload_buf;
 
-	// MARK: Ephemeral resources
 	MRCOwned<id<MTLCommandBuffer>> m_current_render_cmdbuf;
 	struct MainRenderEncoder
 	{
@@ -314,7 +308,6 @@ public:
 			bool rt1_depth    : 1;
 		} has = {};
 		DepthStencilSelector depth_sel = DepthStencilSelector::NoDepth();
-		// Clear line (Things below here are tracked by `has` and don't need to be cleared to reset)
 		SamplerSelector sampler_sel;
 		u8 blend_color;
 		struct { u32 w, h; } full_rov_size;
@@ -349,41 +342,23 @@ public:
 	GSDeviceMTL();
 	~GSDeviceMTL() override;
 
-	/// Allocate space in the given buffer
 	Map Allocate(UploadBuffer& buffer, size_t amt);
-	/// Allocate space in the given buffer for use with the given render command encoder
 	Map Allocate(BufferPair& buffer, size_t amt);
-	/// Enqueue upload of any outstanding data
 	void Sync(BufferPair& buffer);
-	/// Get the texture upload encoder, creating a new one if it doesn't exist
 	id<MTLBlitCommandEncoder> GetTextureUploadEncoder();
-	/// Get the late texture upload encoder, creating a new one if it doesn't exist
 	id<MTLBlitCommandEncoder> GetLateTextureUploadEncoder();
-	/// Get the vertex upload encoder, creating a new one if it doesn't exist
 	id<MTLBlitCommandEncoder> GetVertexUploadEncoder();
-	/// Get the render command buffer, creating a new one if it doesn't exist
 	id<MTLCommandBuffer> GetRenderCmdBuf();
-	/// Get the render command buffer, will not create a new one if it doesn't exist.
 	id<MTLCommandBuffer> GetRenderCmdBufWithoutCreate();
-	/// Get the spin fence if spinning is enabled.
 	id<MTLFence> GetSpinFence();
-	/// Get the texture to use as RT1 depth for the given depth texture
 	id<MTLTexture> GetRT1DepthTexture(GSTextureMTL* depth);
-	/// Called by command buffers when they finish
 	void DrawCommandBufferFinished(u64 draw, id<MTLCommandBuffer> buffer);
-	/// Flush pending operations from all encoders to the GPU
 	void FlushEncoders();
-	/// Flush pending operations and spins the GPU for a download.
 	void FlushEncodersForReadback();
-	/// End current render pass without flushing
 	void EndRenderPass();
-	/// Prepare to begin a new render pass
 	void PrepareBeginRenderPass();
-	/// Begin a new render pass (may reuse existing)
 	void BeginRenderPass(NSString* name, GSTexture* color, MTLLoadAction color_load, GSTexture* depth, MTLLoadAction depth_load, GSTexture* stencil = nullptr, MTLLoadAction stencil_load = MTLLoadActionDontCare, bool rt1 = false);
-	/// Begin a new full-ROV render pass (may reuse existing)
 	void BeginFullROV(NSString* name, uint32_t width, uint32_t height);
-	/// Call at the end of each frame
 	void FrameCompleted();
 
 	GSTexture* CreateSurface(GSTexture::Usage usage, int width, int height, int levels, GSTexture::Format format, u32 layers = 1) override;
@@ -434,7 +409,6 @@ public:
 	void BeginStretchRect(NSString* name, GSTexture* dTex, MTLLoadAction action);
 	void DoStretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, id<MTLRenderPipelineState> pipeline, std::optional<Filter> filter, LoadAction load_action, const void* frag_uniform, size_t frag_uniform_len);
 	void DrawStretchRect(const GSVector4& sRect, const GSVector4& dRect, const GSVector2& ds);
-	/// Copy from a position in sTex to the same position in the currently active render encoder using the given fs pipeline and rect
 	void RenderCopy(GSTexture* sTex, id<MTLRenderPipelineState> pipeline, const GSVector4i& rect);
 	void PresentRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, PresentShader shader, float shaderTime, Filter filter) override;
 	void DrawMultiStretchRects(const MultiStretchRect* rects, u32 num_rects, GSTexture* dTex, ShaderConvertSelector shader) override;
@@ -445,7 +419,6 @@ public:
 
 	void FlushClears(GSTexture* tex);
 
-	// MARK: Main Render Encoder operations
 	void MRESetHWPipelineState(GSHWDrawConfig::VSSelector vs, GSHWDrawConfig::PSSelector ps, GSHWDrawConfig::BlendState blend, GSHWDrawConfig::ColorMaskSelector cms);
 	void MRESetDSS(DepthStencilSelector sel);
 	void MRESetDSS(id<MTLDepthStencilState> dss);
@@ -462,15 +435,11 @@ public:
 	void MRESetPipeline(id<MTLRenderPipelineState> pipe);
 	void MREInitHWDraw(GSHWDrawConfig& config, const Map& verts);
 
-	// MARK: Render HW
-
 	void SetupDestinationAlpha(GSTexture* rt, GSTexture* ds, const GSVector4i& r, SetDATM datm);
 	void PrepareROVTexture(GSTexture** ptex);
 	void RenderHW(GSHWDrawConfig& config) override;
 	void SendHWDraw(GSHWDrawConfig& config, id<MTLRenderCommandEncoder> enc, id<MTLBuffer> buffer, size_t off,
 		bool one_barrier, bool full_barrier);
-
-	// MARK: Debug
 
 	void PushDebugGroup(const char* fmt, ...) override;
 	void PopDebugGroup() override;
@@ -479,13 +448,11 @@ public:
 	void FlushDebugEntries(id<MTLCommandEncoder> enc);
 	void EndDebugGroup(id<MTLCommandEncoder> enc);
 
-	// MARK: ImGui
-
 	void RenderImGui(ImDrawData* data);
 	u32 FrameNo() const { return m_frame; }
 
 protected:
-	using GSDevice::DoStretchRect; // Suppress overloaded virtual function warning
+	using GSDevice::DoStretchRect;
 	virtual void DoStretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect,
 		ShaderConvertSelector shader, Filter filter) override;
 };
@@ -505,4 +472,4 @@ static constexpr bool IsCommandBufferCompleted(MTLCommandBufferStatus status)
 	}
 }
 
-#endif // __APPLE__
+#endif

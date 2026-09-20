@@ -49,7 +49,6 @@
 
 InputRecordingUI::InputRecordingData g_InputRecordingData;
 
-// Start timers at 0 so we immediately get lines to cache.
 static constexpr double ONE_BILLION = 1000000000;
 static constexpr double UPDATE_INTERVAL = 0.1 * ONE_BILLION;
 static constexpr double UPDATE_INTERVAL_CPU_INFO = 5.0 * ONE_BILLION;
@@ -76,7 +75,6 @@ SmallString s_speed_icon;
 
 constexpr ImU32 white_color = IM_COL32(255, 255, 255, 255);
 
-// OSD positioning funcs
 ImVec2 CalculateOSDPosition(OsdOverlayPos position, float margin, const ImVec2& text_size, float window_width, float window_height)
 {
 	switch (position)
@@ -109,27 +107,26 @@ ImVec2 CalculatePerformanceOverlayTextPosition(OsdOverlayPos position, float mar
 {
 	const float abs_margin = std::abs(margin);
 
-	// Get the X position based on horizontal alignment
 	float x_pos;
 	switch (position)
 	{
 		case OsdOverlayPos::TopLeft:
 		case OsdOverlayPos::CenterLeft:
 		case OsdOverlayPos::BottomLeft:
-			x_pos = abs_margin; // Left alignment
+			x_pos = abs_margin;
 			break;
 
 		case OsdOverlayPos::TopCenter:
 		case OsdOverlayPos::Center:
 		case OsdOverlayPos::BottomCenter:
-			x_pos = (window_width - text_size.x) * 0.5f; // Center alignment
+			x_pos = (window_width - text_size.x) * 0.5f;
 			break;
 
 		case OsdOverlayPos::TopRight:
 		case OsdOverlayPos::CenterRight:
 		case OsdOverlayPos::BottomRight:
 		default:
-			x_pos = window_width - text_size.x - abs_margin; // Right alignment
+			x_pos = window_width - text_size.x - abs_margin;
 			break;
 	}
 
@@ -152,7 +149,7 @@ namespace ImGuiManager
 	static void DrawVideoCaptureOverlay(float& position_y, float scale, float margin, float spacing);
 	static void DrawTextureReplacementsOverlay(float& position_y, float scale, float margin, float spacing);
 	static void DrawIndicatorsOverlay(float& position_y, float scale, float margin, float spacing);
-} // namespace ImGuiManager
+}
 
 static std::tuple<float, float> GetMinMax(std::span<const float> values)
 {
@@ -182,9 +179,6 @@ static std::tuple<float, float> GetMinMax(std::span<const float> values)
 
 __ri void ImGuiManager::FormatProcessorStat(SmallStringBase& text, double usage, double time)
 {
-	// Some values, such as GPU (and even CPU to some extent) can be out of phase with the wall clock,
-	// which the processor time is divided by to get a utilization percentage. Let's clamp it at 100%,
-	// so that people don't get confused, and remove the decimal places when it's there while we're at it.
 	if (usage >= 99.95)
 		text.append_format("100% ({:.2f}ms)", time);
 	else
@@ -202,7 +196,6 @@ __ri void ImGuiManager::DrawPerformanceOverlay(float& position_y, float scale, f
 	ImDrawList* dl = ImGui::GetBackgroundDrawList();
 	ImVec2 text_size;
 
-	// Adjust initial Y position based on vertical alignment
 	switch (GSConfig.OsdPerformancePos)
 	{
 		case OsdOverlayPos::CenterLeft:
@@ -223,7 +216,6 @@ __ri void ImGuiManager::DrawPerformanceOverlay(float& position_y, float scale, f
 		case OsdOverlayPos::TopCenter:
 		case OsdOverlayPos::TopRight:
 		default:
-			// Top alignment keeps the passed position_y
 			break;
 	}
 
@@ -382,9 +374,9 @@ __ri void ImGuiManager::DrawPerformanceOverlay(float& position_y, float scale, f
 			if (!s_speed_line.empty())
 			{
 				if (speed < 95.0f)
-					s_speed_line_color = IM_COL32(255, 100, 100, 255); // red
+					s_speed_line_color = IM_COL32(255, 100, 100, 255);
 				else if (speed > 105.0f)
-					s_speed_line_color = IM_COL32(100, 255, 100, 255); // green
+					s_speed_line_color = IM_COL32(100, 255, 100, 255);
 				else
 					s_speed_line_color = white_color;
 
@@ -396,7 +388,7 @@ __ri void ImGuiManager::DrawPerformanceOverlay(float& position_y, float scale, f
 				GSgetStats(s_gs_stats_line);
 				GSgetMemoryStats(s_gs_memory_stats_line);
 				s_gs_frame_times_line.format("{} QF | Min: {:.2f}ms | Avg: {:.2f}ms | Max: {:.2f}ms",
-					MTGS::GetCurrentVsyncQueueSize() - 1, // subtract one for the current frame
+					MTGS::GetCurrentVsyncQueueSize() - 1,
 					PerformanceMetrics::GetMinimumFrameTime(),
 					PerformanceMetrics::GetAverageFrameTime(),
 					PerformanceMetrics::GetMaximumFrameTime());
@@ -419,12 +411,10 @@ __ri void ImGuiManager::DrawPerformanceOverlay(float& position_y, float scale, f
 
 			if (GSConfig.OsdShowHardwareInfo)
 			{
-				// GPU can change on the fly with settings, but CPU change of any kind is a rare edge case.
 				if (s_last_update_timer_cpu_info.GetTimeNanoseconds() >= UPDATE_INTERVAL_CPU_INFO)
 				{
 					s_last_update_timer_cpu_info.Reset();
 
-					// CPU
 					const CPUInfo& info = GetCPUInfo();
 					const bool has_small = info.num_small_cores > 0;
 					const bool has_smt = info.num_threads != info.num_big_cores + info.num_small_cores;
@@ -439,7 +429,6 @@ __ri void ImGuiManager::DrawPerformanceOverlay(float& position_y, float scale, f
 
 				DRAW_LINE(osd_font, font_size, s_hardware_info_cpu_line.c_str(), white_color);
 
-				// GPU
 				const char* gpu_suffix = "";
 				if (GSConfig.UseDebugDevice && GSConfig.HWROV)
 					gpu_suffix = " (Debug & ROV)";
@@ -536,7 +525,6 @@ __ri void ImGuiManager::DrawPerformanceOverlay(float& position_y, float scale, f
 				DRAW_LINE(osd_font, font_size, s_gpu_stats_line.c_str(), white_color);
 			}
 		}
-		// No refresh yet. Display cached lines.
 		else
 		{
 			if (GSConfig.OsdShowFPS || GSConfig.OsdShowVPS || GSConfig.OsdShowSpeed || GSConfig.OsdShowVersion)
@@ -594,7 +582,6 @@ __ri void ImGuiManager::DrawPerformanceOverlay(float& position_y, float scale, f
 			}
 		}
 
-		// Check every OSD frame because this is an animation.
 		if (GSConfig.OsdShowFrameTimes)
 		{
 			const auto& history = PerformanceMetrics::GetFrameTimeHistory();
@@ -958,7 +945,6 @@ __ri void ImGuiManager::DrawSettingsOverlay(float scale, float margin, float spa
 		if (GSConfig.HWROVBarriersVK)
 			APPEND("RBVK ");
 
-		// deliberately test global and print local here for auto values
 		if (EmuConfig.GS.TextureFiltering != BiFiltering::PS2)
 			APPEND("BF={} ", static_cast<unsigned>(GSConfig.TextureFiltering));
 		if (EmuConfig.GS.TriFilter != TriFiltering::Automatic)
@@ -1054,7 +1040,6 @@ __ri void ImGuiManager::DrawSettingsOverlay(float scale, float margin, float spa
 
 __ri void ImGuiManager::DrawInputsOverlay(float scale, float margin, float spacing)
 {
-	// Technically this is racing the CPU thread.. but it doesn't really matter, at worst, the inputs get displayed onscreen late.
 	if (!GSConfig.OsdShowInputs ||
 		FullscreenUI::HasActiveWindow())
 		return;
@@ -1108,7 +1093,6 @@ __ri void ImGuiManager::DrawInputsOverlay(float scale, float margin, float spaci
 				case InputBindingInfo::Type::Axis:
 				case InputBindingInfo::Type::HalfAxis:
 				{
-					// axes are only shown if not resting/past deadzone. values are normalized.
 					const float value = pad->GetEffectiveInput(bind);
 					const float abs_value = std::abs(value);
 					if (abs_value >= (254.0f / 255.0f))
@@ -1120,7 +1104,6 @@ __ri void ImGuiManager::DrawInputsOverlay(float scale, float margin, float spaci
 
 				case InputBindingInfo::Type::Button:
 				{
-					// buttons display the value from 0 through 255.
 					const float value = pad->GetEffectiveInput(bind);
 					if (value >= 254.0f)
 						text.append_format(" {}", bi.icon_name ? bi.icon_name : bi.name);
@@ -1162,7 +1145,6 @@ __ri void ImGuiManager::DrawInputsOverlay(float scale, float margin, float spaci
 				case InputBindingInfo::Type::Axis:
 				case InputBindingInfo::Type::HalfAxis:
 				{
-					// axes are only shown if not resting/past deadzone. values are normalized.
 					const float value = static_cast<float>(USB::GetDeviceBindValue(port, bi.bind_index));
 					if (value >= (254.0f / 255.0f))
 						text.append_format(" {}", bi.icon_name ? bi.icon_name : bi.name);
@@ -1173,7 +1155,6 @@ __ri void ImGuiManager::DrawInputsOverlay(float scale, float margin, float spaci
 
 				case InputBindingInfo::Type::Button:
 				{
-					// buttons display the value from 0 through 255. values are normalized, so denormalize them.
 					const float value = static_cast<float>(USB::GetDeviceBindValue(port, bi.bind_index)) * 255.0f;
 					if (value >= 254.0f)
 						text.append_format(" {}", bi.icon_name ? bi.icon_name : bi.name);
@@ -1227,7 +1208,6 @@ __ri void ImGuiManager::DrawInputRecordingOverlay(float& position_y, float scale
 		position_y += text_size.y + spacing; \
 	} while (0)
 
-	// Status Indicators
 	if (g_InputRecordingData.is_recording)
 	{
 		DRAW_LINE(osd_font, font_size, TinyString::from_format(TRANSLATE_FS("ImGuiOverlays", "{} Recording Input"), ICON_PF_CIRCLE).c_str(), IM_COL32(255, 0, 0, 255));
@@ -1237,7 +1217,6 @@ __ri void ImGuiManager::DrawInputRecordingOverlay(float& position_y, float scale
 		DRAW_LINE(osd_font, font_size, TinyString::from_format(TRANSLATE_FS("ImGuiOverlays", "{} Replaying"), ICON_FA_PLAY).c_str(), IM_COL32(97, 240, 84, 255));
 	}
 
-	// Input Recording Metadata
 	DRAW_LINE(osd_font, font_size, g_InputRecordingData.recording_active_message.c_str(), IM_COL32(117, 255, 241, 255));
 	DRAW_LINE(osd_font, font_size, g_InputRecordingData.frame_data_message.c_str(), IM_COL32(117, 255, 241, 255));
 	DRAW_LINE(osd_font, font_size, g_InputRecordingData.undo_count_message.c_str(), IM_COL32(117, 255, 241, 255));
@@ -1264,7 +1243,6 @@ __ri void ImGuiManager::DrawVideoCaptureOverlay(float& position_y, float scale, 
 	const ImVec2 text_size = osd_font->CalcTextSizeA(font_size, std::numeric_limits<float>::max(),
 		-1.0f, text_msg.c_str(), text_msg.end_ptr(), nullptr);
 
-	// Shadow
 	dl->AddText(osd_font, font_size,
 		ImVec2(GetWindowWidth() - margin - text_size.x - icon_size.x + shadow_offset, position_y + shadow_offset),
 		IM_COL32(0, 0, 0, 100), ICON);
@@ -1272,7 +1250,6 @@ __ri void ImGuiManager::DrawVideoCaptureOverlay(float& position_y, float scale, 
 		ImVec2(GetWindowWidth() - margin - text_size.x + shadow_offset, position_y + shadow_offset),
 		IM_COL32(0, 0, 0, 100), text_msg.c_str(), text_msg.end_ptr());
 
-	// Text
 	dl->AddText(osd_font, font_size,
 		ImVec2(GetWindowWidth() - margin - text_size.x - icon_size.x, position_y), IM_COL32(255, 0, 0, 255), ICON);
 	dl->AddText(osd_font, font_size,
@@ -1351,17 +1328,16 @@ __ri void ImGuiManager::DrawIndicatorsOverlay(float& position_y, float scale, fl
 
 		if (VMManager::GetState() != VMState::Paused)
 		{
-			// Draw Speed indicator
 			const float target_speed = VMManager::GetTargetSpeed();
 			const bool is_normal_speed = (target_speed == EmuConfig.EmulationSpeed.NominalScalar ||
 										  VMManager::IsTargetSpeedAdjustedToHost());
 			if (!is_normal_speed)
 			{
-				if (target_speed == EmuConfig.EmulationSpeed.SlomoScalar) // Slow-Motion
+				if (target_speed == EmuConfig.EmulationSpeed.SlomoScalar)
 					s_speed_icon = ICON_PF_SLOW_MOTION;
-				else if (target_speed == EmuConfig.EmulationSpeed.TurboScalar) // Turbo
+				else if (target_speed == EmuConfig.EmulationSpeed.TurboScalar)
 					s_speed_icon = ICON_FA_FORWARD_FAST;
-				else // Unlimited
+				else
 					s_speed_icon = ICON_FA_FORWARD;
 
 				DRAW_LINE(osd_font, font_size, s_speed_icon, white_color);
@@ -1369,7 +1345,6 @@ __ri void ImGuiManager::DrawIndicatorsOverlay(float& position_y, float scale, fl
 		}
 		else
 		{
-			// Draw Pause indicator
 			const TinyString pause_msg = TinyString::from_format(TRANSLATE_FS("ImGuiOverlays", "{} Paused"), ICON_FA_PAUSE);
 			DRAW_LINE(osd_font, font_size, pause_msg, white_color);
 		}
@@ -1387,7 +1362,7 @@ namespace SaveStateSelectorUI
 			std::string filename;
 			std::unique_ptr<GSTexture> preview_texture;
 		};
-	} // namespace
+	}
 
 	static void InitializePlaceholderListEntry(ListEntry* li, std::string path, s32 slot);
 	static void InitializeListEntry(const std::string& serial, u32 crc, ListEntry* li, s32 slot);
@@ -1407,8 +1382,8 @@ namespace SaveStateSelectorUI
 	static constexpr const char* SAVED_AGO_MINUTES = TRANSLATE_NOOP("ImGuiOverlays", "Saved {0} minutes ago at {1:%H:%M}");
 	static constexpr const char* SAVED_AGO_SECONDS = TRANSLATE_NOOP("ImGuiOverlays", "Saved {} seconds ago");
 	static constexpr const char* SAVED_AGO_NOW = TRANSLATE_NOOP("ImGuiOverlays", "Saved just now");
-	static constexpr std::time_t ONE_HOUR = 60 * 60; // 3600
-	static constexpr std::time_t TWENTY_FOUR_HOURS = ONE_HOUR * 24; // 86400
+	static constexpr std::time_t ONE_HOUR = 60 * 60;
+	static constexpr std::time_t TWENTY_FOUR_HOURS = ONE_HOUR * 24;
 
 	static std::shared_ptr<GSTexture> s_placeholder_texture;
 	static std::string s_load_legend;
@@ -1427,9 +1402,9 @@ namespace SaveStateSelectorUI
 	static ImAnimatedFloat s_background_animated;
 
 	static bool s_open = false;
-} // namespace SaveStateSelectorUI
+}
 
-void SaveStateSelectorUI::Open(float open_time /* = DEFAULT_OPEN_TIME */)
+void SaveStateSelectorUI::Open(float open_time )
 {
 	const std::string serial = VMManager::GetDiscSerial();
 	if (serial.empty())
@@ -1485,8 +1460,6 @@ void SaveStateSelectorUI::RefreshList(const std::string& serial, u32 crc)
 
 void SaveStateSelectorUI::Clear()
 {
-	// called on CPU thread at shutdown, textures should already be deleted, unless running
-	// big picture UI, in which case we have to delete them here...
 	for (ListEntry& li : s_slots)
 	{
 		if (li.preview_texture)
@@ -1635,7 +1608,6 @@ void SaveStateSelectorUI::Draw()
 			ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoTitleBar |
 				ImGuiWindowFlags_NoScrollbar))
 	{
-		// Leave 2 lines for the legend
 		const float legend_margin = ImGui::GetFontSize() * 3.0f + ImGui::GetStyle().ItemSpacing.y * 3.0f;
 		const float padding = 10.0f * scale;
 
@@ -1743,7 +1715,6 @@ void SaveStateSelectorUI::Draw()
 	ImGui::PopStyleVar(2);
 	ImGui::PopStyleColor();
 
-	// auto-close
 	s_open_time += io.DeltaTime;
 	if (s_open_time >= s_close_time)
 		Close();

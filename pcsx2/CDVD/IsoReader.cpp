@@ -44,10 +44,8 @@ bool IsoReader::ReadSector(u8* buf, u32 lsn, Error* error)
 
 bool IsoReader::ReadPVD(Error* error)
 {
-	// volume descriptor start at sector 16
 	static constexpr u32 START_SECTOR = 16;
 
-	// try only a maximum of 256 volume descriptors
 	for (u32 i = 0; i < 256; i++)
 	{
 		u8 buffer[SECTOR_SIZE];
@@ -76,11 +74,9 @@ std::optional<IsoReader::ISODirectoryEntry> IsoReader::LocateFile(const std::str
 	const ISODirectoryEntry* root_de = reinterpret_cast<const ISODirectoryEntry*>(m_pvd.root_directory_entry);
 	if (path.empty() || path == "/" || path == "\\")
 	{
-		// locating the root directory
 		return *root_de;
 	}
 
-	// start at the root directory
 	u8 sector_buffer[SECTOR_SIZE];
 	return LocateFile(path, sector_buffer, root_de->location_le, root_de->length_le, error);
 }
@@ -103,7 +99,6 @@ std::string_view IsoReader::GetDirectoryEntryFileName(const u8* sector, u32 de_s
 			return "..";
 	}
 
-	// Strip any version information like the PS2 BIOS does.
 	u32 length_without_version = 0;
 	for (; length_without_version < de->filename_length; length_without_version++)
 	{
@@ -123,7 +118,6 @@ std::optional<IsoReader::ISODirectoryEntry> IsoReader::LocateFile(
 		return std::nullopt;
 	}
 
-	// strip any leading slashes
 	size_t path_component_start = 0;
 	while (path_component_start < path.length() &&
 		   (path[path_component_start] == '/' || path[path_component_start] == '\\'))
@@ -146,7 +140,6 @@ std::optional<IsoReader::ISODirectoryEntry> IsoReader::LocateFile(
 		return std::nullopt;
 	}
 
-	// start reading directory entries
 	const u32 num_sectors = (directory_record_size + (SECTOR_SIZE - 1)) / SECTOR_SIZE;
 	for (u32 i = 0; i < num_sectors; i++)
 	{
@@ -163,25 +156,21 @@ std::optional<IsoReader::ISODirectoryEntry> IsoReader::LocateFile(
 			const std::string_view de_filename = GetDirectoryEntryFileName(sector_buffer, sector_offset);
 			sector_offset += de->entry_length;
 
-			// Empty file would be pretty strange..
 			if (de_filename.empty() || de_filename == "." || de_filename == "..")
 				continue;
 
 			if (!StringUtil::compareNoCase(de_filename, path_component))
 				continue;
 
-			// found it. is this the file we're looking for?
 			if ((path_component_start + path_component_length) == path.length())
 				return *de;
 
-			// if it is a directory, recurse into it
 			if (de->flags & ISODirectoryEntryFlag_Directory)
 			{
 				return LocateFile(path.substr(path_component_start + path_component_length), sector_buffer,
 					de->location_le, de->length_le, error);
 			}
 
-			// we're looking for a directory but got a file
 			Error::SetString(error, fmt::format("Looking for directory '{}' but got file", path_component));
 			return std::nullopt;
 		}
@@ -198,7 +187,6 @@ std::vector<std::string> IsoReader::GetFilesInDirectory(const std::string_view p
 	u32 directory_record_length;
 	if (base_path.empty())
 	{
-		// root directory
 		const ISODirectoryEntry* root_de = reinterpret_cast<const ISODirectoryEntry*>(m_pvd.root_directory_entry);
 		directory_record_lsn = root_de->location_le;
 		directory_record_length = root_de->length_le;
@@ -222,7 +210,6 @@ std::vector<std::string> IsoReader::GetFilesInDirectory(const std::string_view p
 			base_path += '/';
 	}
 
-	// start reading directory entries
 	const u32 num_sectors = (directory_record_length + (SECTOR_SIZE - 1)) / SECTOR_SIZE;
 	std::vector<std::string> files;
 	u8 sector_buffer[SECTOR_SIZE];
@@ -241,7 +228,6 @@ std::vector<std::string> IsoReader::GetFilesInDirectory(const std::string_view p
 			const std::string_view de_filename = GetDirectoryEntryFileName(sector_buffer, sector_offset);
 			sector_offset += de->entry_length;
 
-			// Empty file would be pretty strange..
 			if (de_filename.empty() || de_filename == "." || de_filename == "..")
 				continue;
 
@@ -279,7 +265,7 @@ bool IsoReader::ReadFile(const std::string_view path, std::vector<u8>* data, Err
 	return ReadFile(de.value(), data, error);
 }
 
-bool IsoReader::ReadFile(const ISODirectoryEntry& de, std::vector<u8>* data, Error* error /*= nullptr*/)
+bool IsoReader::ReadFile(const ISODirectoryEntry& de, std::vector<u8>* data, Error* error )
 {
 	if (de.flags & ISODirectoryEntryFlag_Directory)
 	{
@@ -302,7 +288,6 @@ bool IsoReader::ReadFile(const ISODirectoryEntry& de, std::vector<u8>* data, Err
 			return false;
 	}
 
-	// Might not be sector aligned, so reduce it back.
 	data->resize(de.length_le);
 	return true;
 }

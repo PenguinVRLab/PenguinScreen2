@@ -29,4 +29,4 @@ namespace PacketReader::ARP
 		virtual void WriteBytes(u8* buffer, int* offset);
 		virtual ARP_Packet* Clone() const;
 	};
-} // namespace PacketReader::ARP
+}

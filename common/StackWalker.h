@@ -36,45 +36,34 @@
 
 #include "RedtapeWindows.h"
 
-class StackWalkerInternal; // forward
+class StackWalkerInternal;
 class StackWalker
 {
 public:
   typedef enum StackWalkOptions
   {
-    // No addition info will be retrieved
-    // (only the address is available)
     RetrieveNone = 0,
 
-    // Try to get the symbol-name
     RetrieveSymbol = 1,
 
-    // Try to get the line for this symbol
     RetrieveLine = 2,
 
-    // Try to retrieve the module-infos
     RetrieveModuleInfo = 4,
 
-    // Also retrieve the version for the DLL/EXE
     RetrieveFileVersion = 8,
 
-    // Contains all the above
     RetrieveVerbose = 0xF,
 
-    // Generate a "good" symbol-search-path
     SymBuildPath = 0x10,
 
-    // Also use the public Microsoft-Symbol-Server
     SymUseSymSrv = 0x20,
 
-    // Contains all the above "Sym"-options
     SymAll = 0x30,
 
-    // Contains all options (default)
     OptionsAll = 0x3F
   } StackWalkOptions;
 
-  StackWalker(int    options = OptionsAll, // 'int' is by design, to combine the enum-flags
+  StackWalker(int    options = OptionsAll,
               LPCSTR szSymPath = NULL,
               DWORD  dwProcessId = GetCurrentProcessId(),
               HANDLE hProcess = GetCurrentProcess());
@@ -90,7 +79,7 @@ public:
       PVOID   lpBuffer,
       DWORD   nSize,
       LPDWORD lpNumberOfBytesRead,
-      LPVOID  pUserData // optional data, which was passed in "ShowCallstack"
+      LPVOID  pUserData
   );
 
   BOOL LoadModules();
@@ -99,26 +88,23 @@ public:
       HANDLE                    hThread = GetCurrentThread(),
       const CONTEXT*            context = NULL,
       PReadProcessMemoryRoutine readMemoryFunction = NULL,
-      LPVOID pUserData = NULL // optional to identify some data in the 'readMemoryFunction'-callback
+      LPVOID pUserData = NULL
   );
 
   BOOL ShowObject(LPVOID pObject);
 
 #if _MSC_VER >= 1300
-  // due to some reasons, the "STACKWALK_MAX_NAMELEN" must be declared as "public"
-  // in older compilers in order to use it... starting with VC7 we can declare it as "protected"
 protected:
 #endif
   enum
   {
     STACKWALK_MAX_NAMELEN = 1024
-  }; // max name length for found symbols
+  };
 
 protected:
-  // Entry for each Callstack-Entry
   typedef struct CallstackEntry
   {
-    DWORD64 offset; // if 0, we have no valid entry
+    DWORD64 offset;
     CHAR    name[STACKWALK_MAX_NAMELEN];
     CHAR    undName[STACKWALK_MAX_NAMELEN];
     CHAR    undFullName[STACKWALK_MAX_NAMELEN];
@@ -169,9 +155,8 @@ protected:
                                       LPDWORD lpNumberOfBytesRead);
 
   friend StackWalkerInternal;
-}; // class StackWalker
+};
 
-// The following is defined for x86 (XP and higher), x64 and IA64:
 #define GET_CURRENT_CONTEXT_STACKWALKER_CODEPLEX(c, contextFlags) \
   do                                                              \
   {                                                               \

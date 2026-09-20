@@ -67,7 +67,6 @@ public:
 	__fi bool isOnUIThread() const { return (QThread::currentThread() == m_ui_thread); }
 	bool shouldRenderToMain() const;
 
-	/// Called back from the GS thread when the display state changes (e.g. fullscreen, render to main).
 	std::optional<WindowInfo> acquireRenderWindow(bool recreate_window);
 	void connectDisplaySignals(DisplaySurface* widget);
 	void releaseRenderWindow();
@@ -122,22 +121,16 @@ Q_SIGNALS:
 	void onMouseLockRequested(bool state);
 	void onFullscreenUIStateChange(bool running);
 
-	/// Called when the VM is starting initialization, but has not been completed yet.
 	void onVMStarting();
 
-	/// Called when the VM is created.
 	void onVMStarted();
 
-	/// Called when the VM is paused.
 	void onVMPaused();
 
-	/// Called when the VM is resumed after being paused.
 	void onVMResumed();
 
-	/// Called when the VM is shut down or destroyed.
 	void onVMStopped();
 
-	/// Provided by the host; called when the running executable changes.
 	void onGameChanged(const QString& title, const QString& elf_override, const QString& disc_path,
 		const QString& serial, quint32 disc_crc, quint32 crc);
 
@@ -146,26 +139,18 @@ Q_SIGNALS:
 	void onInputDeviceDisconnected(const QString& identifier);
 	void onVibrationMotorsEnumerated(const QList<InputBindingKey>& motors);
 
-	/// Called when a save state is loading, before the file is processed.
 	void onSaveStateLoading(const QString& path);
 
-	/// Called after a save state is successfully loaded. If the save state was invalid, was_successful will be false.
 	void onSaveStateLoaded(const QString& path, bool was_successful);
 
-	/// Called when a save state is being created/saved. The compression/write to disk is asynchronous, so this callback
-	/// just signifies that the save has started, not necessarily completed.
 	void onSaveStateSaved(const QString& path);
 
-	/// Called when achievements login is requested.
 	void onAchievementsLoginRequested(Achievements::LoginRequestReason reason);
 
-	/// Called when achievements are reloaded/refreshed (e.g. game change, login, option change).
 	void onAchievementsRefreshed(quint32 id, const QString& game_info_string);
 
-	/// Called when hardcore mode is enabled or disabled.
 	void onAchievementsHardcoreModeChanged(bool enabled);
 
-	/// Called when video capture starts/stops.
 	void onCaptureStarted(const QString& filename);
 	void onCaptureStopped();
 
@@ -173,10 +158,8 @@ protected:
 	void run();
 
 private:
-	/// Interval at which the controllers are polled when the system is not active.
 	static constexpr u32 BACKGROUND_CONTROLLER_POLLING_INTERVAL = 100;
 
-	/// Poll at half the vsync rate for FSUI to reduce the chance of getting a press+release in the same frame.
 	static constexpr u32 FULLSCREEN_UI_CONTROLLER_POLLING_INTERVAL = 8;
 
 	void destroyVM();
@@ -228,75 +211,51 @@ extern EmuThread* g_emu_thread;
 
 namespace QtHost
 {
-	/// Default theme name for the platform.
 	const char* GetDefaultThemeName();
 
-	/// Default language for the platform.
 	const char* GetDefaultLanguage();
 
-	/// Sets application theme according to settings.
 	void UpdateApplicationTheme();
 
-	/// Returns true if the application theme is using dark colours.
 	bool IsDarkApplicationTheme();
 
-	/// Sets the icon theme, based on the current style (light/dark).
 	void SetIconThemeFromStyle();
 
-	/// Returns true if the calling thread is the UI thread.
 	bool IsOnUIThread();
 
-	/// Returns true if advanced settings should be shown.
 	bool ShouldShowAdvancedSettings();
 
-	/// Executes a function on the UI thread.
 	void RunOnUIThread(const std::function<void()>& func, bool block = false);
 
-	/// Returns a list of supported languages and codes (suffixes for translation files).
 	std::vector<std::pair<QString, QString>> GetAvailableLanguageList();
 
-	/// Call when the language changes.
 	void InstallTranslator(QWidget* dialog_parent);
 
-	/// Returns the application name and version, optionally including debug/devel config indicator.
 	QString GetAppNameAndVersion();
 
-	/// Returns the debug/devel config indicator.
 	QString GetAppConfigSuffix();
 
-	/// Returns the main application icon.
 	QIcon GetAppIcon();
 
-	/// Returns the base path for resources. This may be : prefixed, if we're using embedded resources.
 	QString GetResourcesBasePath();
 
-	/// Returns the URL to a runtime-downloaded resource.
 	std::string GetRuntimeDownloadedResourceURL(std::string_view name);
 
-	/// Saves a game settings interface.
 	bool SaveGameSettings(SettingsInterface* sif, bool delete_if_empty);
 
-	/// Downloads the specified URL into memory.
 	std::optional<bool> DownloadFile(QWidget* parent, const QString& title, std::string url, std::vector<u8>* data);
 
-	/// Downloads the specified URL to the provided path.
 	bool DownloadFile(QWidget* parent, const QString& title, std::string url, const std::string& path);
 
-	/// VM state, safe to access on UI thread.
 	bool IsVMValid();
 	bool IsVMPaused();
 
-	/// Accessors for game information.
 	const QString& GetCurrentGameTitle();
 	const QString& GetCurrentGameSerial();
 	const QString& GetCurrentGamePath();
 
-	/// Compare strings in the locale of the current UI language
 	int LocaleSensitiveCompare(QStringView lhs, QStringView rhs);
 
-	/// Determines whether or not requests to enter/exit fullscreen mode should
-	/// be ignored. This is a hack so that we don't destroy a dialog box while
-	/// inside its exec function, which would cause a crash.
 	void LockVMWithDialog();
 	void UnlockVMWithDialog();
-} // namespace QtHost
+}

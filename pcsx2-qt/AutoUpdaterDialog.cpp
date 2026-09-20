@@ -44,7 +44,6 @@
 #include <shellapi.h>
 #endif
 
-// Interval at which HTTP requests are polled.
 static constexpr u32 HTTP_POLL_INTERVAL = 10;
 
 #if defined(_WIN32)
@@ -56,7 +55,6 @@ static constexpr u32 HTTP_POLL_INTERVAL = 10;
 #endif
 
 #ifdef MULTI_ISA_SHARED_COMPILATION
-// #undef UPDATE_ADDITIONAL_TAGS
 #elif _M_SSE >= 0x501
 #define UPDATE_ADDITIONAL_TAGS "AVX2"
 #else
@@ -66,10 +64,8 @@ static constexpr u32 HTTP_POLL_INTERVAL = 10;
 #define LATEST_RELEASE_URL "https://api.pcsx2.net/v1/%1Releases?pageSize=1"
 #define CHANGES_URL "https://api.github.com/repos/PCSX2/pcsx2/compare/%1...%2"
 
-// Available release channels.
 static const char* UPDATE_TAGS[] = {"stable", "nightly"};
 
-// TODO: Make manual releases create this file, and make it contain `#define DEFAULT_UPDATER_CHANNEL "stable"`.
 #if __has_include("DefaultUpdaterChannel.h")
 #include "DefaultUpdaterChannel.h"
 #endif
@@ -77,7 +73,7 @@ static const char* UPDATE_TAGS[] = {"stable", "nightly"};
 #define DEFAULT_UPDATER_CHANNEL "nightly"
 #endif
 
-AutoUpdaterDialog::AutoUpdaterDialog(QWidget* parent /* = nullptr */)
+AutoUpdaterDialog::AutoUpdaterDialog(QWidget* parent )
 	: QDialog(parent)
 {
 	m_ui.setupUi(this);
@@ -97,12 +93,6 @@ AutoUpdaterDialog::~AutoUpdaterDialog() = default;
 
 bool AutoUpdaterDialog::isSupported()
 {
-	// PenguinScreen2 (2026-07-19): auto-update is removed product-wide. This
-	// product never phones home — updates arrive via flatpak or a manual
-	// download. Returning false here disables every updater code path: the
-	// startup check, and the wizard / Interface-Settings auto-update widgets,
-	// which both gate on isSupported(). The upstream api.pcsx2.net endpoint
-	// (LATEST_RELEASE_URL) is therefore never contacted on any platform.
 	return false;
 }
 
@@ -147,7 +137,6 @@ void AutoUpdaterDialog::reportError(const char* msg, ...)
 	std::string full_msg = StringUtil::StdStringFromFormatV(msg, ap);
 	va_end(ap);
 
-	// don't display errors when we're doing an automatic background check, it's just annoying
 	Console.Error("Updater Error: %s", full_msg.c_str());
 	if (m_display_messages)
 		QMessageBox::critical(this, tr("Updater Error"), QString::fromStdString(full_msg));
@@ -210,7 +199,6 @@ void AutoUpdaterDialog::queueUpdateCheck(bool display_message)
 void AutoUpdaterDialog::getLatestReleaseComplete(s32 status_code, std::vector<u8> data)
 {
 #ifdef _M_X86
-	// should already be initialized, but just in case this somehow runs before the CPU thread starts setting up...
 	cpuinfo_initialize();
 #endif
 
@@ -229,7 +217,6 @@ void AutoUpdaterDialog::getLatestReleaseComplete(s32 status_code, std::vector<u8
 			const QJsonArray data_array(doc_object["data"].toArray());
 			if (!data_array.isEmpty())
 			{
-				// just take the first one, that's all we requested anyway
 				const QJsonObject data_object(data_array.first().toObject());
 				const QJsonObject assets_object(data_object["assets"].toObject());
 				const QJsonArray platform_array(assets_object[UPDATE_PLATFORM_STR].toArray());
@@ -238,7 +225,6 @@ void AutoUpdaterDialog::getLatestReleaseComplete(s32 status_code, std::vector<u8
 					QJsonObject best_asset;
 					int best_asset_score = 0;
 
-					// search for usable files
 					for (const QJsonValue& asset_value : platform_array)
 					{
 						const QJsonObject asset_object(asset_value.toObject());
@@ -253,13 +239,11 @@ void AutoUpdaterDialog::getLatestReleaseComplete(s32 status_code, std::vector<u8
 							const QString additional_tag_str(additional_tag.toString());
 							if (additional_tag_str == QStringLiteral("symbols"))
 							{
-								// we're not interested in symbols downloads
 								is_symbols = true;
 								break;
 							}
 							if (additional_tag_str == QStringLiteral("installer"))
 							{
-								// we're not interested in installer download
 								is_installer = true;
 								break;
 							}
@@ -274,7 +258,6 @@ void AutoUpdaterDialog::getLatestReleaseComplete(s32 status_code, std::vector<u8
 #ifdef UPDATE_ADDITIONAL_TAGS
 							if (additional_tag_str == QStringLiteral(UPDATE_ADDITIONAL_TAGS))
 							{
-								// Found the same variant as what's currently running!  But keep checking in case it's symbols.
 								is_perfect_match = true;
 							}
 #endif
@@ -282,32 +265,29 @@ void AutoUpdaterDialog::getLatestReleaseComplete(s32 status_code, std::vector<u8
 
 						if (is_symbols)
 						{
-							// skip this asset
 							continue;
 						}
 
 						if (is_installer)
 						{
-							// skip this asset
 							continue;
 						}
 #ifdef _M_X86
 						if (is_avx2 && cpuinfo_has_x86_avx2())
 						{
-							// skip this asset
 							continue;
 						}
 #endif
 
 						int score;
 						if (is_perfect_match)
-							score = 4; // #1 choice is the one matching this binary
+							score = 4;
 						else if (is_avx2)
-							score = 3; // Prefer AVX2 over SSE4 (support test was done above)
+							score = 3;
 						else if (is_sse4)
-							score = 2; // Prefer SSE4 over one with no tags at all
+							score = 2;
 						else
-							score = 1; // Multi-ISA builds will have no tags, they'll only get picked because they're the only available build
+							score = 1;
 
 						if (score > best_asset_score)
 						{
@@ -455,7 +435,6 @@ void AutoUpdaterDialog::downloadUpdateClicked()
 		msgbox.addButton(QMessageBox::Yes);
 		msgbox.addButton(QMessageBox::No);
 		msgbox.setDefaultButton(QMessageBox::No);
-		// This makes the box wider, for some reason sizing boxes in Qt is hard - Source: The internet.
 		QSpacerItem* horizontalSpacer = new QSpacerItem(500, 0, QSizePolicy::Minimum, QSizePolicy::Expanding);
 		QGridLayout* layout = (QGridLayout*)msgbox.layout();
 		layout->addItem(horizontalSpacer, layout->rowCount(), 0, 1, layout->columnCount());
@@ -497,11 +476,8 @@ void AutoUpdaterDialog::downloadUpdateClicked()
 		&progress);
 
 
-	// Since we're going to block, don't allow the timer to poll, otherwise the progress callback can cause the timer to
-	// run, and recursively poll again.
 	m_http_poll_timer->stop();
 
-	// Block until completion.
 	while (m_http->HasAnyRequests())
 	{
 		QApplication::processEvents(QEventLoop::AllEvents, HTTP_POLL_INTERVAL);
@@ -510,12 +486,10 @@ void AutoUpdaterDialog::downloadUpdateClicked()
 
 	if (download_result.value_or(false))
 	{
-		// updater started. since we're a modal on the main window, we have to queue this.
 		QMetaObject::invokeMethod(g_main_window, "requestExit", Qt::QueuedConnection, Q_ARG(bool, true));
 		done(0);
 	}
 
-	// download error or cancelled
 }
 
 void AutoUpdaterDialog::checkIfUpdateNeeded()
@@ -541,9 +515,6 @@ void AutoUpdaterDialog::checkIfUpdateNeeded()
 
 	Console.WriteLn(Color_StrongRed, "Update needed.");
 
-	// Don't show the dialog if a game started while the update info was downloading. Some people have
-	// really slow connections, apparently. If we're a manual triggered update check, then display
-	// regardless. This will fall through and signal main to delete us.
 	if (!m_display_messages &&
 		(QtHost::IsVMValid() || (g_emu_thread->isRunningFullscreenUI() && g_emu_thread->isFullscreen())))
 	{
@@ -557,7 +528,6 @@ void AutoUpdaterDialog::checkIfUpdateNeeded()
 	m_ui.updateNotes->setText(tr("Loading..."));
 	queueGetChanges();
 
-	// We have to defer this, because it comes back through the timer/HTTP callback...
 	QMetaObject::invokeMethod(this, "exec", Qt::QueuedConnection);
 }
 
@@ -577,7 +547,6 @@ void AutoUpdaterDialog::remindMeLaterClicked()
 
 bool AutoUpdaterDialog::doesUpdaterNeedElevation(const std::string& application_dir) const
 {
-	// Try to create a dummy text file in the PCSX2 updater directory. If it fails, we probably won't have write permission.
 	const std::string dummy_path = Path::Combine(application_dir, "update.txt");
 	auto fp = FileSystem::OpenManagedCFile(dummy_path.c_str(), "wb");
 	if (!fp)
@@ -634,7 +603,7 @@ bool AutoUpdaterDialog::doUpdate(const std::string& application_dir, const std::
 
 	SHELLEXECUTEINFOW sei = {};
 	sei.cbSize = sizeof(sei);
-	sei.lpVerb = needs_elevation ? L"runas" : nullptr; // needed to trigger elevation
+	sei.lpVerb = needs_elevation ? L"runas" : nullptr;
 	sei.lpFile = wupdater_path.c_str();
 	sei.lpParameters = arguments.c_str();
 	sei.lpDirectory = wapplication_dir.c_str();
@@ -651,7 +620,6 @@ bool AutoUpdaterDialog::doUpdate(const std::string& application_dir, const std::
 
 void AutoUpdaterDialog::cleanupAfterUpdate()
 {
-	// If we weren't portable, then updater executable gets left in the application directory.
 	if (EmuFolders::AppRoot == EmuFolders::DataRoot)
 		return;
 
@@ -690,7 +658,6 @@ bool AutoUpdaterDialog::processUpdate(const std::vector<u8>& data, QProgressDial
 	Console.WriteLn("Backup AppImage path = %s", backup_appimage_path.toUtf8().constData());
 	Console.WriteLn("New AppImage path = %s", new_appimage_path.toUtf8().constData());
 
-	// Remove old "new" appimage and existing backup appimage.
 	if (QFile::exists(new_appimage_path) && !QFile::remove(new_appimage_path))
 	{
 		reportError("Failed to remove old destination AppImage: %s", new_appimage_path.toUtf8().constData());
@@ -702,9 +669,7 @@ bool AutoUpdaterDialog::processUpdate(const std::vector<u8>& data, QProgressDial
 		return false;
 	}
 
-	// Write "new" appimage.
 	{
-		// We want to copy the permissions from the old appimage to the new one.
 		QFile old_file(qappimage_path);
 		const QFileDevice::Permissions old_permissions = old_file.permissions();
 		QFile new_file(new_appimage_path);
@@ -718,7 +683,6 @@ bool AutoUpdaterDialog::processUpdate(const std::vector<u8>& data, QProgressDial
 		}
 	}
 
-	// Rename "old" appimage.
 	if (!QFile::rename(qappimage_path, backup_appimage_path))
 	{
 		reportError("Failed to rename old AppImage to %s", backup_appimage_path.toUtf8().constData());
@@ -726,14 +690,12 @@ bool AutoUpdaterDialog::processUpdate(const std::vector<u8>& data, QProgressDial
 		return false;
 	}
 
-	// Rename "new" appimage.
 	if (!QFile::rename(new_appimage_path, qappimage_path))
 	{
 		reportError("Failed to rename new AppImage to %s", qappimage_path.toUtf8().constData());
 		return false;
 	}
 
-	// Execute new appimage.
 	QProcess* new_process = new QProcess();
 	new_process->setProgram(qappimage_path);
 	new_process->setArguments(QStringList{QStringLiteral("-updatecleanup")});
@@ -743,13 +705,11 @@ bool AutoUpdaterDialog::processUpdate(const std::vector<u8>& data, QProgressDial
 		return false;
 	}
 
-	// We exit once we return.
 	return true;
 }
 
 void AutoUpdaterDialog::cleanupAfterUpdate()
 {
-	// Remove old/backup AppImage.
 	const char* appimage_path = std::getenv("APPIMAGE");
 	if (!appimage_path)
 		return;
@@ -875,7 +835,6 @@ bool AutoUpdaterDialog::processUpdate(const std::vector<u8>& data, QProgressDial
 		}
 		QDir(QString::fromStdString(*trashed_path)).removeRecursively();
 	}
-	// For some reason if I use QProcess the shell gets killed immediately with SIGKILL, but NSTask is fine...
 	if (!CocoaTools::DelayedLaunch(open_path.toStdString()))
 	{
 		reportError("Failed to start new application");

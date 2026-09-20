@@ -18,4 +18,4 @@ namespace Sessions
 		virtual bool WillRecive(PacketReader::IP::IP_Address parDestIP) = 0;
 		virtual void ForceClose() { RaiseEventConnectionClosed(); };
 	};
-} // namespace Sessions
+}

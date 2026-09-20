@@ -8,9 +8,6 @@
 #ifdef _WIN32
 #include <ws2tcpip.h>
 #elif defined(__POSIX__)
-//Note that getaddrinfo_a() exists which allows asynchronous operation
-//however, that function is not standard POSIX, and is instead part of glibc
-//So we will run with getaddrinfo() in a thread ourself
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
@@ -41,9 +38,6 @@ namespace InternalServers
 		questions = dnsQuestions;
 		clientPort = port;
 
-		//Prefill unordered_map, allowing use to modify it from seperate threads
-		//See https://en.cppreference.com/w/cpp/container#Thread_safety
-		//Different elements in the same container can be modified concurrently by different threads
 		for (size_t i = 0; i < dnsQuestions.size(); i++)
 			answers[dnsQuestions[i]] = {};
 	}
@@ -67,7 +61,6 @@ namespace InternalServers
 		: callback{receivedcallback}
 	{
 #ifdef _WIN32
-		/* Use the MAKEWORD(lowbyte, highbyte) macro declared in Windef.h */
 		const WORD wVersionRequested = MAKEWORD(2, 2);
 
 		WSADATA wsaData{0};
@@ -79,9 +72,6 @@ namespace InternalServers
 #endif
 	}
 
-	//We remap 127.0.0.1 to the PC's IP address
-	//We specificly use the address assigned to
-	//the adapter we are using
 #ifdef _WIN32
 	void DNS_Server::Init(PIP_ADAPTER_ADDRESSES adapter)
 #elif defined(__POSIX__)
@@ -90,7 +80,6 @@ namespace InternalServers
 	{
 		localhostIP = {{{127, 0, 0, 1}}};
 
-		//Find IPv4 Address
 		std::optional<IP_Address> adapterIP = AdapterUtils::GetAdapterIP(adapter);
 		if (adapterIP.has_value())
 			localhostIP = adapterIP.value();
@@ -147,7 +136,7 @@ namespace InternalServers
 			}
 
 			DNS_Packet* ret = new DNS_Packet();
-			ret->id = dns.id; //TODO, drop duplicate requests based on ID
+			ret->id = dns.id;
 			ret->SetQR(true);
 			ret->SetOpCode(static_cast<u8>(DNS_OPCode::Query));
 			ret->SetAA(false);
@@ -157,7 +146,6 @@ namespace InternalServers
 			ret->SetAD(false);
 			ret->SetCD(false);
 			ret->SetRCode(static_cast<u8>(DNS_RCode::NoError));
-			//Counts
 			ret->questions = dns.questions;
 
 			DNS_State* state = new DNS_State(static_cast<int>(reqs.size()), reqs, ret, payload->sourcePort);
@@ -206,7 +194,6 @@ namespace InternalServers
 			IP_Address ans = answers[reqs[i]];
 			if (ans.integer != 0)
 			{
-				//TODO, might not be effective on pcap
 				const IP_Address local{{{127, 0, 0, 1}}};
 				if (ans == local)
 					ans = localhostIP;
@@ -218,7 +205,7 @@ namespace InternalServers
 				retPay->answers.push_back(ansEntry);
 			}
 			else
-				retPay->SetRCode(2); //ServerFailure
+				retPay->SetRCode(2);
 		}
 
 		const u16 clientPort = state->clientPort;
@@ -241,8 +228,6 @@ namespace InternalServers
 
 	DNS_Server::~DNS_Server()
 	{
-		//Block untill DNS finished &
-		//Delete entries in queue
 		while (outstandingQueries != 0)
 		{
 			UDP_Packet* retPay = nullptr;
@@ -266,7 +251,6 @@ namespace InternalServers
 #ifdef _WIN32
 	void DNS_Server::GetHost(const std::string& url, DNS_State* state)
 	{
-		//Need to convert to UTF16
 		const int size = MultiByteToWideChar(CP_UTF8, 0, url.c_str(), -1, nullptr, 0);
 		std::vector<wchar_t> converted_string(size);
 		MultiByteToWideChar(CP_UTF8, 0, url.c_str(), -1, converted_string.data(), converted_string.size());
@@ -312,7 +296,7 @@ namespace InternalServers
 				break;
 			}
 			case WSAHOST_NOT_FOUND:
-			case WSATRY_AGAIN: //Nonauthoritative host not found
+			case WSATRY_AGAIN:
 				Console.Error("DEV9: Internal DNS failed to find host %s", data->url.c_str());
 				remaining = data->state->AddNoAnswer(data->url);
 				break;
@@ -328,7 +312,6 @@ namespace InternalServers
 		if (remaining == 0)
 			data->session->FinaliseDNS(data->state);
 
-		//cleanup
 		if (data->result != nullptr)
 			FreeAddrInfoEx((ADDRINFOEX*)data->result);
 		delete data;
@@ -336,11 +319,8 @@ namespace InternalServers
 #elif defined(__POSIX__)
 	void DNS_Server::GetHost(const std::string& url, DNS_State* state)
 	{
-		//Need to spin up thread, pass the parms to it
 
 		std::thread GetHostThread(&DNS_Server::GetAddrInfoThread, this, url, state);
-		//detatch thread so that it can clean up itself
-		//we use another method of waiting for thread compleation
 		GetHostThread.detach();
 	}
 
@@ -373,7 +353,7 @@ namespace InternalServers
 				break;
 			}
 			case EAI_NONAME:
-			case EAI_AGAIN: //Nonauthoritative host not found
+			case EAI_AGAIN:
 				Console.Error("DEV9: Internal DNS failed to find host %s", url.c_str());
 				remaining = state->AddNoAnswer(url);
 				break;
@@ -389,9 +369,8 @@ namespace InternalServers
 		if (remaining == 0)
 			FinaliseDNS(state);
 
-		//cleanup
 		if (result != nullptr)
 			freeaddrinfo(result);
 	}
 #endif
-} // namespace InternalServers
+}

@@ -15,7 +15,6 @@ using namespace x86Emitter;
 extern int g_psxWriteOk;
 extern u32 g_psxMaxRecMem;
 
-// R3000A instruction implementation
 #define REC_FUNC(f) \
 	static void rpsx##f() \
 	{ \
@@ -23,10 +22,9 @@ extern u32 g_psxMaxRecMem;
 		_psxFlushCall(FLUSH_EVERYTHING); \
 		xFastCall((void*)(uptr)psx##f); \
 		PSX_DEL_CONST(_Rt_); \
-		/*	branch = 2; */ \
+ \
 	}
 
-// Same as above but with a different naming convension (to avoid various rename)
 #define REC_GTE_FUNC(f) \
 	static void rgte##f() \
 	{ \
@@ -34,7 +32,7 @@ extern u32 g_psxMaxRecMem;
 		_psxFlushCall(FLUSH_EVERYTHING); \
 		xFastCall((void*)(uptr)gte##f); \
 		PSX_DEL_CONST(_Rt_); \
-		/*	branch = 2; */ \
+ \
 	}
 
 extern void psxLWL();
@@ -42,8 +40,6 @@ extern void psxLWR();
 extern void psxSWL();
 extern void psxSWR();
 
-// TODO(Stenzek): Operate directly on mem when destination register is not live.
-// Do we want aligned targets? Seems wasteful...
 #ifdef PCSX2_DEBUG
 #define x86SetJ32A x86SetJ32
 #endif
@@ -99,7 +95,6 @@ static void rpsxMoveSToECX(int info)
 
 static void rpsxCopyReg(int dest, int src)
 {
-	// try a simple rename first...
 	const int roldsrc = _checkX86reg(X86TYPE_PSX, src, MODE_READ);
 	if (roldsrc >= 0 && psxTryRenameReg(dest, src, roldsrc, 0, 0) >= 0)
 		return;
@@ -146,7 +141,6 @@ static void rpsxCopyReg(int dest, int src)
 	}
 }
 
-////
 static void rpsxADDIU_const()
 {
 	g_psxConstRegs[_Rt_] = g_psxConstRegs[_Rs_] + _Imm_;
@@ -154,7 +148,6 @@ static void rpsxADDIU_const()
 
 static void rpsxADDIU_(int info)
 {
-	// Rt = Rs + Im
 	rpsxMoveStoT(info);
 	if (_Imm_ != 0)
 		xADD(xRegister32(EEREC_T), _Imm_);
@@ -164,7 +157,6 @@ PSXRECOMPILE_CONSTCODE1(ADDIU, XMMINFO_WRITET | XMMINFO_READS);
 
 void rpsxADDI() { rpsxADDIU(); }
 
-//// SLTI
 static void rpsxSLTI_const()
 {
 	g_psxConstRegs[_Rt_] = *(int*)&g_psxConstRegs[_Rs_] < _Imm_;
@@ -191,7 +183,6 @@ static void rpsxSLTI_(int info)
 
 PSXRECOMPILE_CONSTCODE1(SLTI, XMMINFO_WRITET | XMMINFO_READS | XMMINFO_NORENAME);
 
-//// SLTIU
 static void rpsxSLTIU_const()
 {
 	g_psxConstRegs[_Rt_] = g_psxConstRegs[_Rs_] < (u32)_Imm_;
@@ -251,7 +242,6 @@ static void rpsxLogicalOpI(u64 info, int op)
 	}
 }
 
-//// ANDI
 static void rpsxANDI_const()
 {
 	g_psxConstRegs[_Rt_] = g_psxConstRegs[_Rs_] & _ImmU_;
@@ -264,7 +254,6 @@ static void rpsxANDI_(int info)
 
 PSXRECOMPILE_CONSTCODE1(ANDI, XMMINFO_WRITET | XMMINFO_READS);
 
-//// ORI
 static void rpsxORI_const()
 {
 	g_psxConstRegs[_Rt_] = g_psxConstRegs[_Rs_] | _ImmU_;
@@ -366,7 +355,6 @@ static void rpsxSUBU_const()
 
 static void rpsxSUBU_consts(int info)
 {
-	// more complex because Rt can be Rd, and we're reversing the op
 	const s32 sval = g_psxConstRegs[_Rs_];
 	const xRegister32 dreg((_Rt_ == _Rd_) ? eax.GetId() : EEREC_D);
 	xMOV(dreg, sval);
@@ -389,14 +377,12 @@ static void rpsxSUBU_constt(int info)
 
 static void rpsxSUBU_(int info)
 {
-	// Rd = Rs - Rt
 	if (_Rs_ == _Rt_)
 	{
 		xXOR(xRegister32(EEREC_D), xRegister32(EEREC_D));
 		return;
 	}
 
-	// a bit messier here because it's not commutative..
 	if ((info & PROCESS_EE_S) && (info & PROCESS_EE_T))
 	{
 		if (EEREC_D == EEREC_S)
@@ -405,7 +391,6 @@ static void rpsxSUBU_(int info)
 		}
 		else if (EEREC_D == EEREC_T)
 		{
-			// D might equal T
 			const xRegister32 dreg((_Rt_ == _Rd_) ? eax.GetId() : EEREC_D);
 			xMOV(dreg, xRegister32(EEREC_S));
 			xSUB(dreg, xRegister32(EEREC_T));
@@ -424,7 +409,6 @@ static void rpsxSUBU_(int info)
 	}
 	else if (info & PROCESS_EE_T)
 	{
-		// D might equal T
 		const xRegister32 dreg((_Rt_ == _Rd_) ? eax.GetId() : EEREC_D);
 		xMOV(dreg, ptr32[&psxRegs.GPR.r[_Rs_]]);
 		xSUB(dreg, xRegister32(EEREC_T));
@@ -450,7 +434,7 @@ namespace
 		XOR,
 		NOR
 	};
-} // namespace
+}
 
 static void rpsxLogicalOp_constv(LogicalOp op, int info, int creg, u32 vreg, int regv)
 {
@@ -518,7 +502,6 @@ static void rpsxLogicalOp(LogicalOp op, int info)
 	                         : *bad;
 	pxAssert(&xOP != bad);
 
-	// swap because it's commutative and Rd might be Rt
 	u32 rs = _Rs_, rt = _Rt_;
 	int regs = (info & PROCESS_EE_S) ? EEREC_S : -1, regt = (info & PROCESS_EE_T) ? EEREC_T : -1;
 	if (_Rd_ == _Rt_)
@@ -592,7 +575,6 @@ static void rpsxOR_(int info)
 
 PSXRECOMPILE_CONSTCODE0(OR, XMMINFO_WRITED | XMMINFO_READS | XMMINFO_READT);
 
-//// XOR
 static void rpsxXOR_const()
 {
 	g_psxConstRegs[_Rd_] = g_psxConstRegs[_Rs_] ^ g_psxConstRegs[_Rt_];
@@ -615,7 +597,6 @@ static void rpsxXOR_(int info)
 
 PSXRECOMPILE_CONSTCODE0(XOR, XMMINFO_WRITED | XMMINFO_READS | XMMINFO_READT);
 
-//// NOR
 static void rpsxNOR_const()
 {
 	g_psxConstRegs[_Rd_] = ~(g_psxConstRegs[_Rs_] | g_psxConstRegs[_Rt_]);
@@ -638,7 +619,6 @@ static void rpsxNOR_(int info)
 
 PSXRECOMPILE_CONSTCODE0(NOR, XMMINFO_WRITED | XMMINFO_READS | XMMINFO_READT);
 
-//// SLT
 static void rpsxSLT_const()
 {
 	g_psxConstRegs[_Rd_] = *(int*)&g_psxConstRegs[_Rs_] < *(int*)&g_psxConstRegs[_Rt_];
@@ -671,10 +651,8 @@ static void rpsxSLTs_(int info, int sign)
 {
 	const xImpl_Set& SET = sign ? xSETL : xSETB;
 
-	// need to keep Rs/Rt around.
 	const xRegister32 dreg((_Rd_ == _Rt_ || _Rd_ == _Rs_) ? _allocX86reg(X86TYPE_TEMP, 0, 0) : EEREC_D);
 
-	// force Rs into a register, may as well cache it since we're loading anyway.
 	const int regs = (info & PROCESS_EE_S) ? EEREC_S : _allocX86reg(X86TYPE_PSX, _Rs_, MODE_READ);
 
 	xXOR(dreg, dreg);
@@ -709,7 +687,6 @@ static void rpsxSLT_(int info)
 
 PSXRECOMPILE_CONSTCODE0(SLT, XMMINFO_WRITED | XMMINFO_READS | XMMINFO_READT | XMMINFO_NORENAME);
 
-//// SLTU
 static void rpsxSLTU_const()
 {
 	g_psxConstRegs[_Rd_] = g_psxConstRegs[_Rs_] < g_psxConstRegs[_Rt_];
@@ -732,7 +709,6 @@ static void rpsxSLTU_(int info)
 
 PSXRECOMPILE_CONSTCODE0(SLTU, XMMINFO_WRITED | XMMINFO_READS | XMMINFO_READT | XMMINFO_NORENAME);
 
-//// MULT
 static void rpsxMULT_const()
 {
 	_deletePSXtoX86reg(PSX_HI, DELETE_REG_FREE_NO_WRITEBACK);
@@ -765,7 +741,6 @@ static void rpsxWritebackHILO(int info)
 
 static void rpsxMULTsuperconst(int info, int sreg, int imm, int sign)
 {
-	// Lo/Hi = Rs * Rt (signed)
 	xMOV(eax, imm);
 
 	const int regs = rpsxAllocRegIfUsed(sreg, MODE_READ);
@@ -789,7 +764,6 @@ static void rpsxMULTsuperconst(int info, int sreg, int imm, int sign)
 
 static void rpsxMULTsuper(int info, int sign)
 {
-	// Lo/Hi = Rs * Rt (signed)
 	_psxMoveGPRtoR(eax, _Rs_);
 
 	const int regt = rpsxAllocRegIfUsed(_Rt_, MODE_READ);
@@ -828,7 +802,6 @@ static void rpsxMULT_(int info)
 
 PSXRECOMPILE_CONSTCODE3_PENALTY(MULT, 1, psxInstCycles_Mult);
 
-//// MULTU
 static void rpsxMULTU_const()
 {
 	_deletePSXtoX86reg(PSX_HI, DELETE_REG_FREE_NO_WRITEBACK);
@@ -857,7 +830,6 @@ static void rpsxMULTU_(int info)
 
 PSXRECOMPILE_CONSTCODE3_PENALTY(MULTU, 1, psxInstCycles_Mult);
 
-//// DIV
 static void rpsxDIV_const()
 {
 	_deletePSXtoX86reg(PSX_HI, DELETE_REG_FREE_NO_WRITEBACK);
@@ -865,13 +837,6 @@ static void rpsxDIV_const()
 
 	u32 lo, hi;
 
-	/*
-	 * Normally, when 0x80000000(-2147483648), the signed minimum value, is divided by 0xFFFFFFFF(-1), the
-	 * 	operation will result in overflow. However, in this instruction an overflow exception does not occur and the
-	 * 	result will be as follows:
-	 * 	Quotient: 0x80000000 (-2147483648), and remainder: 0x00000000 (0)
-	 */
-	// Of course x86 cpu does overflow !
 	if (g_psxConstRegs[_Rs_] == 0x80000000u && g_psxConstRegs[_Rt_] == 0xFFFFFFFFu)
 	{
 		xMOV(ptr32[&psxRegs.GPR.n.hi], 0);
@@ -902,7 +867,6 @@ static void rpsxDIV_const()
 
 static void rpsxDIVsuper(int info, int sign, int process = 0)
 {
-	// Lo/Hi = Rs / Rt (signed)
 	if (process & PROCESS_CONSTT)
 		xMOV(ecx, g_psxConstRegs[_Rt_]);
 	else if (info & PROCESS_EE_T)
@@ -918,14 +882,13 @@ static void rpsxDIVsuper(int info, int sign, int process = 0)
 		xMOV(eax, ptr32[&psxRegs.GPR.r[_Rs_]]);
 
 	u8* end1;
-	if (sign) //test for overflow (x86 will just throw an exception)
+	if (sign)
 	{
 		xCMP(eax, 0x80000000);
 		u8* cont1 = JNE8(0);
 		xCMP(ecx, 0xffffffff);
 		u8* cont2 = JNE8(0);
-		//overflow case:
-		xXOR(edx, edx); //EAX remains 0x80000000
+		xXOR(edx, edx);
 		end1 = JMP8(0);
 
 		x86SetJ8(cont1);
@@ -935,19 +898,17 @@ static void rpsxDIVsuper(int info, int sign, int process = 0)
 	xCMP(ecx, 0);
 	u8* cont3 = JNE8(0);
 
-	//divide by zero
 	xMOV(edx, eax);
-	if (sign) //set EAX to (EAX < 0)?1:-1
+	if (sign)
 	{
-		xSAR(eax, 31); //(EAX < 0)?-1:0
-		xSHL(eax, 1); //(EAX < 0)?-2:0
-		xNOT(eax); //(EAX < 0)?1:-1
+		xSAR(eax, 31);
+		xSHL(eax, 1);
+		xNOT(eax);
 	}
 	else
 		xMOV(eax, 0xffffffff);
 	u8* end2 = JMP8(0);
 
-	// Normal division
 	x86SetJ8(cont3);
 	if (sign)
 	{
@@ -984,7 +945,6 @@ static void rpsxDIV_(int info)
 
 PSXRECOMPILE_CONSTCODE3_PENALTY(DIV, 1, psxInstCycles_Div);
 
-//// DIVU
 void rpsxDIVU_const()
 {
 	u32 lo, hi;
@@ -1023,8 +983,6 @@ void rpsxDIVU_(int info)
 
 PSXRECOMPILE_CONSTCODE3_PENALTY(DIVU, 1, psxInstCycles_Div);
 
-// TLB loadstore functions
-
 static u8* rpsxGetConstantAddressOperand(bool store)
 {
 #if 0
@@ -1040,8 +998,6 @@ static u8* rpsxGetConstantAddressOperand(bool store)
 
 static void rpsxCalcAddressOperand()
 {
-	// if it's a const register, just flush it, since we'll need to do that
-	// when we call the load/store function anyway
 	int rs;
 	if (PSX_IS_CONST1(_Rs_))
 		rs = _allocX86reg(X86TYPE_PSX, _Rs_, MODE_READ);
@@ -1106,7 +1062,6 @@ static void rpsxLoad(int size, bool sign)
 
 	if (_Rt_ == 0)
 	{
-		// dummy read
 		is_ram_read.SetTarget();
 		return;
 	}
@@ -1114,7 +1069,6 @@ static void rpsxLoad(int size, bool sign)
 	xForwardJump8 done;
 	is_ram_read.SetTarget();
 
-	// read from psM directly
 	xAND(arg1regd, Ps2MemSize::ExposedIopRam - 1);
 
 	auto addr = xComplexAddress(rax, iopMem->Main, arg1reg);
@@ -1138,7 +1092,6 @@ static void rpsxLoad(int size, bool sign)
 	const int rt = rpsxAllocRegIfUsed(_Rt_, MODE_WRITE);
 	const xRegister32 dreg((rt < 0) ? eax.GetId() : rt);
 
-	// sign/zero extend as needed
 	switch (size)
 	{
 		case 8:
@@ -1153,7 +1106,6 @@ static void rpsxLoad(int size, bool sign)
 			jNO_DEFAULT
 	}
 
-	// if not caching, write back
 	if (rt < 0)
 		xMOV(ptr32[&psxRegs.GPR.r[_Rt_]], eax);
 }
@@ -1221,7 +1173,6 @@ static void rpsxSW()
 	xFastCall((void*)iopMemWrite32);
 }
 
-//// SLL
 static void rpsxSLL_const()
 {
 	g_psxConstRegs[_Rd_] = g_psxConstRegs[_Rt_] << _Sa_;
@@ -1241,7 +1192,6 @@ static void rpsxSLL_(int info)
 
 PSXRECOMPILE_CONSTCODE2(SLL, XMMINFO_WRITED | XMMINFO_READS);
 
-//// SRL
 static void rpsxSRL_const()
 {
 	g_psxConstRegs[_Rd_] = g_psxConstRegs[_Rt_] >> _Sa_;
@@ -1261,7 +1211,6 @@ static void rpsxSRL_(int info)
 
 PSXRECOMPILE_CONSTCODE2(SRL, XMMINFO_WRITED | XMMINFO_READS);
 
-//// SRA
 static void rpsxSRA_const()
 {
 	g_psxConstRegs[_Rd_] = *(int*)&g_psxConstRegs[_Rt_] >> _Sa_;
@@ -1281,7 +1230,6 @@ static void rpsxSRA_(int info)
 
 PSXRECOMPILE_CONSTCODE2(SRA, XMMINFO_WRITED | XMMINFO_READS);
 
-//// SLLV
 static void rpsxShiftV_constt(int info, const xImpl_Group2& shift)
 {
 	pxAssert(_Rs_ != 0);
@@ -1321,7 +1269,6 @@ static void rpsxSLLV_(int info)
 
 PSXRECOMPILE_CONSTCODE0(SLLV, XMMINFO_WRITED | XMMINFO_READS);
 
-//// SRLV
 static void rpsxSRLV_const()
 {
 	g_psxConstRegs[_Rd_] = g_psxConstRegs[_Rt_] >> (g_psxConstRegs[_Rs_] & 0x1f);
@@ -1344,7 +1291,6 @@ static void rpsxSRLV_(int info)
 
 PSXRECOMPILE_CONSTCODE0(SRLV, XMMINFO_WRITED | XMMINFO_READS);
 
-//// SRAV
 static void rpsxSRAV_const()
 {
 	g_psxConstRegs[_Rd_] = *(int*)&g_psxConstRegs[_Rt_] >> (g_psxConstRegs[_Rs_] & 0x1f);
@@ -1398,7 +1344,6 @@ static void rpsxMTLO()
 
 static void rpsxJ()
 {
-	// j target
 	u32 newpc = _InstrucTarget_ * 4 + (psxpc & 0xf0000000);
 	psxRecompileNextInstruction(true, false);
 	psxSetBranchImm(newpc);
@@ -1457,7 +1402,6 @@ static void rpsxJALR()
 	const u32 newpc = psxpc + 4;
 	const bool swap = (_Rd_ == _Rs_) ? false : psxTrySwapDelaySlot(_Rs_, 0, _Rd_);
 
-	// jalr Rs
 	int wbreg = -1;
 	if (!swap)
 	{
@@ -1502,7 +1446,6 @@ static void rpsxJALR()
 	psxSetBranchReg();
 }
 
-//// BEQ
 static u32* s_pbranchjmp;
 
 static void rpsxSetBranchEQ(int process)
@@ -1525,7 +1468,6 @@ static void rpsxSetBranchEQ(int process)
 	}
 	else
 	{
-		// force S into register, since we need to load it, may as well cache.
 		const int regs = _allocX86reg(X86TYPE_PSX, _Rs_, MODE_READ);
 		const int regt = _checkX86reg(X86TYPE_PSX, _Rt_, MODE_READ);
 
@@ -1578,7 +1520,6 @@ static void rpsxBEQ_process(int process)
 
 		if (!swap)
 		{
-			// recopy the next inst
 			psxpc -= 4;
 			psxLoadBranchState();
 			psxRecompileNextInstruction(true, false);
@@ -1590,7 +1531,6 @@ static void rpsxBEQ_process(int process)
 
 static void rpsxBEQ()
 {
-	// prefer using the host register over an immediate, it'll be smaller code.
 	if (PSX_IS_CONST2(_Rs_, _Rt_))
 		rpsxBEQ_const();
 	else if (PSX_IS_CONST1(_Rs_) && _checkX86reg(X86TYPE_PSX, _Rs_, MODE_READ) < 0)
@@ -1601,7 +1541,6 @@ static void rpsxBEQ()
 		rpsxBEQ_process(0);
 }
 
-//// BNE
 static void rpsxBNE_const()
 {
 	u32 branchTo;
@@ -1642,7 +1581,6 @@ static void rpsxBNE_process(int process)
 
 	if (!swap)
 	{
-		// recopy the next inst
 		psxpc -= 4;
 		psxLoadBranchState();
 		psxRecompileNextInstruction(true, false);
@@ -1663,10 +1601,8 @@ static void rpsxBNE()
 		rpsxBNE_process(0);
 }
 
-//// BLTZ
 static void rpsxBLTZ()
 {
-	// Branch if Rs < 0
 	u32 branchTo = (s32)_Imm_ * 4 + psxpc;
 
 	if (PSX_IS_CONST1(_Rs_))
@@ -1702,7 +1638,6 @@ static void rpsxBLTZ()
 
 	if (!swap)
 	{
-		// recopy the next inst
 		psxpc -= 4;
 		psxLoadBranchState();
 		psxRecompileNextInstruction(true, false);
@@ -1711,7 +1646,6 @@ static void rpsxBLTZ()
 	psxSetBranchImm(branchTo);
 }
 
-//// BGEZ
 static void rpsxBGEZ()
 {
 	u32 branchTo = ((s32)_Imm_ * 4) + psxpc;
@@ -1749,7 +1683,6 @@ static void rpsxBGEZ()
 
 	if (!swap)
 	{
-		// recopy the next inst
 		psxpc -= 4;
 		psxLoadBranchState();
 		psxRecompileNextInstruction(true, false);
@@ -1758,10 +1691,8 @@ static void rpsxBGEZ()
 	psxSetBranchImm(branchTo);
 }
 
-//// BLTZAL
 static void rpsxBLTZAL()
 {
-	// Branch if Rs < 0
 	u32 branchTo = (s32)_Imm_ * 4 + psxpc;
 
 	_psxDeleteReg(31, DELETE_REG_FREE_NO_WRITEBACK);
@@ -1802,7 +1733,6 @@ static void rpsxBLTZAL()
 
 	if (!swap)
 	{
-		// recopy the next inst
 		psxpc -= 4;
 		psxLoadBranchState();
 		psxRecompileNextInstruction(true, false);
@@ -1811,7 +1741,6 @@ static void rpsxBLTZAL()
 	psxSetBranchImm(branchTo);
 }
 
-//// BGEZAL
 static void rpsxBGEZAL()
 {
 	u32 branchTo = ((s32)_Imm_ * 4) + psxpc;
@@ -1854,7 +1783,6 @@ static void rpsxBGEZAL()
 
 	if (!swap)
 	{
-		// recopy the next inst
 		psxpc -= 4;
 		psxLoadBranchState();
 		psxRecompileNextInstruction(true, false);
@@ -1863,10 +1791,8 @@ static void rpsxBGEZAL()
 	psxSetBranchImm(branchTo);
 }
 
-//// BLEZ
 static void rpsxBLEZ()
 {
-	// Branch if Rs <= 0
 	u32 branchTo = (s32)_Imm_ * 4 + psxpc;
 
 	if (PSX_IS_CONST1(_Rs_))
@@ -1910,10 +1836,8 @@ static void rpsxBLEZ()
 	psxSetBranchImm(branchTo);
 }
 
-//// BGTZ
 static void rpsxBGTZ()
 {
-	// Branch if Rs > 0
 	u32 branchTo = (s32)_Imm_ * 4 + psxpc;
 
 	_psxFlushAllDirty();
@@ -1961,7 +1885,6 @@ static void rpsxBGTZ()
 
 static void rpsxMFC0()
 {
-	// Rt = Cop0->Rd
 	if (!_Rt_)
 		return;
 
@@ -1971,7 +1894,6 @@ static void rpsxMFC0()
 
 static void rpsxCFC0()
 {
-	// Rt = Cop0->Rd
 	if (!_Rt_)
 		return;
 
@@ -1981,7 +1903,6 @@ static void rpsxCFC0()
 
 static void rpsxMTC0()
 {
-	// Cop0->Rd = Rt
 	if (PSX_IS_CONST1(_Rt_))
 	{
 		xMOV(ptr32[&psxRegs.CP0.r[_Rd_]], g_psxConstRegs[_Rt_]);
@@ -1995,7 +1916,6 @@ static void rpsxMTC0()
 
 static void rpsxCTC0()
 {
-	// Cop0->Rd = Rt
 	rpsxMTC0();
 }
 
@@ -2009,13 +1929,10 @@ static void rpsxRFE()
 	xOR(eax, ecx);
 	xMOV(ptr32[&psxRegs.CP0.n.Status], eax);
 
-	// Test the IOP's INTC status, so that any pending ints get raised.
-
 	_psxFlushCall(0);
 	xFastCall((void*)(uptr)&iopTestIntc);
 }
 
-//// COP2
 REC_GTE_FUNC(RTPS);
 REC_GTE_FUNC(NCLIP);
 REC_GTE_FUNC(OP);
@@ -2048,7 +1965,6 @@ REC_GTE_FUNC(LWC2);
 REC_GTE_FUNC(SWC2);
 
 
-// R3000A tables
 extern void (*rpsxBSC[64])();
 extern void (*rpsxSPC[64])();
 extern void (*rpsxREG[32])();
@@ -2105,14 +2021,14 @@ void (*rpsxCP0[32])() = {
 };
 
 void (*rpsxCP2[64])() = {
-	rpsxBASIC, rgteRTPS , rpsxNULL , rpsxNULL, rpsxNULL, rpsxNULL , rgteNCLIP, rpsxNULL, // 00
-	rpsxNULL , rpsxNULL , rpsxNULL , rpsxNULL, rgteOP  , rpsxNULL , rpsxNULL , rpsxNULL, // 08
-	rgteDPCS , rgteINTPL, rgteMVMVA, rgteNCDS, rgteCDP , rpsxNULL , rgteNCDT , rpsxNULL, // 10
-	rpsxNULL , rpsxNULL , rpsxNULL , rgteNCCS, rgteCC  , rpsxNULL , rgteNCS  , rpsxNULL, // 18
-	rgteNCT  , rpsxNULL , rpsxNULL , rpsxNULL, rpsxNULL, rpsxNULL , rpsxNULL , rpsxNULL, // 20
-	rgteSQR  , rgteDCPL , rgteDPCT , rpsxNULL, rpsxNULL, rgteAVSZ3, rgteAVSZ4, rpsxNULL, // 28
-	rgteRTPT , rpsxNULL , rpsxNULL , rpsxNULL, rpsxNULL, rpsxNULL , rpsxNULL , rpsxNULL, // 30
-	rpsxNULL , rpsxNULL , rpsxNULL , rpsxNULL, rpsxNULL, rgteGPF  , rgteGPL  , rgteNCCT, // 38
+	rpsxBASIC, rgteRTPS , rpsxNULL , rpsxNULL, rpsxNULL, rpsxNULL , rgteNCLIP, rpsxNULL,
+	rpsxNULL , rpsxNULL , rpsxNULL , rpsxNULL, rgteOP  , rpsxNULL , rpsxNULL , rpsxNULL,
+	rgteDPCS , rgteINTPL, rgteMVMVA, rgteNCDS, rgteCDP , rpsxNULL , rgteNCDT , rpsxNULL,
+	rpsxNULL , rpsxNULL , rpsxNULL , rgteNCCS, rgteCC  , rpsxNULL , rgteNCS  , rpsxNULL,
+	rgteNCT  , rpsxNULL , rpsxNULL , rpsxNULL, rpsxNULL, rpsxNULL , rpsxNULL , rpsxNULL,
+	rgteSQR  , rgteDCPL , rgteDPCT , rpsxNULL, rpsxNULL, rgteAVSZ3, rgteAVSZ4, rpsxNULL,
+	rgteRTPT , rpsxNULL , rpsxNULL , rpsxNULL, rpsxNULL, rpsxNULL , rpsxNULL , rpsxNULL,
+	rpsxNULL , rpsxNULL , rpsxNULL , rpsxNULL, rpsxNULL, rgteGPF  , rgteGPL  , rgteNCCT,
 };
 
 void (*rpsxCP2BSC[32])() = {
@@ -2123,9 +2039,6 @@ void (*rpsxCP2BSC[32])() = {
 };
 // clang-format on
 
-////////////////////////////////////////////////
-// Back-Prob Function Tables - Gathering Info //
-////////////////////////////////////////////////
 #define rpsxpropSetRead(reg) \
 	{ \
 		if (!(pinst->regs[reg] & EEINST_USED)) \
@@ -2150,14 +2063,6 @@ void rpsxpropREGIMM(EEINST* prev, EEINST* pinst);
 void rpsxpropCP0(EEINST* prev, EEINST* pinst);
 void rpsxpropCP2(EEINST* prev, EEINST* pinst);
 
-//SPECIAL, REGIMM, J   , JAL  , BEQ , BNE , BLEZ, BGTZ,
-//ADDI   , ADDIU , SLTI, SLTIU, ANDI, ORI , XORI, LUI ,
-//COP0   , NULL  , COP2, NULL , NULL, NULL, NULL, NULL,
-//NULL   , NULL  , NULL, NULL , NULL, NULL, NULL, NULL,
-//LB     , LH    , LWL , LW   , LBU , LHU , LWR , NULL,
-//SB     , SH    , SWL , SW   , NULL, NULL, SWR , NULL,
-//NULL   , NULL  , NULL, NULL , NULL, NULL, NULL, NULL,
-//NULL   , NULL  , NULL, NULL , NULL, NULL, NULL, NULL
 void rpsxpropBSC(EEINST* prev, EEINST* pinst)
 {
 	switch (psxRegs.code >> 26)
@@ -2168,23 +2073,23 @@ void rpsxpropBSC(EEINST* prev, EEINST* pinst)
 		case 1:
 			rpsxpropREGIMM(prev, pinst);
 			break;
-		case 2: // j
+		case 2:
 			break;
-		case 3: // jal
+		case 3:
 			rpsxpropSetWrite(31);
 			break;
-		case 4: // beq
-		case 5: // bne
+		case 4:
+		case 5:
 			rpsxpropSetRead(_Rs_);
 			rpsxpropSetRead(_Rt_);
 			break;
 
-		case 6: // blez
-		case 7: // bgtz
+		case 6:
+		case 7:
 			rpsxpropSetRead(_Rs_);
 			break;
 
-		case 15: // lui
+		case 15:
 			rpsxpropSetWrite(_Rt_);
 			break;
 
@@ -2195,7 +2100,6 @@ void rpsxpropBSC(EEINST* prev, EEINST* pinst)
 			rpsxpropCP2(prev, pinst);
 			break;
 
-		// stores
 		case 40:
 		case 41:
 		case 42:
@@ -2205,9 +2109,8 @@ void rpsxpropBSC(EEINST* prev, EEINST* pinst)
 			rpsxpropSetRead(_Rs_);
 			break;
 
-		case 50: // LWC2
-		case 58: // SWC2
-			// Operation on COP2 registers/memory. GPRs are left untouched
+		case 50:
+		case 58:
 			break;
 
 		default:
@@ -2217,72 +2120,64 @@ void rpsxpropBSC(EEINST* prev, EEINST* pinst)
 	}
 }
 
-//SLL , NULL, SRL , SRA , SLLV   , NULL , SRLV, SRAV,
-//JR  , JALR, NULL, NULL, SYSCALL, BREAK, NULL, NULL,
-//MFHI, MTHI, MFLO, MTLO, NULL   , NULL , NULL, NULL,
-//MULT, MULTU, DIV, DIVU, NULL   , NULL , NULL, NULL,
-//ADD , ADDU, SUB , SUBU, AND    , OR   , XOR , NOR ,
-//NULL, NULL, SLT , SLTU, NULL   , NULL , NULL, NULL,
-//NULL, NULL, NULL, NULL, NULL   , NULL , NULL, NULL,
-//NULL, NULL, NULL, NULL, NULL   , NULL , NULL, NULL,
 void rpsxpropSPECIAL(EEINST* prev, EEINST* pinst)
 {
 	switch (_Funct_)
 	{
-		case 0: // SLL
-		case 2: // SRL
-		case 3: // SRA
+		case 0:
+		case 2:
+		case 3:
 			rpsxpropSetWrite(_Rd_);
 			rpsxpropSetRead(_Rt_);
 			break;
 
-		case 8: // JR
+		case 8:
 			rpsxpropSetRead(_Rs_);
 			break;
-		case 9: // JALR
+		case 9:
 			rpsxpropSetWrite(_Rd_);
 			rpsxpropSetRead(_Rs_);
 			break;
 
-		case 12: // syscall
-		case 13: // break
+		case 12:
+		case 13:
 			_recClearInst(prev);
 			prev->info = 0;
 			break;
-		case 15: // sync
+		case 15:
 			break;
 
-		case 16: // mfhi
+		case 16:
 			rpsxpropSetWrite(_Rd_);
 			rpsxpropSetRead(PSX_HI);
 			break;
-		case 17: // mthi
+		case 17:
 			rpsxpropSetWrite(PSX_HI);
 			rpsxpropSetRead(_Rs_);
 			break;
-		case 18: // mflo
+		case 18:
 			rpsxpropSetWrite(_Rd_);
 			rpsxpropSetRead(PSX_LO);
 			break;
-		case 19: // mtlo
+		case 19:
 			rpsxpropSetWrite(PSX_LO);
 			rpsxpropSetRead(_Rs_);
 			break;
 
-		case 24: // mult
-		case 25: // multu
-		case 26: // div
-		case 27: // divu
+		case 24:
+		case 25:
+		case 26:
+		case 27:
 			rpsxpropSetWrite(PSX_LO);
 			rpsxpropSetWrite(PSX_HI);
 			rpsxpropSetRead(_Rs_);
 			rpsxpropSetRead(_Rt_);
 			break;
 
-		case 32: // add
-		case 33: // addu
-		case 34: // sub
-		case 35: // subu
+		case 32:
+		case 33:
+		case 34:
+		case 35:
 			rpsxpropSetWrite(_Rd_);
 			if (_Rs_)
 				rpsxpropSetRead(_Rs_);
@@ -2298,22 +2193,17 @@ void rpsxpropSPECIAL(EEINST* prev, EEINST* pinst)
 	}
 }
 
-//BLTZ  , BGEZ  , NULL, NULL, NULL, NULL, NULL, NULL,
-//NULL  , NULL  , NULL, NULL, NULL, NULL, NULL, NULL,
-//BLTZAL, BGEZAL, NULL, NULL, NULL, NULL, NULL, NULL,
-//NULL  , NULL  , NULL, NULL, NULL, NULL, NULL, NULL
 void rpsxpropREGIMM(EEINST* prev, EEINST* pinst)
 {
 	switch (_Rt_)
 	{
-		case 0: // bltz
-		case 1: // bgez
+		case 0:
+		case 1:
 			rpsxpropSetRead(_Rs_);
 			break;
 
-		case 16: // bltzal
-		case 17: // bgezal
-			// do not write 31
+		case 16:
+		case 17:
 			rpsxpropSetRead(_Rs_);
 			break;
 
@@ -2321,24 +2211,20 @@ void rpsxpropREGIMM(EEINST* prev, EEINST* pinst)
 	}
 }
 
-//MFC0, NULL, CFC0, NULL, MTC0, NULL, CTC0, NULL,
-//NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-//RFE , NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-//NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
 void rpsxpropCP0(EEINST* prev, EEINST* pinst)
 {
 	switch (_Rs_)
 	{
-		case 0: // mfc0
-		case 2: // cfc0
+		case 0:
+		case 2:
 			rpsxpropSetWrite(_Rt_);
 			break;
 
-		case 4: // mtc0
-		case 6: // ctc0
+		case 4:
+		case 6:
 			rpsxpropSetRead(_Rt_);
 			break;
-		case 16: // rfe
+		case 16:
 			break;
 
 			jNO_DEFAULT
@@ -2346,22 +2232,17 @@ void rpsxpropCP0(EEINST* prev, EEINST* pinst)
 }
 
 
-// Basic table:
-// gteMFC2, psxNULL, gteCFC2, psxNULL, gteMTC2, psxNULL, gteCTC2, psxNULL,
-// psxNULL, psxNULL, psxNULL, psxNULL, psxNULL, psxNULL, psxNULL, psxNULL,
-// psxNULL, psxNULL, psxNULL, psxNULL, psxNULL, psxNULL, psxNULL, psxNULL,
-// psxNULL, psxNULL, psxNULL, psxNULL, psxNULL, psxNULL, psxNULL, psxNULL,
 void rpsxpropCP2_basic(EEINST* prev, EEINST* pinst)
 {
 	switch (_Rs_)
 	{
-		case 0: // mfc2
-		case 2: // cfc2
+		case 0:
+		case 2:
 			rpsxpropSetWrite(_Rt_);
 			break;
 
-		case 4: // mtc2
-		case 6: // ctc2
+		case 4:
+		case 6:
 			rpsxpropSetRead(_Rt_);
 			break;
 
@@ -2372,26 +2253,15 @@ void rpsxpropCP2_basic(EEINST* prev, EEINST* pinst)
 }
 
 
-// Main table:
-// psxBASIC, gteRTPS , psxNULL , psxNULL, psxNULL, psxNULL , gteNCLIP, psxNULL, // 00
-// psxNULL , psxNULL , psxNULL , psxNULL, gteOP  , psxNULL , psxNULL , psxNULL, // 08
-// gteDPCS , gteINTPL, gteMVMVA, gteNCDS, gteCDP , psxNULL , gteNCDT , psxNULL, // 10
-// psxNULL , psxNULL , psxNULL , gteNCCS, gteCC  , psxNULL , gteNCS  , psxNULL, // 18
-// gteNCT  , psxNULL , psxNULL , psxNULL, psxNULL, psxNULL , psxNULL , psxNULL, // 20
-// gteSQR  , gteDCPL , gteDPCT , psxNULL, psxNULL, gteAVSZ3, gteAVSZ4, psxNULL, // 28
-// gteRTPT , psxNULL , psxNULL , psxNULL, psxNULL, psxNULL , psxNULL , psxNULL, // 30
-// psxNULL , psxNULL , psxNULL , psxNULL, psxNULL, gteGPF  , gteGPL  , gteNCCT, // 38
 void rpsxpropCP2(EEINST* prev, EEINST* pinst)
 {
 	switch (_Funct_)
 	{
-		case 0: // Basic opcode
+		case 0:
 			rpsxpropCP2_basic(prev, pinst);
 			break;
 
 		default:
-			// COP2 operation are likely done with internal COP2 registers
-			// No impact on GPR
 			break;
 	}
 }

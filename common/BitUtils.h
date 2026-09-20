@@ -19,7 +19,6 @@ static inline int _BitScanReverse(unsigned long* const Index, const unsigned lon
 	if (Mask == 0)
 		return 0;
 
-	// For some reason, clang won't emit bsr if we use std::countl_zeros()...
 	*Index = 31 - __builtin_clz(Mask);
 	return 1;
 }
@@ -73,18 +72,15 @@ namespace Common
 
 	__fi static u32 CountLeadingSignBits(s32 n)
 	{
-		// If the sign bit is 1, we invert the bits to 0 for count-leading-zero.
 		if (n < 0)
 			n = ~n;
 
-		// If BSR is used directly, it would have an undefined value for 0.
 		if (n == 0)
 			return 32;
 
-		// Perform our count leading zero.
 		return std::countl_zero(static_cast<u32>(n));
 	}
-} // namespace Common
+}
 
 template <typename T>
 [[maybe_unused]] __fi static T GetBufferT(const u8* buffer, u32 offset)

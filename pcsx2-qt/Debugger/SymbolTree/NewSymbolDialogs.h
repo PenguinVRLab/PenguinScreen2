@@ -10,13 +10,11 @@
 #include "DebugTools/DebugInterface.h"
 #include "ui_NewSymbolDialog.h"
 
-// Base class for symbol creation dialogs.
 class NewSymbolDialog : public QDialog
 {
 	Q_OBJECT
 
 public:
-	// Used to apply default settings.
 	void setName(QString name);
 	void setAddress(u32 address);
 	void setCustomSize(u32 size);
@@ -35,7 +33,6 @@ protected:
 		FUNCTION_FIELD = 1 << 6
 	};
 
-	// Used for setting up row visibility. Keep in sync with the .ui file!
 	enum Row
 	{
 		NAME,

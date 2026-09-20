@@ -5,35 +5,27 @@
 #include "common/Assertions.h"
 
 #include <cstdio>
-#include <cassert> // assert
+#include <cassert>
 #include <sched.h>
-#include <sys/time.h> // gettimeofday()
+#include <sys/time.h>
 #include <pthread.h>
 #include <unistd.h>
 #include <mach/mach.h>
-#include <mach/mach_error.h> // mach_error_string()
+#include <mach/mach_error.h>
 #include <mach/mach_init.h>
 #include <mach/mach_port.h>
-#include <mach/mach_time.h> // mach_absolute_time()
-#include <mach/semaphore.h> // semaphore_*()
-#include <mach/task.h> // semaphore_create() and semaphore_destroy()
+#include <mach/mach_time.h>
+#include <mach/semaphore.h>
+#include <mach/task.h>
 #include <mach/thread_act.h>
-
-// Note: assuming multicore is safer because it forces the interlocked routines to use
-// the LOCK prefix.  The prefix works on single core CPUs fine (but is slow), but not
-// having the LOCK prefix is very bad indeed.
 
 __forceinline void Threading::Timeslice()
 {
 	sched_yield();
 }
 
-// For use in spin/wait loops, acts as a hint to Intel CPUs and should, in theory
-// improve performance and reduce cpu power consumption.
 __forceinline void Threading::SpinWait()
 {
-	// If this doesn't compile you can just comment it out (it only serves as a
-	// performance hint and isn't required).
 #if defined(ARCH_X86)
 	__asm__("pause");
 #elif defined(ARCH_ARM64)
@@ -43,26 +35,17 @@ __forceinline void Threading::SpinWait()
 
 __forceinline void Threading::EnableHiresScheduler()
 {
-	// Darwin has customizable schedulers, see xnu/osfmk/man. Not
-	// implemented yet though (and not sure if useful for pcsx2).
 }
 
 __forceinline void Threading::DisableHiresScheduler()
 {
-	// see EnableHiresScheduler()
 }
 
-// Just like on Windows, this is not really the number of ticks per second,
-// but just a factor by which one has to divide GetThreadCpuTime() or
-// pxThread::GetCpuTime() if one wants to receive a value in seconds. NOTE:
-// doing this will of course yield precision loss.
 u64 Threading::GetThreadTicksPerSecond()
 {
-	return 1000000; // the *CpuTime() functions return values in microseconds
+	return 1000000;
 }
 
-// gets the CPU time used by the current thread (both system and user), in
-// microseconds, returns 0 on failure
 static u64 getthreadtime(thread_port_t thread)
 {
 	mach_msg_type_number_t count = THREAD_BASIC_INFO_COUNT;
@@ -75,37 +58,17 @@ static u64 getthreadtime(thread_port_t thread)
 		return 0;
 	}
 
-	// add system and user time
 	return (u64)info.user_time.seconds * (u64)1e6 +
 		   (u64)info.user_time.microseconds +
 		   (u64)info.system_time.seconds * (u64)1e6 +
 		   (u64)info.system_time.microseconds;
 }
 
-// Returns the current timestamp (not relative to a real world clock) in microseconds
 u64 Threading::GetThreadCpuTime()
 {
-	// we could also use mach_thread_self() and mach_port_deallocate(), but
-	// that calls upon mach traps (kinda like system calls). Unless I missed
-	// something in the COMMPAGE (like Linux vDSO) which makes overrides it
-	// to be user-space instead. In contract,
-	// pthread_mach_thread_np(pthread_self()) is entirely in user-space.
 	u64 us = getthreadtime(pthread_mach_thread_np(pthread_self()));
 	return us;
 }
-
-// --------------------------------------------------------------------------------------
-//  Semaphore Implementation for Darwin/OSX
-//
-//  Sadly, Darwin/OSX needs its own implementation of Semaphores instead of
-//  relying on phtreads, because OSX unnamed semaphore (the best kind)
-//  support is very poor.
-//
-//  This implementation makes use of Mach primitives instead. These are also
-//  what Grand Central Dispatch (GCD) is based on, as far as I understand:
-//  http://newosxbook.com/articles/GCD.html.
-//
-// --------------------------------------------------------------------------------------
 
 static void MACH_CHECK(kern_return_t mach_retval)
 {
@@ -188,7 +151,6 @@ u64 Threading::ThreadHandle::GetCPUTime() const
 
 bool Threading::ThreadHandle::SetAffinity(u64 processor_mask) const
 {
-	// Doesn't appear to be possible to set affinity.
 	return false;
 }
 
@@ -248,7 +210,6 @@ bool Threading::Thread::Start(EntryPoint func)
 	if (res != 0)
 		return false;
 
-	// thread started, it'll release the memory
 	m_native_handle = (void*)handle;
 	func_clone.release();
 	return true;
@@ -272,7 +233,6 @@ void Threading::Thread::Join()
 	m_native_handle = nullptr;
 }
 
-// name can be up to 16 bytes
 void Threading::SetNameOfCurrentThread(const char* name)
 {
 	pthread_setname_np(name);

@@ -7,8 +7,6 @@
 #include <cassert>
 #include <cstring>
 
-/* ------------------------------------------------------------------ */
-
 int usb_desc_device(const USBDescID* id, const USBDescDevice* dev,
 					bool msos, u8* dest, size_t len)
 {
@@ -25,11 +23,6 @@ int usb_desc_device(const USBDescID* id, const USBDescDevice* dev,
 
 	if (msos && dev->bcdUSB < 0x0200)
 	{
-		/*
-		 * Version 2.0+ required for microsoft os descriptors to work.
-		 * Done this way so msos-desc compat property will handle both
-		 * the version and the new descriptors being present.
-		 */
 		d->u.device.bcdUSB_lo = usb_lo(0x0200);
 		d->u.device.bcdUSB_hi = usb_hi(0x0200);
 	}
@@ -107,7 +100,6 @@ int usb_desc_config(const USBDescConfig& conf, int flags,
 	d->u.config.bMaxPower = conf.bMaxPower;
 	wTotalLength += bLength;
 
-	/* handle grouped interfaces if any */
 	for (auto& i : conf.if_groups)
 	{
 		rc = usb_desc_iface_group(i, flags,
@@ -120,7 +112,6 @@ int usb_desc_config(const USBDescConfig& conf, int flags,
 		wTotalLength += rc;
 	}
 
-	/* handle normal (ungrouped / no IAD) interfaces if any */
 	for (auto& i : conf.ifs)
 	{
 		rc = usb_desc_iface(i, flags,
@@ -142,7 +133,6 @@ int usb_desc_iface_group(const USBDescIfaceAssoc& iad, int flags,
 {
 	int pos = 0;
 
-	/* handle interface association descriptor */
 	constexpr u8 bLength = 0x08;
 
 	if (len < bLength)
@@ -160,7 +150,6 @@ int usb_desc_iface_group(const USBDescIfaceAssoc& iad, int flags,
 	dest[0x07] = iad.iFunction;
 	pos += bLength;
 
-	/* handle associated interfaces in this group */
 	for (auto& i : iad.ifs)
 	{
 		int rc = usb_desc_iface(i, flags, dest + pos, len - pos);
@@ -298,7 +287,7 @@ static int usb_desc_cap_usb2_ext(const USBDesc* desc, u8* dest, size_t len)
 	d->bDescriptorType = USB_DT_DEVICE_CAPABILITY;
 	d->u.cap.bDevCapabilityType = USB_DEV_CAP_USB2_EXT;
 
-	d->u.cap.u.usb2_ext.bmAttributes_1 = (1 << 1); /* LPM */
+	d->u.cap.u.usb2_ext.bmAttributes_1 = (1 << 1);
 	d->u.cap.u.usb2_ext.bmAttributes_2 = 0;
 	d->u.cap.u.usb2_ext.bmAttributes_3 = 0;
 	d->u.cap.u.usb2_ext.bmAttributes_4 = 0;
@@ -473,7 +462,7 @@ int usb_desc_parse_config(const u8* data, int len, USBDescDevice& dev)
 									(d->u.endpoint.wMaxPacketSize_hi << 8);
 				ep.bInterval = d->u.endpoint.bInterval;
 
-				ep.is_audio = d->bLength == 0x9; /* has bRefresh + bSynchAddress */
+				ep.is_audio = d->bLength == 0x9;
 				if (ep.is_audio)
 				{
 					ep.bRefresh = d->u.endpoint.bRefresh;
@@ -485,7 +474,7 @@ int usb_desc_parse_config(const u8* data, int len, USBDescDevice& dev)
 			}
 			break;
 			case USB_DT_INTERFACE_ASSOC:
-				return -1; //TODO
+				return -1;
 				break;
 			case USB_DT_HID:
 			case USB_DT_CS_INTERFACE:
@@ -496,7 +485,7 @@ int usb_desc_parse_config(const u8* data, int len, USBDescDevice& dev)
 				iface->descs.push_back({d->bLength, data + pos});
 			}
 			break;
-			case 0x00: // terminator, if any
+			case 0x00:
 			case USB_DT_OTHER_SPEED_CONFIG:
 			case USB_DT_DEBUG:
 				break;
@@ -510,8 +499,6 @@ int usb_desc_parse_config(const u8* data, int len, USBDescDevice& dev)
 	}
 	return pos;
 }
-
-/* ------------------------------------------------------------------ */
 
 static void usb_desc_ep_init(USBDevice* dev)
 {
@@ -571,7 +558,6 @@ static const USBDescIface* usb_desc_find_interface(USBDevice* dev,
 	return nullptr;
 }
 
-//static
 int usb_desc_set_interface(USBDevice* dev, int index, int value)
 {
 	const USBDescIface* iface;
@@ -595,7 +581,6 @@ int usb_desc_set_interface(USBDevice* dev, int index, int value)
 	return 0;
 }
 
-//static
 int usb_desc_set_config(USBDevice* dev, int value)
 {
 	int i;
@@ -618,9 +603,6 @@ int usb_desc_set_config(USBDevice* dev, int value)
 				assert(dev->ninterfaces <= USB_MAX_INTERFACES);
 			}
 		}
-		/*if (i < dev->device->bNumConfigurations) {
-			return -1;
-		}*/
 	}
 
 	for (i = 0; i < dev->ninterfaces; i++)
@@ -647,12 +629,6 @@ static void usb_desc_setdefaults(USBDevice* dev)
 		case USB_SPEED_FULL:
 			dev->device = desc->full;
 			break;
-			/*case USB_SPEED_HIGH:
-		dev->device = desc->high;
-		break;
-	case USB_SPEED_SUPER:
-		dev->device = desc->super;
-		break;*/
 		default:
 			assert(false && "Unsupported speed");
 	}
@@ -690,7 +666,6 @@ int usb_desc_string(USBDevice* dev, int index, u8* dest, size_t len)
 
 	if (index == 0)
 	{
-		/* language ids */
 		dest[0] = 4;
 		dest[1] = USB_DT_STRING;
 		dest[2] = 0x09;
@@ -747,7 +722,6 @@ int usb_desc_get_descriptor(USBDevice* dev, USBPacket* p,
 	{
 		case USB_DT_DEVICE:
 			ret = usb_desc_device(&desc->id, dev->device, msos, buf, sizeof(buf));
-			//trace_usb_desc_device(dev->addr, len, ret);
 			break;
 		case USB_DT_CONFIG:
 			if (index < dev->device->bNumConfigurations)
@@ -755,19 +729,16 @@ int usb_desc_get_descriptor(USBDevice* dev, USBPacket* p,
 				ret = usb_desc_config(dev->device->confs[index], flags,
 									  buf, sizeof(buf));
 			}
-			//trace_usb_desc_config(dev->addr, index, len, ret);
 			break;
 		case USB_DT_STRING:
 			memset(buf, 0, sizeof(buf));
 			ret = usb_desc_string(dev, index, buf, sizeof(buf));
-			//trace_usb_desc_string(dev->addr, index, len, ret);
 			break;
 		case USB_DT_DEVICE_QUALIFIER:
 			if (other_dev != nullptr)
 			{
 				ret = usb_desc_device_qualifier(other_dev, buf, sizeof(buf));
 			}
-			//trace_usb_desc_device_qualifier(dev->addr, len, ret);
 			break;
 		case USB_DT_OTHER_SPEED_CONFIG:
 			if (other_dev != nullptr && index < other_dev->bNumConfigurations)
@@ -776,15 +747,12 @@ int usb_desc_get_descriptor(USBDevice* dev, USBPacket* p,
 									  buf, sizeof(buf));
 				buf[0x01] = USB_DT_OTHER_SPEED_CONFIG;
 			}
-			//trace_usb_desc_other_speed_config(dev->addr, index, len, ret);
 			break;
 		case USB_DT_BOS:
 			ret = usb_desc_bos(desc, buf, sizeof(buf));
-			//trace_usb_desc_bos(dev->addr, len, ret);
 			break;
 
 		case USB_DT_DEBUG:
-			/* ignore silently */
 			break;
 
 		default:
@@ -814,7 +782,6 @@ int usb_desc_handle_control(USBDevice* dev, USBPacket* p,
 	{
 		case DeviceOutRequest | USB_REQ_SET_ADDRESS:
 			dev->addr = value;
-			//trace_usb_set_addr(dev->addr);
 			ret = 0;
 			break;
 
@@ -823,17 +790,12 @@ int usb_desc_handle_control(USBDevice* dev, USBPacket* p,
 			break;
 
 		case DeviceRequest | USB_REQ_GET_CONFIGURATION:
-			/*
-		 * 9.4.2: 0 should be returned if the device is unconfigured, otherwise
-		 * the non zero value of bConfigurationValue.
-		 */
 			data[0] = dev->config ? dev->config->bConfigurationValue : 0;
 			p->actual_length = 1;
 			ret = 0;
 			break;
 		case DeviceOutRequest | USB_REQ_SET_CONFIGURATION:
 			ret = usb_desc_set_config(dev, value);
-			//trace_usb_set_config(dev->addr, value, ret);
 			break;
 
 		case DeviceRequest | USB_REQ_GET_STATUS:
@@ -843,12 +805,6 @@ int usb_desc_handle_control(USBDevice* dev, USBPacket* p,
 											  &dev->device->confs[0];
 
 			data[0] = 0;
-			/*
-		 * Default state: Device behavior when this request is received while
-		 *                the device is in the Default state is not specified.
-		 * We return the same value that a configured device would return if
-		 * it used the first configuration.
-		 */
 			if (config->bmAttributes & USB_CFG_ATT_SELFPOWER)
 			{
 				data[0] |= 1 << USB_DEVICE_SELF_POWERED;
@@ -868,7 +824,6 @@ int usb_desc_handle_control(USBDevice* dev, USBPacket* p,
 				dev->remote_wakeup = 0;
 				ret = 0;
 			}
-			//trace_usb_clear_device_feature(dev->addr, value, ret);
 			break;
 		case DeviceOutRequest | USB_REQ_SET_FEATURE:
 			if (value == USB_DEVICE_REMOTE_WAKEUP)
@@ -876,16 +831,8 @@ int usb_desc_handle_control(USBDevice* dev, USBPacket* p,
 				dev->remote_wakeup = 1;
 				ret = 0;
 			}
-			//trace_usb_set_device_feature(dev->addr, value, ret);
 			break;
 
-			/*    case DeviceOutRequest | USB_REQ_SET_SEL:
-	case DeviceOutRequest | USB_REQ_SET_ISOCH_DELAY:
-		if (dev->speed == USB_SPEED_SUPER) {
-			ret = 0;
-		}
-		break;
-*/
 		case InterfaceRequest | USB_REQ_GET_INTERFACE:
 			if (index < 0 || index >= dev->ninterfaces)
 			{
@@ -897,7 +844,6 @@ int usb_desc_handle_control(USBDevice* dev, USBPacket* p,
 			break;
 		case InterfaceOutRequest | USB_REQ_SET_INTERFACE:
 			ret = usb_desc_set_interface(dev, index, value);
-			//trace_usb_set_interface(dev->addr, index, value, ret);
 			break;
 	}
 	return ret;

@@ -10,9 +10,6 @@
 #define xMOV64(regX, loc)  xMOVUPS (regX, loc)
 #define xMOV128(regX, loc) xMOVUPS (regX, loc)
 
-// =====================================================================================================
-//  VifUnpackSSE_Base Section
-// =====================================================================================================
 VifUnpackSSE_Base::VifUnpackSSE_Base()
 	: usn(false)
 	, doMask(false)
@@ -131,11 +128,6 @@ void VifUnpackSSE_Base::xUPK_S_8() const
 	}
 }
 
-// The V2 + V3 unpacks have freaky behaviour, the manual claims "indeterminate".
-// After testing on the PS2, it's very much determinate in 99% of cases
-// and games like Lemmings, And1 Streetball rely on this data to be like this!
-// I have commented after each shuffle to show what data is going where - Ref
-
 void VifUnpackSSE_Base::xUPK_V2_32() const
 {
 	if (UnpkLoopIteration == 0)
@@ -145,18 +137,18 @@ void VifUnpackSSE_Base::xUPK_V2_32() const
 		if (IsInputMasked())
 			return;
 
-		xPSHUF.D(destReg, workReg, 0x44); //v1v0v1v0
+		xPSHUF.D(destReg, workReg, 0x44);
 		if (IsAligned)
-			xBLEND.PS(destReg, zeroReg, 0x8); //zero last word - tested on ps2
+			xBLEND.PS(destReg, zeroReg, 0x8);
 	}
 	else
 	{
 		if (IsInputMasked())
 			return;
 
-		xPSHUF.D(destReg, workReg, 0xEE); //v3v2v3v2
+		xPSHUF.D(destReg, workReg, 0xEE);
 		if (IsAligned)
-			xBLEND.PS(destReg, zeroReg, 0x8); //zero last word - tested on ps2
+			xBLEND.PS(destReg, zeroReg, 0x8);
 	}
 }
 
@@ -169,14 +161,14 @@ void VifUnpackSSE_Base::xUPK_V2_16() const
 		if (IsInputMasked())
 			return;
 
-		xPSHUF.D(destReg, workReg, 0x44); //v1v0v1v0
+		xPSHUF.D(destReg, workReg, 0x44);
 	}
 	else
 	{
 		if (IsInputMasked())
 			return;
 
-		xPSHUF.D(destReg, workReg, 0xEE); //v3v2v3v2
+		xPSHUF.D(destReg, workReg, 0xEE);
 	}
 }
 
@@ -189,14 +181,14 @@ void VifUnpackSSE_Base::xUPK_V2_8() const
 		if (IsInputMasked())
 			return;
 
-		xPSHUF.D(destReg, workReg, 0x44); //v1v0v1v0
+		xPSHUF.D(destReg, workReg, 0x44);
 	}
 	else
 	{
 		if (IsInputMasked())
 			return;
 
-		xPSHUF.D(destReg, workReg, 0xEE); //v3v2v3v2
+		xPSHUF.D(destReg, workReg, 0xEE);
 	}
 }
 
@@ -207,7 +199,7 @@ void VifUnpackSSE_Base::xUPK_V3_32() const
 
 	xMOV128(destReg, ptr128[srcIndirect]);
 	if (UnpkLoopIteration != IsAligned)
-		xBLEND.PS(destReg, zeroReg, 0x8); //zero last word - tested on ps2
+		xBLEND.PS(destReg, zeroReg, 0x8);
 }
 
 void VifUnpackSSE_Base::xUPK_V3_16() const
@@ -217,14 +209,10 @@ void VifUnpackSSE_Base::xUPK_V3_16() const
 
 	xPMOVXX16(destReg);
 
-	//With V3-16, it takes the first vector from the next position as the W vector
-	//However - IF the end of this iteration of the unpack falls on a quadword boundary, W becomes 0
-	//IsAligned is the position through the current QW in the vif packet
-	//Iteration counts where we are in the packet.
 	const int result = (((UnpkLoopIteration / 4) + 1 + (4 - IsAligned)) & 0x3);
 
 	if ((UnpkLoopIteration & 0x1) == 0 && result == 0)
-		xBLEND.PS(destReg, zeroReg, 0x8); //zero last word - tested on ps2
+		xBLEND.PS(destReg, zeroReg, 0x8);
 }
 
 void VifUnpackSSE_Base::xUPK_V3_8() const
@@ -234,7 +222,7 @@ void VifUnpackSSE_Base::xUPK_V3_8() const
 
 	xPMOVXX8(destReg);
 	if (UnpkLoopIteration != IsAligned)
-		xBLEND.PS(destReg, zeroReg, 0x8); //zero last word - tested on ps2
+		xBLEND.PS(destReg, zeroReg, 0x8);
 }
 
 void VifUnpackSSE_Base::xUPK_V4_32() const
@@ -268,19 +256,19 @@ void VifUnpackSSE_Base::xUPK_V4_5() const
 
 	xMOV16      (workReg, ptr32[srcIndirect]);
 	xPSHUF.D    (workReg, workReg, _v0);
-	xPSLL.D     (workReg, 3);           // ABG|R5.000
-	xMOVAPS     (destReg, workReg);     // x|x|x|R
-	xPSRL.D     (workReg, 8);           // ABG
-	xPSLL.D     (workReg, 3);           // AB|G5.000
-	mVUmergeRegs(destReg, workReg, 0x4);// x|x|G|R
-	xPSRL.D     (workReg, 8);           // AB
-	xPSLL.D     (workReg, 3);           // A|B5.000
-	mVUmergeRegs(destReg, workReg, 0x2);// x|B|G|R
-	xPSRL.D     (workReg, 8);           // A
-	xPSLL.D     (workReg, 7);           // A.0000000
-	mVUmergeRegs(destReg, workReg, 0x1);// A|B|G|R
-	xPSLL.D     (destReg, 24); // can optimize to
-	xPSRL.D     (destReg, 24); // single AND...
+	xPSLL.D     (workReg, 3);
+	xMOVAPS     (destReg, workReg);
+	xPSRL.D     (workReg, 8);
+	xPSLL.D     (workReg, 3);
+	mVUmergeRegs(destReg, workReg, 0x4);
+	xPSRL.D     (workReg, 8);
+	xPSLL.D     (workReg, 3);
+	mVUmergeRegs(destReg, workReg, 0x2);
+	xPSRL.D     (workReg, 8);
+	xPSLL.D     (workReg, 7);
+	mVUmergeRegs(destReg, workReg, 0x1);
+	xPSLL.D     (destReg, 24);
+	xPSRL.D     (destReg, 24);
 }
 
 void VifUnpackSSE_Base::xUnpack(int upknum) const
@@ -307,16 +295,10 @@ void VifUnpackSSE_Base::xUnpack(int upknum) const
 		case 3:
 		case 7:
 		case 11:
-			// TODO: Needs hardware testing.
-			// Dynasty Warriors 5: Empire  - Player 2 chose a character menu.
 			Console.Warning("Vpu/Vif: Invalid Unpack %d", upknum);
 			break;
 	}
 }
-
-// =====================================================================================================
-//  VifUnpackSSE_Simple
-// =====================================================================================================
 
 VifUnpackSSE_Simple::VifUnpackSSE_Simple(bool usn_, bool domask_, int curCycle_)
 {
@@ -339,7 +321,6 @@ void VifUnpackSSE_Simple::doMaskWrite(const xRegisterSSE& regX) const
 	xMOVAPS(ptr[dstIndirect], regX);
 }
 
-// ecx = dest, edx = src
 static void nVifGen(int usn, int mask, int curCycle)
 {
 	int usnpart  = usn * 2 * 16;

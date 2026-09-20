@@ -50,20 +50,13 @@ namespace Sessions
 				return std::nullopt;
 			}
 			case TCP_State::SentSYN_ACK:
-				// Don't read data untill PS2 ACKs connection
 				return std::nullopt;
 			case TCP_State::CloseCompletedFlushBuffer:
-				/*
-				 * When TCP connection is closed by the server
-				 * the server is the last to send a packet
-				 * so the event must be raised here
-				 */
 				state = TCP_State::CloseCompleted;
 				RaiseEventConnectionClosed();
 				return std::nullopt;
 			case TCP_State::Connected:
 			case TCP_State::Closing_ClosedByPS2:
-				// Only accept data in above two states
 				break;
 			default:
 				return std::nullopt;
@@ -72,8 +65,6 @@ namespace Sessions
 		if (ShouldWaitForAck())
 			return std::nullopt;
 
-		// Note, windowSize will be updated before _ReceivedAckNumber, potential race condition
-		// in practice, we just get a smaller or -ve maxSize
 		const u32 outstanding = GetOutstandingSequenceLength();
 
 		int maxSize = 0;
@@ -88,8 +79,6 @@ namespace Sessions
 			int err = 0;
 			int recived;
 
-			// FIONREAD uses unsigned long on windows and int on linux
-			// Zero init so we don't have bad data on any unused bytes
 			unsigned long available = 0;
 #ifdef _WIN32
 			err = ioctlsocket(client, FIONREAD, &available);
@@ -115,17 +104,12 @@ namespace Sessions
 #ifdef _WIN32
 					case WSAEINVAL:
 					case WSAESHUTDOWN:
-						// In theory, this should only occur when the PS2 has RST the connection
-						// and the call to TCPSession.Recv() occurs at just the right time.
-						//Console.WriteLn("DEV9: TCP: Recv() on shutdown socket");
 						return std::nullopt;
 					case WSAEWOULDBLOCK:
 						return std::nullopt;
 #elif defined(__POSIX__)
 					case EINVAL:
 					case ESHUTDOWN:
-						// See WSAESHUTDOWN
-						//Console.WriteLn("DEV9: TCP: Recv() on shutdown socket");
 						return std::nullopt;
 					case EWOULDBLOCK:
 						return std::nullopt;
@@ -138,7 +122,6 @@ namespace Sessions
 						return std::nullopt;
 				}
 
-				// Server closed the Socket
 				if (recived == 0)
 				{
 					const int result = shutdown(client, SD_RECEIVE);
@@ -175,7 +158,6 @@ namespace Sessions
 				iRet->SetPSH(true);
 
 				myNumberACKed.store(false);
-				//DevCon.WriteLn("DEV9: TCP: myNumberACKed reset");
 				return ReceivedPayload{destIP, std::move(iRet)};
 			}
 		}
@@ -190,7 +172,6 @@ namespace Sessions
 			state = TCP_State::SentSYN_ACK;
 
 			std::unique_ptr<TCP_Packet> ret = std::make_unique<TCP_Packet>(new PayloadData(0));
-			// Send packet to say we connected
 			ret->sourcePort = destPort;
 			ret->destinationPort = srcPort;
 
@@ -242,7 +223,6 @@ namespace Sessions
 
 	ReceivedPayload TCP_Session::CloseByPS2Stage3()
 	{
-		//Console.WriteLn("DEV9: TCP: Remote has closed connection after PS2");
 
 		std::unique_ptr ret = CreateBasePacket();
 		IncrementMyNumber(1);
@@ -251,7 +231,6 @@ namespace Sessions
 		ret->SetFIN(true);
 
 		myNumberACKed.store(false);
-		//DevCon.WriteLn("myNumberACKed reset");
 
 		state = TCP_State::Closing_ClosedByPS2ThenRemote_WaitingForAck;
 		return ReceivedPayload{destIP, std::move(ret)};
@@ -259,7 +238,6 @@ namespace Sessions
 
 	ReceivedPayload TCP_Session::CloseByRemoteStage1()
 	{
-		//Console.WriteLn("DEV9: TCP: Remote has closed connection");
 
 		std::unique_ptr<TCP_Packet> ret = CreateBasePacket();
 		IncrementMyNumber(1);
@@ -268,9 +246,8 @@ namespace Sessions
 		ret->SetFIN(true);
 
 		myNumberACKed.store(false);
-		//DevCon.WriteLn("myNumberACKed reset");
 
 		state = TCP_State::Closing_ClosedByRemote;
 		return ReceivedPayload{destIP, std::move(ret)};
 	}
-} // namespace Sessions
+}

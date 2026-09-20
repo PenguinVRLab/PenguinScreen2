@@ -105,7 +105,6 @@ void pxOnAssertFail(const char* file, int line, const char* func, const char* ms
 	}
 	else if (result != IDIGNORE)
 	{
-		// try to save a crash dump before exiting
 		CrashHandler::WriteDumpForCaller();
 		TerminateProcess(GetCurrentProcess(), 0xBAADC0DE);
 	}

@@ -35,22 +35,22 @@ void sioSetGameSerial( const std::string& serial ) {
 
 std::tuple<u32, u32> sioConvertPadToPortAndSlot(u32 index)
 {
-	if (index > 4) // [5,6,7]
-		return std::make_tuple(1, index - 4); // 2B,2C,2D
-	else if (index > 1) // [2,3,4]
-		return std::make_tuple(0, index - 1); // 1B,1C,1D
-	else // [0,1]
-		return std::make_tuple(index, 0); // 1A,2A
+	if (index > 4)
+		return std::make_tuple(1, index - 4);
+	else if (index > 1)
+		return std::make_tuple(0, index - 1);
+	else
+		return std::make_tuple(index, 0);
 }
 
 u32 sioConvertPortAndSlotToPad(u32 port, u32 slot)
 {
 	if (slot == 0)
 		return port;
-	else if (port == 0) // slot=[0,1]
-		return slot + 1; // 2,3,4
+	else if (port == 0)
+		return slot + 1;
 	else
-		return slot + 4; // 5,6,7
+		return slot + 4;
 }
 
 bool sioPadIsMultitapSlot(u32 index)
@@ -89,8 +89,8 @@ void AutoEject::Set(size_t port, size_t slot)
 {
 	if (mcds[port][slot].autoEjectTicks == 0)
 	{
-		mcds[port][slot].autoEjectTicks = 60; // 60 frames is enough.
-		mcds[port][slot].term = Terminator::NOT_READY; // Reset terminator to NOT_READY (0x66), forces the PS2 to recheck the memcard.
+		mcds[port][slot].autoEjectTicks = 60;
+		mcds[port][slot].term = Terminator::NOT_READY;
 	}
 }
 
@@ -124,9 +124,6 @@ void AutoEject::ClearAll()
 	}
 }
 
-// Decremented once per frame if nonzero, indicates how many more frames must pass before
-// memcards are considered "no longer being written to". Used as a way to detect if it is
-// unsafe to shutdown the VM due to memcard access.
 static std::atomic_uint32_t currentBusyTicks = 0;
 
 uint32_t sioLastFrameMcdBusy = 0;

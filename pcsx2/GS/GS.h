@@ -51,7 +51,6 @@ struct GSAdapterInfo
 
 class SmallStringBase;
 
-// Returns the ID for the specified function, otherwise -1.
 s16 GSLookupGetSkipCountFunctionId(const std::string_view name);
 s16 GSLookupBeforeDrawFunctionId(const std::string_view name);
 s16 GSLookupMoveHandlerFunctionId(const std::string_view name);
@@ -100,8 +99,6 @@ void GSgetStats(SmallStringBase& info);
 void GSgetMemoryStats(SmallStringBase& info);
 void GSgetTitleStats(std::string& info);
 
-/// Converts window position to normalized display coordinates (0..1). A value less than 0 or greater than 1 is
-/// returned if the position lies outside the display area.
 void GSTranslateWindowToDisplayCoordinates(float window_x, float window_y, float* display_x, float* display_y);
 
 void GSUpdateConfig(const Pcsx2Config::GSOptions& new_config);
@@ -112,23 +109,16 @@ void GSJoinSnapshotThreads();
 
 namespace Host
 {
-	/// Called when the GS is creating a render device.
-	/// This could also be fullscreen transition.
 	std::optional<WindowInfo> AcquireRenderWindow(bool recreate_window);
 
-	/// Called before drawing the OSD and other display elements.
 	void BeginPresentFrame();
 
-	/// Called when the GS is finished with a render window.
 	void ReleaseRenderWindow();
 
-	/// Returns true if the hosting application is currently fullscreen.
 	bool IsFullscreen();
 
-	/// Alters fullscreen state of hosting application.
 	void SetFullscreen(bool enabled);
 
-	/// Called when video capture starts or stops. Called on the MTGS thread.
 	void OnCaptureStarted(const std::string& filename);
 	void OnCaptureStopped();
 }

@@ -83,16 +83,3 @@ bool InputRecordingControls::isRecording() const
 }
 
 
-// TODO - Once there is GS Capture support again
-//void InputRecordingControls::StopCapture() const
-//{
-//	// TODO - Vaser - Is capturing supported in Qt yet - Check
-//	/*if (MainEmuFrame* mainFrame = GetMainFramePtr())
-//	{
-//		if (mainFrame->IsCapturing())
-//		{
-//			mainFrame->VideoCaptureToggle();
-//			inputRec::log("Capture completed");
-//		}
-//	}*/
-//}

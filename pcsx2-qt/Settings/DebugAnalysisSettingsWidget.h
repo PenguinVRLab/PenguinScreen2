@@ -15,17 +15,10 @@ class DebugAnalysisSettingsWidget : public QWidget
 	Q_OBJECT
 
 public:
-	// Create a widget that will discard any settings changed after it is
-	// closed, for use in the dialog opened by the "Analyze" button.
 	DebugAnalysisSettingsWidget(QWidget* parent = nullptr);
 
-	// Create a widget that will write back any settings changed to the config
-	// system, for use in the settings dialog.
 	DebugAnalysisSettingsWidget(SettingsWindow* dialog, QWidget* parent = nullptr);
 
-	// Read all the analysis settings from the widget tree and store them in the
-	// output object. This is used by the analysis options dialog to start an
-	// analysis run manually.
 	void parseSettingsFromWidgets(Pcsx2Config::DebugAnalysisOptions& output);
 
 protected:

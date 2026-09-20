@@ -163,7 +163,6 @@ void ControllerBindingWidget::onTypeChanged()
 
 	updateHeaderToolButtons();
 
-	// no need to do this on first init, only changes
 	if (!is_initializing)
 		m_dialog->updateListDescription(m_port_number, this);
 }
@@ -214,7 +213,6 @@ void ControllerBindingWidget::onAutomaticBindingClicked()
 
 	for (const QPair<QString, QString>& dev : m_dialog->getDeviceList())
 	{
-		// we set it as data, because the device list could get invalidated while the menu is up
 		QAction* action;
 		if (dev.first.compare(dev.second, Qt::CaseInsensitive) == 0)
 			action = menu.addAction(dev.first);
@@ -236,9 +234,7 @@ void ControllerBindingWidget::onAutomaticBindingClicked()
 
 void ControllerBindingWidget::onClearBindingsClicked()
 {
-	//: Binding: A pair of (host button, target button); Mapping: A list of bindings covering an entire controller. These are two different things (which might be the same in your language, please make sure to verify this).
 	if (QMessageBox::question(QtUtils::GetRootWidget(this), tr("Clear Bindings"),
-			//: Binding: A pair of (host button, target button); Mapping: A list of bindings covering an entire controller. These are two different things (which might be the same in your language, please make sure to verify this).
 			tr("Are you sure you want to clear all bindings for this controller? This action cannot be undone.")) != QMessageBox::Yes)
 	{
 		return;
@@ -258,7 +254,6 @@ void ControllerBindingWidget::onClearBindingsClicked()
 		QtHost::SaveGameSettings(m_dialog->getProfileSettingsInterface(), false);
 	}
 
-	// force a refresh after clearing
 	g_emu_thread->applySettings();
 	onTypeChanged();
 }
@@ -293,15 +288,12 @@ void ControllerBindingWidget::doDeviceAutomaticBinding(const QString& device)
 		}
 	}
 
-	// force a refresh after mapping
 	if (result)
 	{
 		g_emu_thread->applySettings();
 		onTypeChanged();
 	}
 }
-
-//////////////////////////////////////////////////////////////////////////
 
 ControllerMacroWidget::ControllerMacroWidget(ControllerBindingWidget* parent)
 	: QWidget(parent)
@@ -328,7 +320,6 @@ ControllerMacroWidget::~ControllerMacroWidget() = default;
 
 void ControllerMacroWidget::updateListItem(u32 index)
 {
-	//: This is the full text that appears in each option of the 16 available macros, and reads like this:\n\nMacro 1\nNot Configured/Buttons configured
 	m_ui.portList->item(static_cast<int>(index))->setText(tr("Macro %1\n%2").arg(index + 1).arg(m_macros[index]->getSummary()));
 }
 
@@ -351,8 +342,6 @@ void ControllerMacroWidget::createWidgets(ControllerBindingWidget* parent)
 	connect(m_ui.portList, &QListWidget::currentRowChanged, m_ui.container, &QStackedWidget::setCurrentIndex);
 }
 
-//////////////////////////////////////////////////////////////////////////
-
 ControllerMacroEditWidget::ControllerMacroEditWidget(ControllerMacroWidget* parent, ControllerBindingWidget* bwidget, u32 index)
 	: QWidget(parent)
 	, m_parent(parent)
@@ -366,11 +355,9 @@ ControllerMacroEditWidget::ControllerMacroEditWidget(ControllerMacroWidget* pare
 	const Pad::ControllerInfo* cinfo = Pad::GetControllerInfo(m_bwidget->getControllerType());
 	if (!cinfo)
 	{
-		// Shouldn't ever happen.
 		return;
 	}
 
-	// load binds (single string joined by &)
 	const std::string binds_string(dialog->getStringValue(section.c_str(), TinyString::from_format("Macro{}Binds", index + 1u), ""));
 	const std::vector<std::string_view> buttons_split(StringUtil::SplitString(binds_string, '&', true));
 
@@ -386,7 +373,6 @@ ControllerMacroEditWidget::ControllerMacroEditWidget(ControllerMacroWidget* pare
 		}
 	}
 
-	// populate list view
 	for (const InputBindingInfo& bi : cinfo->bindings)
 	{
 		if (bi.bind_type == InputBindingInfo::Type::Motor)
@@ -500,7 +486,6 @@ void ControllerMacroEditWidget::updateBinds()
 
 		if (!item)
 		{
-			// shouldn't happen
 			continue;
 		}
 
@@ -529,8 +514,6 @@ void ControllerMacroEditWidget::updateBinds()
 
 	m_parent->updateListItem(m_index);
 }
-
-//////////////////////////////////////////////////////////////////////////
 
 ControllerCustomSettingsWidget::ControllerCustomSettingsWidget(std::span<const SettingInfo> settings, std::string config_section,
 	std::string config_prefix, const char* translation_ctx, ControllerSettingsWindow* dialog, QWidget* parent_widget)
@@ -836,8 +819,6 @@ void ControllerCustomSettingsWidget::restoreDefaults()
 }
 
 
-//////////////////////////////////////////////////////////////////////////
-
 ControllerBindingWidget_Base::ControllerBindingWidget_Base(ControllerBindingWidget* parent)
 	: QWidget(parent)
 {
@@ -1011,8 +992,6 @@ ControllerBindingWidget_Base* ControllerBindingWidget_Popn::createInstance(Contr
 	return new ControllerBindingWidget_Popn(parent);
 }
 
-//////////////////////////////////////////////////////////////////////////
-
 USBDeviceWidget::USBDeviceWidget(QWidget* parent, ControllerSettingsWindow* dialog, u32 port)
 	: QWidget(parent)
 	, m_dialog(dialog)
@@ -1041,26 +1020,26 @@ USBDeviceWidget::~USBDeviceWidget() = default;
 QIcon USBDeviceWidget::getIcon() const
 {
 	static constexpr const char* icons[][2] = {
-		{"Pad", "wheel-line"}, // Wheel Device
-		{"Msd", "msd-line"}, // Mass Storage Device
-		{"singstar", "singstar-line"}, // Singstar
-		{"logitech_usbmic", "mic-line"}, // Logitech USB Mic
-		{"headset", "headset-line"}, // Logitech Headset Mic
-		{"hidkbd", "keyboard-2-line"}, // HID Keyboard
-		{"hidmouse", "mouse-line"}, // HID Mouse
-		{"RBDrumKit", "drum-line"}, // Rock Band Drum Kit
-		{"BuzzDevice", "buzz-controller-line"}, // Buzz Controller
-		{"TranceVibrator", "trance-vibrator-line"}, // Trance Vibrator
-		{"webcam", "eyetoy-line"}, // EyeToy
-		{"beatmania", "keyboard-2-line"}, // BeatMania Da Da Da!! (Konami Keyboard)
-		{"seamic", "seamic-line"}, // SEGA Seamic
-		{"printer", "printer-line"}, // Printer
-		{"Keyboardmania", "keyboardmania-line"}, // KeyboardMania
-		{"guncon2", "guncon2-line"}, // GunCon 2
-		{"DJTurntable", "dj-hero-line"}, // DJ Hero TurnTable
-		{"Gametrak", "gametrak-line"}, // Gametrak Device
-		{"RealPlay", "realplay-sphere-line"}, // RealPlay Device
-		{"TrainController", "train-line"} // Train Controller
+		{"Pad", "wheel-line"},
+		{"Msd", "msd-line"},
+		{"singstar", "singstar-line"},
+		{"logitech_usbmic", "mic-line"},
+		{"headset", "headset-line"},
+		{"hidkbd", "keyboard-2-line"},
+		{"hidmouse", "mouse-line"},
+		{"RBDrumKit", "drum-line"},
+		{"BuzzDevice", "buzz-controller-line"},
+		{"TranceVibrator", "trance-vibrator-line"},
+		{"webcam", "eyetoy-line"},
+		{"beatmania", "keyboard-2-line"},
+		{"seamic", "seamic-line"},
+		{"printer", "printer-line"},
+		{"Keyboardmania", "keyboardmania-line"},
+		{"guncon2", "guncon2-line"},
+		{"DJTurntable", "dj-hero-line"},
+		{"Gametrak", "gametrak-line"},
+		{"RealPlay", "realplay-sphere-line"},
+		{"TrainController", "train-line"}
 	};
 
 	for (size_t i = 0; i < std::size(icons); i++)
@@ -1181,7 +1160,6 @@ void USBDeviceWidget::onAutomaticBindingClicked()
 
 	for (const QPair<QString, QString>& dev : m_dialog->getDeviceList())
 	{
-		// we set it as data, because the device list could get invalidated while the menu is up
 		QAction* action;
 		if (dev.first.compare(dev.second, Qt::CaseInsensitive) == 0)
 			action = menu.addAction(dev.first);
@@ -1223,7 +1201,6 @@ void USBDeviceWidget::onClearBindingsClicked()
 		m_dialog->getProfileSettingsInterface()->Save();
 	}
 
-	// force a refresh after clearing
 	g_emu_thread->applySettings();
 	onTypeChanged();
 }
@@ -1258,15 +1235,12 @@ void USBDeviceWidget::doDeviceAutomaticBinding(const QString& device)
 		}
 	}
 
-	// force a refresh after mapping
 	if (result)
 	{
 		g_emu_thread->applySettings();
 		onTypeChanged();
 	}
 }
-
-//////////////////////////////////////////////////////////////////////////
 
 USBBindingWidget::USBBindingWidget(USBDeviceWidget* parent)
 	: QWidget(parent)
@@ -1302,7 +1276,6 @@ void USBBindingWidget::createWidgets(std::span<const InputBindingInfo> bindings)
 	scrollarea->setFrameShape(QFrame::StyledPanel);
 	scrollarea->setFrameShadow(QFrame::Plain);
 
-	// We do axes and buttons separately, so we can figure out how many columns to use.
 	constexpr int NUM_AXIS_COLUMNS = 2;
 	int column = 0;
 	int row = 0;
@@ -1413,12 +1386,12 @@ USBBindingWidget* USBBindingWidget::createInstance(
 
 	if (type == "Pad")
 	{
-		if (subtype == 0) // Generic or Driving Force
+		if (subtype == 0)
 		{
 			Ui::USBBindingWidget_DrivingForce().setupUi(widget);
 			has_template = true;
 		}
-		else if (subtype == 3) // GT Force
+		else if (subtype == 3)
 		{
 			Ui::USBBindingWidget_GTForce().setupUi(widget);
 			has_template = true;

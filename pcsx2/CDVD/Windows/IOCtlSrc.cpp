@@ -11,7 +11,6 @@
 #include <ntddcdvd.h>
 #include <ntddcdrm.h>
 #include <errno.h>
-// "typedef ignored" warning will disappear once we move to the Windows 10 SDK.
 #pragma warning(push)
 #pragma warning(disable : 4091)
 #include <ntddscsi.h>
@@ -37,14 +36,11 @@ IOCtlSrc::~IOCtlSrc()
 	}
 }
 
-// If a new disc is inserted, ReadFile will fail unless the device is closed
-// and reopened.
 bool IOCtlSrc::Reopen(Error* error)
 {
 	if (m_device != INVALID_HANDLE_VALUE)
 		CloseHandle(m_device);
 
-	// SPTI only works if the device is opened with GENERIC_WRITE access.
 	m_device = CreateFileA(m_filename.c_str(), GENERIC_READ | GENERIC_WRITE,
 						  FILE_SHARE_READ, nullptr, OPEN_EXISTING,
 						  FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
@@ -55,7 +51,6 @@ bool IOCtlSrc::Reopen(Error* error)
 	}
 
 	DWORD unused;
-	// Required to read from layer 1 of Dual layer DVDs
 	DeviceIoControl(m_device, FSCTL_ALLOW_EXTENDED_DASD_IO, nullptr, 0, nullptr,
 					0, &unused, nullptr);
 
@@ -67,12 +62,6 @@ bool IOCtlSrc::Reopen(Error* error)
 
 void IOCtlSrc::SetSpindleSpeed(bool restore_defaults) const
 {
-	// IOCTL_CDROM_SET_SPEED issues a SET CD SPEED command. So 0xFFFF should be
-	// equivalent to "optimal performance".
-	// 1x DVD-ROM and CD-ROM speeds are respectively 1385 KB/s and 150KB/s.
-	// The PS2 can do 4x DVD-ROM and 24x CD-ROM speeds (5540KB/s and 3600KB/s).
-	// TODO: What speed? Performance seems smoother with a lower speed (less
-	// time required to get up to speed).
 	const USHORT speed = restore_defaults ? 0xFFFF : GetMediaType() >= 0 ? 5540 : 3600;
 	CDROM_SET_SPEED s{CdromSetSpeed, speed, speed, CdromDefaultRotation};
 
@@ -148,15 +137,11 @@ bool IOCtlSrc::ReadSectors2352(u32 sector, u32 count, u8* buffer) const
 		char sense_buffer[20];
 	} sptd{};
 
-	// READ CD command
 	sptd.info.Cdb[0] = 0xBE;
-	// Don't care about sector type.
 	sptd.info.Cdb[1] = 0;
-	// Number of sectors to read
 	sptd.info.Cdb[6] = 0;
 	sptd.info.Cdb[7] = 0;
 	sptd.info.Cdb[8] = 1;
-	// Sync + all headers + user data + EDC/ECC. Excludes C2 + subchannel
 	sptd.info.Cdb[9] = 0xF8;
 	sptd.info.Cdb[10] = 0;
 	sptd.info.Cdb[11] = 0;
@@ -167,8 +152,6 @@ bool IOCtlSrc::ReadSectors2352(u32 sector, u32 count, u8* buffer) const
 	sptd.info.SenseInfoOffset = offsetof(sptdinfo, sense_buffer);
 	sptd.info.TimeOutValue = 5;
 
-	// Read sectors one by one to avoid reading data from 2 tracks of different
-	// types in the same read (which will fail).
 	for (u32 n = 0; n < count; ++n)
 	{
 		u32 current_sector = sector + n;
@@ -200,18 +183,7 @@ bool IOCtlSrc::ReadSectors2352(u32 sector, u32 count, u8* buffer) const
 bool IOCtlSrc::ReadDVDInfo()
 {
 	DWORD unused;
-	// 4 bytes header + 18 bytes layer descriptor - Technically you only need
-	// to read 17 bytes of the layer descriptor since bytes 17-2047 is for
-	// media specific information. However, Windows requires you to read at
-	// least 18 bytes of the layer descriptor or else the ioctl will fail. The
-	// media specific information seems to be empty, so there's no point reading
-	// any more than that.
 
-	// UPDATE 15 Jan 2021
-	// Okay so some drives seem to have descriptors BIGGER than 22 bytes!
-	// This causes the read to fail with INVALID_PARAMETER.
-	// So lets just give it 32 bytes to play with, it seems happy enough with that.
-	// Refraction
 	std::array<u8, 32> buffer;
 	DVD_READ_STRUCTURE dvdrs{{}, DvdPhysicalDescriptor, 0, 0};
 
@@ -222,7 +194,7 @@ bool IOCtlSrc::ReadDVDInfo()
 		{
 			Console.Warning("IOCTL_DVD_READ_STRUCTURE not supported");
 		}
-		else if (GetLastError() != ERROR_UNRECOGNIZED_MEDIA) // ERROR_UNRECOGNIZED_MEDIA means probably a CD or no disc
+		else if (GetLastError() != ERROR_UNRECOGNIZED_MEDIA)
 		{
 			Console.Warning("IOCTL Unknown Error %d", GetLastError());
 		}
@@ -237,14 +209,12 @@ bool IOCtlSrc::ReadDVDInfo()
 
 	if (layer.NumberOfLayers == 0)
 	{
-		// Single layer
 		m_media_type = 0;
 		m_layer_break = 0;
 		m_sectors = end_sector - start_sector + 1;
 	}
 	else if (layer.TrackPath == 0)
 	{
-		// Dual layer, Parallel Track Path
 		dvdrs.LayerNumber = 1;
 		if (!DeviceIoControl(m_device, IOCTL_DVD_READ_STRUCTURE, &dvdrs, sizeof(dvdrs),
 							 buffer.data(), buffer.size(), &unused, nullptr))
@@ -258,7 +228,6 @@ bool IOCtlSrc::ReadDVDInfo()
 	}
 	else
 	{
-		// Dual layer, Opposite Track Path
 		u32 end_sector_layer0 = _byteswap_ulong(layer.EndLayerZeroSector);
 		m_media_type = 2;
 		m_layer_break = end_sector_layer0 - start_sector;
@@ -286,7 +255,6 @@ bool IOCtlSrc::ReadCDInfo()
 	for (size_t n = 0; n < track_count; ++n)
 	{
 		TRACK_DATA& track = toc.TrackData[n];
-		// Exclude the lead-out track descriptor.
 		if (track.TrackNumber == 0xAA)
 			continue;
 		u32 lba = (track.Address[1] << 16) + (track.Address[2] << 8) + track.Address[3];

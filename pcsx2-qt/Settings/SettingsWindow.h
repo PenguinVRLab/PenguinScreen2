@@ -83,13 +83,11 @@ public:
 	QString getCategory() const;
 	void setCategory(const char* category);
 
-	// Helper functions for reading effective setting values (from game -> global settings).
 	bool getEffectiveBoolValue(const char* section, const char* key, bool default_value) const;
 	int getEffectiveIntValue(const char* section, const char* key, int default_value) const;
 	float getEffectiveFloatValue(const char* section, const char* key, float default_value) const;
 	std::string getEffectiveStringValue(const char* section, const char* key, const char* default_value) const;
 
-	// Helper functions for reading setting values for this layer (game settings or global).
 	std::optional<bool> getBoolValue(const char* section, const char* key, std::optional<bool> default_value) const;
 	std::optional<int> getIntValue(const char* section, const char* key, std::optional<int> default_value) const;
 	std::optional<float> getFloatValue(const char* section, const char* key, std::optional<float> default_value) const;

@@ -35,37 +35,9 @@
 using namespace PacketReader;
 using namespace PacketReader::IP;
 
-/*
- * The socket api and its sockaddr_* types are somewhat tricky to work with while trying to avoid UB.
- * The various sockaddr_* types may be larger or smaller than the base sockaddr type, preventing the use of std::bit_cast().
- * std::memcpy casting can also be non-trivial if we are casting a large sockaddr_* type to a smaller sockaddr.
- * Using a reinterpret_cast would violate strict aliasing/object lifetime rules.
- * However, what if we consider that any sockaddr pointer is pre-aliased to an object already in the required type,
- * we can then just reinterpret_cast to the assumed original type (and hope the C++ object model agrees with us).
- * 
- * This, still violates strict aliasing rules when passing a sockaddr ptr to be read from/written to,
- * as these will be library functions, we will consider that not my problem(TM).
- * One could even argue that an implementation would need to reinterpret_cast back the pointer anyway.
- * 
- * Another problem this assumption raises, is when we have to determine which sockaddr_* type an object is based on sa_family.
- * Doing this via the provided sockaddr pointer would violate strict aliasing rules with our assumption.
- * We have to std::memcpy to the base sockaddr to read this safely.
- * 
- * https://man7.org/linux/man-pages/man3/sockaddr.3type.html has a note stating the following;
- * "POSIX Issue 8 will fix this by requiring that implementations make sure that these structures can be safely used as they were designed."
- * Where they plan to sweep the issue under the rug.
- */
-
-/*
- * We assume that a sockaddr_* object is given to us pre-aliased via a sockaddr pointer, we need to read sa_family for the actual type.
- * Use std::memcpy to cast, but only copy enough to read the common initial layout, in case we somehow have a sockaddr_* smaller than sockaddr.
- * In practice, any smaller stucts are probably padded up, but that padding is not noted in current spec afaik.
- */
 u16 AdapterUtils::ReadAddressFamily(const sockaddr* unknownAddr)
 {
 	sockaddr addr;
-	// Structures are pointer-interconvertible with the first non-static field.
-	// However, On FreeBSD & Mac, sa_family is not the first member, sa_len is.
 	static_assert(std::is_standard_layout_v<sockaddr>);
 	std::memcpy(&addr, unknownAddr, offsetof(sockaddr, sa_family) + sizeof(addr.sa_family));
 	return addr.sa_family;
@@ -74,11 +46,7 @@ u16 AdapterUtils::ReadAddressFamily(const sockaddr* unknownAddr)
 #ifdef _WIN32
 AdapterUtils::Adapter* AdapterUtils::GetAllAdapters(AdapterBuffer* buffer, bool includeHidden)
 {
-	// It is recommend to pre-allocate enough space to be able to call GetAdaptersAddresses just once.
-	// Also provide extra space if we are including hidden adapters.
 	int neededSize = includeHidden ? 100000 : 50000;
-	// Each IP_ADAPTER_ADDRESSES will have pointers other structures which are also copied into this buffer.
-	// Subsequent IP_ADAPTER_ADDRESSES (accessed via .Next) are also not aligned to sizeof(IP_ADAPTER_ADDRESSES) boundaries.
 	std::unique_ptr<std::byte[]> adapterInfo = std::make_unique_for_overwrite<std::byte[]>(neededSize);
 	ULONG dwBufLen = neededSize;
 
@@ -109,7 +77,6 @@ AdapterUtils::Adapter* AdapterUtils::GetAllAdapters(AdapterBuffer* buffer, bool 
 
 	buffer->swap(adapterInfo);
 
-	// Trigger implicit object creation.
 	return std::launder(reinterpret_cast<PIP_ADAPTER_ADDRESSES>(buffer->get()));
 }
 bool AdapterUtils::GetAdapter(const std::string& name, Adapter* adapter, AdapterBuffer* buffer)
@@ -145,24 +112,17 @@ bool AdapterUtils::GetAdapterAuto(Adapter* adapter, AdapterBuffer* buffer)
 		if (pAdapter->IfType != IF_TYPE_SOFTWARE_LOOPBACK &&
 			pAdapter->OperStatus == IfOperStatusUp)
 		{
-			// Search for an adapter with;
-			// IPv4 Address,
-			// DNS,
-			// Gateway.
 
 			bool hasIPv4 = false;
 			bool hasDNS = false;
 			bool hasGateway = false;
 
-			// IPv4.
 			if (GetAdapterIP(pAdapter).has_value())
 				hasIPv4 = true;
 
-			// DNS.
 			if (GetDNS(pAdapter).size() > 0)
 				hasDNS = true;
 
-			// Gateway.
 			if (GetGateways(pAdapter).size() > 0)
 				hasGateway = true;
 
@@ -227,9 +187,6 @@ bool AdapterUtils::GetAdapterAuto(Adapter* adapter, AdapterBuffer* buffer)
 		if ((pAdapter->ifa_flags & IFF_LOOPBACK) == 0 &&
 			(pAdapter->ifa_flags & IFF_UP) != 0)
 		{
-			// Search for an adapter with;
-			// IPv4 Address,
-			// Gateway.
 
 			bool hasIPv4 = false;
 			bool hasGateway = false;
@@ -255,7 +212,6 @@ bool AdapterUtils::GetAdapterAuto(Adapter* adapter, AdapterBuffer* buffer)
 }
 #endif
 
-// AdapterMAC.
 #ifdef _WIN32
 std::optional<MAC_Address> AdapterUtils::GetAdapterMAC(const Adapter* adapter)
 {
@@ -293,7 +249,6 @@ std::optional<MAC_Address> AdapterUtils::GetAdapterMAC(const Adapter* adapter)
 		if (ReadAddressFamily(po->ifa_addr) != AF_LINK)
 			continue;
 
-		// We have a valid MAC address.
 		std::memcpy(&macAddr, LLADDR(reinterpret_cast<sockaddr_dl*>(po->ifa_addr)), sizeof(macAddr));
 		return macAddr;
 	}
@@ -333,7 +288,6 @@ std::optional<MAC_Address> AdapterUtils::GetAdapterMAC(const Adapter* adapter)
 }
 #endif
 
-// AdapterIP.
 #ifdef _WIN32
 std::optional<IP_Address> AdapterUtils::GetAdapterIP(const Adapter* adapter)
 {
@@ -369,7 +323,6 @@ std::optional<IP_Address> AdapterUtils::GetAdapterIP(const Adapter* adapter)
 }
 #endif
 
-// Gateways.
 #ifdef _WIN32
 std::vector<IP_Address> AdapterUtils::GetGateways(const Adapter* adapter)
 {
@@ -396,8 +349,6 @@ std::vector<IP_Address> AdapterUtils::GetGateways(const Adapter* adapter)
 #ifdef __linux__
 std::vector<IP_Address> AdapterUtils::GetGateways(const Adapter* adapter)
 {
-	// /proc/net/route contains some information about gateway addresses,
-	// and separates the information about by each interface.
 	if (adapter == nullptr)
 		return {};
 
@@ -416,8 +367,6 @@ std::vector<IP_Address> AdapterUtils::GetGateways(const Adapter* adapter)
 		routeLines.push_back(line);
 	route.close();
 
-	// Columns are as follows (first-line header):
-	// Iface  Destination  Gateway  Flags  RefCnt  Use  Metric  Mask  MTU  Window  IRTT.
 	for (size_t i = 1; i < routeLines.size(); i++)
 	{
 		const std::string line = routeLines[i];
@@ -425,11 +374,7 @@ std::vector<IP_Address> AdapterUtils::GetGateways(const Adapter* adapter)
 		{
 			const std::vector<std::string_view> split = StringUtil::SplitString(line, '\t', true);
 			const std::string gatewayIPHex{split[2]};
-			// stoi assumes hex values are unsigned, but tries to store it in a signed int,
-			// this results in a std::out_of_range exception for addresses ending in a number > 128.
-			// We don't have a stoui for (unsigned int), so instead use stoul for (unsigned long).
 			const u32 addressValue = static_cast<u32>(std::stoul(gatewayIPHex, 0, 16));
-			// Skip device routes without valid NextHop IP address.
 			if (addressValue != 0)
 				collection.push_back(std::bit_cast<IP_Address>(addressValue));
 		}
@@ -444,7 +389,6 @@ std::vector<IP_Address> AdapterUtils::GetGateways(const Adapter* adapter)
 
 	std::vector<IP_Address> collection;
 
-	// Get index for our adapter by matching the adapter name.
 	int ifIndex = -1;
 
 	struct if_nameindex* ifNI;
@@ -467,15 +411,12 @@ std::vector<IP_Address> AdapterUtils::GetGateways(const Adapter* adapter)
 	}
 	if_freenameindex(ifNI);
 
-	// Check if we found the adapter.
 	if (ifIndex == -1)
 	{
 		Console.Error("DEV9: Failed to get index for adapter");
 		return collection;
 	}
 
-	// Find the gateway by looking though the routing information.
-	// Ask only for AF_NET, so we can assume any given sockaddr is a sockaddr_in
 	int name[] = {CTL_NET, PF_ROUTE, 0, AF_INET, NET_RT_DUMP, 0};
 	size_t bufferLen = 0;
 
@@ -485,7 +426,6 @@ std::vector<IP_Address> AdapterUtils::GetGateways(const Adapter* adapter)
 		return collection;
 	}
 
-	// bufferLen is an estimate, double it to be safe.
 	bufferLen *= 2;
 	std::unique_ptr<std::byte[]> buffer = std::make_unique<std::byte[]>(bufferLen);
 
@@ -498,7 +438,6 @@ std::vector<IP_Address> AdapterUtils::GetGateways(const Adapter* adapter)
 	rt_msghdr* hdr;
 	for (size_t i = 0; i < bufferLen; i += hdr->rtm_msglen)
 	{
-		// Relying on implicit object creation for following code
 		hdr = reinterpret_cast<rt_msghdr*>(&buffer[i]);
 
 		if (hdr->rtm_flags & RTF_GATEWAY && hdr->rtm_addrs & RTA_GATEWAY && (hdr->rtm_index == ifIndex))
@@ -506,7 +445,6 @@ std::vector<IP_Address> AdapterUtils::GetGateways(const Adapter* adapter)
 			sockaddr_in* sockaddrs = reinterpret_cast<sockaddr_in*>(hdr + 1);
 			pxAssert(sockaddrs[RTAX_DST].sin_family == AF_INET);
 
-			// Default gateway has no destination address.
 			sockaddr_in* sockaddr = &sockaddrs[RTAX_DST];
 			if (sockaddr->sin_addr.s_addr != 0)
 				continue;
@@ -526,7 +464,6 @@ std::vector<IP_Address> AdapterUtils::GetGateways(Adapter* adapter)
 #endif
 #endif
 
-// DNS.
 #ifdef _WIN32
 std::vector<IP_Address> AdapterUtils::GetDNS(const Adapter* adapter)
 {
@@ -551,13 +488,7 @@ std::vector<IP_Address> AdapterUtils::GetDNS(const Adapter* adapter)
 #elif defined(__POSIX__)
 std::vector<IP_Address> AdapterUtils::GetDNS(const Adapter* adapter)
 {
-	// On Linux and OSX, DNS is system wide, not adapter specific, so we can ignore the adapter parameter.
 
-	// Parse /etc/resolv.conf for all of the "nameserver" entries.
-	// These are the DNS servers the machine is configured to use.
-	// On OSX, this file is not directly used by most processes for DNS
-	// queries/routing, but it is automatically generated instead, with
-	// the machine's DNS servers listed in it.
 	if (adapter == nullptr)
 		return {};
 

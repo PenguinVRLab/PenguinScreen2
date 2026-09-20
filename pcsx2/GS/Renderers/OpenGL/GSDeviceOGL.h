@@ -20,7 +20,6 @@ class GSDepthStencilOGL
 	bool m_depth_enable;
 	GLenum m_depth_func;
 	bool m_depth_mask;
-	// Note front face and back might be split but it seems they have same parameter configuration
 	bool m_stencil_enable;
 	GLenum m_stencil_func;
 	GLenum m_stencil_spass_dpass_op;
@@ -89,7 +88,6 @@ public:
 
 		if (m_stencil_enable)
 		{
-			// Note: here the mask control which bitplane is considered by the operation
 			if (GLState::stencil_func != m_stencil_func)
 			{
 				GLState::stencil_func = m_stencil_func;
@@ -153,15 +151,15 @@ private:
 
 	struct
 	{
-		bool buggy_pbo              : 1; ///< Avoid PBOs and just use glTextureSubImage2D with immediate data
-		bool broken_blend_coherency : 1; ///< Issue on Nvidia GPUs where some blend modes don't seem to be properly coherent, see comment in RenderHW
+		bool buggy_pbo              : 1;
+		bool broken_blend_coherency : 1;
 	} m_bugs;
 
 	bool m_disable_download_pbo = false;
 
-	GLuint m_fbo = 0; // frame buffer container
-	GLuint m_fbo_read = 0; // frame buffer container only for reading
-	GLuint m_fbo_write = 0;	// frame buffer container only for writing
+	GLuint m_fbo = 0;
+	GLuint m_fbo_read = 0;
+	GLuint m_fbo_write = 0;
 
 	std::unique_ptr<GLStreamBuffer> m_texture_upload_buffer;
 
@@ -181,20 +179,20 @@ private:
 
 	struct
 	{
-		GLProgram ps[2]; // program object
+		GLProgram ps[2];
 	} m_merge_obj;
 
 	struct
 	{
-		GLProgram ps[NUM_INTERLACE_SHADERS]; // program object
+		GLProgram ps[NUM_INTERLACE_SHADERS];
 	} m_interlace;
 
 	struct
 	{
 		std::string vs;
-		std::vector<GLProgram> ps; // program object
-		GLuint ln = 0; // sampler object
-		GLuint pt = 0; // sampler object
+		std::vector<GLProgram> ps;
+		GLuint ln = 0;
+		GLuint pt = 0;
 		GSDepthStencilOGL* dss = nullptr;
 		GSDepthStencilOGL* dss_write = nullptr;
 	} m_convert;
@@ -313,7 +311,7 @@ private:
 	void SetIndexBuffer(std::unique_ptr<GLStreamBuffer>& buffer, const void* index, size_t count);
 
 protected:
-	using GSDevice::DoStretchRect; // Suppress overloaded virtual function warning
+	using GSDevice::DoStretchRect;
 	virtual void DoStretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect,
 		ShaderConvertSelector shader, Filter filter) override;
 public:
@@ -323,7 +321,6 @@ public:
 
 	__fi static GSDeviceOGL* GetInstance() { return static_cast<GSDeviceOGL*>(g_gs_device.get()); }
 
-	// Used by OpenGL, so the same calling convention is required.
 	static void GLAPIENTRY DebugMessageCallback(GLenum gl_source, GLenum gl_type, GLuint id, GLenum gl_severity, GLsizei gl_length, const GLchar* gl_message, const void* userParam);
 
 	__fi bool IsDownloadPBODisabled() const { return m_disable_download_pbo; }
@@ -355,13 +352,11 @@ public:
 	bool SetGPUPipelineStatisticsEnabled(bool enabled) override;
 	GPUPipelineStatistics GetAndResetAccumulatedGPUPipelineStatistics() override;
 
-	// Helpers and utility draws.
 	void DrawPrimitive();
 	void DrawIndexedPrimitive();
 	void DrawIndexedPrimitive(int offset, int count);
 	void DrawIndexedPrimitiveVSExpand(int offset, int count, bool vs_indexing, int vs_indexing_expansion);
 
-	// Main GS primitive draws.
 	void Draw(const GSHWDrawConfig& config);
 	void Draw(const GSHWDrawConfig& config, int offset, int count);
 
@@ -375,7 +370,6 @@ public:
 	void PopDebugGroup() override;
 	void InsertDebugMessage(DebugMessageCategory category, const char* fmt, ...) override;
 
-	// BlitRect *does* mess with GL state, be sure to re-bind.
 	void BlitRect(GSTexture* sTex, const GSVector4i& r, const GSVector2i& dsize, bool at_origin, Filter filter);
 
 	void DoStretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, const GLProgram& ps, Filter filter);

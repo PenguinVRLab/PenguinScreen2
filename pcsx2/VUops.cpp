@@ -9,10 +9,9 @@
 
 #include <cmath>
 u32 laststall = 0;
-//Lower/Upper instructions can use that..
-#define _Ft_ ((VU->code >> 16) & 0x1F)  // The rt part of the instruction register
-#define _Fs_ ((VU->code >> 11) & 0x1F)  // The rd part of the instruction register
-#define _Fd_ ((VU->code >>  6) & 0x1F)  // The sa part of the instruction register
+#define _Ft_ ((VU->code >> 16) & 0x1F)
+#define _Fs_ ((VU->code >> 11) & 0x1F)
+#define _Fd_ ((VU->code >>  6) & 0x1F)
 #define _It_ (_Ft_ & 0xF)
 #define _Is_ (_Fs_ & 0xF)
 #define _Id_ (_Fd_ & 0xF)
@@ -50,12 +49,9 @@ static __ri bool _vuFMACflush(VURegs* VU)
 
 		VUM_LOG("flushing FMAC pipe[%d] (macflag=%x clipflag=%x statusflag=%x) r %d w %d", i, VU->fmac[i].macflag, VU->fmac[i].clipflag, VU->fmac[i].statusflag, VU->fmacreadpos, VU->fmacwritepos);
 
-		// Clip flags (Affected by CLIP instruction)
 		if (VU->fmac[i].flagreg & (1 << REG_CLIP_FLAG))
 			VU->VI[REG_CLIP_FLAG].UL = VU->fmac[i].clipflag;
 
-		// Normal FMAC instructoins only affectx Z/S/I/O, D/I are modified only by FDIV instructions
-		// Sticky flags (Affected by FSSET)
 		if (VU->fmac[i].flagreg & (1 << REG_STATUS_FLAG))
 			VU->VI[REG_STATUS_FLAG].UL = (VU->VI[REG_STATUS_FLAG].UL & 0x30) | (VU->fmac[i].statusflag & 0xFC0) | (VU->fmac[i].statusflag & 0xF);
 		else
@@ -100,7 +96,6 @@ static __ri bool _vuFDIVflush(VURegs* VU)
 
 		VU->fdiv.enable = 0;
 		VU->VI[REG_Q].UL = VU->fdiv.reg.UL;
-		// FDIV only affects D/I
 		VU->VI[REG_STATUS_FLAG].UL = (VU->VI[REG_STATUS_FLAG].UL & 0xFCF) | (VU->fdiv.statusflag & 0xC30);
 
 		return true;
@@ -126,7 +121,6 @@ static __ri bool _vuEFUflush(VURegs* VU)
 	return false;
 }
 
-// called at end of program
 void _vuFlushAll(VURegs* VU)
 {
 	int i = 0;
@@ -154,12 +148,9 @@ void _vuFlushAll(VURegs* VU)
 	{
 		VUM_LOG("flushing FMAC pipe[%d] (macflag=%x)", i, VU->fmac[i].macflag);
 
-		// Clip flags (Affected by CLIP instruction)
 		if (VU->fmac[i].flagreg & (1 << REG_CLIP_FLAG))
 			VU->VI[REG_CLIP_FLAG].UL = VU->fmac[i].clipflag;
 
-		// Normal FMAC instructoins only affectx Z/S/I/O, D/I are modified only by FDIV instructions
-		// Sticky flags (Affected by FSSET)
 		if (VU->fmac[i].flagreg & (1 << REG_STATUS_FLAG))
 			VU->VI[REG_STATUS_FLAG].UL = (VU->VI[REG_STATUS_FLAG].UL & 0x30) | (VU->fmac[i].statusflag & 0xFC0) | (VU->fmac[i].statusflag & 0xF);
 		else
@@ -213,11 +204,9 @@ static void _vuFMACTestStall(VURegs* VU, u32 reg, u32 xyzw)
 
 	for (int currentpipe = VU->fmacreadpos; i < VU->fmaccount; currentpipe = (currentpipe + 1) & 3, i++)
 	{
-		//Check if enough cycles have passed for this fmac position
 		if ((VU->cycle - VU->fmac[currentpipe].sCycle) >= VU->fmac[currentpipe].Cycle)
 			continue;
 
-		// Check if the regs match
 		if ((VU->fmac[currentpipe].regupper == reg && VU->fmac[currentpipe].xyzwupper & xyzw)
 			|| (VU->fmac[currentpipe].reglower == reg && VU->fmac[currentpipe].xyzwlower & xyzw))
 		{
@@ -262,11 +251,6 @@ static __fi void _vuTestEFUStalls(VURegs* VU, _VURegsNum* VUregsn)
 	if (VU->efu.enable == 0)
 		return;
 
-	// With EFU commands they have a throughput/latency that doesn't match, this means if a stall occurs
-	// The stall is released 1 cycle before P is updated. However there is no other command that can read
-	// P on the same cycle as the stall is released, and if the stall is caused by an EFU command other
-	// than WAITP, we're going to overwrite the value in the pipeline, which will break everything.
-	// So the TL;DR of this is that we should be safe to release 1 cycle early and write back P
 	VU->efu.Cycle -= 1;
 	u64 newCycle = VU->efu.sCycle + VU->efu.Cycle;
 
@@ -284,7 +268,7 @@ static __fi void _vuTestALUStalls(VURegs* VU, _VURegsNum* VUregsn)
 		if ((VU->cycle - VU->ialu[currentpipe].sCycle) >= VU->ialu[currentpipe].Cycle)
 			continue;
 
-		if (VU->ialu[currentpipe].reg & VUregsn->VIread) // Read and written VI regs share the same register
+		if (VU->ialu[currentpipe].reg & VUregsn->VIread)
 		{
 			u64 newCycle = VU->ialu[currentpipe].Cycle + VU->ialu[currentpipe].sCycle;
 
@@ -422,7 +406,6 @@ __fi void _vuBackupVI(VURegs* VU, u32 reg)
 #ifdef VI_BACKUP
 	if (VU->VIBackupCycles && reg == VU->VIRegNumber)
 	{
-		//On repeat writes we need to remember the value from before the chain
 		VU->VIBackupCycles = 2;
 		return;
 	}
@@ -433,9 +416,6 @@ __fi void _vuBackupVI(VURegs* VU, u32 reg)
 #endif
 }
 
-/******************************/
-/*   VU Upper instructions    */
-/******************************/
 #ifndef INT_VUDOUBLEHACK
 static float vuDouble(u32 f)
 {
@@ -464,31 +444,12 @@ static __fi float vuDouble(u32 f)
 
 static __fi float vuADD_TriAceHack(u32 a, u32 b)
 {
-	// On VU0 TriAce Games use ADDi and expects these bit-perfect results:
-	//if (a == 0xb3e2a619 && b == 0x42546666) return vuDouble(0x42546666);
-	//if (a == 0x8b5b19e9 && b == 0xc7f079b3) return vuDouble(0xc7f079b3);
-	//if (a == 0x4b1ed4a8 && b == 0x43a02666) return vuDouble(0x4b1ed5e7);
-	//if (a == 0x7d1ca47b && b == 0x42f23333) return vuDouble(0x7d1ca47b);
 
-	// In the 3rd case, some other rounding error is giving us incorrect
-	// operands ('a' is wrong); and therefor an incorrect result.
-	// We're getting:        0x4b1ed4a8 + 0x43a02666 = 0x4b1ed5e8
-	// We should be getting: 0x4b1ed4a7 + 0x43a02666 = 0x4b1ed5e7
-	// microVU gets the correct operands and result. The interps likely
-	// don't get it due to rounding towards nearest in other calculations.
-
-	// microVU uses something like this to get TriAce games working,
-	// but VU interpreters don't seem to need it currently:
-
-	// Update Sept 2021, now the interpreters don't suck, they do - Refraction
 	s32 aExp = (a >> 23) & 0xff;
 	s32 bExp = (b >> 23) & 0xff;
 	if (aExp - bExp >= 25) b &= 0x80000000;
 	if (aExp - bExp <=-25) a &= 0x80000000;
 	float ret = vuDouble(a) + vuDouble(b);
-	//DevCon.WriteLn("aExp = %d, bExp = %d", aExp, bExp);
-	//DevCon.WriteLn("0x%08x + 0x%08x = 0x%08x", a, b, (u32&)ret);
-	//DevCon.WriteLn("%f + %f = %f", vuDouble(a), vuDouble(b), ret);
 	return ret;
 }
 
@@ -779,9 +740,6 @@ static __fi void _vuMSUBAy(VURegs* VU) { vuMSUBAbc(VU, VU->VF[_Ft_].i.y); }
 static __fi void _vuMSUBAz(VURegs* VU) { vuMSUBAbc(VU, VU->VF[_Ft_].i.z); }
 static __fi void _vuMSUBAw(VURegs* VU) { vuMSUBAbc(VU, VU->VF[_Ft_].i.w); }
 
-// The functions below are floating point semantics min/max on integer representations to get
-// the effect of a floating point min/max without issues with denormal and special numbers.
-
 static __fi u32 fp_max(u32 a, u32 b)
 {
 	return ((s32)a < 0 && (s32)b < 0) ? std::min<s32>(a, b) : std::max<s32>(a, b);
@@ -909,7 +867,6 @@ static __fi void _vuITOF15(VURegs* VU) { applyUnaryFunction<intToFloat<15>>(VU);
 static __fi void _vuCLIP(VURegs* VU)
 {
 	s32 value = VU->VF[_Ft_].i.w;
-	// If denormal, set to the highest possible denormal value so only non-denormals compare higher
 	value = (value & 0x7f800000) ? value & 0x7fffffff : 0x007fffff;
 	const u32 pos = 0x00000000;
 	const u32 neg = 0x80000000;
@@ -923,10 +880,6 @@ static __fi void _vuCLIP(VURegs* VU)
 	if (static_cast<s32>(VU->VF[_Fs_].i.z ^ neg) > value) VU->clipflag |= 0x20;
 	VU->clipflag = VU->clipflag & 0xFFFFFF;
 }
-
-/******************************/
-/*   VU Lower instructions    */
-/******************************/
 
 static __fi void _vuDIV(VURegs* VU)
 {
@@ -1128,18 +1081,14 @@ static __fi void _vuMR32(VURegs* VU)
 	if (_W) VU->VF[_Ft_].i.w = tx;
 }
 
-// --------------------------------------------------------------------------------------
-//  Load / Store Instructions (VU Interpreter)
-// --------------------------------------------------------------------------------------
-
-__fi u32* GET_VU_MEM(VURegs* VU, u32 addr) // non-static, also used by sVU for now.
+__fi u32* GET_VU_MEM(VURegs* VU, u32 addr)
 {
 	if (VU == &vuRegs[1])
 		return (u32*)(vuRegs[1].Mem + (addr & 0x3fff));
 	else if (addr & 0x4000)
-		return (u32*)((u8*)vuRegs[1].VF + (addr & 0x3ff)); // get VF and VI regs (they're mapped to 0x4xx0 in VU0 mem!)
+		return (u32*)((u8*)vuRegs[1].VF + (addr & 0x3ff));
 	else
-		return (u32*)(vuRegs[0].Mem + (addr & 0xfff)); // for addr 0x0000 to 0x4000 just wrap around
+		return (u32*)(vuRegs[0].Mem + (addr & 0xfff));
 }
 
 static __ri void _vuLQ(VURegs* VU)
@@ -1286,10 +1235,7 @@ As an example for setting the polynomial variable correctly, the 23-bit M-series
   would be specified as (1 << 14).
 */
 
-// Unused
 #if 0
-//The two-tap 23 stage M-series polynomials are x23+x18 and x23+x14 ((1 << 18) and (1 << 14), respectively).
-//The reverse sequences can be generated by x23+x(23-18) and x23+x(23-14) ((1 << 9) and (1 << 5), respectively)
 static u32 poly = 1 << 5;
 
 static __ri void SetPoly(u32 newPoly)
@@ -1300,7 +1246,6 @@ static __ri void SetPoly(u32 newPoly)
 
 static __ri void AdvanceLFSR(VURegs* VU)
 {
-	// code from www.project-fao.org (which is no longer there)
 	int x = (VU->VI[REG_R].UL >> 4) & 1;
 	int y = (VU->VI[REG_R].UL >> 22) & 1;
 	VU->VI[REG_R].UL <<= 1;
@@ -1464,7 +1409,6 @@ static __fi void _setBranch(VURegs* VU, u32 bpc)
 {
 	if (VU->branch == 1)
 	{
-		//DevCon.Warning("Branch in Branch Delay slot!");
 		VU->delaybranchpc = bpc;
 		VU->takedelaybranch = true;
 	}
@@ -1599,8 +1543,6 @@ static __ri void _vuBAL(VURegs* VU)
 
 	if (_It_)
 	{
-		//If we are in the branch delay slot, the instruction after the first
-		//instruction in the first branches target becomes the linked reg.
 		if (VU->branch == 1)
 			VU->VI[_It_].US[0] = (VU->branchpc + 8) / 8;
 		else
@@ -1616,15 +1558,12 @@ static __ri void _vuJR(VURegs* VU)
 	_setBranch(VU, bpc);
 }
 
-//If this is in a branch delay, the jump isn't taken ( Evil Dead - Fistfull of Boomstick )
 static __ri void _vuJALR(VURegs* VU)
 {
 	u32 bpc = VU->VI[_Is_].US[0] * 8;
 
 	if (_It_)
 	{
-		//If we are in the branch delay slot, the instruction after the first
-		//instruction in the first branches target becomes the linked reg.
 		if (VU->branch == 1)
 			VU->VI[_It_].US[0] = (VU->branchpc + 8) / 8;
 		else
@@ -1860,19 +1799,7 @@ void _vuXGKICKTransfer(s32 cycles, bool flush)
 
 		VUM_LOG("XGKICK Transferring %x bytes from %x size %x", transfersize * 0x10, VU1.xgkickaddr, VU1.xgkicksizeremaining);
 
-		// Would be "nicer" to do the copy until it's all up, however this really screws up PATH3 masking stuff
-		// So lets just do it the other way :)
-		/*if (THREAD_VU1)
-		{
-			if ((transfersize * 0x10) < VU1.xgkicksizeremaining)
-				gifUnit.gifPath[GIF_PATH_1].CopyGSPacketData(&VU1.Mem[VU1.xgkickaddr], transfersize * 0x10, true);
-			else
-				gifUnit.TransferGSPacketData(GIF_TRANS_XGKICK, &vuRegs[1].Mem[VU1.xgkickaddr], transfersize * 0x10, true);
-		}
-		else*/
-		//{
 			gifUnit.TransferGSPacketData(GIF_TRANS_XGKICK, &vuRegs[1].Mem[VU1.xgkickaddr], transfersize * 0x10, true);
-		//}
 
 		if ((VU0.VI[REG_VPU_STAT].UL & 0x100) && flush)
 			VU1.cycle += transfersize * 2;
@@ -1890,7 +1817,6 @@ void _vuXGKICKTransfer(s32 cycles, bool flush)
 			VUM_LOG("XGKICK transfer finished");
 			VU1.xgkickenable = false;
 			VU0.VI[REG_VPU_STAT].UL &= ~(1 << 12);
-			// Check if VIF is waiting for the GIF to not be busy
 			if (vif1Regs.stat.VGW)
 			{
 				vif1Regs.stat.VGW = false;
@@ -1920,8 +1846,6 @@ static __ri void _vuXGKICK(VURegs* VU)
 	VU->xgkicksizeremaining = 0;
 	VU->xgkickendpacket = false;
 	VU->xgkicklastcycle = VU->cycle;
-	// XGKick command counts as one cycle for the transfer.
-	// Can be tested with Resident Evil: Outbreak, Kingdom Hearts, CART Fury.
 	VU->xgkickcyclecount = 1;
 	VU0.VI[REG_VPU_STAT].UL |= (1 << 12);
 	VUM_LOG("XGKICK addr %x", addr);
@@ -2319,10 +2243,6 @@ static __ri void _vuRegsCLIP(const VURegs* VU, _VURegsNum* VUregsn)
     VUregsn->VIread  = GET_VF0_FLAG(_Fs_)|GET_VF0_FLAG(_Ft_)|(1 << REG_CLIP_FLAG);
 }
 
-/******************************/
-/*   VU Lower instructions    */
-/******************************/
-
 static __ri void _vuRegsDIV(const VURegs* VU, _VURegsNum* VUregsn)
 {
 	VUregsn->pipe = VUPIPE_FDIV;
@@ -2410,7 +2330,7 @@ static __ri void _vuRegsMR32(const VURegs* VU, _VURegsNum* VUregsn)
 	VUregsn->VFwrite = _Ft_;
 	VUregsn->VFwxyzw = _XYZW;
 	VUregsn->VFread0 = _Fs_;
-	VUregsn->VFr0xyzw= (_XYZW >> 1) | ((_XYZW << 3) & 0x8);  //rotate
+	VUregsn->VFr0xyzw= (_XYZW >> 1) | ((_XYZW << 3) & 0x8);
 	VUregsn->VFread1 = 0;
 	VUregsn->VFr1xyzw = 0xff;
 	VUregsn->VIwrite = 0;
@@ -2867,14 +2787,6 @@ static __ri void _vuRegsXTOP(const VURegs* VU, _VURegsNum* VUregsn)
 	VUregsn->cycles  = 0;
 }
 
-// --------------------------------------------------------------------------------------
-//  VU0
-// --------------------------------------------------------------------------------------
-
-/****************************************/
-/*   VU Micromode Upper instructions    */
-/****************************************/
-
 static void VU0MI_ABS()  { _vuABS(&VU0); }
 static void VU0MI_ADD()  { _vuADD(&VU0); }
 static void VU0MI_ADDi() { _vuADDi(&VU0); }
@@ -2971,10 +2883,6 @@ static void VU0MI_ITOF12() { _vuITOF12(&VU0); }
 static void VU0MI_ITOF15() { _vuITOF15(&VU0); }
 static void VU0MI_CLIP() { _vuCLIP(&VU0); }
 
-/*****************************************/
-/*   VU Micromode Lower instructions    */
-/*****************************************/
-
 static void VU0MI_DIV() { _vuDIV(&VU0); }
 static void VU0MI_SQRT() { _vuSQRT(&VU0); }
 static void VU0MI_RSQRT() { _vuRSQRT(&VU0); }
@@ -3044,10 +2952,6 @@ static void VU0MI_EEXP()    { _vuEEXP(&VU0); }
 static void VU0MI_XITOP() { _vuXITOP(&VU0); }
 static void VU0MI_XGKICK() {}
 static void VU0MI_XTOP() {}
-
-/****************************************/
-/*   VU Micromode Upper instructions    */
-/****************************************/
 
 static void VU0regsMI_ABS(_VURegsNum* VUregsn) { _vuRegsABS(&VU0, VUregsn); }
 static void VU0regsMI_ADD(_VURegsNum* VUregsn) { _vuRegsADD(&VU0, VUregsn); }
@@ -3145,10 +3049,6 @@ static void VU0regsMI_ITOF12(_VURegsNum* VUregsn) { _vuRegsITOF12(&VU0, VUregsn)
 static void VU0regsMI_ITOF15(_VURegsNum* VUregsn) { _vuRegsITOF15(&VU0, VUregsn); }
 static void VU0regsMI_CLIP(_VURegsNum* VUregsn) { _vuRegsCLIP(&VU0, VUregsn); }
 
-/*****************************************/
-/*   VU Micromode Lower instructions    */
-/*****************************************/
-
 static void VU0regsMI_DIV(_VURegsNum* VUregsn) { _vuRegsDIV(&VU0, VUregsn); }
 static void VU0regsMI_SQRT(_VURegsNum* VUregsn) { _vuRegsSQRT(&VU0, VUregsn); }
 static void VU0regsMI_RSQRT(_VURegsNum* VUregsn) { _vuRegsRSQRT(&VU0, VUregsn); }
@@ -3230,14 +3130,6 @@ static void VU0regsunknown(_VURegsNum* VUregsn)
 	pxFail("Unknown VU micromode opcode called");
 	CPU_LOG("Unknown VU micromode opcode called");
 }
-
-// --------------------------------------------------------------------------------------
-//  VU1
-// --------------------------------------------------------------------------------------
-
-/****************************************/
-/*   VU Micromode Upper instructions    */
-/****************************************/
 
 static void VU1MI_ABS()  { _vuABS(&VU1); }
 static void VU1MI_ADD()  { _vuADD(&VU1); }
@@ -3335,10 +3227,6 @@ static void VU1MI_ITOF12() { _vuITOF12(&VU1); }
 static void VU1MI_ITOF15() { _vuITOF15(&VU1); }
 static void VU1MI_CLIP() { _vuCLIP(&VU1); }
 
-/*****************************************/
-/*   VU Micromode Lower instructions    */
-/*****************************************/
-
 static void VU1MI_DIV() { _vuDIV(&VU1); }
 static void VU1MI_SQRT() { _vuSQRT(&VU1); }
 static void VU1MI_RSQRT() { _vuRSQRT(&VU1); }
@@ -3410,10 +3298,6 @@ static void VU1MI_XGKICK()  { _vuXGKICK(&VU1); }
 static void VU1MI_XTOP()    { _vuXTOP(&VU1); }
 
 
-
-/****************************************/
-/*   VU Micromode Upper instructions    */
-/****************************************/
 
 static void VU1regsMI_ABS(_VURegsNum* VUregsn) { _vuRegsABS(&VU1, VUregsn); }
 static void VU1regsMI_ADD(_VURegsNum* VUregsn) { _vuRegsADD(&VU1, VUregsn); }
@@ -3511,10 +3395,6 @@ static void VU1regsMI_ITOF12(_VURegsNum* VUregsn) { _vuRegsITOF12(&VU1, VUregsn)
 static void VU1regsMI_ITOF15(_VURegsNum* VUregsn) { _vuRegsITOF15(&VU1, VUregsn); }
 static void VU1regsMI_CLIP(_VURegsNum* VUregsn) { _vuRegsCLIP(&VU1, VUregsn); }
 
-/*****************************************/
-/*   VU Micromode Lower instructions    */
-/*****************************************/
-
 static void VU1regsMI_DIV(_VURegsNum* VUregsn) { _vuRegsDIV(&VU1, VUregsn); }
 static void VU1regsMI_SQRT(_VURegsNum* VUregsn) { _vuRegsSQRT(&VU1, VUregsn); }
 static void VU1regsMI_RSQRT(_VURegsNum* VUregsn) { _vuRegsRSQRT(&VU1, VUregsn); }
@@ -3599,17 +3479,13 @@ static void VU1regsunknown(_VURegsNum* VUregsn)
 
 
 
-// --------------------------------------------------------------------------------------
-//  VU Micromode Tables/Opcodes defs macros
-// --------------------------------------------------------------------------------------
-
 #define _vuTablesMess(PREFIX, FNTYPE) \
 alignas(16) static const FNTYPE PREFIX##LowerOP_T3_00_OPCODE[32] = { \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown, \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##MI_MOVE  , PREFIX##MI_LQI   , PREFIX##MI_DIV  , PREFIX##MI_MTIR,  \
-	PREFIX##MI_RNEXT , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown, /* 0x10 */ \
+	PREFIX##MI_RNEXT , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown, \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##unknown  , PREFIX##MI_MFP   , PREFIX##MI_XTOP , PREFIX##MI_XGKICK,  \
 	PREFIX##MI_ESADD , PREFIX##MI_EATANxy, PREFIX##MI_ESQRT, PREFIX##MI_ESIN,  \
@@ -3620,7 +3496,7 @@ alignas(16) static const FNTYPE PREFIX##LowerOP_T3_01_OPCODE[32] = { \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##MI_MR32  , PREFIX##MI_SQI   , PREFIX##MI_SQRT , PREFIX##MI_MFIR,  \
-	PREFIX##MI_RGET  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown, /* 0x10 */ \
+	PREFIX##MI_RGET  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown, \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##MI_XITOP, PREFIX##unknown,  \
 	PREFIX##MI_ERSADD, PREFIX##MI_EATANxz, PREFIX##MI_ERSQRT, PREFIX##MI_EATAN, \
@@ -3631,7 +3507,7 @@ alignas(16) static const FNTYPE PREFIX##LowerOP_T3_10_OPCODE[32] = { \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##unknown  , PREFIX##MI_LQD   , PREFIX##MI_RSQRT, PREFIX##MI_ILWR,  \
-	PREFIX##MI_RINIT , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown, /* 0x10 */ \
+	PREFIX##MI_RINIT , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown, \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##MI_ELENG , PREFIX##MI_ESUM  , PREFIX##MI_ERCPR, PREFIX##MI_EEXP,  \
@@ -3642,7 +3518,7 @@ alignas(16) static const FNTYPE PREFIX##LowerOP_T3_11_OPCODE[32] = { \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##unknown  , PREFIX##MI_SQD   , PREFIX##MI_WAITQ, PREFIX##MI_ISWR,  \
-	PREFIX##MI_RXOR  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown, /* 0x10 */ \
+	PREFIX##MI_RXOR  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown, \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##MI_ERLENG, PREFIX##unknown  , PREFIX##MI_WAITP, PREFIX##unknown,  \
@@ -3653,15 +3529,15 @@ alignas(16) static const FNTYPE PREFIX##LowerOP_OPCODE[64] = { \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
-	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown, /* 0x10 */  \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
-	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown, /* 0x20 */  \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
-	PREFIX##MI_IADD  , PREFIX##MI_ISUB  , PREFIX##MI_IADDI, PREFIX##unknown, /* 0x30 */ \
+	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
+	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
+	PREFIX##MI_IADD  , PREFIX##MI_ISUB  , PREFIX##MI_IADDI, PREFIX##unknown, \
 	PREFIX##MI_IAND  , PREFIX##MI_IOR   , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##LowerOP_T3_00, PREFIX##LowerOP_T3_01, PREFIX##LowerOP_T3_10, PREFIX##LowerOP_T3_11,  \
@@ -3672,31 +3548,31 @@ alignas(16) const FNTYPE PREFIX##_LOWER_OPCODE[128] = { \
 	PREFIX##MI_ILW   , PREFIX##MI_ISW   , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##MI_IADDIU, PREFIX##MI_ISUBIU, PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown, \
-	PREFIX##MI_FCEQ  , PREFIX##MI_FCSET , PREFIX##MI_FCAND, PREFIX##MI_FCOR, /* 0x10 */ \
+	PREFIX##MI_FCEQ  , PREFIX##MI_FCSET , PREFIX##MI_FCAND, PREFIX##MI_FCOR, \
 	PREFIX##MI_FSEQ  , PREFIX##MI_FSSET , PREFIX##MI_FSAND, PREFIX##MI_FSOR, \
 	PREFIX##MI_FMEQ  , PREFIX##unknown  , PREFIX##MI_FMAND, PREFIX##MI_FMOR, \
 	PREFIX##MI_FCGET , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown, \
-	PREFIX##MI_B     , PREFIX##MI_BAL   , PREFIX##unknown , PREFIX##unknown, /* 0x20 */  \
+	PREFIX##MI_B     , PREFIX##MI_BAL   , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##MI_JR    , PREFIX##MI_JALR  , PREFIX##unknown , PREFIX##unknown, \
 	PREFIX##MI_IBEQ  , PREFIX##MI_IBNE  , PREFIX##unknown , PREFIX##unknown, \
 	PREFIX##MI_IBLTZ , PREFIX##MI_IBGTZ , PREFIX##MI_IBLEZ, PREFIX##MI_IBGEZ, \
-	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown, /* 0x30 */ \
+	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown, \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
-	PREFIX##LowerOP  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown, /* 0x40*/  \
+	PREFIX##LowerOP  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
-	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown, /* 0x50 */ \
+	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown, \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
-	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown, /* 0x60 */ \
+	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown, \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
-	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown, /* 0x70 */ \
+	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown, \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown , PREFIX##unknown,  \
@@ -3751,15 +3627,15 @@ alignas(16) const FNTYPE PREFIX##_UPPER_OPCODE[64] = { \
 	PREFIX##MI_SUBx  , PREFIX##MI_SUBy  , PREFIX##MI_SUBz  , PREFIX##MI_SUBw, \
 	PREFIX##MI_MADDx , PREFIX##MI_MADDy , PREFIX##MI_MADDz , PREFIX##MI_MADDw, \
 	PREFIX##MI_MSUBx , PREFIX##MI_MSUBy , PREFIX##MI_MSUBz , PREFIX##MI_MSUBw, \
-	PREFIX##MI_MAXx  , PREFIX##MI_MAXy  , PREFIX##MI_MAXz  , PREFIX##MI_MAXw,  /* 0x10 */  \
+	PREFIX##MI_MAXx  , PREFIX##MI_MAXy  , PREFIX##MI_MAXz  , PREFIX##MI_MAXw,  \
 	PREFIX##MI_MINIx , PREFIX##MI_MINIy , PREFIX##MI_MINIz , PREFIX##MI_MINIw, \
 	PREFIX##MI_MULx  , PREFIX##MI_MULy  , PREFIX##MI_MULz  , PREFIX##MI_MULw, \
 	PREFIX##MI_MULq  , PREFIX##MI_MAXi  , PREFIX##MI_MULi  , PREFIX##MI_MINIi, \
-	PREFIX##MI_ADDq  , PREFIX##MI_MADDq , PREFIX##MI_ADDi  , PREFIX##MI_MADDi, /* 0x20 */ \
+	PREFIX##MI_ADDq  , PREFIX##MI_MADDq , PREFIX##MI_ADDi  , PREFIX##MI_MADDi, \
 	PREFIX##MI_SUBq  , PREFIX##MI_MSUBq , PREFIX##MI_SUBi  , PREFIX##MI_MSUBi, \
 	PREFIX##MI_ADD   , PREFIX##MI_MADD  , PREFIX##MI_MUL   , PREFIX##MI_MAX, \
 	PREFIX##MI_SUB   , PREFIX##MI_MSUB  , PREFIX##MI_OPMSUB, PREFIX##MI_MINI, \
-	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown,  /* 0x30 */ \
+	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown, \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown, \
 	PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown  , PREFIX##unknown, \
 	PREFIX##_UPPER_FD_00, PREFIX##_UPPER_FD_01, PREFIX##_UPPER_FD_10, PREFIX##_UPPER_FD_11,  \
@@ -3816,10 +3692,6 @@ alignas(16) const FNTYPE PREFIX##_UPPER_OPCODE[64] = { \
  PREFIX##LowerOP_T3_11_OPCODE[(VU.code >> 6) & 0x1f](); \
 } \
 
-
-// --------------------------------------------------------------------------------------
-//  VuRegsN Tables
-// --------------------------------------------------------------------------------------
 
 #define _vuRegsTables(VU, PREFIX, FNTYPE) \
  static void PREFIX##_UPPER_FD_00(_VURegsNum *VUregsn); \
@@ -3881,10 +3753,6 @@ _vuTablesPost(VU1, VU1)
 _vuRegsTables(VU0, VU0regs, FnPtr_VuRegsN)
 _vuRegsTables(VU1, VU1regs, FnPtr_VuRegsN)
 
-
-// --------------------------------------------------------------------------------------
-//  VU0macro (COP2)
-// --------------------------------------------------------------------------------------
 
 static __fi void SYNCMSFLAGS()
 {

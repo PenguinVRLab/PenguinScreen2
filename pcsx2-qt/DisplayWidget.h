@@ -19,10 +19,6 @@ public:
 	explicit DisplaySurface();
 	~DisplaySurface();
 
-	// while QWindow can be used directly as a window, Popups requre a QWidget parent.
-	// Additionally, we use saveGeometry/restoreGeometry for render to seperate window mode
-	// but those functions only exist on QWidget.
-	// Thus, we always need a container widget.
 	QWidget* createWindowContainer(QWidget* parent = nullptr);
 
 	std::optional<WindowInfo> getWindowInfo();

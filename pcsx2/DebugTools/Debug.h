@@ -54,9 +54,6 @@ struct LogBase
 		, Color(color) {};
 };
 
-// --------------------------------------------------------------------------------------
-//  TraceLog
-// --------------------------------------------------------------------------------------
 struct TraceLog : public LogBase
 {
 	TraceLog(const LogDescriptor& descriptor, ConsoleColors color = Color_Gray)
@@ -83,14 +80,6 @@ struct ConsoleLog : public LogBase
 	}
 };
 
-// --------------------------------------------------------------------------------------
-//  ConsoleLogFromVM
-// --------------------------------------------------------------------------------------
-// Special console logger for Virtual Machine log sources, such as the EE and IOP console
-// writes (actual game developer messages and such).  These logs do *not* support printf
-// formatting, since anything coming over the EE/IOP consoles should be considered raw
-// string data.  (otherwise %'s would get mis-interpreted).
-//
 template< ConsoleColors conColor >
 class ConsoleLogFromVM : public LogBase
 {
@@ -101,8 +90,6 @@ public:
 	{
 		for (const char ch : msg)
 		{
-			// Ignore control characters.
-			// Otherwise you get fun bells going off.
 			if (ch >= 0x20)
 				m_buffer.push_back(ch);
 
@@ -125,9 +112,6 @@ private:
 	std::string m_buffer;
 };
 
-// --------------------------------------------------------------------------------------
-//  TraceLogPack
-// --------------------------------------------------------------------------------------
 struct TraceLogPack
 {
 	TraceLog	SIF;
@@ -174,11 +158,6 @@ struct TraceLogPack
 		TraceLog UnknownHw;
 		TraceLog DMAhw;
 
-		// TODO items to be added, or removed?  I can't remember which! --air
-		//TraceLog_IOP_Registers	SPU2;
-		//TraceLog_IOP_Registers	USB;
-		//TraceLog_IOP_Registers	FW;
-
 		TraceLog DMAC;
 		TraceLog Counters;
 		TraceLog CDVD;
@@ -209,10 +188,6 @@ struct ConsoleLogPack
 extern TraceLogPack TraceLogging;
 extern ConsoleLogPack ConsoleLogging;
 
-// Helper macro for cut&paste.  Note that we intentionally use a top-level *inline* bitcheck
-// against Trace.Enabled, to avoid extra overhead in Debug builds when logging is disabled.
-// (specifically this allows debug builds to skip havingto resolve all the parameters being
-//  passed into the function)
 #ifdef PCSX2_DEVBUILD
 #	define TraceActive(trace)	TraceLogging.trace.IsActive()
 #else

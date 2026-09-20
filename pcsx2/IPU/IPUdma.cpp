@@ -38,13 +38,11 @@ static __fi int IPU1chain() {
 		return totalqwc;
 	}
 
-	//Write our data to the fifo
 	qwc = ipu_fifo.in.write(pMem, qwc);
 	ipu1ch.madr += qwc << 4;
 	ipu1ch.qwc -= qwc;
 	totalqwc += qwc;
 
-	//Update TADR etc
 	hwDmacSrcTadrInc(ipu1ch);
 
 	if (!ipu1ch.qwc)
@@ -57,9 +55,6 @@ void IPU1dma()
 {
 	if(!ipu1ch.chcr.STR || ipu1ch.chcr.MOD == 2)
 	{
-		//We MUST stop the IPU from trying to fill the FIFO with more data if the DMA has been suspended
-		//if we don't, we risk causing the data to go out of sync with the fifo and we end up losing some!
-		//This is true for Dragons Quest 8 and probably others which suspend the DMA.
 		DevCon.Warning("IPU1 running when IPU1 DMA disabled! CHCR %x QWC %x", ipu1ch.chcr._u32, ipu1ch.qwc);
 		CPU_SET_DMASTALL(DMAC_TO_IPU, true);
 		return;
@@ -67,11 +62,9 @@ void IPU1dma()
 
 	if (IPUCoreStatus.DataRequested == false)
 	{
-		// IPU isn't expecting any data, so put it in to wait mode.
 		cpuRegs.eCycle[4] = 0x9999;
 		CPU_SET_DMASTALL(DMAC_TO_IPU, true);
 
-		// Shouldn't Happen.
 		if (IPUCoreStatus.WaitingOnIPUTo)
 		{
 			IPUCoreStatus.WaitingOnIPUTo = false;
@@ -89,7 +82,7 @@ void IPU1dma()
 		if (IPU1Status.DMAFinished)
 			DevCon.Warning("IPU1 DMA Somehow reading tag when finished??");
 
-		tDMA_TAG* ptag = dmaGetAddr(ipu1ch.tadr, false);  //Set memory pointer to TADR
+		tDMA_TAG* ptag = dmaGetAddr(ipu1ch.tadr, false);
 
 		if (!ipu1ch.transfer("IPU1", ptag))
 		{
@@ -97,7 +90,7 @@ void IPU1dma()
 		}
 		ipu1ch.madr = ptag[1]._u32;
 
-		tagcycles += 1; // Add 1 cycles from the QW read for the tag
+		tagcycles += 1;
 
 		if (ipu1ch.chcr.TTE) DevCon.Warning("TTE?");
 
@@ -106,7 +99,7 @@ void IPU1dma()
 		IPU_LOG("dmaIPU1 dmaChain %8.8x_%8.8x size=%d, addr=%lx, fifosize=%x",
 			ptag[1]._u32, ptag[0]._u32, ipu1ch.qwc, ipu1ch.madr, 8 - g_BP.IFC);
 
-		if (ipu1ch.chcr.TIE && ptag->IRQ) //Tag Interrupt is set, so schedule the end/interrupt
+		if (ipu1ch.chcr.TIE && ptag->IRQ)
 			IPU1Status.DMAFinished = true;
 
 		if (ipu1ch.qwc)
@@ -116,7 +109,6 @@ void IPU1dma()
 	if (IPU1Status.InProgress)
 		totalqwc += IPU1chain();
 
-	// Nothing has been processed except maybe a tag, or the DMA is ending
 	if(totalqwc == 0 || (IPU1Status.DMAFinished && !IPU1Status.InProgress))
 	{
 		totalqwc = std::max(4, totalqwc) + tagcycles;
@@ -141,7 +133,6 @@ void IPU0dma()
 {
 	if(!ipuRegs.ctrl.OFC)
 	{
-		// This shouldn't happen.
 		if (IPUCoreStatus.WaitingOnIPUFrom)
 		{
 			IPUCoreStatus.WaitingOnIPUFrom = false;
@@ -157,7 +148,6 @@ void IPU0dma()
 	if ((!(ipu0ch.chcr.STR) || (cpuRegs.interrupt & (1 << DMAC_FROM_IPU))) || (ipu0ch.qwc == 0))
 	{
 		DevCon.Warning("How??");
-		// This shouldn't happen.
 		if (IPUCoreStatus.WaitingOnIPUFrom)
 		{
 			IPUCoreStatus.WaitingOnIPUFrom = false;
@@ -181,9 +171,8 @@ void IPU0dma()
 	ipu0ch.madr += readsize << 4;
 	ipu0ch.qwc -= readsize;
 
-	if (dmacRegs.ctrl.STS == STS_fromIPU)   // STS == fromIPU
+	if (dmacRegs.ctrl.STS == STS_fromIPU)
 	{
-		//DevCon.Warning("fromIPU Stall Control");
 		dmacRegs.stadr.ADDR = ipu0ch.madr;
 	}
 
@@ -199,27 +188,15 @@ void IPU0dma()
 	}
 }
 
-__fi void dmaIPU0() // fromIPU
+__fi void dmaIPU0()
 {
-	//if (dmacRegs.ctrl.STS == STS_fromIPU) DevCon.Warning("DMA Stall enabled on IPU0");
 
-	if (dmacRegs.ctrl.STS == STS_fromIPU)   // STS == fromIPU - Initial settings
+	if (dmacRegs.ctrl.STS == STS_fromIPU)
 		dmacRegs.stadr.ADDR = ipu0ch.madr;
 
 	CPU_SET_DMASTALL(DMAC_FROM_IPU, false);
-	// Note: This should probably be a very small value, however anything lower than this will break Mana Khemia
-	// This is because the game sends bad DMA information, starts an IDEC, then sets it to the correct values
-	// but because our IPU is too quick, it messes up the sync between the DMA and IPU.
-	// So this will do until (if) we sort the timing out of IPU, shouldn't cause any problems for games for now.
-	//IPU_INT_FROM( 160 );
-	// Update 22/12/2021 - Doesn't seem to need this now after fixing some FIFO/DMA behaviour
 	IPU0dma();
 
-	// Explanation of this:
-	// The DMA logic on a NORMAL transfer is generally a "transfer first, ask questions later" so when it's sent
-	// QWC == 0 (which we change to 0x10000) it transfers, causing an underflow, then asks if it's reached 0
-	// since IPU_FROM is beholden to the OUT FIFO, if there's nothing to transfer, it will stay at 0 and won't underflow
-	// so the DMA will end.
 	if (ipu0ch.qwc == 0x10000)
 	{
 		ipu0ch.qwc = 0;
@@ -229,12 +206,12 @@ __fi void dmaIPU0() // fromIPU
 	}
 }
 
-__fi void dmaIPU1() // toIPU
+__fi void dmaIPU1()
 {
 	IPU_LOG("IPU1DMAStart QWC %x, MADR %x, CHCR %x, TADR %x", ipu1ch.qwc, ipu1ch.madr, ipu1ch.chcr._u32, ipu1ch.tadr);
 	CPU_SET_DMASTALL(DMAC_TO_IPU, false);
 
-	if (ipu1ch.chcr.MOD == CHAIN_MODE)  //Chain Mode
+	if (ipu1ch.chcr.MOD == CHAIN_MODE)
 	{
 		IPU_LOG("Setting up IPU1 Chain mode");
 		if(ipu1ch.qwc == 0)
@@ -242,7 +219,7 @@ __fi void dmaIPU1() // toIPU
 			IPU1Status.InProgress = false;
 			IPU1Status.DMAFinished = false;
 		}
-		else // Attempting to continue a previous chain
+		else
 		{
 			IPU_LOG("Resuming DMA TAG %x", (ipu1ch.chcr.TAG >> 12));
 			IPU1Status.InProgress = true;
@@ -256,7 +233,7 @@ __fi void dmaIPU1() // toIPU
 			}
 		}
 	}
-	else // Normal Mode
+	else
 	{
 			IPU_LOG("Setting up IPU1 Normal mode");
 			IPU1Status.InProgress = true;
@@ -291,7 +268,7 @@ __fi void ipu1Interrupt()
 {
 	IPU_LOG("ipu1Interrupt %llx:", cpuRegs.cycle);
 
-	if(!IPU1Status.DMAFinished || IPU1Status.InProgress)  //Sanity Check
+	if(!IPU1Status.DMAFinished || IPU1Status.InProgress)
 	{
 		IPU1dma();
 		return;

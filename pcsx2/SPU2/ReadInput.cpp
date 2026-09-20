@@ -8,15 +8,6 @@
 #include "SPU2/defs.h"
 #include "SPU2/spu2.h"
 
-// Core 0 Input is "SPDIF mode" - Source audio is AC3 compressed.
-
-// Core 1 Input is "CDDA mode" - Source audio data is 32 bits.
-// PS2 note:  Very! few PS2 games use this mode.  Some PSX games used it, however no
-// *known* PS2 game does since it was likely only available if the game was recorded to CD
-// media (ie, not available in DVD mode, which almost all PS2 games use).  Plus PS2 games
-// generally prefer to use ADPCM streaming audio since they need as much storage space as
-// possible for FMVs and high-def textures.
-//
 StereoOut32 V_Core::ReadInput_HiFi()
 {
 	if (SPU2::IsRunningPSXMode() && SPU2::MsgToConsole())
@@ -34,15 +25,12 @@ StereoOut32 V_Core::ReadInput_HiFi()
 		retval.Right >>= 16;
 	}
 
-	// Simulate MADR increase, GTA VC tracks the MADR address for calculating a certain point in the buffer
 	if (InputDataTransferred)
 	{
 		u32 amount = std::min(InputDataTransferred, (u32)0x180);
 
 		InputDataTransferred -= amount;
 		MADR += amount;
-		// Because some games watch the MADR to see when it reaches the end we need to end the DMA here
-		// Tom & Jerry War of the Whiskers is one such game, the music will skip
 		if (!InputDataTransferred && !InputDataLeft)
 		{
 			if (Index == 0)
@@ -93,7 +81,6 @@ StereoOut32 V_Core::ReadInput()
 		if (Cores[i].IRQEnable && (0x2000 + (Index << 10) + ReadIndex) == (Cores[i].IRQA & 0xfffffdff))
 			SetIrqCall(i);
 
-	// PlayMode & 2 is Bypass Mode, so it doesn't go through the SPU
 	if ((Index == 1) || !(Index == 0 && (PlayMode & 2) != 0))
 	{
 		retval = StereoOut32(
@@ -106,15 +93,12 @@ StereoOut32 V_Core::ReadInput()
 	DebugCores[Index].admaWaveformR[OutPos % 0x100] = retval.Right;
 #endif
 
-	// Simulate MADR increase, GTA VC tracks the MADR address for calculating a certain point in the buffer
 	if (InputDataTransferred)
 	{
 		u32 amount = std::min(InputDataTransferred, (u32)0x180);
 
 		InputDataTransferred -= amount;
 		MADR += amount;
-		// Because some games watch the MADR to see when it reaches the end we need to end the DMA here
-		// Tom & Jerry War of the Whiskers is one such game, the music will skip
 		if (!InputDataTransferred && !InputDataLeft)
 		{
 			if (Index == 0)
@@ -124,7 +108,7 @@ StereoOut32 V_Core::ReadInput()
 		}
 	}
 
-	if (PlayMode == 2 && Index == 0) //Bitstream bypass refills twice as quickly (GTA VC)
+	if (PlayMode == 2 && Index == 0)
 		ReadIndex = (ReadIndex * 2) & 0x1FF;
 
 	if (ReadIndex == 0x100 || ReadIndex == 0x0 || ReadIndex == 0x80 || ReadIndex == 0x180)

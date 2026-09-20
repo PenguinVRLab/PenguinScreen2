@@ -60,11 +60,9 @@ private:
 		int player_id;
 		bool use_gamepad_rumble;
 
-		// Used to disable Joystick controls that are used in Gamepad inputs so we don't get double events
 		std::vector<bool> joy_button_used_in_pad;
 		std::vector<bool> joy_axis_used_in_pad;
 
-		// Track last hat state so we can send "unpressed" events.
 		std::vector<u8> last_hat_state;
 	};
 
@@ -92,11 +90,6 @@ private:
 
 	ControllerDataVector m_controllers;
 
-	// ConvertKeyToString and ConvertKeyToIcon can inspect the
-	// currently connected gamepad to provide matching labels
-	// ParseKeyString can also inspect the gamepad for migrations
-	// Those functions can be called on the main thread, while
-	// gamepad addition/removal is done on the CPU thread
 	std::mutex m_controllers_key_mutex;
 
 	std::vector<u32> m_gamepads_needing_migration;

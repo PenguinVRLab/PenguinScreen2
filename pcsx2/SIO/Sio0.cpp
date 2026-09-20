@@ -62,9 +62,6 @@ void Sio0::SoftReset()
 	g_MemoryCardProtocol.ResetPS1State();
 }
 
-// Simulates the ACK line on the bus. Peripherals are expected to send an ACK signal
-// over this line to tell the PS1 "keep sending me things I'm not done yet". The PS1
-// then uses this after it receives the peripheral's response to decide what to do.
 void Sio0::SetAcknowledge(bool ack)
 {
 	if (ack)
@@ -97,7 +94,7 @@ void Sio0::Interrupt(Sio0Interrupt sio0Interrupt)
 
 	if (!(psxRegs.interrupt & (1 << IopEvt_SIO)))
 	{
-		PSX_INT(IopEvt_SIO, PSXCLK / 250000); // PSXCLK/250000);
+		PSX_INT(IopEvt_SIO, PSXCLK / 250000);
 	}
 }
 
@@ -170,8 +167,6 @@ void Sio0::SetTxData(u8 cmd)
 		case SioMode::PAD:
 			currentPad = Pad::GetPad(port, slot);
 			pxAssertMsg(currentPad != nullptr, "Got nullptr when looking up pad");
-			// Set ACK in advance of sending the command to the pad.
-			// The pad will, if the command is done, set ACK to false.
 			SetAcknowledge(true);
 			data = currentPad->SendCommandByte(cmd);
 			SetRxData(data);
@@ -202,7 +197,6 @@ void Sio0::SetTxData(u8 cmd)
 			break;
 	}
 
-	// If the peripheral did not ACK, the command is done. Time for a soft reset.
 	if (!(this->stat & SIO0_STAT::ACK))
 	{
 		this->SoftReset();
@@ -234,17 +228,12 @@ void Sio0::SetCtrl(u16 value)
 	ctrl = value;
 	port = (ctrl & SIO0_CTRL::PORT) > 0;
 
-	// CTRL appears to be set to 0 between every "transaction".
-	// Not documented anywhere, but we'll use this to "reset"
-	// the SIO0 state, particularly during the annoying probes
-	// to memcards that occur when a game boots.
 	if (ctrl == 0)
 	{
 		g_MemoryCardProtocol.ResetPS1State();
 		SoftReset();
 	}
 
-	// If CTRL acknowledge, reset STAT bits 3 and 9
 	if (ctrl & SIO0_CTRL::ACK)
 	{
 		stat &= ~(SIO0_STAT::IRQ | SIO0_STAT::RX_PARITY_ERROR);

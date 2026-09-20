@@ -8,8 +8,6 @@
 #if defined(VERTEX_SHADER)
 
 #if VS_MULTIVIEW
-// PCSX2-VR (M4.3 stage 2): both eyes render in a single multiview pass; gl_ViewIndex
-// selects the eye (0 = left, 1 = right) for the stereo displacement below.
 #extension GL_EXT_multiview : require
 #endif
 
@@ -31,17 +29,10 @@ layout(std140, set = 0, binding = 0) uniform cb0
 	vec2 PointSize;
 	uint MaxDepth;
 	float LineAA1Width;
-	// PCSX2-VR (M4.1): x = per-eye horizontal NDC displacement (signed), y = convergence in Q units.
-	// With a multiband map these carry band 0 / the linear pair — see vr_stereo_disp below.
 	vec2 vr_stereo;
-	// PCSX2-VR (multiband): 0 = linear (bit-exact with the pre-multiband path), 1 = bands,
-	// 2 = log. Field order and offsets must match VSConstantBuffer exactly (48/56/60/64/80).
 	uint vr_map_mode;
 	uint vr_band_count;
-	// xyz = split points in DESCENDING q; w = eye sign for the band path (see vr_stereo_disp).
 	vec4 vr_splits;
-	// Per band: x = conv, y = sep (UNSIGNED), z = continuity bias, w = unused.
-	// Log mode reinterprets vr_band[0] as {w0, w1, dfar, -}.
 	vec4 vr_band[4];
 };
 
@@ -56,46 +47,20 @@ layout(location = 0) out VSOutput
 		flat vec4 c;
 	#endif
 
-	float inv_cov; // We use the inverse to make it simpler to interpolate.
-	flat uint interior; // 1 for triangle interior; 0 for edge;
+	float inv_cov;
+	flat uint interior;
 } vsOut;
 
 #if !VS_FST
-// PCSX2-VR (multiband): the depth map evaluator, shared by both VS paths below.
-// Returns the per-eye horizontal NDC displacement for a vertex whose perspective
-// term is q (~1/w). FST/UV draws never reach here (compile-excluded, as before).
-//
-// LINEAR is the default and MUST stay bit-exact with the pre-multiband shader: its
-// branch is a verbatim copy of the old expression, deliberately NOT rewritten to go
-// through the general band formula (that would add a `+ 0.0` bias term and re-order
-// the float ops). Wrapping identical arithmetic in a function does not reassociate
-// it, so this is safe.
-//
-// BANDS splits the depth range so near and far content can each get their own
-// convergence — one global pair can only serve one depth well. The compare chain
-// runs on DESCENDING split_q (band 0 = nearest = largest q); the CPU pads unused
-// splits with -FLT_MAX and duplicates the last valid band into the unused slots, so
-// no band-count check is needed here. Per-band bias is solved at profile-parse time
-// to make d continuous across every split.
-//
-// EYE SIGN: bands arrive unsigned because the deep-window clamp max(0, d) has to run
-// on the magnitude — clamping an already-signed value would be wrong for one eye — so
-// the sign is applied afterwards from vr_splits.w. The linear branch keeps the old
-// convention (sign pre-baked into vr_stereo.x, or supplied by vr_eye_sign under
-// multiview), which is why it is NOT multiplied by vr_splits.w.
 float vr_stereo_disp(float q)
 {
 	if (vr_map_mode == 0u)
 	{
-		// VERBATIM the pre-multiband expression — bit-exactness gate. Do not reassociate.
 		return vr_stereo.x * max(0.0f, 1.0f - vr_stereo.y * q);
 	}
 
 	if (vr_map_mode == 2u)
 	{
-		// Log map: band[0] holds {w0, w1, dfar}. Equal ratios of w get equal disparity
-		// steps; clamped flat outside the [w0, w1] anchors. dnear is pinned to 0 by
-		// design (deep window: depth goes INTO the screen only, never out).
 		float w = 1.0f / max(q, 1e-8f);
 		float t = clamp(log(w / vr_band[0].x) / log(vr_band[0].y / vr_band[0].x), 0.0f, 1.0f);
 		return (vr_band[0].z * t) * vr_splits.w;
@@ -107,41 +72,12 @@ float vr_stereo_disp(float q)
 	else if (q >= vr_splits.z) band = vr_band[2];
 	else                       band = vr_band[3];
 
-	// bias + sep*(1 - conv*q), clamped as an unsigned magnitude, then eye-signed.
 	float d = band.z + band.y * (1.0f - band.x * q);
 	return max(0.0f, d) * vr_splits.w;
 }
 #endif
 
 #if VS_FST
-// PCSX2-VR (HUD collimation): the ONE displacement a UV/FST draw can carry.
-//
-// WHY: everything above is a function of q, and FST draws have no meaningful q —
-// which is why they are compile-excluded from vr_stereo_disp. The consequence is
-// that every UV draw renders at EXACTLY zero disparity, i.e. pinned on the screen
-// plane. For text you READ that is correct. For symbology you AIM THROUGH (a gun
-// reticle, a target designator bracket) it is wrong: the bracket sits on the glass
-// while the jet it encloses sits ~80 arcmin behind it, so the two can never be
-// fused at once. Real combat HUDs solve this by COLLIMATING the symbology to
-// optical infinity, so symbol and target share one vergence. This is that.
-//
-// A CONSTANT, not a depth map. Collimation has no q dependence by construction —
-// the whole point is that the symbol adopts ONE authored depth (the far field it
-// must agree with), so a single NDC number is the complete mechanism. It rides in
-// vr_band[0].w, which is spare in every map mode (bands: {conv,sep,bias,-}; log:
-// {w0,w1,dfar,-}), so no constant-buffer layout changes and no new shader
-// permutation — VSSelector is a full 8 bits (GSDevice.h:676-704).
-//
-// EYE SIGN, the one place it is decided for FST: the same convention as the
-// linear path. Under multiview the CB carries the UNSIGNED magnitude and
-// gl_ViewIndex supplies the sign here; otherwise the CPU has already baked the
-// sign in (and a mono-centre target gets 0, so this never runs there — see
-// GSRendererHW::DetermineVSConfig). Positive = left eye left, right eye right =
-// uncrossed disparity = BEHIND the screen, matching vr_stereo_disp's sign.
-//
-// OFF-STATE: vr_band[0].w is 0 in every existing path (both the band fill and the
-// zeroing arm write w = 0.0f explicitly), so the guard at each call site is
-// unreachable unless a profile opts in. Non-VR builds never write it at all.
 float vr_collimate_signed()
 {
 	#if VS_MULTIVIEW
@@ -165,38 +101,16 @@ layout(location = 6) in vec4 a_f;
 
 void main()
 {
-	// Clamp to max depth, gs doesn't wrap
 	uint z = min(a_z, MaxDepth);
-
-	// pos -= 0.05 (1/320 pixel) helps avoiding rounding problems (integral part of pos is usually 5 digits, 0.05 is about as low as we can go)
-	// example: ceil(afterseveralvertextransformations(y = 133)) => 134 => line 133 stays empty
-	// input granularity is 1/16 pixel, anything smaller than that won't step drawing up/left by one pixel
-	// example: 133.0625 (133 + 1/16) should start from line 134, ceil(133.0625 - 0.05) still above 133
 
 	gl_Position = vec4(a_p, float(z), 1.0f) - vec4(0.05f, 0.05f, 0, 0);
 	gl_Position.xy = gl_Position.xy * vec2(VertexScale.x, -VertexScale.y) - vec2(VertexOffset.x, -VertexOffset.y);
-	gl_Position.z *= exp2(-32.0f);		// integer->float depth
+	gl_Position.z *= exp2(-32.0f);
 	gl_Position.y = -gl_Position.y;
 
-	// PCSX2-VR (M4.1): depth-proportional per-eye horizontal displacement (3D-Vision-style).
-	// a_q ~= 1/w is the perspective term; near geometry (large q) shifts more than far.
-	// Guarded on vr_stereo.x so a disabled stereo mode (vr_stereo == 0) is provably a no-op.
-	// UV/FST draws carry no meaningful Q, so they are excluded at compile time -> zero displacement.
-	// The clamp pins content nearer than the convergence plane AT the screen instead of
-	// popping it out with unbounded amplification: untextured screen-space geometry (HUD
-	// lines etc.) arrives with q ~= 1 and would otherwise be flung by (conv*q - 1) times
-	// the separation (field-verified on AC5's pitch ladder). Tier-2 stereo is a "deep
-	// window": depth goes INTO the screen only.
 	#if !VS_FST
-		// The map_mode term widens the guard for band/log maps, whose band 0 may
-		// legitimately have separation 0 while later bands do not. Off-state is
-		// unaffected: stereo disabled zeroes the whole VR block, so map_mode is 0
-		// and vr_stereo.x is 0, and this is still skipped.
 		if (vr_stereo.x != 0.0f || vr_map_mode != 0u)
 		{
-			// Multiview (stage 2): vr_stereo.x is the unsigned separation; the view index
-			// supplies the eye sign. Otherwise the sign is pre-baked into vr_stereo.x
-			// (mono is 0; the interleave debug path bakes the alternating sign).
 			#if VS_MULTIVIEW
 				float vr_eye_sign = (gl_ViewIndex == 0) ? -1.0f : 1.0f;
 			#else
@@ -206,11 +120,6 @@ void main()
 		}
 	#endif
 
-	// PCSX2-VR (HUD collimation): the FST sibling of the block above. Deliberately
-	// a SEPARATE #if rather than an #else on it, so the bit-exactness-critical text
-	// above is untouched by this feature. Guarded on the constant itself: 0 (every
-	// profile that has not opted in, every disabled/mono draw, every non-VR build)
-	// leaves gl_Position exactly as the line above produced it.
 	#if VS_FST
 		if (vr_band[0].w != 0.0f)
 			gl_Position.x += vr_collimate_signed();
@@ -220,18 +129,14 @@ void main()
 		vec2 uv = a_uv - TextureOffset;
 		vec2 st = a_st - TextureOffset;
 
-		// Integer nomalized
 		vsOut.ti.xy = uv * TextureScale;
 
 		#if VS_FST
-			// Integer integral
 			vsOut.ti.zw = uv;
 		#else
-			// float for post-processing in some games
 			vsOut.ti.zw = st / TextureScale;
 		#endif
 
-		// Float coords
 		vsOut.t.xy = st;
 		vsOut.t.w = a_q;
 	#else
@@ -247,7 +152,7 @@ void main()
 	vsOut.t.z = a_f.r;
 }
 
-#else // VS_EXPAND
+#else
 
 struct RawVertex
 {
@@ -272,7 +177,6 @@ layout(std140, set = 0, binding = 2) readonly buffer VertexBuffer {
 	RawVertex vertex_buffer[];
 };
 
-// Warning: use std430 instead of std140 so that the ints are tightly packed.
 layout(std430, set = 0, binding = 3) readonly buffer IndexBuffer {
 	uint index_buffer[];
 };
@@ -288,7 +192,6 @@ struct ProcessedVertex
 uint load_index(uint _i)
 {
 	uint i = _i + BaseIndex;
-	// i is even => load lower 16 bits; i odd => load upper 16 bits.
 	uint shift = (i & 1u) << 4u;
 	return (index_buffer[i >> 1u] >> shift) & 0xFFFFu;
 }
@@ -311,7 +214,7 @@ ProcessedVertex load_vertex(uint index)
 	uint z = min(a_z, MaxDepth);
 	vtx.p = vec4(a_p, float(z), 1.0f) - vec4(0.05f, 0.05f, 0, 0);
 	vtx.p.xy = vtx.p.xy * vec2(VertexScale.x, -VertexScale.y) - vec2(VertexOffset.x, -VertexOffset.y);
-	vtx.p.z *= exp2(-32.0f);		// integer->float depth
+	vtx.p.z *= exp2(-32.0f);
 	vtx.p.y = -vtx.p.y;
 
 	#if VS_TME
@@ -338,13 +241,11 @@ ProcessedVertex load_vertex(uint index)
 	return vtx;
 }
 
-// Convert XY from NDC to GS pixel coordinates (i.e. 1.0 = 1 GS pixel).
 vec2 get_xy_unscaled(vec2 xy)
 {
 	return round(xy / VertexScale) / 16.0f;
 }
 
-// Get the XY deltas in GS pixel coordinates, using first vertex as the origin.
 mat2 get_xy_deltas_unscaled(ProcessedVertex v0, ProcessedVertex v1, ProcessedVertex v2)
 {
 	vec2 xy0 = get_xy_unscaled(v0.p.xy);
@@ -353,10 +254,6 @@ mat2 get_xy_deltas_unscaled(ProcessedVertex v0, ProcessedVertex v1, ProcessedVer
 	return mat2(xy1 - xy0, xy2 - xy0);
 }
 
-// Get the AA1 outward expand direction to the edge formed by the first two vertices.
-// This is up or down for shallow (X dominant) edges, and right or left for steep (Y dominant) edges.
-// Similar expansion to line AA1 except instead of expanding on both sides of the line,
-// expand on on the side towards the outside of the triangle.
 vec2 get_aa1_triangle_expand_dir(ProcessedVertex v0, ProcessedVertex v1, ProcessedVertex v2)
 {
 	mat2 xy_deltas = get_xy_deltas_unscaled(v0, v1, v2);
@@ -368,7 +265,6 @@ vec2 get_aa1_triangle_expand_dir(ProcessedVertex v0, ProcessedVertex v1, Process
 
 	if ((dot(line_expand, line_normal) >= 0.0f) == (dot(line_opposite, line_normal) >= 0.0f))
 	{
-		// Expand direction point towards the interior so flip it.
 		line_expand = -line_expand;
 	}
 
@@ -380,11 +276,8 @@ mat2 get_inverse(mat2 mat, float det)
 	return mat2(mat[1][1], -mat[0][1], -mat[1][0], mat[0][0]) * (1 / det);
 }
 
-// Extrapolate triangle attributes from the first vertex along the given direction.
-// dp_mat is derived from the input vertices, it is passed in to avoid recomputing.
 void extrapolate_aa1_triangle_edge(inout ProcessedVertex v0, ProcessedVertex v1, ProcessedVertex v2, mat2 dp_mat, vec2 dp)
 {
-	// Get texture deltas
 	#if VS_TME
 		#if VS_FST
 			mat2 dt = mat2(v1.ti.zw - v0.ti.zw, v2.ti.zw - v0.ti.zw);
@@ -393,33 +286,28 @@ void extrapolate_aa1_triangle_edge(inout ProcessedVertex v0, ProcessedVertex v1,
 		#endif
 	#endif
 
-	// Get color delta if interpolating
 	#if VS_IIP
 		mat2x4 dc = mat2x4(v1.c - v0.c, v2.c - v0.c);
 	#endif
 
-	vec2 dz = vec2(v1.p.z - v0.p.z, v2.p.z - v0.p.z); // Z deltas
+	vec2 dz = vec2(v1.p.z - v0.p.z, v2.p.z - v0.p.z);
 
-	vec2 df = vec2(v1.t.z - v0.t.z, v2.t.z - v0.t.z); // Fog deltas
+	vec2 df = vec2(v1.t.z - v0.t.z, v2.t.z - v0.t.z);
 
-	vec2 dq = vec2(v1.t.w - v0.t.w, v2.t.w - v0.t.w); // Q deltas
+	vec2 dq = vec2(v1.t.w - v0.t.w, v2.t.w - v0.t.w);
 
-	// To prevent unstable extrapolation, do not extrapolate if the
-	// minimum perpendicular length of the triangle is < 2 pixels.
-	float dp_det = determinant(dp_mat); // Twice signed triangle area.
+	float dp_det = determinant(dp_mat);
 	float len0 = length(dp_mat[0]);
 	float len1 = length(dp_mat[1]);
 	float len2 = length(dp_mat[1] - dp_mat[0]);
 	float min_perp_length = abs(dp_det) / max(max(len0, len1), len2);
 
-	// Get the position -> barycentric weight matrix
 	mat2 inv_dp_mat = get_inverse(dp_mat, dp_det);
 
 	vec2 weights = min_perp_length < 2 ? vec2(0) : inv_dp_mat * dp;
 
-	v0.p.xy += dp * PointSize; // Extrapolate position
+	v0.p.xy += dp * PointSize;
 
-	// Extrapolate texture coords
 	#if VS_TME
 		#if VS_FST
 			v0.ti.zw += dt * weights;
@@ -431,15 +319,14 @@ void extrapolate_aa1_triangle_edge(inout ProcessedVertex v0, ProcessedVertex v1,
 		#endif
 	#endif
 
-	// Extrapolate and clamp color
 	#if VS_IIP
 		v0.c += dc * weights;
 		v0.c = clamp(v0.c, vec4(0), vec4(255));
 	#endif
 
-	v0.p.z += dot(dz, weights); // Extrapolate depth
+	v0.p.z += dot(dz, weights);
 
-	v0.t.z += dot(df, weights); // Extrapolate fog
+	v0.t.z += dot(df, weights);
 }
 
 void main()
@@ -465,7 +352,6 @@ void main()
 	vtx = load_vertex(vid_base);
 	ProcessedVertex other = load_vertex(vid_other);
 
-	// Use bottom minus top for delta regardless of which vertex we are expanding.
 	vec2 line_delta = is_bottom ? (vtx.p.xy - other.p.xy) : (other.p.xy - vtx.p.xy);
 	vec2 line_vector = normalize(line_delta / VertexScale);
 	vec2 line_expand = vec2(line_vector.y, -line_vector.x);
@@ -480,13 +366,8 @@ void main()
 	vsOut.inv_cov = is_right ? 1.0f : -1.0f;
 #endif
 
-	// Lines will be run as (0 1 2) (1 2 3)
-	// This means that both triangles will have a point based off the top line point as their first point
-	// So we don't have to do anything for !IIP
-
 #elif VS_EXPAND == VS_EXPAND_SPRITE
 
-	// Sprite points are always in pairs
 	uint vid_base = vid >> 1;
 	uint vid_lt = vid_base & ~1u;
 	uint vid_rb = vid_base | 1u;
@@ -507,37 +388,25 @@ void main()
 
 #elif VS_EXPAND == VS_EXPAND_TRIANGLE_AA1
 
-	// Triangles with AA1 are expanded as follows:
-	// - Vertices 0-2: Interior of triangle (1 triangle).
-	// - Vertices 3-8: First edge expanded (2 triangles).
-	// - Vertices 9-14: Second edge expanded (2 triangles).
-	// - Vertices 15-20: Third edge expanded (2 triangles).
-	// - Vertices 21-26: First corner cap (2 triangles).
-	// - Vertices 27-32: Second corner cap (2 triangles).
-	// - Vertices 33-38: Third corner cap (2 triangles).
-
 	uint prim_id = vid / 39;
-	uint prim_offset = vid - 39 * prim_id; // range: 0-38
+	uint prim_offset = vid - 39 * prim_id;
 	bool interior = prim_offset < 3;
 	bool edge = 3 <= prim_offset && prim_offset < 21;
 
 	if (interior)
 	{
 		vtx = load_vertex(load_index(3 * prim_id + prim_offset));
-		vsOut.inv_cov = 0.0f; // Full coverage
+		vsOut.inv_cov = 0.0f;
 		vsOut.interior = 1;
 	}
 	else if (edge)
 	{
-		// Vertex indices for this edge. We need all 3 for determining exterior/interior.
-		uint prim_offset_edges = prim_offset - 3; // range: 0-17
+		uint prim_offset_edges = prim_offset - 3;
 		uint i0 = prim_offset_edges / 6;
 		uint i1 = (i0 >= 2) ? i0 - 2 : i0 + 1;
 		uint i2 = (i0 >= 1) ? i0 - 1 : i0 + 2;
-		uint edge_offset = prim_offset_edges - 6 * i0; // range: 0-5
+		uint edge_offset = prim_offset_edges - 6 * i0;
 
-		// Note: order of top/bottom, inside/outside is arbitrary,
-		// as long as it assembles into two triangles forming a quad.
 		bool is_bottom = (2 <= edge_offset) && (edge_offset <= 4);
 		bool is_outside = (edge_offset & 1) != 0;
 
@@ -549,54 +418,44 @@ void main()
 
 		vec2 expand_dir = is_outside ? get_aa1_triangle_expand_dir(vtx, other, opposite) : vec2(0);
 
-		// Do actual extrapolation, or no-op if expand_dir == 0.
 		extrapolate_aa1_triangle_edge(vtx, other, opposite, pos_deltas, expand_dir);
 
-		vsOut.inv_cov = is_outside ? 1.0f : 0.0f; // No coverage on outside, otherwise full.
+		vsOut.inv_cov = is_outside ? 1.0f : 0.0f;
 
 		vsOut.interior = 0;
 	}
-	else // Corner cap
+	else
 	{
-		// Vertex indices for this cap. We need all 3 for determining exterior/interior.
-		uint prim_offset_cap = prim_offset - 21; // range: 0-8
+		uint prim_offset_cap = prim_offset - 21;
 		uint i0 = prim_offset_cap / 6;
 		uint i1 = (i0 >= 2) ? i0 - 2 : i0 + 1;
 		uint i2 = (i0 >= 1) ? i0 - 1 : i0 + 2;
-		uint cap_offset = prim_offset_cap - 6 * i0; // range: 0-5
+		uint cap_offset = prim_offset_cap - 6 * i0;
 
 		bool is_near_corner = cap_offset == 0 || cap_offset == 3;
 		bool is_far_corner = cap_offset == 2 || cap_offset == 5;
 		bool is_first_tri = cap_offset < 3;
 
-		// First triangle is on the side of vertex i1 and second is on the side of vertex i2.
 		vtx = load_vertex(load_index(3 * prim_id + i0));
 		ProcessedVertex other = load_vertex(load_index(3 * prim_id + (is_first_tri ? i1 : i2)));
 		ProcessedVertex opposite = load_vertex(load_index(3 * prim_id + (is_first_tri ? i2 : i1)));
 
 		mat2 pos_deltas = get_xy_deltas_unscaled(vtx, other, opposite);
 
-		// Get the edge expansion directions of both incident edges.
 		vec2 edge_expand_dir_0 = get_aa1_triangle_expand_dir(vtx, other, opposite);
 		vec2 edge_expand_dir_1 = get_aa1_triangle_expand_dir(vtx, opposite, other);
 
-		// Check if the corner is already filled by the expanded edges.
-		// This happens if the expand directions are the same.
-		// If so we output a degenerate triangle at this corner.
 		bool corner_filled = all(equal(edge_expand_dir_0, edge_expand_dir_1));
 
-		// Nothing if corner is filled, otherwise opposite to the bisector of the corner angle.
 		vec2 far_corner_dir = corner_filled ? vec2(0) : -normalize((pos_deltas[0] + pos_deltas[1]) / 2);
 
-		// Determine the expand direction.
-		vec2 expand_dir = is_near_corner ? vec2(0) :       // No extrapolation
-		                  is_far_corner ? far_corner_dir : // Opposite to the angle bisector of corner
-		                  edge_expand_dir_0;               // Standard AA1 edge expansion
+		vec2 expand_dir = is_near_corner ? vec2(0) :
+		                  is_far_corner ? far_corner_dir :
+		                  edge_expand_dir_0;
 
-		// Do the actual extrapolation (no-op if expand_dir == 0).
 		extrapolate_aa1_triangle_edge(vtx, other, opposite, pos_deltas, expand_dir);
 
-		vsOut.inv_cov = is_near_corner ? 0.0f : 1.0f; // Full coverage at near corner, otherwise none.
+		vsOut.inv_cov = is_near_corner ? 0.0f : 1.0f;
 	
 		vsOut.interior = 0;
 	}
@@ -605,16 +464,9 @@ void main()
 
 	gl_Position = vtx.p;
 
-	// PCSX2-VR (M4.1): same displacement as the non-expand path, applied post-expansion.
-	// vtx.t.w carries a_q for textured draws (1.0 otherwise), covering sprite/line/point
-	// primitives; inert when vr_stereo == 0, skipped for FST/UV draws. Same behind-screen
-	// clamp as the non-expand path: untextured expanded lines carry q = 1.0 and must land
-	// at screen depth, not fly off by (conv - 1) separations.
 	#if !VS_FST
-		// Same widened guard as the non-expand path above (band 0 may have sep 0).
 		if (vr_stereo.x != 0.0f || vr_map_mode != 0u)
 		{
-			// Same per-view sign selection as the non-expand path above.
 			#if VS_MULTIVIEW
 				float vr_eye_sign = (gl_ViewIndex == 0) ? -1.0f : 1.0f;
 			#else
@@ -624,9 +476,6 @@ void main()
 		}
 	#endif
 
-	// PCSX2-VR (HUD collimation): same constant, applied post-expansion. AC5's
-	// reticle and target brackets are SPRITE-class draws, so on a backend that
-	// VS-expands sprites this is the path that actually runs for them.
 	#if VS_FST
 		if (vr_band[0].w != 0.0f)
 			gl_Position.x += vr_collimate_signed();
@@ -637,9 +486,9 @@ void main()
 	vsOut.c = vtx.c;
 }
 
-#endif // VS_EXPAND
+#endif
 
-#endif // VERTEX_SHADER
+#endif
 
 #ifdef FRAGMENT_SHADER
 
@@ -811,8 +660,8 @@ layout(location = 0) in VSOutput
 	#else
 		flat vec4 c;
 	#endif
-	float inv_cov; // We use the inverse to make it simpler to interpolate.
-	flat uint interior; // 1 for triangle interior; 0 for edge;
+	float inv_cov;
+	flat uint interior;
 } vsIn;
 
 #if PS_RETURN_COLOR
@@ -839,11 +688,6 @@ layout(location = 0) in VSOutput
 #endif
 
 #if NEEDS_TEX
-// PCSX2-VR (M4.3): for stereo feed draws (a multiview draw sampling a 2-layer
-// stereo texture) the texture binds as an ARRAY and every sample selects the
-// current view's layer — each eye's upstream content flows through blits into
-// its own display layer. TEXC/ITEXC wrap the coordinates so the sampling sites
-// below stay layer-blind.
 #if PS_TEX_IN_ARRAY
 #extension GL_EXT_multiview : require
 layout(set = 1, binding = 0) uniform sampler2DArray Texture;
@@ -859,13 +703,6 @@ layout(set = 1, binding = 1) uniform texture2D Palette;
 
 #if PS_FEEDBACK_LOOP_IS_NEEDED_RT || PS_FEEDBACK_LOOP_IS_NEEDED_DEPTH
 	#if defined(DISABLE_TEXTURE_BARRIER) || defined(HAS_FEEDBACK_LOOP_LAYOUT)
-		// PCSX2-VR (Stage 1 / D4): on a promoted stereo target the feedback texture is a
-		// 2-layer array. Sampled as a plain texture2D (this path — feedback-loop-layout,
-		// the modern-NVIDIA path, or no-texture-barrier) both eyes read layer 0 (the LEFT
-		// eye). When ApplyTFXState binds the ARRAY view instead, declare the sampler as
-		// texture2DArray and texelFetch the current view's layer so each eye reads its own
-		// destination (Full DATE / StencilOne FS / SW blend / FBMASK). RT and depth are
-		// gated independently — a stereo RT can pair with a mono depth (temporary-Z path).
 		#if (PS_RT_IN_ARRAY || PS_DEPTH_IN_ARRAY)
 		#extension GL_EXT_multiview : require
 		#endif
@@ -888,7 +725,6 @@ layout(set = 1, binding = 1) uniform texture2D Palette;
 			#endif
 		#endif
 	#else
-		// Must consider each case separately since the input attachment indices must be consecutive.
 		#if (PS_FEEDBACK_LOOP_IS_NEEDED_RT && !PS_ROV_COLOR) && (PS_FEEDBACK_LOOP_IS_NEEDED_DEPTH && !PS_ROV_DEPTH)
 			layout(input_attachment_index = 0, set = 1, binding = 2) uniform subpassInput RtSampler;
 			layout(input_attachment_index = 1, set = 1, binding = 4) uniform subpassInput DepthSampler;
@@ -917,15 +753,12 @@ layout(depth_less) out float gl_FragDepth;
 #if (PS_AUTOMATIC_LOD != 1) && (PS_MANUAL_LOD == 1)
 float manual_lod(float uv_w)
 {
-	// FIXME add LOD: K - ( LOG2(Q) * (1 << L))
 	float K = LODParams.x;
 	float L = LODParams.y;
 	float bias = LODParams.z;
 	float max_lod = LODParams.w;
 
 	float gs_lod = K - log2(abs(uv_w)) * L;
-	// FIXME max useful ?
-	//return max(min(gs_lod, max_lod) - bias, 0.0f);
 	return min(gs_lod, max_lod) - bias;
 }
 #endif
@@ -933,16 +766,10 @@ float manual_lod(float uv_w)
 #if PS_ANISOTROPIC_FILTERING > 1
 vec4 sample_c_af(vec2 uv, float uv_w)
 {
-	// HW sampler will reject bad UVs, match that here.
 	uv = (any(isnan(uv)) || any(isinf(uv))) ? vec2(0.0f, 0.0f) : uv;
 
-	// Large floating point values risk NaN/Inf values.
-	// Above this value floats lose decimal precision, so seems a resonable limit for UVs.
 	uv = clamp(uv, -8388608.0f, 8388608.0f);
 
-	// Below taken from https://microsoft.github.io/DirectX-Specs/d3d/archive/D3D11_3_FunctionalSpec.htm#7.18.11%20LOD%20Calculations
-	// And https://registry.khronos.org/OpenGL/extensions/EXT/EXT_texture_filter_anisotropic.txt
-	// With guidance from https://pema.dev/2025/05/09/mipmaps-too-much-detail/ 
 	vec2 sz = vec2(textureSize(Texture, 0).xy);
 	vec2 dX = dFdx(uv) * sz;
 	vec2 dY = dFdy(uv) * sz;
@@ -950,7 +777,6 @@ vec4 sample_c_af(vec2 uv, float uv_w)
 	float length_x = length(dX);
 	float length_y = length(dY);
 
-	// Calculate Ellipse Transform
 	bool d_zero = length_x < 0.001f || length_y < 0.001f;
 	float f = (dX.x * dY.y - dX.y * dY.x);
 	bool d_par = f < 0.001f;
@@ -999,7 +825,6 @@ vec4 sample_c_af(vec2 uv, float uv_w)
 		}
 	}
 
-	// Compute AF values
 	bool is_major_x = length_x > length_y;
 	float length_major = is_major_x ? length_x : length_y;
 	float length_minor = is_major_x ? length_y : length_x;
@@ -1009,9 +834,6 @@ vec4 sample_c_af(vec2 uv, float uv_w)
 	vec2 aniso_line;
 	if (length_major <= 1.0f)
 	{
-		// A zero length_major would result in NaN Lod and break sampling.
-		// A small length_major would result in aniso_ratio getting clamped to 1.
-		// Perform isotropic filtering instead.
 		aniso_ratio = 1.0f;
 		length_lod = length_major;
 		aniso_line = vec2(0.0f, 0.0f);
@@ -1023,7 +845,6 @@ vec4 sample_c_af(vec2 uv, float uv_w)
 		aniso_ratio = min(length_major / length_minor, PS_ANISOTROPIC_FILTERING);
 		length_lod = length_major / aniso_ratio;
 
-		// clamp to top Lod
 		if (length_lod < 1.0f)
 			aniso_ratio = max(1.0f, aniso_ratio * length_lod);
 
@@ -1037,7 +858,7 @@ vec4 sample_c_af(vec2 uv, float uv_w)
 #elif PS_MANUAL_LOD == 1
 	float lod = manual_lod(uv_w);
 #else
-	float lod = 0.0f; // No Lod
+	float lod = 0.0f;
 #endif
 
 	vec4 colour;
@@ -1091,7 +912,7 @@ vec4 sample_c(vec2 uv)
 #elif PS_MANUAL_LOD == 1
 	return textureLod(Texture, TEXC(uv), manual_lod(vsIn.t.w));
 #else
-	return textureLod(Texture, TEXC(uv), 0); // No lod
+	return textureLod(Texture, TEXC(uv), 0);
 #endif
 #endif
 }
@@ -1127,8 +948,6 @@ vec4 clamp_wrap_uv(vec4 uv)
 		#elif PS_WMS == 3
 		{
 			#if PS_FST == 0
-			// wrap negative uv coords to avoid an off by one error that shifted
-			// textures. Fixes Xenosaga's hair issue.
 			uv = fract(uv);
 			#endif
 			uv = vec4((uvec4(uv * tex_size) & floatBitsToUint(MinMax.xyxy)) | floatBitsToUint(MinMax.zwzw)) / tex_size;
@@ -1181,7 +1000,6 @@ vec4 clamp_wrap_uv(vec4 uv)
 	#endif
 
 	#if PS_REGION_RECT == 1
-		// Normalized -> Integer Coordinates.
 		uv = clamp(uv * WH.zwzw + STRange.xyxy, STRange.xyxy, STRange.zwzw);
 	#endif
 
@@ -1209,8 +1027,6 @@ uvec4 sample_4_index(vec4 uv)
 	c.z = sample_c(uv.xw).a;
 	c.w = sample_c(uv.zw).a;
 
-	// Denormalize value
-
 #if PS_RTA_SRC_CORRECTION
 	uvec4 i = uvec4(round(c * 128.25f));
 #else
@@ -1218,13 +1034,10 @@ uvec4 sample_4_index(vec4 uv)
 #endif
 
 	#if PS_PAL_FMT == 1
-		// 4HL
 		return i & 0xFu;
 	#elif PS_PAL_FMT == 2
-		// 4HH
 		return i >> 4u;
 	#else
-		// 8
 		return i;
 	#endif
 }
@@ -1268,10 +1081,6 @@ vec4 fetch_c(ivec2 uv)
 	return texelFetch(Texture, ITEXC(uv), 0);
 #endif
 }
-
-//////////////////////////////////////////////////////////////////////
-// Depth sampling
-//////////////////////////////////////////////////////////////////////
 
 ivec2 clamp_wrap_uv_depth(ivec2 uv)
 {
@@ -1326,50 +1135,35 @@ vec4 sample_depth(vec2 st, ivec2 pos)
 
 	#if (PS_TALES_OF_ABYSS_HLE == 1)
 	{
-		// Warning: UV can't be used in channel effect
 		uint depth = fetch_raw_depth(pos);
 
-		// Convert msb based on the palette
 		t = texelFetch(Palette, ivec2((depth >> 8u) & 0xFFu, 0), 0) * 255.0f;
 	}
 	#elif (PS_URBAN_CHAOS_HLE == 1)
 	{
-		// Depth buffer is read as a RGB5A1 texture. The game try to extract the green channel.
-		// So it will do a first channel trick to extract lsb, value is right-shifted.
-		// Then a new channel trick to extract msb which will shifted to the left.
-		// OpenGL uses a vec32 format for the depth so it requires a couple of conversion.
-		// To be faster both steps (msb&lsb) are done in a single pass.
 
-		// Warning: UV can't be used in channel effect
 		uint depth = fetch_raw_depth(pos);
 
-		// Convert lsb based on the palette
 		t = texelFetch(Palette, ivec2(depth & 0xFFu, 0), 0) * 255.0f;
 
-		// Msb is easier
 		float green = float(((depth >> 8u) & 0xFFu) * 36.0f);
 		green = min(green, 255.0f);
 		t.g += green;
 	}
 	#elif (PS_DEPTH_FMT == 1)
 	{
-		// Based on ps_convert_depth32_rgba8 of convert
 
-		// Convert a vec32 depth texture into a RGBA color texture
 		uint d = uint(fetch_c(uv).r * exp2(32.0f));
 		t = vec4(uvec4((d & 0xFFu), ((d >> 8) & 0xFFu), ((d >> 16) & 0xFFu), (d >> 24)));
 	}
 	#elif (PS_DEPTH_FMT == 2)
 	{
-		// Based on ps_convert_depth16_rgb5a1 of convert
 
-		// Convert a vec32 (only 16 lsb) depth into a RGB5A1 color texture
 		uint d = uint(fetch_c(uv).r * exp2(32.0f));
 		t = vec4(uvec4((d & 0x1Fu), ((d >> 5) & 0x1Fu), ((d >> 10) & 0x1Fu), (d >> 15) & 0x01u)) * vec4(8.0f, 8.0f, 8.0f, 128.0f);
 	}
 	#elif (PS_DEPTH_FMT == 3)
 	{
-		// Convert a RGBA/RGB5A1 color texture into a RGBA/RGB5A1 color texture
 		t = fetch_c(uv) * 255.0f;
 	}
 	#endif
@@ -1390,10 +1184,6 @@ vec4 sample_depth(vec2 st, ivec2 pos)
 
 	return t;
 }
-
-//////////////////////////////////////////////////////////////////////
-// Fetch a Single Channel
-//////////////////////////////////////////////////////////////////////
 
 vec4 fetch_red(ivec2 xy)
 {
@@ -1533,7 +1323,7 @@ vec4 sample_color(vec2 st)
 	return trunc(t * 255.0f + 0.05f);
 }
 
-#endif // NEEDS_TEX
+#endif
 
 vec4 tfx(vec4 T, vec4 C)
 {
@@ -1559,7 +1349,6 @@ vec4 tfx(vec4 T, vec4 C)
 #endif
 
 #if (PS_TFX == 0) || (PS_TFX == 2) || (PS_TFX == 3)
-	// Clamp only when it is useful
 	C_out = min(C_out, 255.0f);
 #endif
 
@@ -1681,8 +1470,6 @@ void ps_dither(inout vec3 C, float As)
 
 		float value = DitherMatrix[fpos.y & 3][fpos.x & 3];
 
-		// The idea here is we add on the dither amount adjusted by the alpha before it goes to the hw blend
-		// so after the alpha blend the resulting value should be the same as (Cs - Cd) * As + Cd + Dither.
 		#if PS_DITHER_ADJUST
 			#if PS_BLEND_C == 2
 				float Alpha = Af;
@@ -1703,28 +1490,17 @@ void ps_dither(inout vec3 C, float As)
 
 void ps_color_clamp_wrap(inout vec3 C)
 {
-	// When dithering the bottom 3 bits become meaningless and cause lines in the picture
-	// so we need to limit the color depth on dithered items
 #if SW_BLEND || (PS_DITHER > 0 && PS_DITHER < 3) || PS_FBMASK
 
 #if PS_DST_FMT == FMT_16 && PS_BLEND_MIX == 0 && PS_ROUND_INV
-	C += 7.0f; // Need to round up, not down since the shader will invert
+	C += 7.0f;
 #endif
 
-	// Correct the Color value based on the output format
 #if PS_COLCLIP == 0 && PS_COLCLIP_HW == 0
-	// Standard Clamp
 	C = clamp(C, vec3(0.0f), vec3(255.0f));
 #endif
 
-	// FIXME rouding of negative float?
-	// compiler uses trunc but it might need floor
-
-	// Warning: normally blending equation is mult(A, B) = A * B >> 7. GPU have the full accuracy
-	// GS: Color = 1, Alpha = 255 => output 1
-	// GPU: Color = 1/255, Alpha = 255/255 * 255/128 => output 1.9921875
 #if PS_DST_FMT == FMT_16 && PS_DITHER != 3 && (PS_BLEND_MIX == 0 || PS_DITHER > 0)
-	// In 16 bits format, only 5 bits of colors are used. It impacts shadows computation of Castlevania
 	C = vec3(ivec3(C) & ivec3(0xF8));
 #elif PS_COLCLIP == 1 || PS_COLCLIP_HW == 1
 	C = vec3(ivec3(C) & ivec3(0xFF));
@@ -1741,10 +1517,7 @@ void ps_blend(inout vec4 Color, inout vec4 As_rgba)
 
 	#if SW_BLEND
 
-		// PABE
 		#if PS_PABE
-			// As_rgba needed for accumulation blend to manipulate Cd
-			// No blending so early exit
 			if (As < 1.0f)
 			{
 				As_rgba.rgb = vec3(0.0f);
@@ -1757,7 +1530,6 @@ void ps_blend(inout vec4 Color, inout vec4 As_rgba)
 		#if PS_FEEDBACK_LOOP_IS_NEEDED_RT
 			vec4 RT = sample_from_rt();
 		#else
-			// Not used, but we define it to make the selection below simpler.
 			vec4 RT = vec4(0.0f);
 		#endif
 
@@ -1782,7 +1554,6 @@ void ps_blend(inout vec4 Color, inout vec4 As_rgba)
 			#endif
 		#endif
 
-			// Let the compiler do its jobs !
 			#if PS_COLCLIP_HW == 1
 			vec3 Cd = trunc(RT.rgb * 65535.0f);
 			#else
@@ -1822,8 +1593,6 @@ void ps_blend(inout vec4 Color, inout vec4 As_rgba)
 			vec3 D = vec3(0.0f);
 		#endif
 
-		// As/Af clamp alpha for Blend mix
-		// We shouldn't clamp blend mix with blend hw 1 as we want alpha higher
 		float C_clamped = C;
 		#if PS_BLEND_MIX > 0 && PS_BLEND_HW != 1 && PS_BLEND_HW != 2
 			C_clamped = min(C_clamped, 1.0f);
@@ -1831,13 +1600,6 @@ void ps_blend(inout vec4 Color, inout vec4 As_rgba)
 
 		#if PS_BLEND_A == PS_BLEND_B
 			Color.rgb = D;
-		// In blend_mix, HW adds on some alpha factor * dst.
-		// Truncating here wouldn't quite get the right result because it prevents the <1 bit here from combining with a <1 bit in dst to form a ≥1 amount that pushes over the truncation.
-		// Instead, apply an offset to convert HW's round to a floor.
-		// Since alpha is in 1/128 increments, subtracting (0.5 - 0.5/128 == 127/256) would get us what we want if GPUs blended in full precision.
-		// But they don't.  Details here: https://github.com/PCSX2/pcsx2/pull/6809#issuecomment-1211473399
-		// Based on the scripts at the above link, the ideal choice for Intel GPUs is 126/256, AMD 120/256.  Nvidia is a lost cause.
-		// 124/256 seems like a reasonable compromise, providing the correct answer 99.3% of the time on Intel (vs 99.6% for 126/256), and 97% of the time on AMD (vs 97.4% for 120/256).
 		#elif PS_BLEND_MIX == 2
 			Color.rgb = ((A - B) * C_clamped + D) + (124.0f/256.0f);
 		#elif PS_BLEND_MIX == 1
@@ -1847,27 +1609,14 @@ void ps_blend(inout vec4 Color, inout vec4 As_rgba)
 		#endif
 
 		#if PS_BLEND_HW == 1
-			// As or Af
 			As_rgba.rgb = vec3(C);
-			// Subtract 1 for alpha to compensate for the changed equation,
-			// if c.rgb > 255.0f then we further need to adjust alpha accordingly,
-			// we pick the lowest overflow from all colors because it's the safest,
-			// we divide by 255 the color because we don't know Cd value,
-			// changed alpha should only be done for hw blend.
 			vec3 alpha_compensate = max(vec3(1.0f), Color.rgb / vec3(255.0f));
 			As_rgba.rgb -= alpha_compensate;
 		#elif PS_BLEND_HW == 2
-			// Since we can't do Cd*(Aalpha + 1) - Cs*Alpha in hw blend
-			// what we can do is adjust the Cs value that will be
-			// subtracted, this way we can get a better result in hw blend.
-			// Result is still wrong but less wrong than before.
 			float division_alpha = 1.0f + C;
 			Color.rgb /= vec3(division_alpha);
 		#elif PS_BLEND_HW == 3
-			// As, Ad or Af clamped.
 			As_rgba.rgb = vec3(C_clamped);
-			// Cs*(Alpha + 1) might overflow, if it does then adjust alpha value
-			// that is sent on second output to compensate.
 			vec3 overflow_check = (Color.rgb - vec3(255.0f)) / 255.0f;
 			vec3 alpha_compensate = max(vec3(0.0f), overflow_check);
 			As_rgba.rgb -= alpha_compensate;
@@ -1882,34 +1631,24 @@ void ps_blend(inout vec4 Color, inout vec4 As_rgba)
 		#endif
 
 		#if PS_BLEND_HW == 1
-			// Needed for Cd * (As/Ad/F + 1) blending modes
 			Color.rgb = vec3(255.0f);
 		#elif PS_BLEND_HW == 2
-			// Cd*As,Cd*Ad or Cd*F
 
 			Color.rgb = max(vec3(0.0f), (Alpha - vec3(1.0f)));
 			Color.rgb *= vec3(255.0f);
 		#elif PS_BLEND_HW == 3 && PS_RTA_CORRECTION == 0
-			// Needed for Cs*Ad, Cs*Ad + Cd, Cd - Cs*Ad
-			// Multiply Color.rgb by (255/128) to compensate for wrong Ad/255 value when rgb are below 128.
-			// When any color channel is higher than 128 then adjust the compensation automatically
-			// to give us more accurate colors, otherwise they will be wrong.
-			// The higher the value (>128) the lower the compensation will be.
 			float max_color = max(max(Color.r, Color.g), Color.b);
 			float color_compensate = 255.0f / max(128.0f, max_color);
 			Color.rgb *= vec3(color_compensate);
 		#elif PS_BLEND_HW == 4
-			// Needed for Cd * (1 - Ad) and Cd*(1 + Alpha).
 
 			As_rgba.rgb = Alpha * vec3(128.0f / 255.0f);
 			Color.rgb = vec3(127.5f);
 		#elif PS_BLEND_HW == 5
-			// Needed for Cs*Alpha + Cd*(1 - Alpha).
 			Alpha *= vec3(128.0f / 255.0f);
 			As_rgba.rgb = (Alpha - vec3(0.5f));
 			Color.rgb = (Color.rgb * Alpha);
 		#elif PS_BLEND_HW == 6
-			// Needed for Cd*Alpha + Cs*(1 - Alpha).
 			Alpha *= vec3(128.0f / 255.0f);
 			As_rgba.rgb = Alpha;
 			Color.rgb *= (Alpha - vec3(0.5f));
@@ -1939,7 +1678,6 @@ void main()
 {
 	float input_z = gl_FragCoord.z;
 
-	// Must floor before depth testing.
 #if PS_ZFLOOR
 	input_z = floor(input_z * exp2(32.0f)) * exp2(-32.0f);
 #endif
@@ -1970,28 +1708,24 @@ void main()
 #endif
 
 #if PS_SCANMSK & 2
-	// fail depth test on prohibited lines
 	if ((int(gl_FragCoord.y) & 1) == (PS_SCANMSK & 1))
 		DISCARD;
 #endif
 #if PS_DATE >= 5
 
 #if PS_WRITE_RG == 1
-	// Pseudo 16 bits access.
 	float rt_a = sample_from_rt().g;
 #else
 	float rt_a = sample_from_rt().a;
 #endif
 
 #if (PS_DATE & 3) == 1
-	// DATM == 0: Pixel with alpha equal to 1 will failed
 	#if PS_RTA_CORRECTION
 		bool bad = (254.5f / 255.0f) < rt_a;
 	#else
 		bool bad = (127.5f / 255.0f) < rt_a;
 	#endif
 #elif (PS_DATE & 3) == 2
-	// DATM == 1: Pixel with alpha equal to 0 will failed
 	#if PS_RTA_CORRECTION
 		bool bad = rt_a < (254.5f / 255.0f);
 	#else
@@ -2003,12 +1737,10 @@ void main()
 		DISCARD;
 	}
 
-#endif		// PS_DATE >= 5
+#endif
 
 #if PS_DATE == 3
 	int stencil_ceil = int(texelFetch(PrimMinTexture, ivec2(gl_FragCoord.xy), 0).r);
-	// Note gl_PrimitiveID == stencil_ceil will be the primitive that will update
-	// the bad alpha value so we must keep it.
 
 	if (gl_PrimitiveID > stencil_ceil) {
 		DISCARD;
@@ -2019,19 +1751,17 @@ void main()
 
 #if PS_AA1
 	#if PS_AA1 == PS_AA1_LINE
-		// Blur only outer part of the line by scaling coverage.
 		float cov = clamp(LineCovScale * (1.0f - abs(vsIn.inv_cov)), 0.0f, 1.0f);
 	#else
 		float cov = clamp(1.0f - abs(vsIn.inv_cov), 0.0f, 1.0f);
 	#endif
 	#if PS_ABE
-		if (floor(C.a) == 128.0f) // The coverage is only used if the fragment alpha is 128.
+		if (floor(C.a) == 128.0f)
 			C.a = 128.0f * cov;
 	#else
 		C.a = 128.0f * cov;
 	#endif
 #elif PS_FIXED_ONE_A
-	// AA (Fixed one) will output a coverage of 1.0 as alpha
 	C.a = 128.0f;
 #endif
 
@@ -2055,25 +1785,19 @@ void main()
 	vec4 alpha_blend = vec4(C.a / 128.0f);
 #endif
 
-	// Correct the ALPHA value based on the output format
 #if (PS_DST_FMT == FMT_16)
-	float A_one = 128.0f; // alpha output will be 0x80
+	float A_one = 128.0f;
 	C.a = (PS_FBA != 0) ? A_one : step(128.0f, C.a) * A_one;
 #elif (PS_DST_FMT == FMT_32) && (PS_FBA != 0)
 	if(C.a < 128.0f) C.a += 128.0f;
 #endif
 
-	// Get first primitive that will write a failling alpha value
 #if PS_DATE == 1
 
-	// DATM == 0
-	// Pixel with alpha equal to 1 will failed (128-255)
 	o_col0 = (C.a > 127.5f) ? vec4(gl_PrimitiveID) : vec4(0x7FFFFFFF);
 
 #elif PS_DATE == 2
 
-	// DATM == 1
-	// Pixel with alpha equal to 0 will failed (0-127)
 	o_col0 = (C.a < 127.5f) ? vec4(gl_PrimitiveID) : vec4(0x7FFFFFFF);
 
 #else
@@ -2091,7 +1815,6 @@ void main()
 			#endif
 		#endif
 
-		// Special case for 32bit input and 16bit output, shuffle used by The Godfather
 		#if PS_SHUFFLE_SAME
 			#if (PS_PROCESS_BA & SHUFFLE_READ)
 				uvec4 denorm_c = uvec4(C);
@@ -2099,13 +1822,11 @@ void main()
 			#else
 				C.ga = C.rg;
 			#endif
-		// Copy of a 16bit source in to this target
 		#elif PS_READ16_SRC
 			uvec4 denorm_c = uvec4(C);
 			uvec2 denorm_TA = uvec2(vec2(TA.xy) * 255.0f + 0.5f);
 			C.rb = vec2(float((denorm_c.r >> 3) | (((denorm_c.g >> 3) & 0x7u) << 5)));
 			C.ga = vec2(float((denorm_c.g >> 6) | ((denorm_c.b >> 3) << 2) | (denorm_TA.x & 0x80u)));
-		// Write RB part. Mask will take care of the correct destination
 		#elif PS_SHUFFLE_ACROSS
 			#if(PS_PROCESS_BA == SHUFFLE_READWRITE && PS_PROCESS_RG == SHUFFLE_READWRITE)
 				C.br = C.rb;
@@ -2116,23 +1837,20 @@ void main()
 			#else
 				C.rb = C.rr;
 				C.ga = C.gg;
-			#endif // PS_PROCESS_BA
-		#endif // PS_SHUFFLE_ACROSS
-	#endif // PS_SHUFFLE
+			#endif
+		#endif
+	#endif
 
 	ps_dither(C.rgb, alpha_blend.a);
 
-	// Color clamp/wrap needs to be done after sw blending and dithering
 	ps_color_clamp_wrap(C.rgb);
 
 	ps_fbmask(C);
 
 	#if (PS_AFAIL == AFAIL_RGB_ONLY_DSB) && !PS_NO_COLOR1
-		// Use alpha blend factor to determine whether to update A.
 		alpha_blend.a = float(atst_pass);
 	#endif
 
-	// Output color scaling
 	#if !PS_NO_COLOR
 		#if PS_RTA_CORRECTION
 			o_col0.a = C.a / 128.0f;
@@ -2148,7 +1866,6 @@ void main()
 			o_col1 = alpha_blend;
 		#endif
 
-		// Alpha test with feedback
 		#if PS_AFAIL == AFAIL_FB_ONLY
 			if (!atst_pass)
 				DISCARD_DEPTH;
@@ -2158,7 +1875,7 @@ void main()
 		#elif (PS_AFAIL == AFAIL_RGB_ONLY || PS_AFAIL == AFAIL_RGB_ONLY_SW_Z)
 			if (!atst_pass)
 			{
-				o_col0.a = sample_from_rt().a; // discard alpha
+				o_col0.a = sample_from_rt().a;
 			#if PS_AFAIL == AFAIL_RGB_ONLY_SW_Z
 				DISCARD_DEPTH;
 			#endif
@@ -2172,18 +1889,16 @@ void main()
 	
 	#if PS_AA1 == PS_AA1_TRIANGLE_SW_Z
 		if (!bool(vsIn.interior))
-			DISCARD_DEPTH; // No depth update for triangle edges.
+			DISCARD_DEPTH;
 	#endif
 	
-	// Writing back color (result already written to o_col0 for non-ROV)
 	#if PS_RETURN_COLOR_ROV
-		o_col0 = mix(o_col0, sample_from_rt(), equal(FbMask, uvec4(0xFFu))); // channel masking
+		o_col0 = mix(o_col0, sample_from_rt(), equal(FbMask, uvec4(0xFFu)));
 
 		if (!rov_discard_color)
 			imageStore(RtImageRov, ivec2(gl_FragCoord.xy), o_col0);
 	#endif
 	
-	// Writing back depth
 	#if PS_RETURN_DEPTH
 		gl_FragDepth = input_z;
 	#elif PS_RETURN_DEPTH_ROV
@@ -2194,7 +1909,7 @@ void main()
 	#if PS_ROV_COLOR || PS_ROV_DEPTH
 		endInvocationInterlockARB();
 	#endif
-#endif // PS_DATE
+#endif
 }
 
 #endif

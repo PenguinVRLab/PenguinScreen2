@@ -10,12 +10,12 @@ class StateWrapper;
 class Sio0
 {
 private:
-	u32 txData; // 0x1f801040
-	u32 rxData; // 0x1f801040
-	u32 stat; // 0x1f801044
-	u16 mode; // 0x1f801048
-	u16 ctrl; // 0x1f80104a
-	u16 baud; // 0x1f80104e
+	u32 txData;
+	u32 rxData;
+	u32 stat;
+	u16 mode;
+	u16 ctrl;
+	u16 baud;
 
 	void ClearStatAcknowledge();
 

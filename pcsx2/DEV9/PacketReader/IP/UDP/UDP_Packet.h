@@ -13,7 +13,6 @@ namespace PacketReader::IP::UDP
 		u16 destinationPort;
 
 	private:
-		//u16 length;
 		u16 checksum;
 
 		const static int headerLength = 8;
@@ -22,7 +21,6 @@ namespace PacketReader::IP::UDP
 		std::unique_ptr<Payload> payload;
 
 	public:
-		//Takes ownership of payload
 		UDP_Packet(Payload* data);
 		UDP_Packet(const u8* buffer, int bufferSize);
 		UDP_Packet(const UDP_Packet&);
@@ -38,4 +36,4 @@ namespace PacketReader::IP::UDP
 		virtual bool VerifyChecksum(IP_Address srcIP, IP_Address dstIP);
 		virtual void CalculateChecksum(IP_Address srcIP, IP_Address dstIP);
 	};
-} // namespace PacketReader::IP::UDP
+}

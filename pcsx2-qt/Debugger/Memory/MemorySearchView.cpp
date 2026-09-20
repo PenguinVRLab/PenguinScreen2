@@ -39,7 +39,6 @@ MemorySearchView::MemorySearchView(const DebuggerViewParameters& parameters)
 	connect(m_ui.cmbSearchType, &QComboBox::currentIndexChanged, this, &MemorySearchView::onSearchTypeChanged);
 	connect(m_ui.cmbSearchComparison, &QComboBox::currentIndexChanged, this, &MemorySearchView::onSearchComparisonChanged);
 
-	// Ensures we don't retrigger the load results function unintentionally
 	m_resultsLoadTimer.setInterval(100);
 	m_resultsLoadTimer.setSingleShot(true);
 	connect(&m_resultsLoadTimer, &QTimer::timeout, this, &MemorySearchView::loadSearchResults);
@@ -175,7 +174,6 @@ static bool memoryValueComparator(SearchComparison searchComparison, T searchVal
 	}
 }
 
-// Handles the comparison of the read value against either the search value, or if existing searchResults are available, the value at the same address in the searchResultsMap
 template <typename T>
 bool handleSearchComparison(SearchComparison searchComparison, u32 searchAddress, const SearchResult* priorResult, T searchValue, T readValue)
 {
@@ -333,7 +331,6 @@ bool handleArraySearchComparison(DebugInterface* cpu, SearchComparison searchCom
 			return false;
 		}
 	}
-	// Default to no match found unless the comparison is a NotEquals
 	return isNotOperator;
 }
 
@@ -578,7 +575,6 @@ void MemorySearchView::onSearchResultsListScroll(u32 value)
 	const bool scrolledSufficiently = value > (m_ui.listSearchResults->verticalScrollBar()->maximum() * 0.95);
 	if (!m_resultsLoadTimer.isActive() && hasResultsToLoad && scrolledSufficiently)
 	{
-		// Load results once timer ends, allowing us to debounce repeated requests and only do one load.
 		m_resultsLoadTimer.start();
 	}
 }
@@ -610,7 +606,6 @@ SearchType MemorySearchView::getCurrentSearchType()
 
 SearchComparison MemorySearchView::getCurrentSearchComparison()
 {
-	// Note: The index can't be converted directly to the enum value since we change what comparisons are shown.
 	return m_searchComparisonLabelMap.labelToEnum(m_ui.cmbSearchComparison->currentText());
 }
 
@@ -639,7 +634,6 @@ void MemorySearchView::onSearchTypeChanged(int newIndex)
 	else
 		m_ui.chkSearchHex->setEnabled(false);
 
-	// Clear existing search results when the comparison type changes
 	if (m_searchResults.size() > 0 && (int)(m_searchResults.front().getType()) != newIndex)
 	{
 		m_searchResults.clear();
@@ -666,7 +660,6 @@ void MemorySearchView::updateSearchComparisonSelections()
 		m_ui.cmbSearchComparison->addItem(m_searchComparisonLabelMap.enumToLabel(comparison));
 	}
 
-	// Preserve selection if applicable
 	if (selectedComparison == SearchComparison::Invalid)
 		return;
 	if (std::find(comparisons.begin(), comparisons.end(), selectedComparison) != comparisons.end())

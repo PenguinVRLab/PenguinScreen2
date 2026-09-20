@@ -25,9 +25,8 @@
 #include <mutex>
 #include <string>
 
-// We're using deprecated fields because we're targeting multiple ffmpeg versions.
 #if defined(_MSC_VER)
-#pragma warning(disable : 4996) // warning C4996: 'AVCodecContext::channels': was declared deprecated
+#pragma warning(disable : 4996)
 #elif defined(__clang__)
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 #elif defined(__GNUC__)
@@ -50,7 +49,6 @@ extern "C" {
 #include "libswresample/version.h"
 }
 
-// Compatibility with both ffmpeg 4.x and 5.x.
 #if (LIBAVFORMAT_VERSION_MAJOR < 59)
 #define ff_const59
 #else
@@ -180,7 +178,7 @@ namespace GSCapture
 
 	static AVCodecContext* s_video_codec_context = nullptr;
 	static AVStream* s_video_stream = nullptr;
-	static AVFrame* s_converted_video_frame = nullptr; // YUV
+	static AVFrame* s_converted_video_frame = nullptr;
 	static AVFrame* s_hw_video_frame = nullptr;
 	static AVPacket* s_video_packet = nullptr;
 	static SwsContext* s_sws_context = nullptr;
@@ -211,12 +209,11 @@ namespace GSCapture
 	static u32 s_frames_pending_encode = 0;
 	static u32 s_frames_encode_consume_pos = 0;
 
-	// NOTE: So this doesn't need locking, we allocate it once, and leave it.
 	static std::unique_ptr<float[]> s_audio_buffer;
 	static std::atomic<u32> s_audio_buffer_size{0};
 	static u32 s_audio_buffer_write_pos = 0;
 	alignas(__cachelinesize) static u32 s_audio_buffer_read_pos = 0;
-} // namespace GSCapture
+}
 
 #ifndef USE_LINKED_FFMPEG
 #define DECLARE_IMPORT(X) static decltype(X)* wrap_##X;
@@ -230,8 +227,6 @@ VISIT_SWSCALE_IMPORTS(DECLARE_IMPORT);
 VISIT_SWRESAMPLE_IMPORTS(DECLARE_IMPORT);
 #undef DECLARE_IMPORT
 
-// We could refcount this, but really, may as well just load it and pay the cost once.
-// Not like we need to save a few megabytes of memory...
 #ifndef USE_LINKED_FFMPEG
 static void UnloadFFmpegFunctions(std::unique_lock<std::mutex>& lock);
 
@@ -405,7 +400,6 @@ bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float 
 		return false;
 	}
 
-	// find the codec id
 	if (capture_video)
 	{
 		const float sample_aspect_ratio = aspect / (static_cast<float>(s_size.x) / static_cast<float>(s_size.y));
@@ -421,8 +415,6 @@ bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float 
 			}
 		}
 
-		// FFmpeg decides whether mp4, mkv, etc should use h264 or mpeg4 as their default codec by whether x264 was enabled
-		// But there's a lot of other h264 encoders (e.g. hardware encoders) we may want to use instead
 		if (!vcodec && wrap_avformat_query_codec(output_format, AV_CODEC_ID_H264, FF_COMPLIANCE_NORMAL))
 			vcodec = wrap_avcodec_find_encoder(AV_CODEC_ID_H264);
 		if (!vcodec)
@@ -451,7 +443,6 @@ bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float 
 		wrap_av_reduce(&s_video_codec_context->time_base.num, &s_video_codec_context->time_base.den, 10000,
 			static_cast<s64>(static_cast<double>(fps) * 10000.0), std::numeric_limits<s32>::max());
 
-		// Default to NV12 if not overridden by the user
 		const AVPixelFormat preferred_sw_pix_fmt = GSConfig.VideoCaptureFormat.empty() ? AV_PIX_FMT_NV12 : static_cast<AVPixelFormat>(std::stoi(GSConfig.VideoCaptureFormat));
 		AVPixelFormat sw_pix_fmt = preferred_sw_pix_fmt;
 		if (vcodec->pix_fmts)
@@ -475,11 +466,9 @@ bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float 
 		if (preferred_sw_pix_fmt != sw_pix_fmt)
 			Console.Warning("GSCapture: preferred pixel format (%d) was unsupported by the codec. Using (%d) instead.", preferred_sw_pix_fmt, sw_pix_fmt);
 
-		// Can we use hardware encoding?
 		const AVCodecHWConfig* hwconfig = wrap_avcodec_get_hw_config(vcodec, 0);
 		if (hwconfig && hwconfig->pix_fmt != AV_PIX_FMT_NONE && hwconfig->pix_fmt != sw_pix_fmt)
 		{
-			// First index isn't our preferred pixel format, try the others, but fall back if one doesn't exist.
 			int index = 1;
 			while (const AVCodecHWConfig* next_hwconfig = wrap_avcodec_get_hw_config(vcodec, index++))
 			{
@@ -568,7 +557,6 @@ bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float 
 			return false;
 		}
 
-		// If the user overrode the pixel format, get that now
 		if (has_pixel_format_override)
 			sw_pix_fmt = s_video_codec_context->pix_fmt;
 
@@ -638,7 +626,6 @@ bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float 
 
 	if (capture_audio)
 	{
-		// The CPU thread might have dumped some frames in here from the last capture, so clear it out.
 		s_audio_buffer_read_pos = 0;
 		s_audio_buffer_write_pos = 0;
 		s_audio_buffer_size.store(0, std::memory_order_release);
@@ -728,8 +715,6 @@ bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float 
 			}
 		}
 
-		// TODO: Check channel layout support
-
 		if (GSConfig.EnableAudioCaptureParameters)
 		{
 			res = wrap_av_dict_parse_string(&s_audio_codec_arguments, GSConfig.AudioCaptureParameters.c_str(), "=", ":", 0);
@@ -752,7 +737,6 @@ bool GSCapture::BeginCapture(float fps, GSVector2i recommendedResolution, float 
 			return false;
 		}
 
-		// Use packet size for frame if it supports it... but most don't.
 		if (acodec->capabilities & AV_CODEC_CAP_VARIABLE_FRAME_SIZE)
 			s_audio_frame_size = AudioStream::CHUNK_SIZE;
 		else
@@ -856,7 +840,6 @@ bool GSCapture::DeliverVideoFrame(GSTexture* stex)
 {
 	std::unique_lock<std::mutex> lock(s_lock);
 
-	// If the encoder thread reported an error, stop the capture.
 	if (s_encoding_error)
 	{
 		InternalEndCapture(lock);
@@ -868,7 +851,6 @@ bool GSCapture::DeliverVideoFrame(GSTexture* stex)
 
 	PendingFrame& pf = s_pending_frames[s_pending_frames_pos];
 
-	// It shouldn't be pending map, but the encode thread might be lagging.
 	pxAssert(pf.state != PendingFrame::State::NeedsMap);
 	if (pf.state == PendingFrame::State::NeedsEncoding)
 	{
@@ -907,21 +889,16 @@ void GSCapture::ProcessFramePendingMap(std::unique_lock<std::mutex>& lock)
 	PendingFrame& pf = s_pending_frames[s_frames_map_consume_pos];
 	pxAssert(pf.state == PendingFrame::State::NeedsMap);
 
-	// Flushing is potentially expensive, so we leave it unlocked in case the encode thread
-	// needs to pick up another thread while we're waiting.
 	lock.unlock();
 
 	if (pf.tex->NeedsFlush())
 		pf.tex->Flush();
 
-	// Even if the map failed, we need to kick it to the encode thread anyway, because
-	// otherwise our queue indices will get desynchronized.
 	if (!pf.tex->Map(GSVector4i(0, 0, s_size.x, s_size.y)))
 		Console.Warning("GSCapture: Failed to map previously flushed frame.");
 
 	lock.lock();
 
-	// Kick to encoder thread!
 	pf.state = PendingFrame::State::NeedsEncoding;
 	s_frames_map_consume_pos = (s_frames_map_consume_pos + 1) % MAX_PENDING_FRAMES;
 	s_frames_pending_map--;
@@ -948,21 +925,17 @@ void GSCapture::EncoderThreadEntryPoint()
 
 		bool okay = !s_encoding_error;
 
-		// If the frame failed to map, this will be false, and we'll just skip it.
 		if (okay && s_video_stream && pf.tex->IsMapped())
 			okay = SendFrame(pf);
 
-		// Encode as many audio frames while the video is ahead.
 		if (okay && s_audio_stream)
 			okay = ProcessAudioPackets(pf.pts);
 
 		lock.lock();
 
-		// If we had an encoding error, tell the GS thread to shut down the capture (later).
 		if (!okay)
 			s_encoding_error = true;
 
-		// Done with this frame! Wait for the next.
 		pf.state = PendingFrame::State::Unused;
 		s_frames_encode_consume_pos = (s_frames_encode_consume_pos + 1) % MAX_PENDING_FRAMES;
 		s_frames_pending_encode--;
@@ -979,14 +952,12 @@ void GSCapture::StartEncoderThread()
 
 void GSCapture::StopEncoderThread(std::unique_lock<std::mutex>& lock)
 {
-	// Thread will exit when s_capturing is false.
 	pxAssert(!s_capturing.load(std::memory_order_acquire));
 
 	if (s_encoder_thread.Joinable())
 	{
 		Console.WriteLn("GSCapture: Stopping encoder thread.");
 
-		// Might be sleeping, so wake it before joining.
 		s_frame_ready_cv.notify_one();
 		lock.unlock();
 		s_encoder_thread.Join();
@@ -1002,7 +973,6 @@ bool GSCapture::SendFrame(const PendingFrame& pf)
 	const int source_height = static_cast<int>(pf.tex->GetHeight());
 	const int source_pitch = static_cast<int>(pf.tex->GetMapPitch());
 
-	// In case a previous frame is still using the frame.
 	wrap_av_frame_make_writable(s_converted_video_frame);
 
 	s_sws_context = wrap_sws_getCachedContext(s_sws_context, source_width, source_height, source_format, s_converted_video_frame->width,
@@ -1019,7 +989,6 @@ bool GSCapture::SendFrame(const PendingFrame& pf)
 	AVFrame* frame_to_send = s_converted_video_frame;
 	if (IsUsingHardwareVideoEncoding())
 	{
-		// Need to transfer the frame to hardware.
 		const int res = wrap_av_hwframe_transfer_data(s_hw_video_frame, s_converted_video_frame, 0);
 		if (res < 0)
 		{
@@ -1030,7 +999,6 @@ bool GSCapture::SendFrame(const PendingFrame& pf)
 		frame_to_send = s_hw_video_frame;
 	}
 
-	// Set the correct PTS before handing it off.
 	frame_to_send->pts = pf.pts;
 
 	const int res = wrap_avcodec_send_frame(s_video_codec_context, frame_to_send);
@@ -1061,7 +1029,6 @@ bool GSCapture::ReceivePackets(AVCodecContext* codec_context, AVStream* stream, 
 		int res = wrap_avcodec_receive_packet(codec_context, packet);
 		if (res == AVERROR(EAGAIN) || res == AVERROR_EOF)
 		{
-			// no more data available
 			break;
 		}
 		else if (res < 0)
@@ -1072,7 +1039,6 @@ bool GSCapture::ReceivePackets(AVCodecContext* codec_context, AVStream* stream, 
 
 		packet->stream_index = stream->index;
 
-		// in case the frame rate changed...
 		wrap_av_packet_rescale_ts(packet, codec_context->time_base, stream->time_base);
 
 		res = wrap_av_interleaved_write_frame(s_format_context, packet);
@@ -1090,16 +1056,11 @@ bool GSCapture::ReceivePackets(AVCodecContext* codec_context, AVStream* stream, 
 
 void GSCapture::DeliverAudioPacket(const float* frames)
 {
-	// Since this gets called from the EE thread, we might race here after capture stops, and send a few too many samples
-	// late. We don't really want to be grabbing the lock on the EE thread, so instead, we'll just YOLO push the frames
-	// through and clear them out for the next capture. If we happen to fill the buffer, *then* we'll lock, and check if
-	// the capture has stopped.
 
 	static constexpr u32 num_frames = AudioStream::CHUNK_SIZE;
 
 	if ((AUDIO_BUFFER_SIZE - s_audio_buffer_size.load(std::memory_order_acquire)) < num_frames)
 	{
-		// Need to wait for it to drain a bit.
 		std::unique_lock<std::mutex> lock(s_lock);
 		s_frame_encoded_cv.wait(lock, []() {
 			return (!s_capturing.load(std::memory_order_acquire) ||
@@ -1109,7 +1070,6 @@ void GSCapture::DeliverAudioPacket(const float* frames)
 			return;
 	}
 
-	// Since the buffer size is aligned to the SndOut packet size, we should always have space for at least one full packet.
 	pxAssert((AUDIO_BUFFER_SIZE - s_audio_buffer_write_pos) >= num_frames);
 	std::memcpy(s_audio_buffer.get() + (s_audio_buffer_write_pos * AUDIO_CHANNELS), frames, sizeof(float) * AUDIO_CHANNELS * num_frames);
 	s_audio_buffer_write_pos = (s_audio_buffer_write_pos + num_frames) % AUDIO_BUFFER_SIZE;
@@ -1118,7 +1078,6 @@ void GSCapture::DeliverAudioPacket(const float* frames)
 
 	if (!s_video_stream && buffer_size >= s_audio_frame_size)
 	{
-		// If we're not capturing video, push "frames" when we hit the audio packet size.
 		std::unique_lock<std::mutex> lock(s_lock);
 		if (!s_capturing.load(std::memory_order_acquire))
 			return;
@@ -1140,21 +1099,16 @@ bool GSCapture::ProcessAudioPackets(s64 video_pts)
 	{
 		pxAssert(pending_frames >= AudioStream::CHUNK_SIZE);
 
-		// In case the encoder is still using it.
 		if (s_audio_frame_pos == 0)
 			wrap_av_frame_make_writable(s_converted_audio_frame);
 
-		// Grab as many source frames as we can.
 		const u32 contig_frames = std::min(pending_frames, AUDIO_BUFFER_SIZE - s_audio_buffer_read_pos);
 		const u32 this_batch = std::min(s_audio_frame_size - s_audio_frame_pos, contig_frames);
 
-		// Do we need to convert the sample format?
 		if (!s_swr_context)
 		{
-			// No, just copy frames out of staging buffer.
 			if (s_audio_frame_planar)
 			{
-				// This is slow. Hopefully doesn't happen in too many configurations.
 				for (u32 i = 0; i < AUDIO_CHANNELS; i++)
 				{
 					u8* output = s_converted_audio_frame->data[i] + s_audio_frame_pos * s_audio_frame_bps;
@@ -1169,17 +1123,14 @@ bool GSCapture::ProcessAudioPackets(s64 video_pts)
 			}
 			else
 			{
-				// Direct copy - optimal.
 				std::memcpy(s_converted_audio_frame->data[0] + s_audio_frame_pos * s_audio_frame_bps * AUDIO_CHANNELS,
 					&s_audio_buffer[s_audio_buffer_read_pos * AUDIO_CHANNELS], this_batch * sizeof(float) * AUDIO_CHANNELS);
 			}
 		}
 		else
 		{
-			// Use swresample to convert.
 			const u8* input = reinterpret_cast<u8*>(&s_audio_buffer[s_audio_buffer_read_pos * AUDIO_CHANNELS]);
 
-			// Might be planar, so offset both buffers.
 			u8* output[AUDIO_CHANNELS];
 			if (s_audio_frame_planar)
 			{
@@ -1204,14 +1155,12 @@ bool GSCapture::ProcessAudioPackets(s64 video_pts)
 		s_audio_frame_pos += this_batch;
 		pending_frames -= this_batch;
 
-		// Do we have a complete frame?
 		if (s_audio_frame_pos == s_audio_frame_size)
 		{
 			s_audio_frame_pos = 0;
 
 			if (!s_swr_context)
 			{
-				// PTS is simply frames.
 				s_converted_audio_frame->pts = s_next_audio_pts;
 			}
 			else
@@ -1219,10 +1168,8 @@ bool GSCapture::ProcessAudioPackets(s64 video_pts)
 				s_converted_audio_frame->pts = wrap_swr_next_pts(s_swr_context, s_next_audio_pts);
 			}
 
-			// Increment PTS.
 			s_next_audio_pts += s_audio_frame_size;
 
-			// Send off for encoding.
 			int res = wrap_avcodec_send_frame(s_audio_codec_context, s_converted_audio_frame);
 			if (res < 0)
 			{
@@ -1230,7 +1177,6 @@ bool GSCapture::ProcessAudioPackets(s64 video_pts)
 				return false;
 			}
 
-			// Write any packets back to the output file.
 			if (!ReceivePackets(s_audio_codec_context, s_audio_stream, s_audio_packet))
 				return false;
 		}
@@ -1283,7 +1229,6 @@ void GSCapture::InternalEndCapture(std::unique_lock<std::mutex>& lock)
 		s_filename = {};
 		s_encoding_error = false;
 
-		// end of stream
 		if (s_video_stream)
 		{
 			res = wrap_avcodec_send_frame(s_video_codec_context, nullptr);
@@ -1301,7 +1246,6 @@ void GSCapture::InternalEndCapture(std::unique_lock<std::mutex>& lock)
 				ReceivePackets(s_audio_codec_context, s_audio_stream, s_audio_packet);
 		}
 
-		// end of file!
 		res = wrap_av_write_trailer(s_format_context);
 		if (res < 0)
 			LogAVError(res, "av_write_trailer() failed: ");
@@ -1426,7 +1370,6 @@ std::string GSCapture::GetNextCaptureFileName()
 	const std::string_view ext = Path::GetExtension(s_filename);
 	std::string_view name = Path::GetFileTitle(s_filename);
 
-	// Should end with a number.
 	int partnum = 2;
 	std::string_view::size_type pos = name.rfind("_part");
 	if (pos != std::string_view::npos)
@@ -1439,13 +1382,11 @@ std::string GSCapture::GetNextCaptureFileName()
 		}
 		if (cpos == name.length())
 		{
-			// Has existing part number, so add to it.
 			partnum = StringUtil::FromChars<int>(name.substr(pos + 5)).value_or(1) + 1;
 			name = name.substr(0, pos);
 		}
 	}
 
-	// If we haven't started a new file previously, add "_part2".
 	ret = Path::BuildRelativePath(s_filename, fmt::format("{}_part{:03d}.{}", name, partnum, ext));
 	return ret;
 }
@@ -1461,7 +1402,6 @@ void GSCapture::Flush()
 
 	if (IsCapturingAudio())
 	{
-		// Clear any buffered audio frames out, we don't want to delay the CPU thread.
 		const u32 audio_frames = s_audio_buffer_size.load(std::memory_order_acquire);
 		if (audio_frames > 0)
 			Console.Warning("Dropping %u audio frames on for buffer clear.", audio_frames);
@@ -1491,7 +1431,6 @@ GSCapture::CodecList GSCapture::GetCodecListForContainer(const char* container, 
 	const AVCodec* codec;
 	while ((codec = wrap_av_codec_iterate(&iter)) != nullptr)
 	{
-		// only get audio codecs
 		if (codec->type != type || !wrap_avcodec_find_encoder(codec->id) || !wrap_avcodec_find_encoder_by_name(codec->name))
 			continue;
 
@@ -1532,7 +1471,6 @@ GSCapture::FormatList GSCapture::GetVideoFormatList(const char* codec)
 		return ret;
 	}
 
-	// rawvideo doesn't have a list of formats.
 	if (v_codec->pix_fmts == nullptr)
 	{
 		Console.Error("(GetVideoFormatList) v_codec->pix_fmts is null.");

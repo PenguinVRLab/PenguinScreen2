@@ -24,7 +24,7 @@ void Gif_ParsePacket(u8* data, u32 size, GIF_PATH path) {
 	u32 offset = 0;
 	GIF_PARSE("Path %d Transfer", path+1);
 	for(;;) {
-		if (!gifTag.isValid) { // Need new Gif Tag
+		if (!gifTag.isValid) {
 			if (offset + 16 > size) return;
 
 			gifTag.setTag(&buffer[offset], 1);
@@ -49,23 +49,22 @@ void Gif_ParsePacket(u8* data, u32 size, GIF_PATH path) {
 						GIF_PARSE("----[Reg=%s][nreg=%d][nloop=%d]",
 							GifTag_RegStr[gifTag.regs[j]&0xf], j, i);
 					}
-					offset += 16; // 1 QWC
+					offset += 16;
 				}}
 				break;
 			case GIF_FLG_REGLIST:
 				for(u32 j = 0; j < gifTag.nRegs; j++) {
 					GIF_PARSE("----[Reg=%s][nreg=%d]", GifTag_RegStr[gifTag.regs[j]&0xf], j);
 				}
-				offset += gifTag.len; // Data length
+				offset += gifTag.len;
 				break;
 			case GIF_FLG_IMAGE:
 			case GIF_FLG_IMAGE2:
-				offset += gifTag.len; // Data length
+				offset += gifTag.len;
 				break;
 			jNO_DEFAULT;
 		}
 
-		// Reload gif tag next loop
 		gifTag.isValid = false;
 	}
 }

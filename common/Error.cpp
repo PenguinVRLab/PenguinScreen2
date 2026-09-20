@@ -11,7 +11,6 @@
 #include <cwctype>
 #include <type_traits>
 
-// Platform-specific includes
 #if defined(_WIN32)
 #include "RedtapeWindows.h"
 static_assert(std::is_same_v<DWORD, unsigned long>, "DWORD is unsigned long");
@@ -185,7 +184,6 @@ void Error::SetSocket(int err)
 
 void Error::SetSocket(std::string_view prefix, int err)
 {
-	// Socket errors are win32 errors on windows
 #ifdef _WIN32
 	SetWin32(prefix, err);
 #else

@@ -20,21 +20,9 @@ enum class FreezeAction
 	Size,
 };
 
-// Savestate Versioning!
-
-// NOTICE: When updating g_SaveVersion, please make sure you add the following line to your commit message somewhere:
-// [SAVEVERSION+]
-// This informs the auto updater that the users savestates will be invalidated.
-
 static const u32 g_SaveVersion = (0x9A59 << 16) | 0x0000;
 
 
-// the freezing data between submodules and core
-// an interesting thing to note is that this dates back from before plugin
-// merges and was used to pass data between plugins and cores, although the
-// struct was system dependant as the size of int differs between systems, thus
-// subsystems making use of freezeData, like GSDump and save states aren't
-// necessarily portable; we might want to investigate this in the future -- govanify
 struct freezeData
 {
 	int size;
@@ -50,8 +38,6 @@ struct SaveStateScreenshotData
 
 class ArchiveEntryList;
 
-// Wrappers to generate a save state compatible across all frontends.
-// These functions assume that the caller has paused the core thread.
 extern std::unique_ptr<ArchiveEntryList> SaveState_DownloadState(Error* error);
 extern std::unique_ptr<SaveStateScreenshotData> SaveState_SaveScreenshot();
 extern bool SaveState_ZipToDisk(
@@ -60,12 +46,6 @@ extern bool SaveState_ZipToDisk(
 extern bool SaveState_ReadScreenshot(const std::string& filename, u32* out_width, u32* out_height, std::vector<u32>* out_pixels);
 extern bool SaveState_UnzipFromDisk(const std::string& filename, Error* error);
 
-// --------------------------------------------------------------------------------------
-//  SaveStateBase class
-// --------------------------------------------------------------------------------------
-// Provides the base API for both loading and saving savestates.  Normally you'll want to
-// use one of the four "functional" derived classes rather than this class directly: gzLoadingState, gzSavingState (gzipped disk-saved
-// states), and memLoadingState, memSavingState (uncompressed memory states).
 class SaveStateBase
 {
 public:
@@ -74,11 +54,11 @@ public:
 protected:
 	VmStateBuffer& m_memory;
 
-	u32 m_version = 0;		// version of the savestate being loaded.
+	u32 m_version = 0;
 
-	int m_idx = 0;			// current read/write index of the allocation
+	int m_idx = 0;
 
-	bool m_error = false; // error occurred while reading/writing
+	bool m_error = false;
 
 public:
 	SaveStateBase(VmStateBuffer& memblock);
@@ -87,8 +67,6 @@ public:
 	__fi bool HasError() const { return m_error; }
 	__fi bool IsOkay() const { return !m_error; }
 
-	// Gets the version of savestate that this object is acting on.
-	// The version refers to the low 16 bits only (high 16 bits classifies Pcsx2 build types)
 	u32 GetVersion() const
 	{
 		return (m_version & 0xffff);
@@ -97,16 +75,12 @@ public:
 	bool FreezeBios();
 	bool FreezeInternals(Error* error);
 
-	// Loads or saves an arbitrary data type.  Usable on atomic types, structs, and arrays.
-	// For dynamically allocated pointers use FreezeMem instead.
 	template<typename T>
 	void Freeze( T& data )
 	{
 		FreezeMem( const_cast<void*>((void*)&data), sizeof( T ) );
 	}
 
-	// FreezeLegacy can be used to load structures short of their full size, which is
-	// useful for loading structures that have had new stuff added since a previous version.
 	template<typename T>
 	void FreezeLegacy( T& data, int sizeOfNewStuff )
 	{
@@ -118,11 +92,9 @@ public:
 	template <typename T>
 	void FreezeDeque(std::deque<T>& q)
 	{
-		// overwritten when loading
 		u32 count = static_cast<u32>(q.size());
 		Freeze(count);
 
-		// have to use a temp array, because deque doesn't have a contiguous block of memory
 		std::unique_ptr<T[]> temp;
 		if (count > 0)
 		{
@@ -147,7 +119,6 @@ public:
 
 	void FreezeString(std::string& s)
 	{
-		// overwritten when loading
 		u32 length = static_cast<u32>(s.length());
 		Freeze(length);
 
@@ -172,23 +143,15 @@ public:
 		m_idx += size;
 	}
 
-	// Freezes an identifier value into the savestate for troubleshooting purposes.
-	// Identifiers can be used to determine where in a savestate that data has become
-	// skewed (if the value does not match then the error occurs somewhere prior to that
-	// position).
 	bool FreezeTag( const char* src );
 
-	// Returns true if this object is a StateLoading type object.
 	bool IsLoading() const { return !IsSaving(); }
 
-	// Loads or saves a memory block.
 	virtual void FreezeMem( void* data, int size )=0;
 
-	// Returns true if this object is a StateSaving type object.
 	virtual bool IsSaving() const=0;
 
 public:
-	// note: gsFreeze() needs to be public because of the GSState recorder.
 	bool gsFreeze();
 
 protected:
@@ -205,7 +168,7 @@ protected:
 	bool ipuDmaFreeze();
 	bool gifFreeze();
 	bool gifDmaFreeze();
-	bool gifPathFreeze(u32 path); // called by gifFreeze()
+	bool gifPathFreeze(u32 path);
 
 	bool sprFreeze();
 
@@ -216,17 +179,9 @@ protected:
 	bool deci2Freeze();
 	bool handleFreeze();
 
-	// Save or load PCSX2's global frame counter (g_FrameCount) along with each savestate
-	//
-	// This is to prevent any inaccuracy issues caused by having a different
-	// internal emulation frame count than what it was at the beginning of the
-	// original recording
 	bool InputRecordingFreeze();
 };
 
-// --------------------------------------------------------------------------------------
-//  ArchiveEntry
-// --------------------------------------------------------------------------------------
 class ArchiveEntry final
 {
 protected:
@@ -272,9 +227,6 @@ public:
 	}
 };
 
-// --------------------------------------------------------------------------------------
-//  ArchiveEntryList
-// --------------------------------------------------------------------------------------
 class ArchiveEntryList final
 {
 public:
@@ -330,10 +282,6 @@ public:
 		return m_list[idx];
 	}
 };
-
-// --------------------------------------------------------------------------------------
-//  Saving and Loading Specialized Implementations...
-// --------------------------------------------------------------------------------------
 
 class memSavingState final : public SaveStateBase
 {

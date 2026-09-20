@@ -147,10 +147,6 @@ QWidget* SymbolTreeValueDelegate::createEditor(QWidget* parent, const QStyleOpti
 
 				if (!named)
 				{
-					// The value isn't equal to any of the named constants, so
-					// add an extra item to the combo box representing the
-					// current value so that the first named constant isn't
-					// written back to VM memory accidentally.
 					QString text = display_options.signedIntegerToString(value.toInt(), 32);
 					combo_box->insertItem(0, text, value.toInt());
 					combo_box->setCurrentIndex(0);
@@ -181,8 +177,6 @@ QWidget* SymbolTreeValueDelegate::createEditor(QWidget* parent, const QStyleOpti
 
 void SymbolTreeValueDelegate::setEditorData(QWidget* editor, const QModelIndex& index) const
 {
-	// This function is intentionally left blank to prevent the values of
-	// editors from constantly being reset every time the model is updated.
 }
 
 void SymbolTreeValueDelegate::setModelData(QWidget* editor, QAbstractItemModel* model, const QModelIndex& index) const
@@ -343,8 +337,6 @@ void SymbolTreeValueDelegate::onComboBoxIndexChanged(int index)
 		commitData(combo_box);
 }
 
-// *****************************************************************************
-
 SymbolTreeLocationDelegate::SymbolTreeLocationDelegate(
 	DebugInterface& cpu,
 	u32 alignment,
@@ -437,8 +429,6 @@ void SymbolTreeLocationDelegate::setModelData(QWidget* editor, QAbstractItemMode
 		symbol_tree_model->resetChildren(index);
 	}
 }
-
-// *****************************************************************************
 
 SymbolTreeTypeDelegate::SymbolTreeTypeDelegate(
 	DebugInterface& cpu,
@@ -533,8 +523,6 @@ void SymbolTreeTypeDelegate::setModelData(QWidget* editor, QAbstractItemModel* m
 	else
 		AsyncDialogs::warning(editor, tr("Cannot Change Type"), error_message);
 }
-
-// *****************************************************************************
 
 SymbolTreeIntegerLineEdit::SymbolTreeIntegerLineEdit(
 	SymbolTreeDisplayOptions display_options, s32 size_bits, QWidget* parent)

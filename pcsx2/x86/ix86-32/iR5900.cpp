@@ -22,11 +22,7 @@
 #include "common/HeapArray.h"
 #include "common/Perf.h"
 
-// Only for MOVQ workaround.
 #include "common/emitter/internal.h"
-
-//#define DUMP_BLOCKS 1
-//#define TRACE_BLOCKS 1
 
 #ifdef DUMP_BLOCKS
 #include "Zydis/Zydis.h"
@@ -54,19 +50,16 @@ alignas(16) static u32 hwLUT[_64kb];
 
 static __fi u32 HWADDR(u32 mem) { return hwLUT[mem >> 16] + mem; }
 
-u32 s_nBlockCycles = 0; // cycles of current block recompiling
-bool s_nBlockInterlocked = false; // Block is VU0 interlocked
-u32 pc; // recompiler pc
-int g_branch; // set for branch
+u32 s_nBlockCycles = 0;
+bool s_nBlockInterlocked = false;
+u32 pc;
+int g_branch;
 
 alignas(16) GPR_reg64 g_cpuConstRegs[32] = {};
 u32 g_cpuHasConstReg = 0, g_cpuFlushedConstReg = 0;
 bool g_cpuFlushedPC, g_cpuFlushedCode, g_recompilingDelaySlot, g_maySignalException;
 
 eeProfiler EE::Profiler;
-
-////////////////////////////////////////////////////////////////
-// Static Private Variables - R5900 Dynarec
 
 #define X86
 
@@ -76,10 +69,10 @@ static DynamicHeapArray<BASEBLOCK, 4096> recLutUnmapped;
 static size_t recLutEntries;
 static bool extraRam;
 
-static BASEBLOCK* recRAM = nullptr; // and the ptr to the blocks here
-static BASEBLOCK* recROM = nullptr; // and here
-static BASEBLOCK* recROM1 = nullptr; // also here
-static BASEBLOCK* recROM2 = nullptr; // also here
+static BASEBLOCK* recRAM = nullptr;
+static BASEBLOCK* recROM = nullptr;
+static BASEBLOCK* recROM1 = nullptr;
+static BASEBLOCK* recROM2 = nullptr;
 
 static BaseBlocks recBlocks;
 static u8* recPtr = nullptr;
@@ -89,11 +82,10 @@ static u32 s_nInstCacheSize = 0;
 
 static BASEBLOCK* s_pCurBlock = nullptr;
 static BASEBLOCKEX* s_pCurBlockEx = nullptr;
-u32 s_nEndBlock = 0; // what pc the current block ends
+u32 s_nEndBlock = 0;
 u32 s_branchTo;
 static bool s_nBlockFF;
 
-// save states for branches
 GPR_reg64 s_saveConstRegs[32];
 static u32 s_saveHasConstReg = 0, s_saveFlushedConstReg = 0;
 static EEINST* s_psaveInstInfo = nullptr;
@@ -220,7 +212,6 @@ static ZyanStatus ZydisFormatterPrintDisplacement(const ZydisFormatter* formatte
 	bool did_print = false;
 	SmallString buf;
 
-	// hardcoded RTEXTPTR
 	if (context->operand->mem.base == ZYDIS_REGISTER_RBX) {
 		did_print = Address2Symbol(address, buf);
 	}
@@ -265,7 +256,6 @@ void _eeFlushAllDirty()
 	_flushXMMregs();
 	_flushX86regs();
 
-	// flush constants, do them all at once for slightly better codegen
 	_flushConstRegs(false);
 }
 
@@ -358,12 +348,8 @@ void _eeMoveGPRtoM(uptr to, int fromgpr)
 	}
 }
 
-// Use this to call into interpreter functions that require an immediate branchtest
-// to be done afterward (anything that throws an exception or enables interrupts, etc).
 void recBranchCall(void (*func)())
 {
-	// In order to make sure a branch test is performed, the nextBranchCycle is set
-	// to the current cpu cycle.
 
 	xMOV(rax, ptr64[&cpuRegs.cycle]);
 	xMOV(ptr64[&cpuRegs.nextEventCycle], rax);
@@ -377,10 +363,6 @@ void recCall(void (*func)())
 	iFlushCall(FLUSH_INTERPRETER);
 	xFastCall((void*)func);
 }
-
-// =====================================================================================================
-//  R5900 Dispatchers
-// =====================================================================================================
 
 static void recRecompile(const u32 startpc);
 static void dyna_block_discard(u32 start, u32 sz);
@@ -406,8 +388,6 @@ static void recEventTest()
 	}
 }
 
-// The address for all cleared blocks.  It recompiles the current pc and then
-// dispatches to the recompiled block address.
 static const void* _DynGen_JITCompile()
 {
 	pxAssertMsg(DispatcherReg != NULL, "Please compile the DispatcherReg subroutine *before* JITComple.  Thanks.");
@@ -416,10 +396,6 @@ static const void* _DynGen_JITCompile()
 
 	xFastCall((const void*)recRecompile, ptr32[&cpuRegs.pc]);
 
-	// C equivalent:
-	// u32 addr = cpuRegs.pc;
-	// void(**base)() = (void(**)())recLUT[addr >> 16];
-	// base[addr >> 2]();
 	xMOV(eax, ptr[&cpuRegs.pc]);
 	xMOV(edx, eax);
 	xSHR(eax, 16);
@@ -429,15 +405,10 @@ static const void* _DynGen_JITCompile()
 	return retval;
 }
 
-// called when jumping to variable pc address
 static const void* _DynGen_DispatcherReg()
 {
-	u8* retval = xGetPtr(); // fallthrough target, can't align it!
+	u8* retval = xGetPtr();
 
-	// C equivalent:
-	// u32 addr = cpuRegs.pc;
-	// void(**base)() = (void(**)())recLUT[addr >> 16];
-	// base[addr >> 2]();
 	xMOV(eax, ptr[&cpuRegs.pc]);
 	xMOV(edx, eax);
 	xSHR(eax, 16);
@@ -466,15 +437,11 @@ static const void* _DynGen_EnterRecompiledCode()
 	xScopedStackFrame frame(true, true);
 #else
 #ifdef _WIN32
-	// Shadow space for Win32
 	static constexpr u32 stack_size = 32 + 8;
 #else
-	// Stack still needs to be aligned
 	static constexpr u32 stack_size = 8;
 #endif
 
-	// We never return through this function, instead we fastjmp() out.
-	// So we don't need to worry about preserving callee-saved registers, but we do need to align the stack.
 	xSUB(rsp, stack_size);
 
 	if (u8* ptr = xGetTextPtr())
@@ -516,8 +483,6 @@ static void _DynGen_Dispatchers()
 {
 	const u8* start = xGetAlignedCallTarget();
 
-	// Place the EventTest and DispatcherReg stuff at the top, because they get called the
-	// most and stand to benefit from strong alignment and direct referencing.
 	DispatcherEvent = _DynGen_DispatcherEvent();
 	DispatcherReg = _DynGen_DispatcherReg();
 
@@ -532,9 +497,6 @@ static void _DynGen_Dispatchers()
 	Perf::any.Register(start, static_cast<u32>(xGetPtr() - start), "EE Dispatcher");
 }
 
-
-//////////////////////////////////////////////////////////////////////////////////////////
-//
 
 static void recError(u32 error)
 {
@@ -560,7 +522,6 @@ static __ri void ClearRecLUT(BASEBLOCK* base, int memsize)
 
 static void recReserveRAM()
 {
-	// One entry per possible call target
 	recLutEntries = (Ps2MemSize::ExposedRam + Ps2MemSize::Rom + Ps2MemSize::Rom1 + Ps2MemSize::Rom2) / 4;
 
 	if (recRAMCopy.size() != Ps2MemSize::ExposedRam)
@@ -569,7 +530,6 @@ static void recReserveRAM()
 	if (recLutReserve_RAM.size() != recLutEntries)
 		recLutReserve_RAM.resize(recLutEntries);
 
-	// Allocate one LUT page of memory for unmapped pages to reference
 	recLutUnmapped.resize(_64kb / 4);
 
 	BASEBLOCK* basepos = recLutReserve_RAM.data();
@@ -638,7 +598,6 @@ static void recReserve()
 alignas(16) static u16 manual_page[Ps2MemSize::TotalRam >> 12];
 alignas(16) static u8 manual_counter[Ps2MemSize::TotalRam >> 12];
 
-////////////////////////////////////////////////////
 static void recResetRaw()
 {
 	Console.WriteLn(Color_StrongBlack, "EE/iR5900 Recompiler Reset");
@@ -709,23 +668,17 @@ static void recExitExecution()
 
 static void recSafeExitExecution()
 {
-	// If we're currently processing events, we can't safely jump out of the recompiler here, because we'll
-	// leave things in an inconsistent state. So instead, we flag it for exiting once cpuEventTest() returns.
-	// Exiting in the middle of a rec block with the registers unsaved would be a bad idea too..
 	eeRecExitRequested = true;
 
-	// Force an event test at the end of this block.
 	if (!eeEventTestIsActive)
 	{
-		// EE is running.
 		cpuRegs.nextEventCycle = 0;
 	}
 	else
 	{
-		// IOP might be running, so break out if so.
 		if (psxRegs.iopCycleEE > 0)
 		{
-			psxRegs.iopBreak += psxRegs.iopCycleEE; // record the number of cycles the IOP didn't run.
+			psxRegs.iopBreak += psxRegs.iopCycleEE;
 			psxRegs.iopCycleEE = 0;
 		}
 	}
@@ -735,7 +688,6 @@ static void recResetEE()
 {
 	if (eeCpuExecuting)
 	{
-		// get outta here as soon as we can
 		eeRecNeedsReset = true;
 		recSafeExitExecution();
 		return;
@@ -751,24 +703,17 @@ static void recCancelInstruction()
 
 static void recExecute()
 {
-	// Reset before we try to execute any code, if there's one pending.
-	// We need to do this here, because if we reset while we're executing, it sets the "needs reset"
-	// flag, which triggers a JIT exit (the fastjmp_set below), and eventually loops back here.
 	if (eeRecNeedsReset)
 	{
 		eeRecNeedsReset = false;
 		recResetRaw();
 	}
 
-	// setjmp will save the register context and will return 0
-	// A call to longjmp will restore the context (included the eip/rip)
-	// but will return the longjmp 2nd parameter (here 1)
 	if (!fastjmp_set(&m_SetJmp_StateCheck))
 	{
 		eeCpuExecuting = true;
 		((void (*)())EnterRecompiledCode)();
 
-		// Generally unreachable code here ...
 	}
 
 	eeCpuExecuting = false;
@@ -776,35 +721,29 @@ static void recExecute()
 	EE::Profiler.Print();
 }
 
-////////////////////////////////////////////////////
 void R5900::Dynarec::OpcodeImpl::recSYSCALL()
 {
 	EE::Profiler.EmitOp(eeOpcode::SYSCALL);
 	if (GPR_IS_CONST1(3))
 	{
-		// If it's FlushCache or iFlushCache, we can skip it since we don't support cache in the JIT.
 		if (g_cpuConstRegs[3].UC[0] == 0x64 || g_cpuConstRegs[3].UC[0] == 0x68)
 		{
-			// Emulate the amount of cycles it takes for the exception handlers to run
-			// This number was found by using github.com/F0bes/flushcache-cycles
 			s_nBlockCycles += 5650;
 			return;
 		}
 	}
 	recCall(R5900::Interpreter::OpcodeImpl::SYSCALL);
-	g_branch = 2; // Indirect branch with event check.
+	g_branch = 2;
 }
 
-////////////////////////////////////////////////////
 void R5900::Dynarec::OpcodeImpl::recBREAK()
 {
 	EE::Profiler.EmitOp(eeOpcode::BREAK);
 
 	recCall(R5900::Interpreter::OpcodeImpl::BREAK);
-	g_branch = 2; // Indirect branch with event check.
+	g_branch = 2;
 }
 
-// Size is in dwords (4 bytes)
 void recClear(u32 addr, u32 size)
 {
 	if ((addr) >= maxrecmem || !(recLUT[(addr) >> 16] + (addr & ~0xFFFFUL)))
@@ -880,16 +819,12 @@ void recClear(u32 addr, u32 size)
 static int* s_pCode;
 
 
-// Branch to a runtime variable target
-// pass the target in eax
 void SetBranchReg()
 {
 	g_branch = 1;
 
 	xMOV(ptr32[&cpuRegs.pc], eax);
 
-	// Test for jump to unaligned, only needed for register branches
-	//  since unaligned targets can't be encoded with imm
 	xTEST(eax, 3);
 	xForwardJNZ32 unaligned;
 
@@ -906,7 +841,6 @@ void SetBranchImm(u32 imm)
 
 	pxAssert(imm);
 
-	// end the current block
 	iFlushCall(FLUSH_EVERYTHING);
 	xMOV(ptr32[&cpuRegs.pc], imm);
 	iBranchTest(imm);
@@ -914,7 +848,6 @@ void SetBranchImm(u32 imm)
 
 u8* recBeginThunk()
 {
-	// if recPtr reached the mem limit reset whole mem
 	if (recPtr >= recPtrEnd)
 		eeRecNeedsReset = true;
 
@@ -948,118 +881,113 @@ bool TrySwapDelaySlot(u32 rs, u32 rt, u32 rd, bool allow_loadstore)
 		return true;
 	}
 
-	//std::string disasm;
-	//disR5900Fasm(disasm, opcode_encoded, pc, false);
-
 	const u32 opcode_rs = ((opcode_encoded >> 21) & 0x1F);
 	const u32 opcode_rt = ((opcode_encoded >> 16) & 0x1F);
 	const u32 opcode_rd = ((opcode_encoded >> 11) & 0x1F);
 
 	switch (opcode_encoded >> 26)
 	{
-		case 8: // ADDI
-		case 9: // ADDIU
-		case 10: // SLTI
-		case 11: // SLTIU
-		case 12: // ANDIU
-		case 13: // ORI
-		case 14: // XORI
-		case 24: // DADDI
-		case 25: // DADDIU
+		case 8:
+		case 9:
+		case 10:
+		case 11:
+		case 12:
+		case 13:
+		case 14:
+		case 24:
+		case 25:
 		{
 			if ((rs != 0 && rs == opcode_rt) || (rt != 0 && rt == opcode_rt) || (rd != 0 && (rd == opcode_rs || rd == opcode_rt)))
 				goto is_unsafe;
 		}
 		break;
 
-		case 26: // LDL
-		case 27: // LDR
-		case 30: // LQ
-		case 31: // SQ
-		case 32: // LB
-		case 33: // LH
-		case 34: // LWL
-		case 35: // LW
-		case 36: // LBU
-		case 37: // LHU
-		case 38: // LWR
-		case 39: // LWU
-		case 40: // SB
-		case 41: // SH
-		case 42: // SWL
-		case 43: // SW
-		case 44: // SDL
-		case 45: // SDR
-		case 46: // SWR
-		case 55: // LD
-		case 63: // SD
+		case 26:
+		case 27:
+		case 30:
+		case 31:
+		case 32:
+		case 33:
+		case 34:
+		case 35:
+		case 36:
+		case 37:
+		case 38:
+		case 39:
+		case 40:
+		case 41:
+		case 42:
+		case 43:
+		case 44:
+		case 45:
+		case 46:
+		case 55:
+		case 63:
 		{
-			// We can't allow loadstore swaps for BC0x/BC2x, since they could affect the condition.
 			if (!allow_loadstore || (rs != 0 && rs == opcode_rt) || (rt != 0 && rt == opcode_rt) || (rd != 0 && (rd == opcode_rs || rd == opcode_rt)))
 				goto is_unsafe;
 		}
 		break;
 
-		case 15: // LUI
+		case 15:
 		{
 			if ((rs != 0 && rs == opcode_rt) || (rt != 0 && rt == opcode_rt) || (rd != 0 && rd == opcode_rt))
 				goto is_unsafe;
 		}
 		break;
 
-		case 49: // LWC1
-		case 57: // SWC1
-		case 54: // LQC2
-		case 62: // SQC2
-			// fprintf(stderr, "SWAPPING coprocessor load delay slot (block %08X) %08X %s\n", s_pCurBlockEx->startpc, pc, disasm.c_str());
+		case 49:
+		case 57:
+		case 54:
+		case 62:
 			break;
 
-		case 0: // SPECIAL
+		case 0:
 		{
 			switch (opcode_encoded & 0x3F)
 			{
-				case 0: // SLL
-				case 2: // SRL
-				case 3: // SRA
-				case 4: // SLLV
-				case 6: // SRLV
-				case 7: // SRAV
-				case 10: // MOVZ
-				case 11: // MOVN
-				case 20: // DSLLV
-				case 22: // DSRLV
-				case 23: // DSRAV
-				case 24: // MULT
-				case 25: // MULTU
-				case 32: // ADD
-				case 33: // ADDU
-				case 34: // SUB
-				case 35: // SUBU
-				case 36: // AND
-				case 37: // OR
-				case 38: // XOR
-				case 39: // NOR
-				case 42: // SLT
-				case 43: // SLTU
-				case 44: // DADD
-				case 45: // DADDU
-				case 46: // DSUB
-				case 47: // DSUBU
-				case 56: // DSLL
-				case 58: // DSRL
-				case 59: // DSRA
-				case 60: // DSLL32
-				case 62: // DSRL31
-				case 64: // DSRA32
+				case 0:
+				case 2:
+				case 3:
+				case 4:
+				case 6:
+				case 7:
+				case 10:
+				case 11:
+				case 20:
+				case 22:
+				case 23:
+				case 24:
+				case 25:
+				case 32:
+				case 33:
+				case 34:
+				case 35:
+				case 36:
+				case 37:
+				case 38:
+				case 39:
+				case 42:
+				case 43:
+				case 44:
+				case 45:
+				case 46:
+				case 47:
+				case 56:
+				case 58:
+				case 59:
+				case 60:
+				case 62:
+				case 64:
 				{
 					if ((rs != 0 && rs == opcode_rd) || (rt != 0 && rt == opcode_rd) || (rd != 0 && (rd == opcode_rs || rd == opcode_rt)))
 						goto is_unsafe;
 				}
 				break;
 
-				case 15: // SYNC
-				case 26: // DIV
-				case 27: // DIVU
+				case 15:
+				case 26:
+				case 27:
 					break;
 
 				default:
@@ -1068,23 +996,23 @@ bool TrySwapDelaySlot(u32 rs, u32 rt, u32 rd, bool allow_loadstore)
 		}
 		break;
 
-		case 16: // COP0
+		case 16:
 		{
 			switch ((opcode_encoded >> 21) & 0x1F)
 			{
-				case 0: // MFC0
-				case 2: // CFC0
+				case 0:
+				case 2:
 				{
 					if ((rs != 0 && rs == opcode_rt) || (rt != 0 && rt == opcode_rt) || (rd != 0 && rd == opcode_rt))
 						goto is_unsafe;
 				}
 				break;
 
-				case 4: // MTC0
-				case 6: // CTC0
+				case 4:
+				case 6:
 					break;
 
-				case 16: // TLB (technically would be safe, but we don't use it anyway)
+				case 16:
 				default:
 					goto is_unsafe;
 			}
@@ -1092,34 +1020,32 @@ bool TrySwapDelaySlot(u32 rs, u32 rt, u32 rd, bool allow_loadstore)
 		}
 		break;
 
-		case 17: // COP1
+		case 17:
 		{
 			switch ((opcode_encoded >> 21) & 0x1F)
 			{
-				case 0: // MFC1
-				case 2: // CFC1
+				case 0:
+				case 2:
 				{
 					if ((rs != 0 && rs == opcode_rt) || (rt != 0 && rt == opcode_rt) || (rd != 0 && rd == opcode_rt))
 						goto is_unsafe;
 				}
 				break;
 
-				case 4: // MTC1
-				case 6: // CTC1
-				case 16: // S
+				case 4:
+				case 6:
+				case 16:
 				{
 					const u32 funct = (opcode_encoded & 0x3F);
-					if (funct == 50 || funct == 52 || funct == 54) // C.EQ, C.LT, C.LE
+					if (funct == 50 || funct == 52 || funct == 54)
 					{
-						// affects flags that we're comparing
 						goto is_unsafe;
 					}
 				}
 					[[fallthrough]];
 
-				case 20: // W
+				case 20:
 				{
-					// fprintf(stderr, "Swapping FPU delay slot (block %08X) %08X %s\n", s_pCurBlockEx->startpc, pc, disasm.c_str());
 				}
 				break;
 
@@ -1129,15 +1055,15 @@ bool TrySwapDelaySlot(u32 rs, u32 rt, u32 rd, bool allow_loadstore)
 		}
 		break;
 
-		case 18: // COP2
+		case 18:
 		{
 			switch ((opcode_encoded >> 21) & 0x1F)
 			{
-				case 8: // BC2XX
+				case 8:
 					goto is_unsafe;
 
-				case 1: // QMFC2
-				case 2: // CFC2
+				case 1:
+				case 2:
 				{
 					if ((rs != 0 && rs == opcode_rt) || (rt != 0 && rt == opcode_rt) || (rd != 0 && rd == opcode_rt))
 						goto is_unsafe;
@@ -1148,25 +1074,24 @@ bool TrySwapDelaySlot(u32 rs, u32 rt, u32 rd, bool allow_loadstore)
 					break;
 			}
 
-			// fprintf(stderr, "Swapping COP2 delay slot (block %08X) %08X %s\n", s_pCurBlockEx->startpc, pc, disasm.c_str());
 		}
 		break;
 
-		case 28: // MMI
+		case 28:
 		{
 			switch (opcode_encoded & 0x3F)
 			{
-				case 8: // MMI0
-				case 9: // MMI1
-				case 10: // MMI2
-				case 40: // MMI3
-				case 41: // MMI3
-				case 52: // PSLLH
-				case 54: // PSRLH
-				case 55: // LSRAH
-				case 60: // PSLLW
-				case 62: // PSRLW
-				case 63: // PSRAW
+				case 8:
+				case 9:
+				case 10:
+				case 40:
+				case 41:
+				case 52:
+				case 54:
+				case 55:
+				case 60:
+				case 62:
+				case 63:
 				{
 					if ((rs != 0 && rs == opcode_rd) || (rt != 0 && rt == opcode_rd) || (rd != 0 && rd == opcode_rd))
 						goto is_unsafe;
@@ -1183,12 +1108,10 @@ bool TrySwapDelaySlot(u32 rs, u32 rt, u32 rd, bool allow_loadstore)
 			goto is_unsafe;
 	}
 
-	// fprintf(stderr, "Swapping delay slot %08X %s\n", pc, disasm.c_str());
 	recompileNextInstruction(true, true);
 	return true;
 
 is_unsafe:
-	// fprintf(stderr, "NOT SWAPPING delay slot %08X %s\n", pc, disasm.c_str());
 	return false;
 #else
 	return false;
@@ -1220,7 +1143,6 @@ void LoadBranchState()
 
 void iFlushCall(int flushtype)
 {
-	// Free registers that are not saved across function calls (x86-32 ABI):
 	for (u32 i = 0; i < iREGCNT_GPR; i++)
 	{
 		if (!x86regs[i].inuse)
@@ -1273,15 +1195,11 @@ void iFlushCall(int flushtype)
 	if ((flushtype == FLUSH_CAUSE) && !g_maySignalException)
 	{
 		if (g_recompilingDelaySlot)
-			xOR(ptr32[&cpuRegs.CP0.n.Cause], 1 << 31); // BD
+			xOR(ptr32[&cpuRegs.CP0.n.Cause], 1 << 31);
 		g_maySignalException = true;
 	}
 #endif
 }
-
-// Note: scaleblockcycles() scales s_nBlockCycles respective to the EECycleRate value for manipulating the cycles of current block recompiling.
-// s_nBlockCycles is 3 bit fixed point.  Divide by 8 when done!
-// Scaling blocks under 40 cycles seems to produce countless problem, so let's try to avoid them.
 
 #define DEFAULT_SCALED_BLOCKS() (s_nBlockCycles >> 3)
 
@@ -1298,16 +1216,14 @@ static u32 scaleblockcycles_calculation()
 		scale_cycles = s_nBlockCycles >> (2 + cyclerate);
 
 	else if (cyclerate == 1)
-		scale_cycles = DEFAULT_SCALED_BLOCKS() / 1.3f; // Adds a mild 30% increase in clockspeed for value 1.
+		scale_cycles = DEFAULT_SCALED_BLOCKS() / 1.3f;
 
-	else if (cyclerate == -1) // the mildest value.
-		// These values were manually tuned to yield mild speedup with high compatibility
+	else if (cyclerate == -1)
 		scale_cycles = (s_nBlockCycles <= 80 || s_nBlockCycles > 168 ? 5 : 7) * s_nBlockCycles / 32;
 
 	else
 		scale_cycles = ((5 + (-2 * (cyclerate + 1))) * s_nBlockCycles) >> 5;
 
-	// Ensure block cycle count is never less than 1.
 	return (scale_cycles < 1) ? 1 : scale_cycles;
 }
 
@@ -1315,7 +1231,7 @@ static u32 scaleblockcycles()
 {
 	const u32 scaled = scaleblockcycles_calculation();
 
-#if 0 // Enable this to get some runtime statistics about the scaling result in practice
+#if 0
 	static u32 scaled_overall = 0, unscaled_overall = 0;
 	if (g_resetEeScalingStats)
 	{
@@ -1339,7 +1255,7 @@ u32 scaleblockcycles_clear()
 {
 	u32 scaled = scaleblockcycles_calculation();
 
-#if 0 // Enable this to get some runtime statistics about the scaling result in practice
+#if 0
 	static u32 scaled_overall = 0, unscaled_overall = 0;
 	if (g_resetEeScalingStats)
 	{
@@ -1371,22 +1287,8 @@ u32 scaleblockcycles_clear()
 	return scaled;
 }
 
-// Generates dynarec code for Event tests followed by a block dispatch (branch).
-// Parameters:
-//   newpc - address to jump to at the end of the block.  If newpc == 0xffffffff then
-//   the jump is assumed to be to a register (dynamic).  For any other value the
-//   jump is assumed to be static, in which case the block will be "hardlinked" after
-//   the first time it's dispatched.
-//
-//   noDispatch - When set true, then jump to Dispatcher.  Used by the recs
-//   for blocks which perform exception checks without branching (it's enabled by
-//   setting "g_branch = 2";
 static void iBranchTest(u32 newpc)
 {
-	// Check the Event scheduler if our "cycle target" has been reached.
-	// Equiv code to:
-	//    cpuRegs.cycle += blockcycles;
-	//    if ( cpuRegs.cycle > g_nextEventCycle ) { DoEvents(); }
 
 	if (EmuConfig.Speedhacks.WaitLoop && s_nBlockFF && newpc == s_branchTo)
 	{
@@ -1402,7 +1304,7 @@ static void iBranchTest(u32 newpc)
 	{
 		xMOV(rax, ptr64[&cpuRegs.cycle]);
 		xADD(rax, scaleblockcycles());
-		xMOV(ptr64[&cpuRegs.cycle], rax); // update cycles
+		xMOV(ptr64[&cpuRegs.cycle], rax);
 		xSUB(rax, ptr64[&cpuRegs.nextEventCycle]);
 
 		if (newpc == 0xffffffff)
@@ -1414,63 +1316,59 @@ static void iBranchTest(u32 newpc)
 	}
 }
 
-// opcode 'code' modifies:
-// 1: status
-// 2: MAC
-// 4: clip
 int cop2flags(u32 code)
 {
 	if (code >> 26 != 022)
-		return 0; // not COP2
+		return 0;
 	if ((code >> 25 & 1) == 0)
-		return 0; // a branch or transfer instruction
+		return 0;
 
 	switch (code >> 2 & 15)
 	{
 		case 15:
 			switch (code >> 6 & 0x1f)
 			{
-				case 4: // ITOF*
-				case 5: // FTOI*
-				case 12: // MOVE MR32
-				case 13: // LQI SQI LQD SQD
-				case 15: // MTIR MFIR ILWR ISWR
-				case 16: // RNEXT RGET RINIT RXOR
+				case 4:
+				case 5:
+				case 12:
+				case 13:
+				case 15:
+				case 16:
 					return 0;
-				case 7: // MULAq, ABS, MULAi, CLIP
-					if ((code & 3) == 1) // ABS
+				case 7:
+					if ((code & 3) == 1)
 						return 0;
-					if ((code & 3) == 3) // CLIP
+					if ((code & 3) == 3)
 						return 4;
 					return 3;
-				case 11: // SUBA, MSUBA, OPMULA, NOP
-					if ((code & 3) == 3) // NOP
+				case 11:
+					if ((code & 3) == 3)
 						return 0;
 					return 3;
-				case 14: // DIV, SQRT, RSQRT, WAITQ
-					if ((code & 3) == 3) // WAITQ
+				case 14:
+					if ((code & 3) == 3)
 						return 0;
-					return 1; // but different timing, ugh
+					return 1;
 				default:
 					break;
 			}
 			break;
-		case 4: // MAXbc
-		case 5: // MINbc
-		case 12: // IADD, ISUB, IADDI
-		case 13: // IAND, IOR
-		case 14: // VCALLMS, VCALLMSR
+		case 4:
+		case 5:
+		case 12:
+		case 13:
+		case 14:
 			return 0;
 		case 7:
-			if ((code & 1) == 1) // MAXi, MINIi
+			if ((code & 1) == 1)
 				return 0;
 			return 3;
 		case 10:
-			if ((code & 3) == 3) // MAX
+			if ((code & 3) == 3)
 				return 0;
 			return 3;
 		case 11:
-			if ((code & 3) == 3) // MINI
+			if ((code & 3) == 3)
 				return 0;
 			return 3;
 		default:
@@ -1481,43 +1379,42 @@ int cop2flags(u32 code)
 
 int COP2DivUnitTimings(u32 code)
 {
-	// Note: Cycles are off by 1 since the check ignores the actual op, so they are off by 1
 	switch (code & 0x3FF)
 	{
-		case 0x3BC: // DIV
-		case 0x3BD: // SQRT
+		case 0x3BC:
+		case 0x3BD:
 			return 6;
-		case 0x3BE: // RSQRT
+		case 0x3BE:
 			return 12;
 		default:
-			return 0; // Used mainly for WAITQ
+			return 0;
 	}
 }
 
 bool COP2IsQOP(u32 code)
 {
-	if (_Opcode_ != 022) // Not COP2 operation
+	if (_Opcode_ != 022)
 		return false;
 
-	if ((code & 0x3f) == 0x20) // VADDq
+	if ((code & 0x3f) == 0x20)
 		return true;
-	if ((code & 0x3f) == 0x21) // VMADDq
+	if ((code & 0x3f) == 0x21)
 		return true;
-	if ((code & 0x3f) == 0x24) // VSUBq
+	if ((code & 0x3f) == 0x24)
 		return true;
-	if ((code & 0x3f) == 0x25) // VMSUBq
+	if ((code & 0x3f) == 0x25)
 		return true;
-	if ((code & 0x3f) == 0x1C) // VMULq
+	if ((code & 0x3f) == 0x1C)
 		return true;
-	if ((code & 0x7FF) == 0x1FC) // VMULAq
+	if ((code & 0x7FF) == 0x1FC)
 		return true;
-	if ((code & 0x7FF) == 0x23C) // VADDAq
+	if ((code & 0x7FF) == 0x23C)
 		return true;
-	if ((code & 0x7FF) == 0x23D) // VMADDAq
+	if ((code & 0x7FF) == 0x23D)
 		return true;
-	if ((code & 0x7FF) == 0x27C) // VSUBAq
+	if ((code & 0x7FF) == 0x27C)
 		return true;
-	if ((code & 0x7FF) == 0x27D) // VMSUBAq
+	if ((code & 0x7FF) == 0x27D)
 		return true;
 
 	return false;
@@ -1535,7 +1432,6 @@ void dynarecCheckBreakpoint()
 
 	const int bpFlags = isBreakpointNeeded(pc);
 	bool hit = false;
-	//check breakpoint at current pc
 	if (bpFlags & 1)
 	{
 		auto cond = CBreakPoints::GetBreakPointCondition(BREAKPOINT_EE, pc);
@@ -1544,7 +1440,6 @@ void dynarecCheckBreakpoint()
 			hit = true;
 		}
 	}
-	//check breakpoint in delay slot
 	if (bpFlags & 2)
 	{
 		auto cond = CBreakPoints::GetBreakPointCondition(BREAKPOINT_EE, pc + 4);
@@ -1595,8 +1490,6 @@ void recMemcheck(u32 op, u32 bits, bool store)
 {
 	iFlushCall(FLUSH_EVERYTHING | FLUSH_PC);
 
-	// compute accessed address
-	// Do not cache reg, we'll call outside jit here
 	_eeMoveGPRtoR(ecx, (op >> 21) & 0x1F, false);
 	if (static_cast<s16>(op) != 0)
 		xADD(ecx, static_cast<s16>(op));
@@ -1608,9 +1501,6 @@ void recMemcheck(u32 op, u32 bits, bool store)
 	xMOV(edx, eax);
 	xADD(edx, bits / 8);
 
-	// ecx = access address
-	// edx = access address+size
-
 	auto checks = CBreakPoints::GetMemChecks(BREAKPOINT_EE);
 	for (size_t i = 0; i < checks.size(); i++)
 	{
@@ -1621,17 +1511,14 @@ void recMemcheck(u32 op, u32 bits, bool store)
 		if ((checks[i].memCond & MEMCHECK_READ) == 0 && !store)
 			continue;
 
-		// logic: memAddress < bpEnd && bpStart < memAddress+memSize
-
 		xMOV(eax, standardizeBreakpointAddress(checks[i].end));
-		xCMP(ecx, eax); // address < end
-		xForwardJGE8 next1; // if address >= end then goto next1
+		xCMP(ecx, eax);
+		xForwardJGE8 next1;
 
 		xMOV(eax, standardizeBreakpointAddress(checks[i].start));
-		xCMP(eax, edx); // start < address+size
-		xForwardJGE8 next2; // if start >= address+size then goto next2
+		xCMP(eax, edx);
+		xForwardJGE8 next2;
 
-		// hit the breakpoint
 		if (checks[i].result & MEMCHECK_BREAK)
 		{
 			xMOV(eax, i);
@@ -1690,7 +1577,6 @@ void recompileNextInstruction(bool delayslot, bool swapped_delay_slot)
 	if (EmuConfig.EnablePatches)
 		Patch::ApplyDynamicPatches(pc);
 
-	// add breakpoint
 	if (!delayslot)
 	{
 		if(encodeBreakpoint() || encodeMemcheck())
@@ -1712,7 +1598,6 @@ void recompileNextInstruction(bool delayslot, bool swapped_delay_slot)
 	pxAssert(s_pCode);
 
 #if 0
-	// acts as a tag for delimiting recompiled instructions when viewing x86 disasm.
 	if (IsDevBuild)
 		xNOP();
 	if (IsDebugBuild)
@@ -1732,13 +1617,11 @@ void recompileNextInstruction(bool delayslot, bool swapped_delay_slot)
 	}
 	else
 	{
-		// increment after recompiling so that pc points to the branch during recompilation
 		g_recompilingDelaySlot = true;
 	}
 
 	g_pCurInstInfo++;
 
-	// pc might be past s_nEndBlock if the last instruction in the block is a DI.
 	if (pc <= s_nEndBlock && (g_pCurInstInfo + (s_nEndBlock - pc) / 4 + 1) <= s_pInstCache + s_nInstCacheSize)
 	{
 		int count;
@@ -1775,9 +1658,6 @@ void recompileNextInstruction(bool delayslot, bool swapped_delay_slot)
 
 	const OPCODE& opcode = GetCurrentInstruction();
 
-	//pxAssert( !(g_pCurInstInfo->info & EEINSTINFO_NOREC) );
-	//Console.Warning("opcode name = %s, it's cycles = %d\n",opcode.Name,opcode.cycles);
-	// if this instruction is a jump or a branch, exit right away
 	if (delayslot)
 	{
 		bool check_branch_delay = false;
@@ -1786,8 +1666,8 @@ void recompileNextInstruction(bool delayslot, bool swapped_delay_slot)
 			case 0:
 				switch (_Funct_)
 				{
-					case 8: // jr
-					case 9: // jalr
+					case 8:
+					case 9:
 						check_branch_delay = true;
 						break;
 				}
@@ -1822,9 +1702,6 @@ void recompileNextInstruction(bool delayslot, bool swapped_delay_slot)
 				check_branch_delay = true;
 				break;
 		}
-		// Check for branch in delay slot, new code by FlatOut.
-		// Gregory tested this in 2017 using the ps2autotests suite and remarked "So far we return 1 (even with this PR), and the HW 2.
-		// Original PR and discussion at https://github.com/PCSX2/pcsx2/pull/1783 so we don't forget this information.
 		if (check_branch_delay)
 		{
 			DevCon.Warning("Branch %x in delay slot!", cpuRegs.code);
@@ -1834,21 +1711,18 @@ void recompileNextInstruction(bool delayslot, bool swapped_delay_slot)
 			g_cpuFlushedPC = false;
 			g_cpuFlushedCode = false;
 			if (g_maySignalException)
-				xAND(ptr32[&cpuRegs.CP0.n.Cause], ~(1 << 31)); // BD
+				xAND(ptr32[&cpuRegs.CP0.n.Cause], ~(1 << 31));
 
 			g_recompilingDelaySlot = false;
 			return;
 		}
 	}
-	// Check for NOP
 	if (cpuRegs.code == 0x00000000)
 	{
-		// Note: Tests on a ps2 suggested more like 5 cycles for a NOP. But there's many factors in this..
 		s_nBlockCycles += 9 * (2 - ((cpuRegs.CP0.n.Config >> 18) & 0x1));
 	}
 	else
 	{
-		//If the COP0 DIE bit is disabled, cycles should be doubled.
 		s_nBlockCycles += opcode.cycles * (2 - ((cpuRegs.CP0.n.Config >> 18) & 0x1));
 		opcode.recompile();
 	}
@@ -1866,44 +1740,26 @@ void recompileNextInstruction(bool delayslot, bool swapped_delay_slot)
 		g_cpuFlushedPC = false;
 		g_cpuFlushedCode = false;
 		if (g_maySignalException)
-			xAND(ptr32[&cpuRegs.CP0.n.Cause], ~(1 << 31)); // BD
+			xAND(ptr32[&cpuRegs.CP0.n.Cause], ~(1 << 31));
 		g_recompilingDelaySlot = false;
 	}
 
 	g_maySignalException = false;
 
-	// Stalls normally occur as necessary on the R5900, but when using COP2 (VU0 macro mode),
-	// there are some exceptions to this.  We probably don't even know all of them.
-	// We emulate the R5900 as if it was fully interlocked (which is mostly true), and
-	// in fact we don't have good enough cycle counting to do otherwise.  So for now,
-	// we'll try to identify problematic code in games create patches.
-	// Look ahead is probably the most reasonable way to do this given the deficiency
-	// of our cycle counting.  Real cycle counting is complicated and will have to wait.
-	// Instead of counting the cycles I'm going to count instructions.  There are a lot of
-	// classes of instructions which use different resources and specific restrictions on
-	// coissuing but this is just for printing a warning so I'll simplify.
-	// Even when simplified this is not simple and it is very very wrong.
-
-	// CFC2 flag register after arithmetic operation: 5 cycles
-	// CTC2 flag register after arithmetic operation... um.  TODO.
-	// CFC2 address register after increment/decrement load/store: 5 cycles TODO
-	// CTC2 CMSAR0, VCALLMSR CMSAR0: 3 cycles but I want to do some tests.
-	// Don't even want to think about DIV, SQRT, RSQRT now.
-
-	if (_Opcode_ == 022) // COP2
+	if (_Opcode_ == 022)
 	{
-		if ((cpuRegs.code >> 25 & 1) == 1 && (cpuRegs.code >> 2 & 0x1ff) == 0xdf) // [LS]Q[DI]
-			; // TODO
-		else if (_Rs_ == 6) // CTC2
-			; // TODO
-		else if ((cpuRegs.code & 0x7FC) == 0x3BC) // DIV/RSQRT/SQRT/WAITQ
+		if ((cpuRegs.code >> 25 & 1) == 1 && (cpuRegs.code >> 2 & 0x1ff) == 0xdf)
+			;
+		else if (_Rs_ == 6)
+			;
+		else if ((cpuRegs.code & 0x7FC) == 0x3BC)
 		{
 			int cycles = COP2DivUnitTimings(cpuRegs.code);
 			for (u32 p = pc; cycles > 0 && p < s_nEndBlock; p += 4, cycles--)
 			{
 				cpuRegs.code = memRead32(p);
 
-				if ((_Opcode_ == 022) && (cpuRegs.code & 0x7FC) == 0x3BC) // WaitQ or another DIV op hit (stalled), we're safe
+				if ((_Opcode_ == 022) && (cpuRegs.code & 0x7FC) == 0x3BC)
 					break;
 
 				else if (COP2IsQOP(cpuRegs.code))
@@ -1927,10 +1783,8 @@ void recompileNextInstruction(bool delayslot, bool swapped_delay_slot)
 			int all_count = 0, cop2o_count = 0, cop2m_count = 0;
 			for (u32 p = pc; s != 0 && p < s_nEndBlock && all_count < 10 && cop2m_count < 5 && cop2o_count < 4; p += 4)
 			{
-				// I am so sorry.
 				cpuRegs.code = memRead32(p);
-				if (_Opcode_ == 022 && _Rs_ == 2) // CFC2
-					// rd is fs
+				if (_Opcode_ == 022 && _Rs_ == 2)
 					if ((_Rd_ == 16 && s & 1) || (_Rd_ == 17 && s & 2) || (_Rd_ == 18 && s & 4))
 					{
 						std::string disasm;
@@ -1947,7 +1801,7 @@ void recompileNextInstruction(bool delayslot, bool swapped_delay_slot)
 					}
 				s &= ~cop2flags(cpuRegs.code);
 				all_count++;
-				if (_Opcode_ == 022 && _Rs_ == 8) // COP2 branch, handled incorrectly like most things
+				if (_Opcode_ == 022 && _Rs_ == 8)
 					;
 				else if (_Opcode_ == 022 && (cpuRegs.code >> 25 & 1) == 0)
 					cop2m_count++;
@@ -1965,9 +1819,6 @@ void recompileNextInstruction(bool delayslot, bool swapped_delay_slot)
 	}
 }
 
-// (Called from recompiled code)]
-// This function is called from the recompiler prior to starting execution of *every* recompiled block.
-// Calling of this function can be enabled or disabled through the use of EmuConfig.Recompiler.PreBlockChecks
 #ifdef TRACE_BLOCKS
 static void PreBlockCheck(u32 blockpc)
 {
@@ -2012,7 +1863,6 @@ static void PreBlockCheck(u32 blockpc)
 #else
 		std::fprintf(fp, "%08X (%u): %08X %08X %08X\n", cpuRegs.pc, cpuRegs.cycle, hash, hashf, hashi);
 #endif
-		// std::fflush(fp);
 	}
 #endif
 #if 0
@@ -2022,18 +1872,12 @@ static void PreBlockCheck(u32 blockpc)
 }
 #endif
 
-// Called when a block under manual protection fails it's pre-execution integrity check.
-// (meaning the actual code area has been modified -- ie dynamic modules being loaded or,
-//  less likely, self-modifying code)
 void dyna_block_discard(u32 start, u32 sz)
 {
 	eeRecPerfLog.Write(Color_StrongGray, "Clearing Manual Block @ 0x%08X  [size=%d]", start, sz * 4);
 	recClear(start, sz);
 }
 
-// called when a page under manual protection has been run enough times to be a candidate
-// for being reset under the faster vtlb write protection.  All blocks in the page are cleared
-// and the block is re-assigned for write protection.
 void dyna_page_reset(u32 start, u32 sz)
 {
 	recClear(start & ~0xfffUL, 0x400);
@@ -2046,11 +1890,8 @@ static void memory_protect_recompiled_code(u32 startpc, u32 size)
 	u32 inpage_ptr = HWADDR(startpc);
 	const u32 inpage_sz = size * 4;
 
-	// The kernel context register is stored @ 0x800010C0-0x80001300
-	// The EENULL thread context register is stored @ 0x81000-....
 	const bool contains_thread_stack = ((startpc >> 12) == 0x81) || ((startpc >> 12) == 0x80001);
 
-	// note: blocks are guaranteed to reside within the confines of a single page.
 	const vtlb_ProtectionMode PageType = contains_thread_stack ? ProtMode_Manual : mmap_GetRamPageInfo(inpage_ptr);
 
 	switch (PageType)
@@ -2067,7 +1908,6 @@ static void memory_protect_recompiled_code(u32 startpc, u32 size)
 		case ProtMode_Manual:
 			xMOV(arg1regd, inpage_ptr);
 			xMOV(arg2regd, inpage_sz / 4);
-			//xMOV( eax, startpc );		// uncomment this to access startpc (as eax) in dyna_block_discard
 
 			u32 lpc = inpage_ptr;
 			u32 stg = inpage_sz;
@@ -2081,36 +1921,12 @@ static void memory_protect_recompiled_code(u32 startpc, u32 size)
 				lpc += 4;
 			}
 
-			// Tweakpoint!  3 is a 'magic' number representing the number of times a counted block
-			// is re-protected before the recompiler gives up and sets it up as an uncounted (permanent)
-			// manual block.  Higher thresholds result in more recompilations for blocks that share code
-			// and data on the same page.  Side effects of a lower threshold: over extended gameplay
-			// with several map changes, a game's overall performance could degrade.
-
-			// (ideally, perhaps, manual_counter should be reset to 0 every few minutes?)
-
 			if (!contains_thread_stack && manual_counter[inpage_ptr >> 12] <= 3)
 			{
-				// Counted blocks add a weighted (by block size) value into manual_page each time they're
-				// run.  If the block gets run a lot, it resets and re-protects itself in the hope
-				// that whatever forced it to be manually-checked before was a 1-time deal.
-
-				// Counted blocks have a secondary threshold check in manual_counter, which forces a block
-				// to 'uncounted' mode if it's recompiled several times.  This protects against excessive
-				// recompilation of blocks that reside on the same codepage as data.
-
-				// fixme? Currently this algo is kinda dumb and results in the forced recompilation of a
-				// lot of blocks before it decides to mark a 'busy' page as uncounted.  There might be
-				// be a more clever approach that could streamline this process, by doing a first-pass
-				// test using the vtlb memory protection (without recompilation!) to reprotect a counted
-				// block.  But unless a new algo is relatively simple in implementation, it's probably
-				// not worth the effort (tests show that we have lots of recompiler memory to spare, and
-				// that the current amount of recompilation is fairly cheap).
 
 				xADD(ptr16[&manual_page[inpage_ptr >> 12]], size);
 				xJC(DispatchPageReset);
 
-				// note: clearcnt is measured per-page, not per-block!
 				eeRecPerfLog.Write("Manual block @ %08X : size =%3d  page/offs = 0x%05X/0x%03X  inpgsz = %d  clearcnt = %d",
 					startpc, size, inpage_ptr >> 12, inpage_ptr & 0xfff, inpage_sz, manual_counter[inpage_ptr >> 12]);
 			}
@@ -2123,14 +1939,12 @@ static void memory_protect_recompiled_code(u32 startpc, u32 size)
 	}
 }
 
-// Skip MPEG Game-Fix
 static bool skipMPEG_By_Pattern(u32 sPC)
 {
 
 	if (!CHECK_SKIPMPEGHACK)
 		return 0;
 
-	// sceMpegIsEnd: lw reg, 0x40(a0); jr ra; lw v0, 0(reg)
 	if ((s_nEndBlock == sPC + 12) && (memRead32(sPC + 4) == 0x03e00008))
 	{
 		const u32 code = memRead32(sPC);
@@ -2160,32 +1974,22 @@ static bool recSkipTimeoutLoop(s32 reg, bool is_timeout_loop)
 
 	DevCon.WriteLn("[EE] Skipping timeout loop at 0x%08X -> 0x%08X", s_pCurBlockEx->startpc, s_nEndBlock);
 
-	// basically, if the time it takes the loop to run is shorter than the
-	// time to the next event, then we want to skip ahead to the event, but
-	// update v0 to reflect how long the loop would have run for.
-
-	// if (cycle >= nextEventCycle) { jump to dispatcher, we're running late }
-	// new_cycles = min(v0 * 8, nextEventCycle)
-	// new_v0 = (new_cycles - cycles) / 8
-	// if new_v0 > 0 { jump to dispatcher because loop exited early }
-	// else new_v0 is 0, so exit loop
-
-	xMOV(r12, ptr64[&cpuRegs.cycle]); // ebx = cycle
-	xMOV(rcx, ptr64[&cpuRegs.nextEventCycle]); // ecx = nextEventCycle
+	xMOV(r12, ptr64[&cpuRegs.cycle]);
+	xMOV(rcx, ptr64[&cpuRegs.nextEventCycle]);
 	xCMP(r12, rcx);
-	xJAE((void*)DispatcherEvent); // jump to dispatcher if event immediately
+	xJAE((void*)DispatcherEvent);
 
-	xMOV(edx, ptr32[&cpuRegs.GPR.r[reg].UL[0]]); // eax = v0
-	xLEA(rax, ptrNative[rdx * 8 + r12]); // edx = v0 * 8 + cycle
+	xMOV(edx, ptr32[&cpuRegs.GPR.r[reg].UL[0]]);
+	xLEA(rax, ptrNative[rdx * 8 + r12]);
 	xCMP(rcx, rax);
-	xCMOVB(rax, rcx); // eax = new_cycles = min(v8 * 8, nextEventCycle)
-	xMOV(ptr64[&cpuRegs.cycle], rax); // writeback new_cycles
-	xSUB(rax, r12); // new_cycles -= cycle
-	xSHR(rax, 3); // compute new v0 value
-	xSUB(rdx, rax); // v0 -= cycle_diff
-	xMOV(ptr32[&cpuRegs.GPR.r[reg].UL[0]], edx); // write back new value of v0
-	xJNZ((void*)DispatcherEvent); // jump to dispatcher if new v0 is not zero (i.e. an event)
-	xMOV(ptr32[&cpuRegs.pc], s_nEndBlock); // otherwise end of loop
+	xCMOVB(rax, rcx);
+	xMOV(ptr64[&cpuRegs.cycle], rax);
+	xSUB(rax, r12);
+	xSHR(rax, 3);
+	xSUB(rdx, rax);
+	xMOV(ptr32[&cpuRegs.GPR.r[reg].UL[0]], edx);
+	xJNZ((void*)DispatcherEvent);
+	xMOV(ptr32[&cpuRegs.pc], s_nEndBlock);
 	recBlocks.Link(HWADDR(s_nEndBlock), xJcc32());
 
 	g_branch = 1;
@@ -2201,7 +2005,6 @@ static void recRecompile(const u32 startpc)
 
 	pxAssert(startpc);
 
-	// if recPtr reached the mem limit reset whole mem
 	if (recPtr >= recPtrEnd)
 		eeRecNeedsReset = true;
 
@@ -2231,9 +2034,8 @@ static void recRecompile(const u32 startpc)
 
 	if (HWADDR(startpc) == EELOAD_START)
 	{
-		// The EELOAD _start function is the same across all BIOS versions
 		const u32 mainjump = memRead32(EELOAD_START + 0x9c);
-		if (mainjump >> 26 == 3) // JAL
+		if (mainjump >> 26 == 3)
 			g_eeloadMain = ((EELOAD_START + 0xa0) & 0xf0000000U) | (mainjump << 2 & 0x0fffffffU);
 	}
 
@@ -2242,17 +2044,15 @@ static void recRecompile(const u32 startpc)
 		xFastCall((void*)eeloadHook);
 		if (VMManager::Internal::IsFastBootInProgress())
 		{
-			// There are four known versions of EELOAD, identifiable by the location of the 'jal' to the EELOAD function which
-			// calls ExecPS2(). The function itself is at the same address in all BIOSs after v1.00-v1.10.
-			const u32 typeAexecjump = memRead32(EELOAD_START + 0x470); // v1.00, v1.01?, v1.10?
-			const u32 typeBexecjump = memRead32(EELOAD_START + 0x5B0); // v1.20, v1.50, v1.60 (3000x models)
-			const u32 typeCexecjump = memRead32(EELOAD_START + 0x618); // v1.60 (3900x models)
-			const u32 typeDexecjump = memRead32(EELOAD_START + 0x600); // v1.70, v1.90, v2.00, v2.20, v2.30
-			if ((typeBexecjump >> 26 == 3) || (typeCexecjump >> 26 == 3) || (typeDexecjump >> 26 == 3)) // JAL to 0x822B8
+			const u32 typeAexecjump = memRead32(EELOAD_START + 0x470);
+			const u32 typeBexecjump = memRead32(EELOAD_START + 0x5B0);
+			const u32 typeCexecjump = memRead32(EELOAD_START + 0x618);
+			const u32 typeDexecjump = memRead32(EELOAD_START + 0x600);
+			if ((typeBexecjump >> 26 == 3) || (typeCexecjump >> 26 == 3) || (typeDexecjump >> 26 == 3))
 				g_eeloadExec = EELOAD_START + 0x2B8;
-			else if (typeAexecjump >> 26 == 3) // JAL to 0x82170
+			else if (typeAexecjump >> 26 == 3)
 				g_eeloadExec = EELOAD_START + 0x170;
-			else // There might be other types of EELOAD, because these models' BIOSs have not been examined: 18000, 3500x, 3700x, 5500x, and 7900x. However, all BIOS versions have been examined except for v1.01 and v1.10.
+			else
 				Console.WriteLn("recRecompile: Could not enable launch arguments for fast boot mode; unidentified BIOS version! Please report this to the PCSX2 developers.");
 		}
 	}
@@ -2262,7 +2062,6 @@ static void recRecompile(const u32 startpc)
 
 	g_branch = 0;
 
-	// reset recomp state variables
 	s_nBlockCycles = 0;
 	s_nBlockInterlocked = false;
 	pc = startpc;
@@ -2280,44 +2079,22 @@ static void recRecompile(const u32 startpc)
 	{
 		if (pc == 0x33ad48 || pc == 0x35060c)
 		{
-			// 0x33ad48 and 0x35060c are the return address of the function (0x356250) that populate the TLB cache
 			xFastCall((void*)GoemonPreloadTlb);
 		}
 		else if (pc == 0x3563b8)
 		{
-			// Game will unmap some virtual addresses. If a constant address were hardcoded in the block, we would be in a bad situation.
 			eeRecNeedsReset = true;
-			// 0x3563b8 is the start address of the function that invalidate entry in TLB cache
 			xFastCall((void*)GoemonUnloadTlb, ptr32[&cpuRegs.GPR.n.a0.UL[0]]);
 		}
 	}
 
-	// go until the next branch
 	i = startpc;
 	s_nEndBlock = 0xffffffff;
 	s_branchTo = -1;
 
-	// Timeout loop speedhack.
-	// God of War 2 and other games (e.g. NFS series) have these timeout loops which just spin for a few thousand
-	// iterations, usually after kicking something which results in an IRQ, but instead of cancelling the loop,
-	// they just let it finish anyway. Such loops look like:
-	//
-	//   00186D6C addiu  v0,v0, -0x1
-	//   00186D70 nop
-	//   00186D74 nop
-	//   00186D78 nop
-	//   00186D7C nop
-	//   00186D80 bne    v0, zero, ->$0x00186D6C
-	//   00186D84 nop
-	//
-	// Skipping them entirely seems to have no negative effects, but we skip cycles based on the incoming value
-	// if the register being decremented, which appears to vary. So far I haven't seen any which increment instead
-	// of decrementing, so we'll limit the test to that to be safe.
-	//
 	s32 timeout_reg = -1;
 	bool is_timeout_loop = true;
 
-	// compile breakpoints as individual blocks
 	const int n1 = isBreakpointNeeded(i);
 	const int n2 = isMemcheckNeeded(i);
 	const int n = std::max<int>(n1, n2);
@@ -2331,16 +2108,15 @@ static void recRecompile(const u32 startpc)
 	{
 		BASEBLOCK* pblock = PC_GETBLOCK(i);
 
-		// stop before breakpoints
 		if (isBreakpointNeeded(i) != 0 || isMemcheckNeeded(i) != 0)
 		{
 			s_nEndBlock = i;
 			break;
 		}
 
-		if (i != startpc) // Block size truncation checks.
+		if (i != startpc)
 		{
-			if ((i & 0xffc) == 0x0) // breaks blocks at 4k page boundaries
+			if ((i & 0xffc) == 0x0)
 			{
 				willbranch3 = 1;
 				s_nEndBlock = i;
@@ -2357,14 +2133,12 @@ static void recRecompile(const u32 startpc)
 			}
 		}
 
-		//HUH ? PSM ? whut ? THIS IS VIRTUAL ACCESS GOD DAMMIT
 		cpuRegs.code = *(int*)PSM(i);
 
 		if (is_timeout_loop)
 		{
 			if ((cpuRegs.code >> 26) == 8 || (cpuRegs.code >> 26) == 9)
 			{
-				// addi/addiu
 				if (timeout_reg >= 0 || _Rs_ != _Rt_ || _Imm_ >= 0)
 					is_timeout_loop = false;
 				else
@@ -2372,7 +2146,6 @@ static void recRecompile(const u32 startpc)
 			}
 			else if ((cpuRegs.code >> 26) == 5)
 			{
-				// bne
 				if (timeout_reg != static_cast<s32>(_Rs_) || _Rt_ != 0 || memRead32(i + 4) != 0)
 					is_timeout_loop = false;
 			}
@@ -2384,24 +2157,23 @@ static void recRecompile(const u32 startpc)
 
 		switch (cpuRegs.code >> 26)
 		{
-			case 0: // special
-				if (_Funct_ == 8 || _Funct_ == 9) // JR, JALR
+			case 0:
+				if (_Funct_ == 8 || _Funct_ == 9)
 				{
 					s_nEndBlock = i + 8;
 					goto StartRecomp;
 				}
-				else if (_Funct_ == 12 || _Funct_ == 13) // SYSCALL, BREAK
+				else if (_Funct_ == 12 || _Funct_ == 13)
 				{
-					s_nEndBlock = i + 4; // No delay slot.
+					s_nEndBlock = i + 4;
 					goto StartRecomp;
 				}
 				break;
 
-			case 1: // regimm
+			case 1:
 
 				if (_Rt_ < 4 || (_Rt_ >= 16 && _Rt_ < 20))
 				{
-					// branches
 					s_branchTo = _Imm_ * 4 + i + 4;
 					if (s_branchTo > startpc && s_branchTo < i)
 						s_nEndBlock = s_branchTo;
@@ -2412,13 +2184,12 @@ static void recRecompile(const u32 startpc)
 				}
 				break;
 
-			case 2: // J
-			case 3: // JAL
+			case 2:
+			case 3:
 				s_branchTo = (_InstrucTarget_ << 2) | ((i + 4) & 0xf0000000);
 				s_nEndBlock = i + 8;
 				goto StartRecomp;
 
-			// branches
 			case 4:
 			case 5:
 			case 6:
@@ -2435,24 +2206,21 @@ static void recRecompile(const u32 startpc)
 
 				goto StartRecomp;
 
-			case 16: // cp0
+			case 16:
 				if (_Rs_ == 16)
 				{
-					if (_Funct_ == 24) // eret
+					if (_Funct_ == 24)
 					{
 						s_nEndBlock = i + 4;
 						goto StartRecomp;
 					}
 				}
 				// Fall through!
-				// COP0's branch opcodes line up with COP1 and COP2's
 
-			case 17: // cp1
-			case 18: // cp2
+			case 17:
+			case 18:
 				if (_Rs_ == 8)
 				{
-					// BC1F, BC1T, BC1FL, BC1TL
-					// BC2F, BC2T, BC2FL, BC2TL
 					s_branchTo = _Imm_ * 4 + i + 4;
 					if (s_branchTo > startpc && s_branchTo < i)
 						s_nEndBlock = s_branchTo;
@@ -2469,10 +2237,6 @@ static void recRecompile(const u32 startpc)
 
 StartRecomp:
 
-	// The idea here is that as long as a loop doesn't write to a register it's already read
-	// (excepting registers initialised with constants or memory loads) or use any instructions
-	// which alter the machine state apart from registers, it will do the same thing on every
-	// iteration.
 	s_nBlockFF = false;
 	if (s_branchTo == startpc)
 	{
@@ -2485,13 +2249,10 @@ StartRecomp:
 			if (i == s_nEndBlock - 8)
 				continue;
 			cpuRegs.code = *(u32*)PSM(i);
-			// nop
 			if (cpuRegs.code == 0)
 				continue;
-			// cache, sync
 			else if (_Opcode_ == 057 || (_Opcode_ == 0 && _Funct_ == 017))
 				continue;
-			// imm arithmetic
 			else if ((_Opcode_ & 070) == 010 || (_Opcode_ & 076) == 030)
 			{
 				if (loads & 1 << _Rs_)
@@ -2507,7 +2268,6 @@ StartRecomp:
 					break;
 				}
 			}
-			// common register arithmetic instructions
 			else if (_Opcode_ == 0 && (_Funct_ & 060) == 040 && (_Funct_ & 076) != 050)
 			{
 				if (loads & 1 << _Rs_ && loads & 1 << _Rt_)
@@ -2523,7 +2283,6 @@ StartRecomp:
 					break;
 				}
 			}
-			// loads
 			else if ((_Opcode_ & 070) == 040 || (_Opcode_ & 076) == 032 || _Opcode_ == 067)
 			{
 				if (loads & 1 << _Rs_)
@@ -2539,7 +2298,6 @@ StartRecomp:
 					break;
 				}
 			}
-			// mfc*, cfc*
 			else if ((_Opcode_ & 074) == 020 && _Rs_ < 4)
 			{
 				loads |= 1 << _Rt_;
@@ -2556,7 +2314,6 @@ StartRecomp:
 		is_timeout_loop = false;
 	}
 
-	// rec info //
 	bool has_cop2_instructions = false;
 	{
 		if (s_nInstCacheSize < (s_nEndBlock - startpc) / 4 + 1)
@@ -2582,7 +2339,6 @@ StartRecomp:
 		}
 	}
 
-	// eventually we'll want to have a vector of passes or something.
 	if (has_cop2_instructions)
 	{
 		COP2MicroFinishPass().Run(startpc, s_nEndBlock, s_pInstCache + 1);
@@ -2612,15 +2368,12 @@ StartRecomp:
 #endif
 #endif
 
-	// Detect and handle self-modified code
 	memory_protect_recompiled_code(startpc, (s_nEndBlock - startpc) >> 2);
 
-	// Skip Recompilation if sceMpegIsEnd Pattern detected
 	const bool doRecompilation = !skipMPEG_By_Pattern(startpc) && !recSkipTimeoutLoop(timeout_reg, is_timeout_loop);
 
 	if (doRecompilation)
 	{
-		// Finally: Generate x86 recompiled code!
 		g_pCurInstInfo = s_pInstCache;
 		while (!g_branch && pc < s_nEndBlock)
 		{
@@ -2665,7 +2418,7 @@ StartRecomp:
 				recompileNextInstruction(false, false);
 			}
 #else
-			recompileNextInstruction(false, false); // For the love of recursion, batman!
+			recompileNextInstruction(false, false);
 #endif
 		}
 	}
@@ -2708,11 +2461,6 @@ StartRecomp:
 
 	if (g_branch == 2)
 	{
-		// Branch type 2 - This is how I "think" this works (air):
-		// Performs a branch/event test but does not actually "break" the block.
-		// This allows exceptions to be raised, and is thus sufficient for
-		// certain types of things like SYSCALL, EI, etc.  but it is not sufficient
-		// for actual branching instructions.
 
 		iFlushCall(FLUSH_EVERYTHING);
 		iBranchTest();
@@ -2726,12 +2474,6 @@ StartRecomp:
 		{
 
 			iFlushCall(FLUSH_EVERYTHING);
-
-			// Split Block concatenation mode.
-			// This code is run when blocks are split either to keep block sizes manageable
-			// or because we're crossing a 4k page protection boundary in ps2 mem.  The latter
-			// case can result in very short blocks which should not issue branch tests for
-			// performance reasons.
 
 			const int numinsts = (pc - startpc) / 4;
 			if (numinsts > 6)
@@ -2750,7 +2492,6 @@ StartRecomp:
 	s_pCurBlockEx->x86size = static_cast<u32>(xGetPtr() - recPtr);
 
 #if 0
-	// Example: Dump both x86/EE code
 	if (startpc == 0x456630) {
 		iDumpBlock(s_pCurBlockEx->startpc, s_pCurBlockEx->size*4, s_pCurBlockEx->fnptr, s_pCurBlockEx->x86size);
 	}

@@ -28,21 +28,20 @@
 
 #include <vector>
 
-//Map of actively pressed keys so that chords work
 using KeyMap = std::unordered_multimap<u64, bool>;
 
 namespace Pad
 {
 	struct MacroButton
 	{
-		std::vector<u32> buttons; ///< Buttons to activate.
-		KeyMap active_buttons; ///< Currently active buttons.
-		float pressure; ///< Pressure to apply when macro is active.
-		u16 toggle_frequency; ///< Interval at which the buttons will be toggled, if not 0.
-		u16 toggle_counter; ///< When this counter reaches zero, buttons will be toggled.
-		bool toggle_state; ///< Current state for turbo.
-		bool trigger_state; ///< Whether the macro button is active.
-		bool trigger_toggle; ///< Whether the macro is trigged by holding or press.
+		std::vector<u32> buttons;
+		KeyMap active_buttons;
+		float pressure;
+		u16 toggle_frequency;
+		u16 toggle_counter;
+		bool toggle_state;
+		bool trigger_state;
+		bool trigger_toggle;
 	};
 
 	static const char* GetControllerTypeName(Pad::ControllerType type);
@@ -58,7 +57,7 @@ namespace Pad
 
 	bool mtapPort0LastState;
 	bool mtapPort1LastState;
-} // namespace Pad
+}
 
 bool Pad::Initialize()
 {
@@ -102,19 +101,14 @@ void Pad::LoadConfig(const SettingsInterface& si)
 
 		PadBase* pad = Pad::GetPad(i);
 
-		// If pad pointer is not occupied yet, type in settings no longer matches the current type, or a multitap was slotted in/out,
-		// then reconstruct a new pad.
 		if (!pad || pad->GetType() != ci->type || (mtapPort0Changed && (i <= 4 && i != 1)) || (mtapPort1Changed && (i >= 5 || i == 1)))
 		{
-			// If the slot is a multitap slot, and the multitap is not plugged in, then the pad should be forced to Not Connected.
 			if (i > 1 && ((i <= 4 && !EmuConfig.Pad.MultitapPort0_Enabled) || (i > 4 && !EmuConfig.Pad.MultitapPort1_Enabled)))
 			{
 				pad = Pad::CreatePad(i, Pad::ControllerType::NotConnected, (VMManager::GetState() != VMState::Shutdown ? Pad::DEFAULT_EJECT_TICKS : 0));
 			}
 			else
 			{
-				// Create the new pad. If the VM is in any kind of running state at all, set eject ticks so the PS2 will think
-				// there was some kind of pad ejection event and properly detect the new one, and properly initiate its config sequence.
 				pad = Pad::CreatePad(i, ci->type, (VMManager::GetState() != VMState::Shutdown ? Pad::DEFAULT_EJECT_TICKS : 0));
 			}
 
@@ -160,7 +154,6 @@ void Pad::SetDefaultControllerConfig(SettingsInterface& si)
 	si.ClearSection("Hotkeys");
 	si.ClearSection("Pad");
 
-	// PCSX2 Controller Settings - Global Settings
 	for (u32 i = 0; i < static_cast<u32>(InputSourceType::Count); i++)
 	{
 		si.SetBoolValue("InputSources",
@@ -175,7 +168,6 @@ void Pad::SetDefaultControllerConfig(SettingsInterface& si)
 	si.SetFloatValue("Pad", "PointerYScale", 8.0f);
 	SDLInputSource::ResetRGBForAllPlayers(si);
 
-	// PCSX2 Controller Settings - Default pad types and parameters.
 	for (u32 i = 0; i < Pad::NUM_CONTROLLER_PORTS; i++)
 	{
 		const std::string section = GetConfigSection(i);
@@ -208,52 +200,31 @@ void Pad::SetDefaultControllerConfig(SettingsInterface& si)
 		}
 	}
 
-	// PCSX2 Controller Settings - Controller 1 / Controller 2 / ...
-	// Use the automapper to set this up.
 	MapController(si, 0, InputManager::GetGenericBindingMapping("Keyboard"));
 }
 
 void Pad::SetDefaultHotkeyConfig(SettingsInterface& si)
 {
-	// PCSX2 Controller Settings - Hotkeys
 
-	// PCSX2 Controller Settings - Hotkeys - General
 	si.SetStringValue("Hotkeys", "ToggleFullscreen", "Keyboard/Alt & Keyboard/Return");
 
-	// PCSX2 Controller Settings - Hotkeys - Graphics
 	si.SetStringValue("Hotkeys", "CycleAspectRatio", "Keyboard/F6");
 	si.SetStringValue("Hotkeys", "CycleInterlaceMode", "Keyboard/F5");
-	// si.SetStringValue("Hotkeys", "CycleTVShader", "Keyboard/"); TBD
-	// si.SetStringValue("Hotkeys", "CycleBlendingAccuracy", "Keyboard/"); TBD
 	si.SetStringValue("Hotkeys", "ToggleMipmapMode", "Keyboard/Insert");
-	//	si.SetStringValue("Hotkeys", "DecreaseUpscaleMultiplier", "Keyboard"); TBD
-	//	si.SetStringValue("Hotkeys", "IncreaseUpscaleMultiplier", "Keyboard"); TBD
-	//  si.SetStringValue("Hotkeys", "ReloadTextureReplacements", "Keyboard"); TBD
 	si.SetStringValue("Hotkeys", "GSDumpMultiFrame", "Keyboard/Control & Keyboard/Shift & Keyboard/F8");
 	si.SetStringValue("Hotkeys", "Screenshot", "Keyboard/F8");
 	si.SetStringValue("Hotkeys", "GSDumpSingleFrame", "Keyboard/Shift & Keyboard/F8");
 	si.SetStringValue("Hotkeys", "ToggleSoftwareRendering", "Keyboard/F9");
-	//  si.SetStringValue("Hotkeys", "ToggleTextureDumping", "Keyboard"); TBD
-	//  si.SetStringValue("Hotkeys", "ToggleTextureReplacements", "Keyboard"); TBD
 	si.SetStringValue("Hotkeys", "ZoomIn", "Keyboard/Control & Keyboard/Plus");
 	si.SetStringValue("Hotkeys", "ZoomOut", "Keyboard/Control & Keyboard/Minus");
-	// Missing hotkey for resetting zoom back to 100 with Keyboard/Control & Keyboard/Asterisk
 
-	// PCSX2 Controller Settings - Hotkeys - Input Recording
 	si.SetStringValue("Hotkeys", "InputRecToggleMode", "Keyboard/Shift & Keyboard/R");
 
-	// PCSX2 Controller Settings - Hotkeys - Save States
 	si.SetStringValue("Hotkeys", "LoadStateFromSlot", "Keyboard/F3");
 	si.SetStringValue("Hotkeys", "SaveStateToSlot", "Keyboard/F1");
 	si.SetStringValue("Hotkeys", "NextSaveStateSlot", "Keyboard/F2");
 	si.SetStringValue("Hotkeys", "PreviousSaveStateSlot", "Keyboard/Shift & Keyboard/F2");
 
-	// PCSX2 Controller Settings - Hotkeys - System
-	//	si.SetStringValue("Hotkeys", "DecreaseSpeed", "Keyboard"); TBD
-	//  si.SetStringValue("Hotkeys", "FrameAdvance", "Keyboard"); TBD
-	//	si.SetStringValue("Hotkeys", "IncreaseSpeed", "Keyboard"); TBD
-	//  si.SetStringValue("Hotkeys", "ResetVM", "Keyboard"); TBD
-	//  si.SetStringValue("Hotkeys", "ShutdownVM", "Keyboard"); TBD
 	si.SetStringValue("Hotkeys", "OpenPauseMenu", "Keyboard/Escape");
 	si.SetStringValue("Hotkeys", "ToggleFrameLimit", "Keyboard/F4");
 	si.SetStringValue("Hotkeys", "TogglePause", "Keyboard/Space");
@@ -295,7 +266,6 @@ const Pad::ControllerInfo* Pad::GetControllerInfoByName(const std::string_view n
 
 const char* Pad::GetControllerTypeName(Pad::ControllerType type)
 {
-	// Not localized, because it should never happen.
 	const ControllerInfo* ci = GetControllerInfo(type);
 	return ci ? ci->GetLocalizedName() : "UNKNOWN";
 }
@@ -317,7 +287,6 @@ const Pad::ControllerInfo* Pad::GetConfigControllerType(const SettingsInterface&
 
 void Pad::ClearPortBindings(SettingsInterface& si, u32 port)
 {
-	// Why don't these just access EmuConfig? Input Profiles.
 	const std::string section = GetConfigSection(port);
 	const ControllerInfo* info = GetConfigControllerType(si, section.c_str(), port);
 	if (!info)
@@ -421,7 +390,6 @@ static u32 TryMapGenericMapping(SettingsInterface& si, const std::string& sectio
 	const InputManager::GenericInputBindingMapping& mapping, GenericInputBinding generic_name,
 	const char* bind_name)
 {
-	// find the mapping it corresponds to
 	const std::string* found_mapping = nullptr;
 	for (const std::pair<GenericInputBinding, std::string>& it : mapping)
 	{
@@ -498,7 +466,6 @@ std::string Pad::GetConfigSection(u32 pad_index)
 	return fmt::format("Pad{}", pad_index + 1);
 }
 
-// Create a new pad instance, update the smart pointer for this pad slot, and return a dumb pointer to the new pad.
 PadBase* Pad::CreatePad(u8 unifiedSlot, ControllerType controllerType, size_t ejectTicks)
 {
 	switch (controllerType)
@@ -575,14 +542,12 @@ bool Pad::Freeze(StateWrapper& sw)
 			{
 				pxAssertMsg(false, fmt::format("Pad::Freeze (on read) Existing Pad {0} was nullptr", unifiedSlot).c_str());
 			}
-			// If the currently configured pad is of a different type than the pad which was used during the savestate...
 			else if (currentPad->GetType() != statePadType)
 			{
 				const ControllerType currentPadType = currentPad->GetType();
 
 				const auto& [port, slot] = sioConvertPadToPortAndSlot(unifiedSlot);
 				Host::AddIconOSDMessage(fmt::format("UnfreezePad{}Changed", unifiedSlot), ICON_FA_GAMEPAD,
-					//: {0} and {1} are the port and multitap slot, {2} and {3} are controller types (e.g. "DualShock 2", "Jogcon")
 					fmt::format(TRANSLATE_FS("Pad",
 									"Controller port {0}, slot {1} has a {2} connected, but the save state has a "
 									"{3}.\nEjecting {2} and replacing it with {3}."),
@@ -590,19 +555,12 @@ bool Pad::Freeze(StateWrapper& sw)
 						GetControllerTypeName(currentPad ? currentPad->GetType() : Pad::ControllerType::NotConnected),
 						GetControllerTypeName(statePadType)));
 
-				// Run the freeze, using a new pad instance of the old type just so we make sure all those attributes
-				// from the state are read out and we aren't going to run into some sort of consistency problem.
 				currentPad = CreatePad(unifiedSlot, statePadType);
 
 				if (currentPad)
 				{
 					currentPad->Freeze(sw);
 
-					// Now immediately discard whatever malformed pad state we just created, and replace it with a fresh pad loaded
-					// using whatever the current user settings are. Savestates are, by definition, never going to occur in the middle
-					// of a transfer between SIO2 and the peripheral, since they aren't captured until the VM is at a point where everything
-					// is "stoppable". For all intents and purposes, by the time a savestate is captured, the IOP is "done" and there is no
-					// "pending work" left hanging in SIO2 or the pads. So there is nothing actually lost from just throwing the pad away and making a new one here.
 					currentPad = CreatePad(unifiedSlot, currentPadType, Pad::DEFAULT_EJECT_TICKS);
 				}
 				else
@@ -610,7 +568,6 @@ bool Pad::Freeze(StateWrapper& sw)
 					pxAssertMsg(false, fmt::format("Pad::Freeze (on read) State Pad {0} was nullptr", unifiedSlot).c_str());
 				}
 			}
-			// ... else, just run the freeze normally.
 			else if (currentPad && !currentPad->Freeze(sw))
 			{
 				return false;
@@ -650,7 +607,6 @@ void Pad::LoadMacroButtonConfig(const SettingsInterface& si, u32 pad, const Cont
 		const float pressure = si.GetFloatValue(section.c_str(), TinyString::from_format("Macro{}Pressure", i + 1), 1.0f);
 		const bool toggle = si.GetBoolValue(section.c_str(), TinyString::from_format("Macro{}Toggle", i + 1), false);
 
-		// convert binds
 		std::vector<u32> bind_indices;
 		std::vector<std::string_view> buttons_split(StringUtil::SplitString(binds_string, '&', true));
 		if (buttons_split.empty())
@@ -679,7 +635,6 @@ void Pad::LoadMacroButtonConfig(const SettingsInterface& si, u32 pad, const Cont
 
 void Pad::SetMacroButtonState(InputBindingKey& key, u32 pad, u32 index, bool state)
 {
-	//0 appears for some reason and breaks mb.active_buttons.size() != binding_count
 	if (key.bits == 0)
 		return;
 
@@ -693,7 +648,6 @@ void Pad::SetMacroButtonState(InputBindingKey& key, u32 pad, u32 index, bool sta
 	SettingsInterface& sif = *Host::GetSettingsInterface();
 	std::vector<std::string> data = sif.GetStringList(fmt::format("Pad{}", pad+1).c_str(), fmt::format("Macro{}", index+1).c_str());
 	size_t binding_count = 0;
-	//just in case there's more than one index
 	for (std::string bind : data)
 	{
 		binding_count += InputManager::SplitChord(bind).size();

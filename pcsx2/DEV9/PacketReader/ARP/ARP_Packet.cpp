@@ -22,19 +22,15 @@ namespace PacketReader::ARP
 
 		NetLib::ReadUInt16(buffer, &offset, &hardwareType);
 		NetLib::ReadUInt16(buffer, &offset, &protocol);
-		//
 		NetLib::ReadByte08(buffer, &offset, &hardwareAddressLength);
 		NetLib::ReadByte08(buffer, &offset, &protocolAddressLength);
 
 		NetLib::ReadUInt16(buffer, &offset, &op);
 
-		//Allocate arrays
 		senderHardwareAddress = std::make_unique<u8[]>(hardwareAddressLength);
 		senderProtocolAddress = std::make_unique<u8[]>(protocolAddressLength);
 		targetHardwareAddress = std::make_unique<u8[]>(hardwareAddressLength);
 		targetProtocolAddress = std::make_unique<u8[]>(protocolAddressLength);
-
-		//Assume normal MAC/IP address lengths for logging
 
 		NetLib::ReadByteArray(buffer, &offset, hardwareAddressLength, senderHardwareAddress.get());
 		NetLib::ReadByteArray(buffer, &offset, protocolAddressLength, senderProtocolAddress.get());
@@ -81,4 +77,4 @@ namespace PacketReader::ARP
 	{
 		return new ARP_Packet(*this);
 	}
-} // namespace PacketReader::ARP
+}

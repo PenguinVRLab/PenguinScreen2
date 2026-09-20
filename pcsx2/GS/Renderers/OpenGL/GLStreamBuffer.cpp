@@ -34,7 +34,6 @@ void GLStreamBuffer::Unbind()
 
 namespace
 {
-	// Uses glBufferSubData() to update. Preferred for drivers which don't support {ARB,EXT}_buffer_storage.
 	class BufferSubDataStreamBuffer final : public GLStreamBuffer
 	{
 	public:
@@ -88,7 +87,6 @@ namespace
 		u8* m_cpu_buffer;
 	};
 
-	// Uses BufferData() to orphan the buffer after every update. Used on Mali where BufferSubData forces a sync.
 	class BufferDataStreamBuffer final : public GLStreamBuffer
 	{
 	public:
@@ -142,7 +140,6 @@ namespace
 		u8* m_cpu_buffer;
 	};
 
-	// Base class for implementations which require syncing.
 	class SyncingStreamBuffer : public GLStreamBuffer
 	{
 	public:
@@ -198,26 +195,19 @@ namespace
 
 		void AllocateSpace(u32 size)
 		{
-			// add sync objects for writes since the last allocation
 			AddSyncsForOffset(m_position);
 
-			// wait for sync objects for the space we want to use
 			EnsureSyncsWaitedForOffset(m_position + size);
 
-			// wrap-around?
 			if ((m_position + size) > m_size)
 			{
-				// current position ... buffer end
 				AddSyncsForOffset(m_size);
 
-				// rewind, and try again
 				m_position = 0;
 
-				// wait for the sync at the start of the buffer
 				WaitForSync(m_sync_objects[0]);
 				m_available_block_index = 1;
 
-				// and however much more we need to satisfy the allocation
 				EnsureSyncsWaitedForOffset(size);
 				m_used_block_index = 0;
 			}
@@ -308,7 +298,7 @@ namespace
 		u8* m_mapped_ptr;
 		bool m_coherent;
 	};
-} // namespace
+}
 
 std::unique_ptr<GLStreamBuffer> GLStreamBuffer::Create(GLenum target, u32 size)
 {
@@ -320,7 +310,6 @@ std::unique_ptr<GLStreamBuffer> GLStreamBuffer::Create(GLenum target, u32 size)
 			return buf;
 	}
 
-	// BufferSubData is slower on all drivers except NVIDIA...
 	const char* vendor = reinterpret_cast<const char*>(glGetString(GL_VENDOR));
 	if (std::strstr(vendor, "NVIDIA"))
 		return BufferSubDataStreamBuffer::Create(target, size);

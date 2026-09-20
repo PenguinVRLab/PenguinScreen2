@@ -11,14 +11,8 @@
 #define FF_LG_CAPS_HIGH_RES_DEADBAND (1 << 2)
 #define FF_LG_CAPS_DAMPER_CLIP (1 << 3)
 
-/*
- * Convert a Logitech wheel position to a signed 16-bit value.
- *
- * input values 127 and 128 are center positions and are translated to output value 0
- */
 static inline int16_t ff_lg_u8_to_s16(uint8_t c, int16_t max = SHRT_MAX)
 {
-	// 127 and 128 are center positions
 	if (c < 128)
 	{
 		++c;
@@ -34,7 +28,6 @@ static inline uint16_t ff_lg_u8_to_u16(uint8_t c, uint16_t max = USHRT_MAX)
 
 static inline int16_t ff_lg_u16_to_s16(uint16_t s)
 {
-	// 32767 and 32768 are center positions
 	int value = s - 32768;
 	if (value < 0)
 	{

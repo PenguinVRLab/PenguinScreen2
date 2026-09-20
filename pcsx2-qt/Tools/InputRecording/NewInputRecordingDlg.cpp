@@ -17,7 +17,6 @@ NewInputRecordingDlg::NewInputRecordingDlg(QWidget* parent)
 	setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
 	setFixedSize(geometry().width(), geometry().height());
 
-	// Default State
 	m_ui.m_recTypeWarning->hide();
 	m_ui.m_dlgBtns->button(QDialogButtonBox::Ok)->setEnabled(false);
 	m_ui.m_filePathInput->setDisabled(true);

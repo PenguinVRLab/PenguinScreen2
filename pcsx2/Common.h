@@ -5,9 +5,9 @@
 
 #include "common/Pcsx2Defs.h"
 
-static const u32 BIAS = 2;				// Bus is half of the actual ps2 speed
-static const u32 PS2CLK = 294912000;	//Hz	/* 294.912 MHz */
-extern u32 PSXCLK;	/* 36.864 MHz */
+static const u32 BIAS = 2;
+static const u32 PS2CLK = 294912000;
+extern u32 PSXCLK;
 
 
 #include "Memory.h"

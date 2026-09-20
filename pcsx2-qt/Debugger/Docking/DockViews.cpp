@@ -72,8 +72,6 @@ KDDockWidgets::Core::View* DockViewFactory::createSegmentedDropIndicatorOverlayV
 	return new DockSegmentedDropIndicatorOverlay(controller, KDDockWidgets::QtCommon::View_qt::asQWidget(parent));
 }
 
-// *****************************************************************************
-
 DockWidget::DockWidget(
 	const QString& unique_name,
 	KDDockWidgets::DockWidgetOptions options,
@@ -86,16 +84,12 @@ DockWidget::DockWidget(
 
 void DockWidget::openStateChanged(bool open)
 {
-	// The LayoutSaver class will close a bunch of dock widgets. We only want to
-	// delete the dock widgets when they're being closed by the user.
 	if (KDDockWidgets::LayoutSaver::restoreInProgress())
 		return;
 
 	if (!open && g_debugger_window)
 		g_debugger_window->dockManager().destroyDebuggerView(uniqueName());
 }
-
-// *****************************************************************************
 
 DockTitleBar::DockTitleBar(KDDockWidgets::Core::TitleBar* controller, KDDockWidgets::Core::View* parent)
 	: KDDockWidgets::QtWidgets::TitleBar(controller, parent)
@@ -109,8 +103,6 @@ void DockTitleBar::mouseDoubleClickEvent(QMouseEvent* event)
 	else
 		event->ignore();
 }
-
-// *****************************************************************************
 
 DockStack::DockStack(KDDockWidgets::Core::Stack* controller, QWidget* parent)
 	: KDDockWidgets::QtWidgets::Stack(controller, parent)
@@ -136,8 +128,6 @@ void DockStack::mouseDoubleClickEvent(QMouseEvent* ev)
 		ev->ignore();
 }
 
-// *****************************************************************************
-
 DockTabBar::DockTabBar(KDDockWidgets::Core::TabBar* controller, QWidget* parent)
 	: KDDockWidgets::QtWidgets::TabBar(controller, parent)
 {
@@ -155,7 +145,6 @@ void DockTabBar::openContextMenu(QPoint pos)
 
 	int tab_index = tabAt(pos);
 
-	// Filter out the placeholder widget displayed when there are no layouts.
 	auto [widget, controller, view] = widgetsFromTabIndex(tab_index);
 	if (!widget)
 		return;

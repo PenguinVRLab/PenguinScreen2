@@ -30,7 +30,7 @@ void HddCreate::Start()
 void HddCreate::WriteImage(const std::string& hddPath, u64 fileBytes, u64 zeroSizeBytes)
 {
 	constexpr int buffsize = 4 * 1024;
-	const u8 buff[buffsize] = {0}; // 4kb.
+	const u8 buff[buffsize] = {0};
 
 	if (FileSystem::FileExists(hddPath.c_str()))
 	{
@@ -49,7 +49,6 @@ void HddCreate::WriteImage(const std::string& hddPath, u64 fileBytes, u64 zeroSi
 
 	bool sparseSupported = false;
 #ifdef _WIN32
-	// Handle owned by CFile.
 	HANDLE nativeFile = reinterpret_cast<HANDLE>(_get_osfhandle(_fileno(newImage.get())));
 
 	if (nativeFile == INVALID_HANDLE_VALUE)
@@ -62,7 +61,6 @@ void HddCreate::WriteImage(const std::string& hddPath, u64 fileBytes, u64 zeroSi
 		return;
 	}
 
-	// Check if we support sparse files.
 	DWORD dwFlags;
 	if (GetVolumeInformationByHandleW(nativeFile, nullptr, 0, nullptr, nullptr, &dwFlags, nullptr, 0) == FALSE)
 	{
@@ -76,7 +74,6 @@ void HddCreate::WriteImage(const std::string& hddPath, u64 fileBytes, u64 zeroSi
 
 	if (dwFlags & FILE_SUPPORTS_SPARSE_FILES)
 	{
-		// Sparse files supported.
 		FILE_SET_SPARSE_BUFFER sparseSetting;
 		sparseSetting.SetSparse = true;
 		FILE_ZERO_DATA_INFORMATION sparseRange;
@@ -98,7 +95,6 @@ void HddCreate::WriteImage(const std::string& hddPath, u64 fileBytes, u64 zeroSi
 		sparseSupported = true;
 	}
 
-	// Set filesize.
 	LARGE_INTEGER seekStart;
 	seekStart.QuadPart = 0;
 	LARGE_INTEGER seekEnd;
@@ -117,7 +113,6 @@ void HddCreate::WriteImage(const std::string& hddPath, u64 fileBytes, u64 zeroSi
 	}
 
 #elif defined(__POSIX__)
-	// Handle owned by CFile.
 	int nativeFile = fileno(newImage.get());
 
 	if (nativeFile == -1)
@@ -130,7 +125,6 @@ void HddCreate::WriteImage(const std::string& hddPath, u64 fileBytes, u64 zeroSi
 		return;
 	}
 
-	// Set filesize.
 	if ((ftruncate(nativeFile, fileBytes) == -1) ||
 		(lseek(nativeFile, 0, SEEK_SET) == -1))
 	{
@@ -142,14 +136,10 @@ void HddCreate::WriteImage(const std::string& hddPath, u64 fileBytes, u64 zeroSi
 		return;
 	}
 
-	// Check the blocks allocated to determine if file is spasre.
-	// Assume that we don't get a false positive from filesystems only supporting ValidDataLength.
 	struct stat fileInfo;
 	if (fstat(nativeFile, &fileInfo) == -1)
 	{
 		Console.Error("DEV9: HddCreate: Failed to check sparse");
-		// Set filesize to zero to avoid potential freeze on close.
-		// Ignore any error, can't do much if this fails anyway.
 		[[maybe_unused]] int i = ftruncate(nativeFile, 0);
 		newImage.reset();
 		FileSystem::DeleteFilePath(hddPath.c_str());
@@ -160,15 +150,12 @@ void HddCreate::WriteImage(const std::string& hddPath, u64 fileBytes, u64 zeroSi
 
 	if (fileInfo.st_blocks != static_cast<s64>(fileBytes / 512))
 	{
-		// Sparse files supported.
 		sparseSupported = true;
-		// File is automatically sparse.
 	}
 #endif
 
 	lastUpdate = std::chrono::steady_clock::now();
 
-	// Round up.
 	const s32 reqMiB = (fileBytes + ((1024 * 1024) - 1)) / (1024 * 1024);
 	const s32 zeroMiB = (zeroSizeBytes + ((1024 * 1024) - 1)) / (1024 * 1024);
 
@@ -178,19 +165,16 @@ void HddCreate::WriteImage(const std::string& hddPath, u64 fileBytes, u64 zeroSi
 
 	for (; iMiB < reqMiB; iMiB++)
 	{
-		// Round down.
 		const s32 req4Kib = std::min<s32>(1024, (fileBytes / 1024) - (u64)iMiB * 1024) / 4;
 		for (s32 i4kb = 0; i4kb < req4Kib; i4kb++)
 		{
 			if (std::fwrite(buff, buffsize, 1, newImage.get()) != 1)
 			{
 				std::fflush(newImage.get());
-				// Set filesize to zero to avoid potential freeze on close.
 #ifdef _WIN32
 				SetFilePointerEx(nativeFile, seekStart, nullptr, FILE_BEGIN);
 				SetEndOfFile(nativeFile);
 #elif defined(__POSIX__)
-				// Ignore any error, can't do much if this fails anyway.
 				[[maybe_unused]] int i = ftruncate(nativeFile, 0);
 #endif
 				newImage.reset();
@@ -207,12 +191,10 @@ void HddCreate::WriteImage(const std::string& hddPath, u64 fileBytes, u64 zeroSi
 			if (std::fwrite(buff, remainingBytes, 1, newImage.get()) != 1)
 			{
 				std::fflush(newImage.get());
-				// Set filesize to zero to avoid potential freeze on close.
 #ifdef _WIN32
 				SetFilePointerEx(nativeFile, seekStart, nullptr, FILE_BEGIN);
 				SetEndOfFile(nativeFile);
 #elif defined(__POSIX__)
-				// Ignore any error, can't do much if this fails anyway.
 				[[maybe_unused]] int i = ftruncate(nativeFile, 0);
 #endif
 				newImage.reset();
@@ -232,12 +214,10 @@ void HddCreate::WriteImage(const std::string& hddPath, u64 fileBytes, u64 zeroSi
 		if (canceled.load())
 		{
 			std::fflush(newImage.get());
-			// Set filesize to zero to avoid potential freeze on close.
 #ifdef _WIN32
 			SetFilePointerEx(nativeFile, seekStart, nullptr, FILE_BEGIN);
 			SetEndOfFile(nativeFile);
 #elif defined(__POSIX__)
-			// Ignore any error, can't do much if this fails anyway.
 			[[maybe_unused]] int i = ftruncate(nativeFile, 0);
 #endif
 			newImage.reset();

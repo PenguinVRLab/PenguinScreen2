@@ -119,7 +119,6 @@ bool RGBA8Image::SaveToFile(const char* filename, u8 quality) const
 	if (SaveToFile(filename, fp.get(), quality))
 		return true;
 
-	// save failed
 	fp.reset();
 	FileSystem::DeleteFilePath(filename);
 	return false;
@@ -196,23 +195,18 @@ static bool PNGCommonLoader(RGBA8Image* image, png_structp png_ptr, png_infop in
 	const png_byte color_type = png_get_color_type(png_ptr, info_ptr);
 	const png_byte bit_depth = png_get_bit_depth(png_ptr, info_ptr);
 
-	// Read any color_type into 8bit depth, RGBA format.
-	// See http://www.libpng.org/pub/png/libpng-manual.txt
-
 	if (bit_depth == 16)
 		png_set_strip_16(png_ptr);
 
 	if (color_type == PNG_COLOR_TYPE_PALETTE)
 		png_set_palette_to_rgb(png_ptr);
 
-	// PNG_COLOR_TYPE_GRAY_ALPHA is always 8 or 16bit depth.
 	if (color_type == PNG_COLOR_TYPE_GRAY && bit_depth < 8)
 		png_set_expand_gray_1_2_4_to_8(png_ptr);
 
 	if (png_get_valid(png_ptr, info_ptr, PNG_INFO_tRNS))
 		png_set_tRNS_to_alpha(png_ptr);
 
-	// These color_type don't have an alpha channel then fill it with 0xff.
 	if (color_type == PNG_COLOR_TYPE_RGB || color_type == PNG_COLOR_TYPE_GRAY || color_type == PNG_COLOR_TYPE_PALETTE)
 		png_set_filler(png_ptr, 0xFF, PNG_FILLER_AFTER);
 
@@ -404,7 +398,7 @@ namespace
 			fastjmp_jmp(&eh->jbuf, 1);
 		}
 	};
-} // namespace
+}
 
 template <typename T>
 static bool WrapJPEGDecompress(RGBA8Image* image, T setup_func)
@@ -412,8 +406,6 @@ static bool WrapJPEGDecompress(RGBA8Image* image, T setup_func)
 	std::vector<u8> scanline;
 	jpeg_decompress_struct info = {};
 
-	// NOTE: Be **very** careful not to allocate memory after calling this function.
-	// It won't get freed, because fastjmp does not unwind the stack.
 	JPEGErrorHandler errhandler;
 	if (fastjmp_set(&errhandler.jbuf) != 0)
 	{
@@ -460,7 +452,6 @@ static bool WrapJPEGDecompress(RGBA8Image* image, T setup_func)
 			break;
 		}
 
-		// RGB -> RGBA
 		const u8* src_ptr = scanline.data();
 		u32* dst_ptr = image->GetRowPixels(y);
 		for (u32 x = 0; x < info.image_width; x++)
@@ -488,8 +479,6 @@ bool JPEGFileLoader(RGBA8Image* image, const char* filename, std::FILE* fp)
 
 	struct FileCallback
 	{
-		// Must be the first member (&this == &mgr)
-		// We pass a pointer of mgr to libjpeg, and we need to be able to cast it back to FileCallback.
 		jpeg_source_mgr mgr;
 
 		std::FILE* fp;
@@ -550,8 +539,6 @@ static bool WrapJPEGCompress(const RGBA8Image& image, u8 quality, T setup_func)
 	std::vector<u8> scanline;
 	jpeg_compress_struct info = {};
 
-	// NOTE: Be **very** careful not to allocate memory after calling this function.
-	// It won't get freed, because fastjmp does not unwind the stack.
 	JPEGErrorHandler errhandler;
 	if (fastjmp_set(&errhandler.jbuf) != 0)
 	{
@@ -576,7 +563,6 @@ static bool WrapJPEGCompress(const RGBA8Image& image, u8 quality, T setup_func)
 	bool result = true;
 	for (u32 y = 0; y < info.image_height; y++)
 	{
-		// RGBA -> RGB
 		u8* dst_ptr = scanline.data();
 		const u32* src_ptr = image.GetRowPixels(y);
 		for (u32 x = 0; x < info.image_width; x++)
@@ -602,7 +588,6 @@ static bool WrapJPEGCompress(const RGBA8Image& image, u8 quality, T setup_func)
 
 bool JPEGBufferSaver(const RGBA8Image& image, std::vector<u8>* buffer, u8 quality)
 {
-	// give enough space to avoid reallocs
 	buffer->resize(image.GetWidth() * image.GetHeight() * 2);
 
 	struct MemCallback
@@ -621,7 +606,6 @@ bool JPEGBufferSaver(const RGBA8Image& image, std::vector<u8>* buffer, u8 qualit
 	cb.mgr.empty_output_buffer = [](j_compress_ptr cinfo) -> boolean {
 		MemCallback* cb = (MemCallback*)cinfo->dest;
 
-		// double size
 		cb->buffer_used = cb->buffer->size();
 		cb->buffer->resize(cb->buffer->size() * 2);
 		cb->mgr.next_output_byte = cb->buffer->data() + cb->buffer_used;
@@ -631,7 +615,6 @@ bool JPEGBufferSaver(const RGBA8Image& image, std::vector<u8>* buffer, u8 qualit
 	cb.mgr.term_destination = [](j_compress_ptr cinfo) {
 		MemCallback* cb = (MemCallback*)cinfo->dest;
 
-		// get final size
 		cb->buffer->resize(cb->buffer->size() - cb->mgr.free_in_buffer);
 	};
 
@@ -778,7 +761,7 @@ bool IsSupportedBMPFormat(u32 compression, u16 bit_count)
 	if (compression == 2)
 		return (bit_count == 4);
 
-	if (compression == 3 || compression == 4) // BMP_BITFIELDS or BMP_ALPHABITFIELDS
+	if (compression == 3 || compression == 4)
 		return (bit_count == 16 || bit_count == 32);
 
 	return false;
@@ -786,7 +769,6 @@ bool IsSupportedBMPFormat(u32 compression, u16 bit_count)
 
 bool LoadBMPPalette(std::vector<u32>& palette, const u8* data, u32 palette_offset, const BMPInfoHeader& info_header)
 {
-	// 1 bit format doesn't use a palette in the traditional sense
 	if (info_header.bit_count == 1)
 	{
 		palette = {0xFFFFFFFF, 0xFF000000};
@@ -795,7 +777,6 @@ bool LoadBMPPalette(std::vector<u32>& palette, const u8* data, u32 palette_offse
 
 	const u32 num_colors = (info_header.clr_used > 0) ? info_header.clr_used : (1u << info_header.bit_count);
 
-	// Make sure that we don't have an unreasonably large palette
 	if (num_colors > 256)
 	{
 		Console.Error("Invalid palette size: %u", num_colors);
@@ -922,9 +903,8 @@ bool LoadUncompressedBMP(u32* pixels, const u8* src, const u8* data, u32 width, 
 					u32 pixel_value = row_src[byte_index] | (row_src[byte_index + 1] << 8) | (row_src[byte_index + 2] << 16) | (row_src[byte_index + 3] << 24);
 					bit_offset += 32;
 
-					if (info_header.compression == 3 || info_header.compression == 4) // BITFIELDS or ALPHABITFIELDS
+					if (info_header.compression == 3 || info_header.compression == 4)
 					{
-						// Calculate shifts
 						auto calc_shift = [](u32 mask) -> u32 {
 							u32 result = 0;
 							while ((mask >= 0x100) || (!(mask & 1) && mask))
@@ -935,7 +915,6 @@ bool LoadUncompressedBMP(u32* pixels, const u8* src, const u8* data, u32 width, 
 							return result;
 						};
 
-						// Calculate scales
 						auto calc_scale = [](u32 low_mask) -> u32 {
 							u32 result = 8;
 							while (low_mask && result)
@@ -946,9 +925,8 @@ bool LoadUncompressedBMP(u32* pixels, const u8* src, const u8* data, u32 width, 
 							return result;
 						};
 
-						// Apply scale
 						auto apply_scale = [](u32 value, u32 scale) -> u8 {
-							if (!(scale & 0x07)) // scale == 8 or 0
+							if (!(scale & 0x07))
 								return static_cast<u8>(value);
 							u32 filled = 8 - scale;
 							u32 result = value << scale;
@@ -979,7 +957,6 @@ bool LoadUncompressedBMP(u32* pixels, const u8* src, const u8* data, u32 width, 
 					}
 					else
 					{
-						// Uncompressed 32-bit BGRA order
 						const u8 b = row_src[byte_index + 0];
 						const u8 g = row_src[byte_index + 1];
 						const u8 r = row_src[byte_index + 2];
@@ -1017,7 +994,6 @@ bool LoadCompressedBMP(u32* pixels, const u8* src, u32 src_size, u32 width, u32 
 
 		while (x < width)
 		{
-			// Check bounds before reading
 			if (src_pos + 2 > src_size)
 				return false;
 
@@ -1036,7 +1012,6 @@ bool LoadCompressedBMP(u32* pixels, const u8* src, u32 src_size, u32 width, u32 
 				}
 				else if (value == 2)
 				{
-					// Delta (jump) need 2 more bytes
 					if (src_pos + 2 > src_size)
 						return false;
 					const u8 dx = src[src_pos++];
@@ -1050,7 +1025,6 @@ bool LoadCompressedBMP(u32* pixels, const u8* src, u32 src_size, u32 width, u32 
 				}
 				else
 				{
-					// Absolute mode need "value" bytes of pixel data
 					const u32 run_length = value;
 					const u32 bytes_needed = run_length * pixel_size;
 					if (src_pos + bytes_needed > src_size)
@@ -1117,8 +1091,6 @@ bool BMPBufferLoader(RGBA8Image* image, const void* buffer, size_t buffer_size)
 		return false;
 	}
 
-	// Check for extended header versions (V4=108 bytes, V5=124 bytes)
-	// We read as BITMAPINFOHEADER (40 bytes) regardless, since extended headers just add fields at the end
 	if (info_header.size == 108)
 	{
 		Console.Warning("BITMAPV4HEADER detected, reading as BITMAPINFOHEADER");
@@ -1156,20 +1128,17 @@ bool BMPBufferLoader(RGBA8Image* image, const void* buffer, size_t buffer_size)
 
 	Console.WriteLn("BMP: %ux%u, %u-bit, compression=%u", width, height, info_header.bit_count, info_header.compression);
 
-	// Read color masks from header or bitfields
 	u32 red_mask = 0;
 	u32 green_mask = 0;
 	u32 blue_mask = 0;
 	u32 alpha_mask = 0;
-	const bool bitfields = (info_header.compression == 3 || info_header.compression == 4); // BMP_BITFIELDS or BMP_ALPHABITFIELDS
+	const bool bitfields = (info_header.compression == 3 || info_header.compression == 4);
 	const u8* header_start = data + sizeof(BMPFileHeader);
-	const u32 header_base_offset = sizeof(BMPFileHeader) + 40; // Base header is 40 bytes
+	const u32 header_base_offset = sizeof(BMPFileHeader) + 40;
 
-	if (info_header.size >= 108) // BMP_WIN4 (108) or BMP_WIN5 (124)
+	if (info_header.size >= 108)
 	{
-		// V4/V5 headers masks come right after the 40-byte base header
-		// Masks are at offsets from header_start: red=40, green=44, blue=48, alpha=52
-		if (buffer_size >= header_base_offset + 16) // Need space for 4 masks
+		if (buffer_size >= header_base_offset + 16)
 		{
 			red_mask = *reinterpret_cast<const u32*>(header_start + 40);
 			green_mask = *reinterpret_cast<const u32*>(header_start + 44);
@@ -1180,18 +1149,16 @@ bool BMPBufferLoader(RGBA8Image* image, const void* buffer, size_t buffer_size)
 	else if (bitfields && (info_header.bit_count == 16 || info_header.bit_count == 32))
 	{
 		const u32 bitfields_offset = sizeof(BMPFileHeader) + info_header.size;
-		if (buffer_size >= bitfields_offset + 12) // Need space for at least r/g/b masks
+		if (buffer_size >= bitfields_offset + 12)
 		{
 			red_mask = *reinterpret_cast<const u32*>(data + bitfields_offset);
 			green_mask = *reinterpret_cast<const u32*>(data + bitfields_offset + 4);
 			blue_mask = *reinterpret_cast<const u32*>(data + bitfields_offset + 8);
-			if (info_header.compression == 4) // BMP_ALPHABITFIELDS
+			if (info_header.compression == 4)
 			{
-				// Read alpha mask: r, g, b, a
 				if (buffer_size >= bitfields_offset + 16)
 					alpha_mask = *reinterpret_cast<const u32*>(data + bitfields_offset + 12);
 			}
-			// For BMP_BITFIELDS (3), alpha_mask stays 0
 		}
 	}
 
@@ -1201,8 +1168,6 @@ bool BMPBufferLoader(RGBA8Image* image, const void* buffer, size_t buffer_size)
 	const u32 bytes_per_pixel = info_header.bit_count / 8;
 	const u32 row_size = ((width * bytes_per_pixel + 3) / 4) * 4;
 
-	// For uncompressed BMPs, verify we have enough data
-	// For RLE-compressed BMPs, size is variable so we check differently
 	if (info_header.compression == 0)
 	{
 		if (file_header.offset + (row_size * height) > buffer_size)
@@ -1213,8 +1178,6 @@ bool BMPBufferLoader(RGBA8Image* image, const void* buffer, size_t buffer_size)
 	}
 	else
 	{
-		// For RLE-compressed BMPs, check that we have at least the offset and some data
-		// Use biSizeImage if available, otherwise just verify offset is valid
 		if (file_header.offset >= buffer_size)
 		{
 			Console.Error("BMP file data incomplete");
@@ -1263,11 +1226,8 @@ bool BMPBufferLoader(RGBA8Image* image, const void* buffer, size_t buffer_size)
 		}
 	}
 
-	// Handle alpha channel for 32-bit BMPs
-	// Only use alpha if alpha_mask is explicitly set in header/bitfields
 	if (info_header.bit_count == 32 && !use_alpha)
 	{
-		// Alpha mask not set or zero - set all pixels to fully opaque
 		for (u32& pixel : pixels)
 			pixel |= 0xFF000000u;
 	}
@@ -1290,7 +1250,6 @@ bool BMPBufferSaver(const RGBA8Image& image, std::vector<u8>* buffer, u8 quality
 	const u32 width = image.GetWidth();
 	const u32 height = image.GetHeight();
 
-	// Check dimensions
 	if (width == 0 || height == 0)
 	{
 		Console.Error("Invalid BMP dimensions: %ux%u", width, height);

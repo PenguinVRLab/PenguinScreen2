@@ -11,14 +11,11 @@ namespace x86Emitter
 		G3Type_NOT = 2,
 		G3Type_NEG = 3,
 		G3Type_MUL = 4,
-		G3Type_iMUL = 5, // partial implementation, iMul has additional forms in ix86.cpp
+		G3Type_iMUL = 5,
 		G3Type_DIV = 6,
 		G3Type_iDIV = 7
 	};
 
-	// --------------------------------------------------------------------------------------
-	//  xImpl_Group3
-	// --------------------------------------------------------------------------------------
 	struct xImpl_Group3
 	{
 		G3Type InstType;
@@ -27,9 +24,6 @@ namespace x86Emitter
 		void operator()(const xIndirect64orLess& from) const;
 	};
 
-	// --------------------------------------------------------------------------------------
-	//  xImpl_iDiv
-	// --------------------------------------------------------------------------------------
 	struct xImpl_iDiv : public xImpl_Group3
 	{
 		const xImplSimd_3Arg PS;
@@ -38,15 +32,9 @@ namespace x86Emitter
 		const xImplSimd_3Arg SD;
 	};
 
-	// --------------------------------------------------------------------------------------
-	//  xImpl_iMul
-	// --------------------------------------------------------------------------------------
-	//
 	struct xImpl_iMul : public xImpl_Group3
 	{
 		using xImpl_Group3::operator();
-
-		// The following iMul-specific forms are valid for 16 and 32 bit register operands only!
 
 		void operator()(const xRegister32& to, const xRegister32& from) const;
 		void operator()(const xRegister32& to, const xIndirectVoid& src) const;
@@ -63,4 +51,4 @@ namespace x86Emitter
 		const xImplSimd_3Arg SS;
 		const xImplSimd_3Arg SD;
 	};
-} // namespace x86Emitter
+}

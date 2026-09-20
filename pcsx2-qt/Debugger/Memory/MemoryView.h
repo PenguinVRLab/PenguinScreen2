@@ -28,19 +28,19 @@ enum class MemoryViewType
 };
 
 const s32 MemoryViewTypeWidth[] = {
-	1, //	BYTE
-	2, //	BYTEHW
-	4, //	WORD
-	8, //	DWORD
-	4, //	FLOAT
+	1,
+	2,
+	4,
+	8,
+	4,
 };
 
 const s32 MemoryViewTypeVisualWidth[] = {
-	2, //	BYTE
-	4, //	BYTEHW
-	8, //	WORD
-	16, //	DWORD
-	14, //	FLOAT
+	2,
+	4,
+	8,
+	16,
+	14,
 };
 
 class MemoryViewTable : public QObject
@@ -54,13 +54,11 @@ private:
 	u32 rowVisible = 0;
 	s32 rowHeight = 0;
 
-	// Stuff used for selection handling
-	// This gets set every paint and depends on the window size / current display mode (1byte,2byte,etc)
-	s32 valuexAxis = 0; // Where the hexadecimal view begins
-	s32 textXAxis = 0; // Where the text view begins
-	s32 row1YAxis = 0; // Where the first row starts
-	s32 segmentXAxis[16]; // Where the segments begin
-	bool selectedText = false; // Whether the user has clicked on text or hex
+	s32 valuexAxis = 0;
+	s32 textXAxis = 0;
+	s32 row1YAxis = 0;
+	s32 segmentXAxis[16];
+	bool selectedText = false;
 
 	bool selectedNibbleHI = false;
 
@@ -101,7 +99,6 @@ public:
 	void InsertAtCurrentSelection(const QString& text, DebugInterface& cpu);
 	void ForwardSelection();
 	void BackwardSelection();
-	// Returns true if the keypress was handled
 	bool KeyPress(int key, QChar keychar, DebugInterface& cpu);
 
 	MemoryViewType GetViewType()

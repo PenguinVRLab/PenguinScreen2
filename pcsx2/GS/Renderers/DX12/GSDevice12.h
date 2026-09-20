@@ -23,9 +23,7 @@ namespace D3D12MA
 
 struct D3D12CommandList
 {
-	// Main command list
 	wil::com_ptr_nothrow<ID3D12GraphicsCommandList4> list4;
-	// Enhanced barriers command list
 	wil::com_ptr_nothrow<ID3D12GraphicsCommandList7> list7;
 };
 
@@ -37,16 +35,12 @@ public:
 
 	enum : u32
 	{
-		/// Number of command lists. One is being built while the other(s) are executed.
 		NUM_COMMAND_LISTS = 3,
 
-		/// Textures that don't fit into this buffer will be uploaded with a staging buffer.
 		TEXTURE_UPLOAD_BUFFER_SIZE = 64 * 1024 * 1024,
 
-		/// Maximum number of samples in a single allocation group.
 		SAMPLER_GROUP_SIZE = 2,
 
-		/// Start/End timestamp queries.
 		NUM_TIMESTAMP_QUERIES_PER_CMDLIST = 2,
 	};
 
@@ -58,9 +52,9 @@ public:
 
 	enum class ResourceType
 	{
-		SRV, // Shader resource view
-		FBL, // Feedback loop
-		UAV, // Unordered access
+		SRV,
+		FBL,
+		UAV,
 	};
 
 	D3D12DescriptorHandle GetResourceDescriptor(GSTexture12* tex, ResourceType type) const
@@ -99,99 +93,76 @@ public:
 	__fi ID3D12CommandQueue* GetCommandQueue() const { return m_command_queue.get(); }
 	__fi D3D12MA::Allocator* GetAllocator() const { return m_allocator.get(); }
 
-	/// Returns the PCI vendor ID of the device, if known.
 	u32 GetAdapterVendorID() const;
 
 	bool UseEnhancedBarriers() const { return m_enhanced_barriers; }
 
-	/// Returns the current command list, commands can be recorded directly.
 	const D3D12CommandList& GetCommandList() const
 	{
 		return m_command_lists[m_current_command_list].command_lists[1];
 	}
 
-	/// Returns the init command list for uploading.
 	const D3D12CommandList& GetInitCommandList();
 
-	/// Returns the per-frame SRV/CBV/UAV allocator.
 	D3D12DescriptorAllocator& GetDescriptorAllocator()
 	{
 		return m_command_lists[m_current_command_list].descriptor_allocator;
 	}
 
-	/// Returns the per-frame sampler allocator.
 	D3D12GroupedSamplerAllocator<SAMPLER_GROUP_SIZE>& GetSamplerAllocator()
 	{
 		return m_command_lists[m_current_command_list].sampler_allocator;
 	}
 
-	/// Invalidates GPU-side sampler caches for all command lists. Call after you've freed samplers,
-	/// and are going to re-use the handles from GetSamplerHeapManager().
 	void InvalidateSamplerGroups();
 
-	// Descriptor manager access.
 	D3D12DescriptorHeapManager& GetDescriptorHeapManager() { return m_descriptor_heap_manager; }
 	D3D12DescriptorHeapManager& GetRTVHeapManager() { return m_rtv_heap_manager; }
 	D3D12DescriptorHeapManager& GetDSVHeapManager() { return m_dsv_heap_manager; }
 	D3D12DescriptorHeapManager& GetSamplerHeapManager() { return m_sampler_heap_manager; }
 	D3D12StreamBuffer& GetTextureStreamBuffer() { return m_texture_stream_buffer; }
 
-	// Root signature access.
 	ComPtr<ID3DBlob> SerializeRootSignature(const D3D12_ROOT_SIGNATURE_DESC* desc);
 	ComPtr<ID3D12RootSignature> CreateRootSignature(const D3D12_ROOT_SIGNATURE_DESC* desc);
 
-	/// Fence value for current command list.
 	u64 GetCurrentFenceValue() const { return m_current_fence_value; }
 
-	/// Last "completed" fence.
 	u64 GetCompletedFenceValue() const { return m_completed_fence_value; }
 
-	/// Feature level to use when compiling shaders.
 	D3D_FEATURE_LEVEL GetFeatureLevel() const { return m_feature_level; }
 
-	/// Test for support for the specified texture format.
 	bool SupportsTextureFormat(DXGI_FORMAT format);
 
-	/// Test for UAV support for the specified texture format.
 	bool IsTextureFormatUAVCapable(DXGI_FORMAT format);
 
-	// Partial depth copies require ProgrammableSamplePositions tier 1.
 	bool SupportsProgrammableSamplePositions();
 
 	enum class WaitType
 	{
-		None, ///< Don't wait (async)
-		Sleep, ///< Wait normally
-		Spin, ///< Wait by spinning
+		None,
+		Sleep,
+		Spin,
 	};
 	static WaitType GetWaitType(bool wait, bool spin);
 
-	/// Executes the current command list.
 	bool ExecuteCommandList(WaitType wait_for_completion);
 
-	/// Waits for a specific fence.
 	void WaitForFence(u64 fence, bool spin);
 
-	/// Waits for any in-flight command buffers to complete.
 	void WaitForGPUIdle();
 
-	/// Defers destruction of a D3D resource (associates it with the current list).
 	void DeferObjectDestruction(ID3D12DeviceChild* resource);
 
-	/// Defers destruction of a D3D resource (associates it with the current list).
 	void DeferResourceDestruction(D3D12MA::Allocation* allocation, ID3D12Resource* resource);
 
-	/// Defers destruction of a descriptor handle (associates it with the current list).
 	void DeferDescriptorDestruction(D3D12DescriptorHeapManager& manager, u32 index);
 	void DeferDescriptorDestruction(D3D12DescriptorHeapManager& manager, D3D12DescriptorHandle* handle);
 
-	// Allocates a temporary CPU staging buffer, fires the callback with it to populate, then copies to a GPU buffer.
 	bool AllocatePreinitializedGPUBuffer(u32 size, ID3D12Resource** gpu_buffer, D3D12MA::Allocation** gpu_allocation,
 		const std::function<void(void*)>& fill_callback);
 	void UploadIndices(D3D12StreamBuffer& buffer, const void* index, size_t count);
 
 private:
-	// For pipeline statistics
 	enum class QueryState
 	{
 		None,
@@ -407,9 +378,9 @@ private:
 	std::array<ComPtr<ID3D12PipelineState>, static_cast<int>(PresentShader::Count)> m_present{};
 	std::array<ComPtr<ID3D12PipelineState>, 2> m_merge{};
 	std::array<ComPtr<ID3D12PipelineState>, NUM_INTERLACE_SHADERS> m_interlace{};
-	std::array<ComPtr<ID3D12PipelineState>, 2> m_colclip_setup_pipelines{}; // [depth]
-	std::array<ComPtr<ID3D12PipelineState>, 2> m_colclip_finish_pipelines{}; // [depth]
-	std::array<std::array<ComPtr<ID3D12PipelineState>, 4>, 2> m_primid_image_setup_pipelines{}; // [depth][datm]
+	std::array<ComPtr<ID3D12PipelineState>, 2> m_colclip_setup_pipelines{};
+	std::array<ComPtr<ID3D12PipelineState>, 2> m_colclip_finish_pipelines{};
+	std::array<std::array<ComPtr<ID3D12PipelineState>, 4>, 2> m_primid_image_setup_pipelines{};
 	ComPtr<ID3D12PipelineState> m_fxaa_pipeline;
 	ComPtr<ID3D12PipelineState> m_shadeboost_pipeline;
 	ComPtr<ID3D12PipelineState> m_imgui_pipeline;
@@ -495,7 +466,7 @@ private:
 	void DestroyResources();
 
 protected:
-	using GSDevice::DoStretchRect; // Suppress overloaded virtual function warning
+	using GSDevice::DoStretchRect;
 	virtual void DoStretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect,
 		ShaderConvertSelector shader, Filter filter) override;
 	virtual void DoStretchRect(GSTexture* sTex, const GSVector4& sRect, const GSVector4& dRect,
@@ -533,13 +504,11 @@ public:
 	void PopDebugGroup() override;
 	void InsertDebugMessage(DebugMessageCategory category, const char* fmt, ...) override;
 
-	// Helpers and utility draws.
 	void DrawPrimitive();
 	void DrawIndexedPrimitive();
 	void DrawIndexedPrimitive(int offset, int count);
 	void DrawIndexedPrimitiveVSExpand(int offset, int count, bool vs_indexing, int vs_indexing_expansion);
 
-	// Main GS primitive draws.
 	void Draw(const GSHWDrawConfig& config);
 	void Draw(const GSHWDrawConfig& config, int offset, int count);
 
@@ -593,16 +562,13 @@ public:
 	void UploadHWDrawVerticesAndIndices(GSHWDrawConfig& config);
 
 public:
-	/// Ends any render pass, executes the command buffer, and invalidates cached state.
 	void ExecuteCommandList(bool wait_for_completion);
 	void ExecuteCommandList(bool wait_for_completion, const char* reason, ...);
 	void ExecuteCommandListAndRestartRenderPass(bool wait_for_completion, const char* reason);
 	void ExecuteCommandListForReadback();
 
-	/// Set dirty flags on everything to force re-bind at next draw time.
 	void InvalidateCachedState();
 
-	/// Binds all dirty state to the command buffer.
 	bool ApplyUtilityState(bool already_execed = false);
 	bool ApplyTFXState(bool already_execed = false);
 
@@ -617,14 +583,9 @@ public:
 	void SetUtilityPushConstants(const void* data, u32 size);
 	void UnbindTexture(GSTexture12* tex);
 
-	// Assumes that the previous level has been transitioned to PS resource,
-	// and the current level has been transitioned to RT.
 	void RenderTextureMipmap(GSTexture12* texture, u32 dst_level, u32 dst_width, u32 dst_height, u32 src_level,
 		u32 src_width, u32 src_height);
 
-	// Ends a render pass if we're currently in one.
-	// When Bind() is next called, the pass will be restarted.
-	// Calling this function is allowed even if a pass has not begun.
 	bool InRenderPass();
 	void BeginRenderPass(
 		D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE color_begin = D3D12_RENDER_PASS_BEGINNING_ACCESS_TYPE_NO_ACCESS,
@@ -696,10 +657,8 @@ private:
 
 	void ApplyBaseState(u32 flags, ID3D12GraphicsCommandList* cmdlist);
 
-	// Which bindings/state has to be updated before the next draw.
 	u32 m_dirty_flags = 0;
 
-	// input assembly
 	D3D12_VERTEX_BUFFER_VIEW m_vertex_buffer = {};
 	D3D12_INDEX_BUFFER_VIEW m_index_buffer = {};
 	D3D12_PRIMITIVE_TOPOLOGY m_primitive_topology = {};
@@ -733,6 +692,5 @@ private:
 
 	std::unique_ptr<GSTexture12> m_null_texture;
 
-	// current pipeline selector - we save this in the struct to avoid re-zeroing it every draw
 	PipelineSelector m_pipeline_selector = {};
 };

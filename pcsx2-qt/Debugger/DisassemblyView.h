@@ -23,7 +23,6 @@ public:
 	void toJson(JsonValueWrapper& json) override;
 	bool fromJson(const JsonValueWrapper& json) override;
 
-	// Required for the breakpoint list (ugh wtf)
 	QString GetLineDisasm(u32 address);
 
 protected:
@@ -36,9 +35,6 @@ protected:
 public slots:
 	void openContextMenu(QPoint pos);
 
-	// Context menu actions
-	// When called, m_selectedAddressStart will be the 'selected' instruction
-	// Of course, m_selectedAddressEnd will be the end of the selection when required
 	void contextCopyAddress();
 	void contextCopyInstructionHex();
 	void contextCopyInstructionText();
@@ -68,7 +64,7 @@ public slots:
 private:
 	Ui::DisassemblyView m_ui;
 
-	u32 m_visibleStart = 0x100000; // The address of the first instruction shown.
+	u32 m_visibleStart = 0x100000;
 	u32 m_visibleRows;
 	u32 m_selectedAddressStart = 0;
 	u32 m_selectedAddressEnd = 0;

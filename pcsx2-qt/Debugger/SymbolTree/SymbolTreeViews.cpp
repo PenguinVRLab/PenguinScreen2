@@ -187,7 +187,6 @@ void SymbolTreeView::reset()
 		root->sortChildrenRecursively(m_sort_by_if_type_is_known);
 		m_model->reset(std::move(root));
 
-		// Read the initial values for visible nodes.
 		updateVisibleNodes(true);
 
 		if (!m_ui.filterBox->text().isEmpty())
@@ -200,7 +199,6 @@ void SymbolTreeView::updateVisibleNodes(bool update_hashes)
 	if (!m_model)
 		return;
 
-	// Enumerate visible symbol nodes.
 	std::vector<const SymbolTreeNode*> nodes;
 	QModelIndex index = m_ui.treeView->indexAt(m_ui.treeView->rect().topLeft());
 	while (m_ui.treeView->visualRect(index).intersects(m_ui.treeView->viewport()->rect()))
@@ -209,7 +207,6 @@ void SymbolTreeView::updateVisibleNodes(bool update_hashes)
 		index = m_ui.treeView->indexBelow(index);
 	}
 
-	// Hash functions for symbols with visible nodes.
 	if (update_hashes)
 	{
 		cpu().GetSymbolGuardian().ReadWrite([&](ccc::SymbolDatabase& database) {
@@ -217,7 +214,6 @@ void SymbolTreeView::updateVisibleNodes(bool update_hashes)
 		});
 	}
 
-	// Update the values of visible nodes from memory.
 	for (const SymbolTreeNode* node : nodes)
 		m_model->setData(m_model->indexFromNode(*node), QVariant(), SymbolTreeModel::UPDATE_FROM_MEMORY_ROLE);
 
@@ -291,8 +287,6 @@ std::unique_ptr<SymbolTreeNode> SymbolTreeView::buildTree(const ccc::SymbolDatab
 			return rhs.module_symbol;
 	};
 
-	// Sort all of the symbols so that we can iterate over them in order and
-	// build a tree.
 	if (m_group_by_source_file)
 		std::stable_sort(symbols.begin(), symbols.end(), source_file_comparator);
 
@@ -313,9 +307,6 @@ std::unique_ptr<SymbolTreeNode> SymbolTreeView::buildTree(const ccc::SymbolDatab
 	const SymbolWork* section_work = nullptr;
 	const SymbolWork* module_work = nullptr;
 
-	// Build the tree. Whenever we enounter a symbol with a different source
-	// file, section or module, because they're all sorted we know that we have
-	// to create a new group node (if we're grouping by that attribute).
 	for (SymbolWork& work : symbols)
 	{
 		std::unique_ptr<SymbolTreeNode> node = buildNode(work, database);
@@ -773,8 +764,6 @@ SymbolTreeNode* SymbolTreeView::currentNode()
 	return m_model->nodeFromIndex(index);
 }
 
-// *****************************************************************************
-
 FunctionTreeView::FunctionTreeView(const DebuggerViewParameters& parameters)
 	: SymbolTreeView(
 		  ALLOW_GROUPING | ALLOW_MANGLED_NAME_ACTIONS | CLICK_TO_GO_TO_IN_DISASSEMBLER,
@@ -863,8 +852,6 @@ void FunctionTreeView::onNewButtonPressed()
 	dialog->open();
 }
 
-// *****************************************************************************
-
 GlobalVariableTreeView::GlobalVariableTreeView(const DebuggerViewParameters& parameters)
 	: SymbolTreeView(
 		  ALLOW_GROUPING | ALLOW_SORTING_BY_IF_TYPE_IS_KNOWN | ALLOW_TYPE_ACTIONS | ALLOW_MANGLED_NAME_ACTIONS,
@@ -900,8 +887,6 @@ std::vector<SymbolTreeView::SymbolWork> GlobalVariableTreeView::getSymbols(
 		work.source_file = database.source_files.symbol_from_handle(global_variable.source_file());
 	}
 
-	// We also include static local variables in the global variable tree
-	// because they have global storage. Why not.
 	for (const ccc::LocalVariable& local_variable : database.local_variables)
 	{
 		if (!std::holds_alternative<ccc::GlobalStorage>(local_variable.storage))
@@ -1007,8 +992,6 @@ void GlobalVariableTreeView::onNewButtonPressed()
 
 	dialog->open();
 }
-
-// *****************************************************************************
 
 LocalVariableTreeView::LocalVariableTreeView(const DebuggerViewParameters& parameters)
 	: SymbolTreeView(
@@ -1138,8 +1121,6 @@ void LocalVariableTreeView::onNewButtonPressed()
 
 	dialog->open();
 }
-
-// *****************************************************************************
 
 ParameterVariableTreeView::ParameterVariableTreeView(const DebuggerViewParameters& parameters)
 	: SymbolTreeView(

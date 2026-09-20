@@ -23,10 +23,8 @@ public:
 	static void Create();
 	static void Destroy();
 
-	/// Returns a handle to the pipeline cache. Set set_dirty to true if you are planning on writing to it externally.
 	VkPipelineCache GetPipelineCache(bool set_dirty = true);
 
-	/// Writes pipeline cache to file, saving all newly compiled pipelines.
 	bool FlushPipelineCache();
 
 	VkShaderModule GetVertexShader(std::string_view shader_code);
@@ -34,7 +32,6 @@ public:
 	VkShaderModule GetComputeShader(std::string_view shader_code);
 
 private:
-	// SPIR-V compiled code type
 	using SPIRVCodeType = u32;
 	using SPIRVCodeVector = std::vector<SPIRVCodeType>;
 

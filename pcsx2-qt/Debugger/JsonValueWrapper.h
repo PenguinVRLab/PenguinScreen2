@@ -5,8 +5,6 @@
 
 #include "rapidjson/document.h"
 
-// Container for a JSON value. This exists solely so that we can forward declare
-// it to avoid pulling in rapidjson for the entire debugger.
 class JsonValueWrapper
 {
 public:

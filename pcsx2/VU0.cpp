@@ -39,13 +39,10 @@ void COP2_Unknown()
 	CPU_LOG("Unknown COP2 opcode called");
 }
 
-//****************************************************************************
-
 __fi void _vu0run(bool breakOnMbit, bool addCycles, bool sync_only) {
 
 	if (!(VU0.VI[REG_VPU_STAT].UL & 1)) return;
 
-	//VU0 is ahead of the EE and M-Bit is already encountered, so no need to wait for it, just catch up the EE
 	if ((VU0.flags & VUFLAG_MFLAGSET) && breakOnMbit && (s64)(cpuRegs.cycle - VU0.cycle) <= 0)
 	{
 		cpuRegs.cycle = VU0.cycle;
@@ -66,26 +63,25 @@ __fi void _vu0run(bool breakOnMbit, bool addCycles, bool sync_only) {
 			return;
 	}
 
-	do { // Run VU until it finishes or M-Bit
+	do {
 		CpuVU0->Execute(runCycles);
-	} while ((VU0.VI[REG_VPU_STAT].UL & 1)						// E-bit Termination
-	  &&	!sync_only && (!breakOnMbit || (!(VU0.flags & VUFLAG_MFLAGSET) && (s32)(cpuRegs.cycle - VU0.cycle) > 0)));	// M-bit Break
+	} while ((VU0.VI[REG_VPU_STAT].UL & 1)
+	  &&	!sync_only && (!breakOnMbit || (!(VU0.flags & VUFLAG_MFLAGSET) && (s32)(cpuRegs.cycle - VU0.cycle) > 0)));
 
-	// Add cycles if called from EE's COP2
 	if (addCycles)
 	{
 		cpuRegs.cycle += (VU0.cycle - startcycle);
-		CpuVU1->ExecuteBlock(0); // Catch up VU1 as it's likely fallen behind
+		CpuVU1->ExecuteBlock(0);
 
 		if(VU0.VI[REG_VPU_STAT].UL & 1)
 			cpuSetNextEventDelta(4);
 	}
 }
 
-void _vu0WaitMicro()   { _vu0run(1, 1, 0); } // Runs VU0 Micro Until E-bit or M-Bit End
-void _vu0FinishMicro() { _vu0run(0, 1, 0); } // Runs VU0 Micro Until E-Bit End
-void vu0Finish()	   { _vu0run(0, 0, 0); } // Runs VU0 Micro Until E-Bit End (doesn't stall EE)
-void vu0Sync()		   { _vu0run(0, 0, 1); } // Runs VU0 until it catches up
+void _vu0WaitMicro()   { _vu0run(1, 1, 0); }
+void _vu0FinishMicro() { _vu0run(0, 1, 0); }
+void vu0Finish()	   { _vu0run(0, 0, 0); }
+void vu0Sync()		   { _vu0run(0, 0, 1); }
 
 namespace R5900 {
 namespace Interpreter{
@@ -102,9 +98,6 @@ namespace OpcodeImpl
 		}
 	}
 
-	// Asadr.Changed
-	//TODO: check this
-	// HUH why ? doesn't make any sense ...
 	void SQC2() {
 		vu0Sync();
 		u32 addr = _Imm_ + cpuRegs.GPR.r[_Rs_].UL[0];
@@ -170,33 +163,31 @@ void CTC2() {
 	if (_Fs_ == 0) return;
 
 	switch(_Fs_) {
-		case REG_MAC_FLAG: // read-only
-		case REG_TPC:      // read-only
-		case REG_VPU_STAT: // read-only
+		case REG_MAC_FLAG:
+		case REG_TPC:
+		case REG_VPU_STAT:
 			break;
 		case REG_R:
 			VU0.VI[REG_R].UL = ((cpuRegs.GPR.r[_Rt_].UL[0] & 0x7FFFFF) | 0x3F800000);
 			break;
 		case REG_FBRST:
 			VU0.VI[REG_FBRST].UL = cpuRegs.GPR.r[_Rt_].UL[0] & 0x0C0C;
-			if (cpuRegs.GPR.r[_Rt_].UL[0] & 0x1) { // VU0 Force Break
+			if (cpuRegs.GPR.r[_Rt_].UL[0] & 0x1) {
 				Console.Error("fixme: VU0 Force Break");
 			}
-			if (cpuRegs.GPR.r[_Rt_].UL[0] & 0x2) { // VU0 Reset
-				//Console.WriteLn("fixme: VU0 Reset");
+			if (cpuRegs.GPR.r[_Rt_].UL[0] & 0x2) {
 				vu0ResetRegs();
 			}
-			if (cpuRegs.GPR.r[_Rt_].UL[0] & 0x100) { // VU1 Force Break
+			if (cpuRegs.GPR.r[_Rt_].UL[0] & 0x100) {
 				Console.Error("fixme: VU1 Force Break");
 			}
-			if (cpuRegs.GPR.r[_Rt_].UL[0] & 0x200) { // VU1 Reset
-//				Console.WriteLn("fixme: VU1 Reset");
+			if (cpuRegs.GPR.r[_Rt_].UL[0] & 0x200) {
 				vu1ResetRegs();
 			}
 			break;
-		case REG_CMSAR1: // REG_CMSAR1
+		case REG_CMSAR1:
 			vu1Finish(true);
-			vu1ExecMicro(cpuRegs.GPR.r[_Rt_].US[0]);	// Execute VU1 Micro SubRoutine
+			vu1ExecMicro(cpuRegs.GPR.r[_Rt_].US[0]);
 			break;
 		case REG_CLIP_FLAG:
 			VU0.clipflag = cpuRegs.GPR.r[_Rt_].UL[0];

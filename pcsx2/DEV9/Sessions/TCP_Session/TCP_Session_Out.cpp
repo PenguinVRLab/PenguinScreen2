@@ -38,16 +38,12 @@ namespace Sessions
 			}
 		}
 
-		// Maybe untested
 		if (tcp.GetRST() == true)
 		{
-			//DevCon.Writeln("DEV9: TCP: PS2 has reset connection");
-			// PS2 has reset connection;
 			if (client != INVALID_SOCKET)
 				CloseSocket();
 			else
 				Console.Error("DEV9: TCP: Reset closed connection");
-			// PS2 sent RST, clearly not expecting more data
 			state = TCP_State::CloseCompleted;
 			RaiseEventConnectionClosed();
 			return true;
@@ -63,11 +59,11 @@ namespace Sessions
 					Console.Error("DEV9: TCP: Invalid repeated SYN (SendingSYN_ACK)");
 					return false;
 				}
-				return true; // Ignore reconnect attempts while we are still attempting connection
+				return true;
 			case TCP_State::SentSYN_ACK:
 				return SendConnected(&tcp);
 			case TCP_State::Connected:
-				if (tcp.GetFIN() == true) // Connection close part 1, received FIN from PS2
+				if (tcp.GetFIN() == true)
 					return CloseByPS2Stage1_2(&tcp);
 				else
 					return SendData(&tcp);
@@ -78,7 +74,7 @@ namespace Sessions
 				return CloseByPS2Stage4(&tcp);
 
 			case TCP_State::Closing_ClosedByRemote:
-				if (tcp.GetFIN() == true) // Connection close part 3, received FIN from PS2
+				if (tcp.GetFIN() == true)
 					return CloseByRemoteStage3_4(&tcp);
 
 				return SendData(&tcp);
@@ -94,10 +90,8 @@ namespace Sessions
 		}
 	}
 
-	// PS2 sent SYN
 	bool TCP_Session::SendConnect(TCP_Packet* tcp)
 	{
-		// Expects SYN Packet
 		destPort = tcp->destinationPort;
 		srcPort = tcp->sourcePort;
 
@@ -108,7 +102,6 @@ namespace Sessions
 			return true;
 		}
 		expectedSeqNumber = tcp->sequenceNumber + 1;
-		// Reset last received numbers
 		receivedPS2SeqNumbers.clear();
 		for (int i = 0; i < receivedPS2SeqNumberCount; i++)
 			receivedPS2SeqNumbers.push_back(tcp->sequenceNumber);
@@ -119,18 +112,18 @@ namespace Sessions
 		{
 			switch (tcp->options[i]->GetCode())
 			{
-				case 0: // End
-				case 1: // Nop
+				case 0:
+				case 1:
 					continue;
-				case 2: // MSS
+				case 2:
 					maxSegmentSize = static_cast<TCPopMSS*>(tcp->options[i])->maxSegmentSize;
 					break;
-				case 3: // WindowScale
+				case 3:
 					windowScale = static_cast<TCPopWS*>(tcp->options[i])->windowScale;
 					if (windowScale > 0)
 						Console.Error("DEV9: TCP: Non-zero window scale option");
 					break;
-				case 8: // TimeStamp
+				case 8:
 					lastRecivedTimeStamp = static_cast<TCPopTS*>(tcp->options[i])->senderTimeStamp;
 					sendTimeStamps = true;
 					timeStampStart = std::chrono::steady_clock::now();
@@ -193,7 +186,7 @@ namespace Sessions
 #endif
 
 
-		constexpr int noDelay = true; // BOOL on Windows
+		constexpr int noDelay = true;
 		ret = setsockopt(client, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&noDelay), sizeof(noDelay));
 
 		if (ret != 0)
@@ -225,14 +218,12 @@ namespace Sessions
 				RaiseEventConnectionClosed();
 				return false;
 			}
-			// Compleation of socket connection checked in recv
 		}
 
 		state = TCP_State::SendingSYN_ACK;
 		return true;
 	}
 
-	// PS2 responding to our SYN-ACK (by sending ACK)
 	bool TCP_Session::SendConnected(TCP_Packet* tcp)
 	{
 		if (tcp->GetSYN() == true)
@@ -243,7 +234,7 @@ namespace Sessions
 				Console.Error("DEV9: TCP: Invalid repeated SYN (SentSYN_ACK)");
 				return true;
 			}
-			return true; // Ignore reconnect attempts while we are still attempting connection
+			return true;
 		}
 		const NumCheckResult Result = CheckNumbers(tcp);
 		if (Result == NumCheckResult::Bad)
@@ -257,10 +248,10 @@ namespace Sessions
 		{
 			switch (tcp->options[i]->GetCode())
 			{
-				case 0: // End
-				case 1: // Nop
+				case 0:
+				case 1:
 					continue;
-				case 8: // Timestamp
+				case 8:
 					lastRecivedTimeStamp = static_cast<TCPopTS*>(tcp->options[i])->senderTimeStamp;
 					break;
 				default:
@@ -268,7 +259,6 @@ namespace Sessions
 					break;
 			}
 		}
-		// Next packet will be data
 		state = TCP_State::Connected;
 		return true;
 	}
@@ -291,8 +281,8 @@ namespace Sessions
 		{
 			switch (tcp->options[i]->GetCode())
 			{
-				case 0: // End
-				case 1: // Nop
+				case 0:
+				case 1:
 					continue;
 				case 8:
 					lastRecivedTimeStamp = static_cast<TCPopTS*>(tcp->options[i])->senderTimeStamp;
@@ -315,14 +305,8 @@ namespace Sessions
 		}
 		if (tcp->GetPayload()->GetLength() != 0)
 		{
-			// Check if we already have sent some of this data
 			const int delta = GetDelta(expectedSeqNumber, tcp->sequenceNumber);
 			pxAssert(delta >= 0);
-			//if (Result == NumCheckResult::OldSeq)
-			//{
-			//	DevCon.WriteLn("[PS2] New data offset: %d bytes", delta);
-			//	DevCon.WriteLn("[PS2] New data length: %d bytes", tcp->GetPayload()->GetLength() - delta);
-			//}
 			if (tcp->GetPayload()->GetLength() - delta > 0)
 			{
 				DevCon.WriteLn("DEV9: TCP: [PS2] Sending: %d bytes", tcp->GetPayload()->GetLength());
@@ -330,7 +314,6 @@ namespace Sessions
 				receivedPS2SeqNumbers.erase(receivedPS2SeqNumbers.begin());
 				receivedPS2SeqNumbers.push_back(expectedSeqNumber);
 
-				// Send the Data
 				int sent = 0;
 				PayloadPtr* payload = static_cast<PayloadPtr*>(tcp->GetPayload());
 				while (sent != payload->GetLength())
@@ -359,10 +342,7 @@ namespace Sessions
 				}
 
 				expectedSeqNumber += tcp->GetPayload()->GetLength() - delta;
-				// Done send
 			}
-			// ACK data
-			//DevCon.WriteLn("[SRV] ACK data: %u", expectedSeqNumber);
 			std::unique_ptr<TCP_Packet> ret = CreateBasePacket();
 			ret->SetACK(true);
 
@@ -383,8 +363,8 @@ namespace Sessions
 		{
 			switch (tcp->options[i]->GetCode())
 			{
-				case 0: // End
-				case 1: // Nop
+				case 0:
+				case 1:
 					continue;
 				case 8:
 					lastRecivedTimeStamp = static_cast<TCPopTS*>(tcp->options[i])->senderTimeStamp;
@@ -402,8 +382,6 @@ namespace Sessions
 
 	TCP_Session::NumCheckResult TCP_Session::CheckRepeatSYNNumbers(TCP_Packet* tcp)
 	{
-		//DevCon.WriteLn("DEV9: TCP: CHECK_REPEAT_SYN_NUMBERS");
-		//DevCon.WriteLn("DEV9: TCP: [SRV] CurrAckNumber = %u [PS2] Seq number = %u", expectedSeqNumber, tcp->sequenceNumber);
 
 		if (tcp->sequenceNumber != expectedSeqNumber - 1)
 		{
@@ -419,16 +397,9 @@ namespace Sessions
 		std::vector<u32> oldSeqNums;
 		std::tie(seqNum, oldSeqNums) = GetAllMyNumbers();
 
-		//DevCon.WriteLn("DEV9: TCP: CHECK_NUMBERS");
-		//DevCon.WriteLn("DEV9: TCP: [SRV] CurrSeqNumber = %u [PS2] Ack number = %u", seqNum, tcp->acknowledgementNumber);
-		//DevCon.WriteLn("DEV9: TCP: [SRV] CurrAckNumber = %u [PS2] Seq number = %u", expectedSeqNumber, tcp->sequenceNumber);
-		//DevCon.WriteLn("DEV9: TCP: [PS2] Data length = %u",  tcp->GetPayload()->GetLength());
-
 		if (tcp->acknowledgementNumber != seqNum)
 		{
-			//DevCon.WriteLn("DEV9: TCP: [PS2] Sent outdated acknowledgement number, got %u expected %u", tcp->acknowledgementNumber, seqNum);
 
-			// Check if oldSeqNums contains tcp->acknowledgementNumber
 			if (std::find(oldSeqNums.begin(), oldSeqNums.end(), tcp->acknowledgementNumber) == oldSeqNums.end())
 			{
 				Console.Error("DEV9: TCP: [PS2] Sent unexpected acknowledgement number, did not match old numbers, got %u expected %u", tcp->acknowledgementNumber, seqNum);
@@ -437,7 +408,6 @@ namespace Sessions
 		}
 		else
 		{
-			//DevCon.WriteLn("[PS2] CurrSeqNumber acknowledged by PS2");
 			myNumberACKed.store(true);
 		}
 
@@ -457,7 +427,6 @@ namespace Sessions
 			}
 			else
 			{
-				// Check if receivedPS2SeqNumbers contains tcp->sequenceNumber
 				if (std::find(receivedPS2SeqNumbers.begin(), receivedPS2SeqNumbers.end(), tcp->sequenceNumber) == receivedPS2SeqNumbers.end())
 				{
 					Console.Error("DEV9: TCP: [PS2] Sent outdated sequence number in an data packet, got %u expected %u", tcp->sequenceNumber, expectedSeqNumber);
@@ -486,7 +455,6 @@ namespace Sessions
 		{
 			const int delta = GetDelta(expectedSeqNumber, tcp->sequenceNumber);
 			pxAssert(delta >= 0);
-			// Check if packet contains only old data
 			if (delta >= tcp->GetPayload()->GetLength())
 				return false;
 
@@ -497,12 +465,10 @@ namespace Sessions
 		return false;
 	}
 
-	// Connection Closing Finished in CloseByPS2Stage4
 	bool TCP_Session::CloseByPS2Stage1_2(TCP_Packet* tcp)
 	{
-		//Console.WriteLn("DEV9: TCP: PS2 has closed connection");
 
-		if (ValidateEmptyPacket(tcp, false)) // Check if valid packet for FIN
+		if (ValidateEmptyPacket(tcp, false))
 			return true;
 
 		receivedPS2SeqNumbers.erase(receivedPS2SeqNumbers.begin());
@@ -520,7 +486,6 @@ namespace Sessions
 				errno);
 #endif
 
-		// Connection close part 2, send ACK to PS2
 		std::unique_ptr<TCP_Packet> ret = CreateBasePacket();
 
 		ret->SetACK(true);
@@ -529,20 +494,15 @@ namespace Sessions
 		return true;
 	}
 
-	// PS2 responding to server response to PS2 closing connection
 	bool TCP_Session::CloseByPS2Stage4(TCP_Packet* tcp)
 	{
-		// Close part 4, receive ACK from PS2
-		//Console.WriteLn("DEV9: TCP: Completed close by PS2");
 
 		if (ValidateEmptyPacket(tcp))
 			return true;
 
 		if (myNumberACKed.load())
 		{
-			//Console.WriteLn("DEV9: TCP: ACK was for FIN");
 			CloseSocket();
-			// recv buffer should be empty
 			state = TCP_State::CloseCompleted;
 			RaiseEventConnectionClosed();
 		}
@@ -552,16 +512,13 @@ namespace Sessions
 
 	bool TCP_Session::CloseByRemoteStage2_ButAfter4(TCP_Packet* tcp)
 	{
-		//Console.WriteLn("DEV9: TCP: Completed close by PS2");
 
 		if (ValidateEmptyPacket(tcp))
 			return true;
 
 		if (myNumberACKed.load())
 		{
-			//Console.WriteLn("DEV9: TCP: ACK was for FIN");
 			CloseSocket();
-			// Receive buffer may not be empty
 			state = TCP_State::CloseCompletedFlushBuffer;
 		}
 		return true;
@@ -569,9 +526,8 @@ namespace Sessions
 
 	bool TCP_Session::CloseByRemoteStage3_4(TCP_Packet* tcp)
 	{
-		//Console.WriteLn("DEV9: TCP: PS2 has closed connection after remote");
 
-		if (ValidateEmptyPacket(tcp, false)) // Check if valid packet for FIN
+		if (ValidateEmptyPacket(tcp, false))
 			return true;
 
 		receivedPS2SeqNumbers.erase(receivedPS2SeqNumbers.begin());
@@ -595,10 +551,8 @@ namespace Sessions
 
 		if (myNumberACKed.load())
 		{
-			//Console.WriteLn("DEV9: TCP: ACK was for FIN");
 			CloseSocket();
 			state = TCP_State::CloseCompletedFlushBuffer;
-			// Receive buffer may not be empty
 		}
 		else
 			state = TCP_State::Closing_ClosedByRemoteThenPS2_WaitingForAck;
@@ -606,7 +560,6 @@ namespace Sessions
 		return true;
 	}
 
-	// Error on sending data
 	void TCP_Session::CloseByRemoteRST()
 	{
 		std::unique_ptr<TCP_Packet> reterr = CreateBasePacket();
@@ -616,4 +569,4 @@ namespace Sessions
 		CloseSocket();
 		state = TCP_State::CloseCompletedFlushBuffer;
 	}
-} // namespace Sessions
+}

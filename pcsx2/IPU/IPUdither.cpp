@@ -28,7 +28,6 @@ __ri void ipu_dither(const macroblock_rgb32 &rgb32, macroblock_rgb16 &rgb16, int
 __ri void ipu_dither_reference(const macroblock_rgb32 &rgb32, macroblock_rgb16 &rgb16, int dte)
 {
     if (dte) {
-        // I'm guessing values are rounded down when clamping.
         const int dither_coefficient[4][4] = {
             {-4, 0, -3, 1},
             {2, -2, 3, -1},
@@ -84,7 +83,6 @@ __ri void ipu_dither_sse2(const macroblock_rgb32 &rgb32, macroblock_rgb16 &rgb16
             __m128i rgba_8_0123 = _mm_load_si128(reinterpret_cast<const __m128i *>(&rgb32.c[i][n * 8]));
             __m128i rgba_8_4567 = _mm_load_si128(reinterpret_cast<const __m128i *>(&rgb32.c[i][n * 8 + 4]));
 
-            // Dither and clamp
             if (dte) {
                 rgba_8_0123 = _mm_adds_epu8(rgba_8_0123, dither_add);
                 rgba_8_0123 = _mm_subs_epu8(rgba_8_0123, dither_sub);
@@ -92,7 +90,6 @@ __ri void ipu_dither_sse2(const macroblock_rgb32 &rgb32, macroblock_rgb16 &rgb16
                 rgba_8_4567 = _mm_subs_epu8(rgba_8_4567, dither_sub);
             }
 
-            // Split into channel components and extend to 16 bits
             const __m128i rgba_16_0415 = _mm_unpacklo_epi8(rgba_8_0123, rgba_8_4567);
             const __m128i rgba_16_2637 = _mm_unpackhi_epi8(rgba_8_0123, rgba_8_4567);
             const __m128i rgba_32_0246 = _mm_unpacklo_epi8(rgba_16_0415, rgba_16_2637);
@@ -106,7 +103,6 @@ __ri void ipu_dither_sse2(const macroblock_rgb32 &rgb32, macroblock_rgb16 &rgb16
             __m128i b = _mm_unpacklo_epi8(ba_64_01234567, zero);
             __m128i a = _mm_unpackhi_epi8(ba_64_01234567, zero);
 
-            // Create RGBA
             r = _mm_srli_epi16(r, 3);
             g = _mm_slli_epi16(_mm_srli_epi16(g, 3), 5);
             b = _mm_slli_epi16(_mm_srli_epi16(b, 3), 10);

@@ -13,7 +13,6 @@
 
 namespace VR::ProfileDB
 {
-
 	enum class Tier
 	{
 		Screen,
@@ -88,9 +87,7 @@ namespace VR::ProfileDB
 		s32 max_w = 0;
 		s32 min_h = 0;
 		s32 max_h = 0;
-
 		float rx0 = 0.0f, ry0 = 0.0f, rx1 = 0.0f, ry1 = 0.0f;
-
 		float tu0 = 0.0f, tv0 = 0.0f, tu1 = 0.0f, tv1 = 0.0f;
 		std::string label;
 	};
@@ -99,7 +96,6 @@ namespace VR::ProfileDB
 
 	struct HudCollimate
 	{
-
 		float disparity = 0.0f;
 		std::vector<CollimateRule> rules;
 	};
@@ -128,9 +124,7 @@ namespace VR::ProfileDB
 	{
 		F32,
 		S16_12,
-
 		S32Angle,
-
 	};
 
 	enum class CameraSource
@@ -147,11 +141,8 @@ namespace VR::ProfileDB
 	enum class CameraCompose
 	{
 		Absolute,
-
 		Delta,
-
 		Anchored,
-
 	};
 
 	enum class CameraWrap
@@ -194,7 +185,6 @@ namespace VR::ProfileDB
 		u32 ee_address = 0;
 		bool relative = false;
 		bool anchored = false;
-
 		MatrixComposeOrder order = MatrixComposeOrder::Pre;
 		bool also_transpose = false;
 		u32 transpose_address = 0;
@@ -257,9 +247,7 @@ namespace VR::ProfileDB
 	{
 		float max_look_deg = 90.0f;
 		float engage_deg = 12.0f;
-
 		float curve = 1.0f;
-
 		bool latch = false;
 		float release_deg = 4.0f;
 	};
@@ -304,9 +292,7 @@ namespace VR::ProfileDB
 
 	enum class StereoRail
 	{
-
 		Divergence,
-
 		FixationGap,
 	};
 
@@ -317,7 +303,6 @@ namespace VR::ProfileDB
 		std::string site;
 		float arcmin = 0.0f;
 		bool from_map = false;
-
 		std::string message;
 	};
 

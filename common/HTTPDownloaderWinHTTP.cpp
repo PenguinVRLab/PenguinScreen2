@@ -86,7 +86,6 @@ void CALLBACK HTTPDownloaderWinHttp::HTTPStatusCallback(HINTERNET hRequest, DWOR
 							[req](HTTPDownloader::Request* it) { return it == req; }),
 				"Request is not pending at close time");
 
-			// we can clean up the connection as well
 			pxAssert(req->hConnection != NULL);
 			WinHttpCloseHandle(req->hConnection);
 			delete req;
@@ -157,7 +156,6 @@ void CALLBACK HTTPDownloaderWinHttp::HTTPStatusCallback(HINTERNET hRequest, DWOR
 			req->data.reserve(req->content_length);
 			req->state = Request::State::Receiving;
 
-			// start reading
 			if (!WinHttpQueryDataAvailable(hRequest, nullptr) && GetLastError() != ERROR_IO_PENDING)
 			{
 				Console.Error("WinHttpQueryDataAvailable() failed: %u", GetLastError());
@@ -173,13 +171,11 @@ void CALLBACK HTTPDownloaderWinHttp::HTTPStatusCallback(HINTERNET hRequest, DWOR
 			std::memcpy(&bytes_available, lpvStatusInformation, sizeof(bytes_available));
 			if (bytes_available == 0)
 			{
-				// end of request
 				DbgCon.WriteLn("End of request '%s', %zu bytes received", req->url.c_str(), req->data.size());
 				req->state.store(Request::State::Complete);
 				return;
 			}
 
-			// start the transfer
 			DbgCon.WriteLn("%u bytes available", bytes_available);
 			req->io_position = static_cast<u32>(req->data.size());
 			req->data.resize(req->io_position + bytes_available);
@@ -212,7 +208,6 @@ void CALLBACK HTTPDownloaderWinHttp::HTTPStatusCallback(HINTERNET hRequest, DWOR
 			return;
 		}
 		default:
-			// unhandled, ignore
 			return;
 	}
 }
@@ -225,7 +220,6 @@ HTTPDownloader::Request* HTTPDownloaderWinHttp::InternalCreateRequest()
 
 void HTTPDownloaderWinHttp::InternalPollRequests()
 {
-	// noop - it uses windows's worker threads
 }
 
 bool HTTPDownloaderWinHttp::StartRequest(HTTPDownloader::Request* request)
@@ -311,8 +305,6 @@ void HTTPDownloaderWinHttp::CloseRequest(HTTPDownloader::Request* request)
 
 	if (req->hRequest != NULL)
 	{
-		// req will be freed by the callback.
-		// the callback can fire immediately here if there's nothing running async, so don't touch req afterwards
 		WinHttpCloseHandle(req->hRequest);
 		return;
 	}

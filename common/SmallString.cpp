@@ -234,8 +234,6 @@ void SmallStringBase::append_sprintf(const char* format, ...)
 
 void SmallStringBase::append_vsprintf(const char* format, va_list ap)
 {
-	// We have a 1KB byte buffer on the stack here. If this is too little, we'll grow it via the heap,
-	// but 1KB should be enough for most strings.
 	char stack_buffer[1024];
 	char* heap_buffer = nullptr;
 	char* buffer = stack_buffer;
@@ -300,8 +298,6 @@ void SmallStringBase::prepend_sprintf(const char* format, ...)
 
 void SmallStringBase::prepend_vsprintf(const char* format, va_list ArgPtr)
 {
-	// We have a 1KB byte buffer on the stack here. If this is too little, we'll grow it via the heap,
-	// but 1KB should be enough for most strings.
 	char stack_buffer[1024];
 	char* heap_buffer = NULL;
 	char* buffer = stack_buffer;
@@ -345,24 +341,20 @@ void SmallStringBase::insert(s32 offset, const char* str, u32 length)
 
 	make_room_for(length);
 
-	// calc real offset
 	u32 real_offset;
 	if (offset < 0)
 		real_offset = static_cast<u32>(std::max<s32>(0, static_cast<s32>(m_length) + offset));
 	else
 		real_offset = std::min(static_cast<u32>(offset), m_length);
 
-	// determine number of characters after offset
 	pxAssert(real_offset <= m_length);
 	const u32 chars_after_offset = m_length - real_offset;
 	if (chars_after_offset > 0)
 		std::memmove(m_buffer + offset + length, m_buffer + offset, chars_after_offset);
 
-	// insert the string
 	std::memcpy(m_buffer + real_offset, str, length);
 	m_length += length;
 
-	// ensure null termination
 	m_buffer[m_length] = 0;
 }
 
@@ -680,7 +672,6 @@ bool SmallStringBase::ends_with(const std::string& str, bool case_sensitive) con
 
 void SmallStringBase::clear()
 {
-	// in debug, zero whole string, in release, zero only the first character
 #if _DEBUG
 	std::memset(m_buffer, 0, m_buffer_size);
 #else
@@ -731,7 +722,6 @@ u32 SmallStringBase::count(char ch) const
 
 void SmallStringBase::resize(u32 new_size, char fill, bool shrink_if_smaller)
 {
-	// if going larger, or we don't own the buffer, realloc
 	if (new_size >= m_buffer_size)
 	{
 		reserve(new_size);
@@ -745,7 +735,6 @@ void SmallStringBase::resize(u32 new_size, char fill, bool shrink_if_smaller)
 	}
 	else
 	{
-		// update length and terminator
 #if _DEBUG
 		std::memset(m_buffer + new_size, 0, m_buffer_size - new_size);
 #else
@@ -753,7 +742,6 @@ void SmallStringBase::resize(u32 new_size, char fill, bool shrink_if_smaller)
 #endif
 		m_length = new_size;
 
-		// shrink if requested
 		if (shrink_if_smaller)
 			shrink_to_fit();
 	}
@@ -766,14 +754,12 @@ void SmallStringBase::update_size()
 
 std::string_view SmallStringBase::substr(s32 offset, s32 count) const
 {
-	// calc real offset
 	u32 real_offset;
 	if (offset < 0)
 		real_offset = static_cast<u32>(std::max<s32>(0, static_cast<s32>(m_length + offset)));
 	else
 		real_offset = std::min((u32)offset, m_length);
 
-	// calc real count
 	u32 real_count;
 	if (count < 0)
 	{
@@ -790,14 +776,12 @@ std::string_view SmallStringBase::substr(s32 offset, s32 count) const
 
 void SmallStringBase::erase(s32 offset, s32 count)
 {
-	// calc real offset
 	u32 real_offset;
 	if (offset < 0)
 		real_offset = static_cast<u32>(std::max<s32>(0, static_cast<s32>(m_length + offset)));
 	else
 		real_offset = std::min((u32)offset, m_length);
 
-	// calc real count
 	u32 real_count;
 	if (count < 0)
 	{
@@ -809,14 +793,12 @@ void SmallStringBase::erase(s32 offset, s32 count)
 		real_count = std::min(m_length - real_offset, static_cast<u32>(count));
 	}
 
-	// Fastpath: offset == 0, count < 0, wipe whole string.
 	if (real_offset == 0 && real_count == m_length)
 	{
 		clear();
 		return;
 	}
 
-	// Fastpath: offset >= 0, count < 0, wipe everything after offset + count
 	if ((real_offset + real_count) == m_length)
 	{
 		m_length -= real_count;
@@ -826,7 +808,6 @@ void SmallStringBase::erase(s32 offset, s32 count)
 		m_buffer[m_length] = 0;
 #endif
 	}
-	// Slowpath: offset >= 0, count < length
 	else
 	{
 		const u32 after_erase_block = m_length - real_offset - real_count;

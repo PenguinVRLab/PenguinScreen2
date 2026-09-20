@@ -36,10 +36,8 @@ static int Similarity(const std::vector<ReadbackSpinManager::Event>& a, std::vec
 	{
 		if (EventIsReadback(*a_idx) && EventIsReadback(*b_idx))
 		{
-			// Same number of events between readbacks
 			score += 0x1000;
 		}
-		// Try to match up on readbacks
 		else if (EventIsReadback(*a_idx))
 		{
 			b_idx++;
@@ -52,19 +50,16 @@ static int Similarity(const std::vector<ReadbackSpinManager::Event>& a, std::vec
 		}
 		else if (a_idx->size == b_idx->size)
 		{
-			// Same size
 			score += 0x100;
 		}
 		else if (a_idx->size / 2 <= b_idx->size && b_idx->size / 2 <= a_idx->size)
 		{
-			// Similar size
 			score += 0x10;
 		}
 		a_idx++;
 		b_idx++;
 		continue;
 	}
-	// Both hit the end at the same time
 	if (a_idx == a.end() && b_idx == b.end())
 		score += 0x1000;
 
@@ -93,13 +88,11 @@ void ReadbackSpinManager::ReadbackRequested()
 	ev.size = -1;
 	m_frames[m_current_frame].push_back(ev);
 
-	// Advance reference frame idx to the next readback
 	while (m_frames[m_reference_frame].size() > m_reference_frame_idx &&
 	       !EventIsReadback(m_frames[m_reference_frame][m_reference_frame_idx]))
 	{
 		m_reference_frame_idx++;
 	}
-	// ...and past it
 	if (m_frames[m_reference_frame].size() > m_reference_frame_idx)
 		m_reference_frame_idx++;
 }
@@ -152,7 +145,6 @@ ReadbackSpinManager::DrawSubmittedReturn ReadbackSpinManager::DrawSubmitted(u64 
 		const bool is_one_frame_back = m_reference_frame == PrevFrameNo(m_current_frame, std::size(m_frames));
 		if ((!next_draw || !IsCompleted(*cur_draw) || !IsCompleted(*next_draw)) && is_one_frame_back)
 		{
-			// Last frame's timing data hasn't arrived, try the same spot in the frame before
 			u32 two_back = PrevFrameNo(m_reference_frame, std::size(m_frames));
 			if (m_frames[two_back].size() > m_reference_frame_idx &&
 			    EventIsDraw(m_frames[two_back][m_reference_frame_idx]))
@@ -165,11 +157,10 @@ ReadbackSpinManager::DrawSubmittedReturn ReadbackSpinManager::DrawSubmitted(u64 
 		{
 			u64 cur_size = cur_draw->size;
 			bool is_similar = cur_size / 2 <= size && size / 2 <= cur_size;
-			if (is_similar) // Only recommend spins if we're somewhat confident in what's going on
+			if (is_similar)
 			{
 				s32 current_draw_time = cur_draw->end - cur_draw->begin;
 				s32 gap = next_draw->begin - cur_draw->end;
-				// Give an extra bit of space for the draw to take a bit longer (we'll go with 1/8 longer)
 				s32 fill = gap - (current_draw_time >> 3);
 				if (fill > 0)
 					out.recommended_spin = static_cast<u32>(static_cast<double>(fill) * m_spins_per_unit_time);
@@ -181,7 +172,6 @@ ReadbackSpinManager::DrawSubmittedReturn ReadbackSpinManager::DrawSubmitted(u64 
 
 	if (m_spins_per_unit_time == 0)
 	{
-		// Recommend some spinning so that we can get timing data
 		out.recommended_spin = 128;
 	}
 
@@ -204,13 +194,6 @@ void ReadbackSpinManager::SpinCompleted(u32 cycles, u32 begin_time, u32 end_time
 {
 	double elapsed = static_cast<double>(end_time - begin_time);
 	constexpr double decay = 15.0 / 16.0;
-
-	// Obviously it'll vary from GPU to GPU, but in my testing,
-	// both a Radeon Pro 5600M and Intel UHD 630 spin at about 100ns/cycle
-
-	// Note: We assume spin time is some constant times the number of cycles
-	// Obviously as the number of cycles gets really low, a constant offset may start being noticeable
-	// But this is not the case as low as 512 cycles (~50µs) on the GPUs listed above
 
 	m_total_spin_cycles = m_total_spin_cycles * decay + cycles;
 	m_total_spin_time = m_total_spin_time * decay + elapsed;

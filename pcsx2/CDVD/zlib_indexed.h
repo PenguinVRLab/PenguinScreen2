@@ -104,21 +104,19 @@ Comments) 1950 to 1952 in the files http://tools.ietf.org/html/rfc1950
 
 #include "common/FileSystem.h"
 
-//#define SPAN (1048576L)  /* desired distance between access points */
-#define WINSIZE 32768U    /* sliding window size */
-#define CHUNK (64 * 1024) /* file input buffer size */
+#define WINSIZE 32768U
+#define CHUNK (64 * 1024)
 
 #ifdef _WIN32
 #pragma pack(push, indexData, 1)
 #endif
 
-/* access point entry */
 struct point
 {
-	s64 out;                  /* corresponding offset in uncompressed data */
-	s64 in;                   /* offset in input file of first full byte */
-	int bits;                      /* number of bits (1-7) from byte at in - 1, or 0 */
-	unsigned char window[WINSIZE]; /* preceding 32K of uncompressed data */
+	s64 out;
+	s64 in;
+	int bits;
+	unsigned char window[WINSIZE];
 }
 #ifndef _WIN32
 __attribute__((packed))
@@ -127,15 +125,14 @@ __attribute__((packed))
 
 typedef struct point Point;
 
-/* access point list */
 struct access
 {
-	int have;           /* number of list entries filled in */
-	int size;           /* number of list entries allocated (only used internally during build)*/
-	struct point* list; /* allocated list */
+	int have;
+	int size;
+	struct point* list;
 
-	s32 span;                   /* once the index is built, holds the span size used to build it */
-	s64 uncompressed_size; /* filled by build_index */
+	s32 span;
+	s64 uncompressed_size;
 }
 #ifndef _WIN32
 __attribute__((packed))
@@ -148,7 +145,6 @@ typedef struct access Access;
 #pragma pack(pop, indexData)
 #endif
 
-/* Deallocate an index built by build_index() */
 static inline void free_index(struct access* index)
 {
 	if (index != NULL)
@@ -158,14 +154,11 @@ static inline void free_index(struct access* index)
 	}
 }
 
-/* Add an entry to the access point list.  If out of memory, deallocate the
-   existing list and return NULL. */
 static inline struct access* addpoint(struct access* index, int bits,
 							  s64 in, s64 out, unsigned left, unsigned char* window)
 {
 	struct point* next;
 
-	/* if list is empty, create it (start with eight points) */
 	if (index == NULL)
 	{
 		index = (Access*)malloc(sizeof(struct access));
@@ -181,7 +174,6 @@ static inline struct access* addpoint(struct access* index, int bits,
 		index->have = 0;
 	}
 
-	/* if list is full, make it bigger */
 	else if (index->have == index->size)
 	{
 		index->size <<= 1;
@@ -194,7 +186,6 @@ static inline struct access* addpoint(struct access* index, int bits,
 		index->list = next;
 	}
 
-	/* fill in entry and increment how many we have */
 	next = index->list + index->have;
 	next->bits = bits;
 	next->in = in;
@@ -205,47 +196,33 @@ static inline struct access* addpoint(struct access* index, int bits,
 		memcpy(next->window + left, window, WINSIZE - left);
 	index->have++;
 
-	/* return list, possibly reallocated */
 	return index;
 }
 
-/* Make one entire pass through the compressed stream and build an index, with
-   access points about every span bytes of uncompressed output -- span is
-   chosen to balance the speed of random access against the memory requirements
-   of the list, about 32K bytes per access point.  Note that data after the end
-   of the first zlib or gzip stream in the file is ignored.  build_index()
-   returns the number of access points on success (>= 1), Z_MEM_ERROR for out
-   of memory, Z_DATA_ERROR for an error in the input file, or Z_ERRNO for a
-   file read error.  On success, *built points to the resulting index. */
 static inline int build_index(FILE* in, s64 span, struct access** built)
 {
 	int ret;
-	s64 totin, totout, totPrinted; /* our own total counters to avoid 4GB limit */
-	s64 last;                      /* totout value of last access point */
-	struct access* index;               /* access points being generated */
+	s64 totin, totout, totPrinted;
+	s64 last;
+	struct access* index;
 	z_stream strm;
 	unsigned char input[CHUNK];
 	unsigned char window[WINSIZE];
 
-	/* initialize inflate */
 	strm.zalloc = Z_NULL;
 	strm.zfree = Z_NULL;
 	strm.opaque = Z_NULL;
 	strm.avail_in = 0;
 	strm.next_in = Z_NULL;
-	ret = inflateInit2(&strm, 47); /* automatic zlib or gzip decoding */
+	ret = inflateInit2(&strm, 47);
 	if (ret != Z_OK)
 		return ret;
 
-	/* inflate the input, maintain a sliding window, and build an index -- this
-       also validates the integrity of the compressed data using the check
-       information at the end of the gzip or zlib stream */
 	totin = totout = last = totPrinted = 0;
-	index = NULL; /* will be allocated by first addpoint() */
+	index = NULL;
 	strm.avail_out = 0;
 	do
 	{
-		/* get some compressed data from input file */
 		strm.avail_in = fread(input, 1, CHUNK, in);
 		if (ferror(in))
 		{
@@ -259,21 +236,17 @@ static inline int build_index(FILE* in, s64 span, struct access** built)
 		}
 		strm.next_in = input;
 
-		/* process all of that, or until end of stream */
 		do
 		{
-			/* reset sliding window if necessary */
 			if (strm.avail_out == 0)
 			{
 				strm.avail_out = WINSIZE;
 				strm.next_out = window;
 			}
 
-			/* inflate until out of input, output, or at end of block --
-               update the total input and output counters */
 			totin += strm.avail_in;
 			totout += strm.avail_out;
-			ret = inflate(&strm, Z_BLOCK); /* return at end of block */
+			ret = inflate(&strm, Z_BLOCK);
 			totin -= strm.avail_in;
 			totout -= strm.avail_out;
 			if (ret == Z_NEED_DICT)
@@ -283,15 +256,6 @@ static inline int build_index(FILE* in, s64 span, struct access** built)
 			if (ret == Z_STREAM_END)
 				break;
 
-			/* if at end of block, consider adding an index entry (note that if
-               data_type indicates an end-of-block, then all of the
-               uncompressed data from that block has been delivered, and none
-               of the compressed data after that block has been consumed,
-               except for up to seven bits) -- the totout == 0 provides an
-               entry point after the zlib or gzip header, and assures that the
-               index always has at least one access point; we avoid creating an
-               access point after the last block by checking bit 6 of data_type
-             */
 			if ((strm.data_type & 128) && !(strm.data_type & 64) &&
 				(totout == 0 || totout - last > span))
 			{
@@ -314,11 +278,9 @@ static inline int build_index(FILE* in, s64 span, struct access** built)
 
 	if (index == NULL)
 	{
-		// Could happen if the start of the stream in Z_STREAM_END
 		return 0;
 	}
 
-	/* clean up and return index (release unused entries in list) */
 	(void)inflateEnd(&strm);
 	index->list = (Point*)realloc(index->list, sizeof(struct point) * index->have);
 	index->size = index->have;
@@ -327,7 +289,6 @@ static inline int build_index(FILE* in, s64 span, struct access** built)
 	*built = index;
 	return index->have;
 
-	/* return error */
 build_index_error:
 	(void)inflateEnd(&strm);
 	if (index != NULL)
@@ -348,13 +309,6 @@ static inline s64 getInOffset(zstate* state)
 	return state->in_offset;
 }
 
-/* Use the index to read len bytes from offset into buf, return bytes read or
-   negative for error (Z_DATA_ERROR or Z_MEM_ERROR).  If data is requested past
-   the end of the uncompressed data, then extract() will return a value less
-   than len, indicating how much as actually read into buf.  This function
-   should not return a data error unless the file was modified since the index
-   was generated.  extract() may also return Z_ERRNO if there is an error on
-   reading or seeking the input file. */
 static inline int extract(FILE* in, struct access* index, s64 offset,
 				  unsigned char* buf, int len, zstate* state)
 {
@@ -364,13 +318,11 @@ static inline int extract(FILE* in, struct access* index, s64 offset,
 	unsigned char discard[WINSIZE];
 	int isEnd = 0;
 
-	/* proceed only if something reasonable to do */
 	if (len < 0 || state == nullptr)
 		return 0;
 
 	if (state->isValid && offset != state->out_offset)
 	{
-		// state doesn't match offset, free allocations before strm is overwritten
 		inflateEnd(&state->strm);
 		state->isValid = 0;
 	}
@@ -378,7 +330,7 @@ static inline int extract(FILE* in, struct access* index, s64 offset,
 
 	if (state->isValid)
 	{
-		state->isValid = 0; // we took control over strm. revalidate when/if we give it back
+		state->isValid = 0;
 		FileSystem::FSeek64(in, state->in_offset, SEEK_SET);
 		state->strm.avail_in = 0;
 		offset = 0;
@@ -386,19 +338,17 @@ static inline int extract(FILE* in, struct access* index, s64 offset,
 	}
 	else
 	{
-		/* find where in stream to start */
 		here = index->list;
 		ret = index->have;
 		while (--ret && here[1].out <= offset)
 			here++;
 
-		/* initialize file and inflate state to start there */
 		state->strm.zalloc = Z_NULL;
 		state->strm.zfree = Z_NULL;
 		state->strm.opaque = Z_NULL;
 		state->strm.avail_in = 0;
 		state->strm.next_in = Z_NULL;
-		ret = inflateInit2(&state->strm, -15); /* raw inflate */
+		ret = inflateInit2(&state->strm, -15);
 		if (ret != Z_OK)
 			return ret;
 		ret = FileSystem::FSeek64(in, here->in - (here->bits ? 1 : 0), SEEK_SET);
@@ -416,35 +366,32 @@ static inline int extract(FILE* in, struct access* index, s64 offset,
 		}
 		inflateSetDictionary(&state->strm, here->window, WINSIZE);
 
-		/* skip uncompressed bytes until offset reached, then satisfy request */
 		offset -= here->out;
 		state->strm.avail_in = 0;
-		skip = 1; /* while skipping to offset */
+		skip = 1;
 	}
 
 	do
 	{
-		/* define where to put uncompressed data, and how much */
 		if (offset == 0 && skip)
-		{ /* at offset now */
+		{
 			state->strm.avail_out = len;
 			state->strm.next_out = buf;
-			skip = 0; /* only do this once */
+			skip = 0;
 		}
 		if (offset > WINSIZE)
-		{ /* skip WINSIZE bytes */
+		{
 			state->strm.avail_out = WINSIZE;
 			state->strm.next_out = discard;
 			offset -= WINSIZE;
 		}
 		else if (offset != 0)
-		{ /* last skip */
+		{
 			state->strm.avail_out = (unsigned)offset;
 			state->strm.next_out = discard;
 			offset = 0;
 		}
 
-		/* uncompress until avail_out filled, or end of stream */
 		do
 		{
 			if (state->strm.avail_in == 0)
@@ -464,7 +411,7 @@ static inline int extract(FILE* in, struct access* index, s64 offset,
 				state->strm.next_in = input;
 			}
 			uint prev_in = state->strm.avail_in;
-			ret = inflate(&state->strm, Z_NO_FLUSH); /* normal inflate */
+			ret = inflate(&state->strm, Z_NO_FLUSH);
 			state->in_offset += (prev_in - state->strm.avail_in);
 			if (ret == Z_NEED_DICT)
 				ret = Z_DATA_ERROR;
@@ -474,18 +421,14 @@ static inline int extract(FILE* in, struct access* index, s64 offset,
 				break;
 		} while (state->strm.avail_out != 0);
 
-		/* if reach end of stream, then don't keep trying to get more */
 		if (ret == Z_STREAM_END)
 			break;
 
-		/* do until offset reached and requested data read, or stream ends */
 	} while (skip);
 
 	isEnd = ret == Z_STREAM_END;
-	/* compute number of uncompressed bytes read after offset */
 	ret = skip ? 0 : len - state->strm.avail_out;
 
-	/* clean up and return bytes read or error */
 extract_ret:
 	if (ret == len && !isEnd)
 	{

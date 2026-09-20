@@ -4,107 +4,86 @@
 #pragma once
 #include "common/Pcsx2Defs.h"
 
-// Keep my nice alignment please!
 #define MOVZ MOVZtemp
 #define MOVN MOVNtemp
 
 enum class eeOpcode
 {
-	// Core
 	special , regimm , J    , JAL   , BEQ  , BNE  , BLEZ  , BGTZ  ,
 	ADDI    , ADDIU  , SLTI , SLTIU , ANDI , ORI  , XORI  , LUI   ,
-	cop0    , cop1   , cop2 , /*,*/   BEQL , BNEL , BLEZL , BGTZL ,
-	DADDI   , DADDIU , LDL  , LDR   , mmi  , /*,*/  LQ    , SQ    ,
+	cop0    , cop1   , cop2 ,   BEQL , BNEL , BLEZL , BGTZL ,
+	DADDI   , DADDIU , LDL  , LDR   , mmi  ,  LQ    , SQ    ,
 	LB      , LH     , LWL  , LW    , LBU  , LHU  , LWR   , LWU   ,
 	SB      , SH     , SWL  , SW    , SDL  , SDR  , SWR   , CACHE ,
-	/*,*/     LWC1   , /*,*/  PREF  , /*,*/  /*,*/  LQC2  , LD    ,
-	/*,*/     SWC1   , /*,*/  /*,*/   /*,*/  /*,*/  SQC2  , SD    ,
+     LWC1   ,  PREF  ,  LQC2  , LD    ,
+     SWC1   ,  SQC2  , SD    ,
 
-	// Special
-	SLL  , /*,*/   SRL  , SRA  , SLLV    , /*,*/   SRLV   , SRAV   ,
-	JR   , JALR  , MOVZ , MOVN , SYSCALL , BREAK , /*,*/    SYNC   ,
-	MFHI , MTHI  , MFLO , MTLO , DSLLV   , /*,*/   DSRLV  , DSRAV  ,
-	MULT , MULTU , DIV  , DIVU , /*,*/     /*,*/   /*,*/    /*,*/
+	SLL  ,   SRL  , SRA  , SLLV    ,   SRLV   , SRAV   ,
+	JR   , JALR  , MOVZ , MOVN , SYSCALL , BREAK ,    SYNC   ,
+	MFHI , MTHI  , MFLO , MTLO , DSLLV   ,   DSRLV  , DSRAV  ,
+	MULT , MULTU , DIV  , DIVU ,
 	ADD  , ADDU  , SUB  , SUBU , AND     , OR    , XOR    , NOR    ,
 	MFSA , MTSA  , SLT  , SLTU , DADD    , DADDU , DSUB   , DSUBU  ,
-	TGE  , TGEU  , TLT  , TLTU , TEQ     , /*,*/   TNE    , /*,*/
-	DSLL , /*,*/   DSRL , DSRA , DSLL32  , /*,*/   DSRL32 , DSRA32 ,
+	TGE  , TGEU  , TLT  , TLTU , TEQ     ,   TNE    ,
+	DSLL ,   DSRL , DSRA , DSLL32  ,   DSRL32 , DSRA32 ,
 
-	// Regimm
-	BLTZ   , BGEZ   , BLTZL   , BGEZL   , /*,*/  /*,*/  /*,*/  /*,*/
-	TGEI   , TGEIU  , TLTI    , TLTIU   , TEQI , /*,*/  TNEI , /*,*/
-	BLTZAL , BGEZAL , BLTZALL , BGEZALL , /*,*/  /*,*/  /*,*/  /*,*/
-	MTSAB  , MTSAH  , /*,*/     /*,*/     /*,*/  /*,*/  /*,*/  /*,*/
+	BLTZ   , BGEZ   , BLTZL   , BGEZL   ,
+	TGEI   , TGEIU  , TLTI    , TLTIU   , TEQI ,  TNEI ,
+	BLTZAL , BGEZAL , BLTZALL , BGEZALL ,
+	MTSAB  , MTSAH  ,
 
-	// MMI
-	MADD  , MADDU  , /*,*/   /*,*/   PLZCW , /*,*/  /*,*/   /*,*/
-	MMI0  , MMI2   , /*,*/   /*,*/   /*,*/   /*,*/  /*,*/   /*,*/
-	MFHI1 , MTHI1  , MFLO1 , MTLO1 , /*,*/   /*,*/  /*,*/   /*,*/
-	MULT1 , MULTU1 , DIV1  , DIVU1 , /*,*/   /*,*/  /*,*/   /*,*/
-	MADD1 , MADDU1 , /*,*/   /*,*/   /*,*/   /*,*/  /*,*/   /*,*/
-	MMI1  , MMI3   , /*,*/   /*,*/   /*,*/   /*,*/  /*,*/   /*,*/
-	PMFHL , PMTHL  , /*,*/   /*,*/   PSLLH , /*,*/  PSRLH , PSRAH ,
-	/*,*/   /*,*/    /*,*/   /*,*/   PSLLW , /*,*/  PSRLW , PSRAW ,
+	MADD  , MADDU  ,   PLZCW ,
+	MMI0  , MMI2   ,
+	MFHI1 , MTHI1  , MFLO1 , MTLO1 ,
+	MULT1 , MULTU1 , DIV1  , DIVU1 ,
+	MADD1 , MADDU1 ,
+	MMI1  , MMI3   ,
+	PMFHL , PMTHL  ,   PSLLH ,  PSRLH , PSRAH ,
+   PSLLW ,  PSRLW , PSRAW ,
 
-	// MMI0
 	PADDW  , PSUBW  , PCGTW  , PMAXW ,
 	PADDH  , PSUBH  , PCGTH  , PMAXH ,
-	PADDB  , PSUBB  , PCGTB  , /*,*/
-	/*,*/    /*,*/    /*,*/    /*,*/
+	PADDB  , PSUBB  , PCGTB  ,
 	PADDSW , PSUBSW , PEXTLW , PPACW ,
 	PADDSH , PSUBSH , PEXTLH , PPACH ,
 	PADDSB , PSUBSB , PEXTLB , PPACB ,
-	/*,*/    /*,*/    PEXT5  , PPAC5 ,
+    PEXT5  , PPAC5 ,
 
-	// MMI1
-	/*,*/    PABSW  , PCEQW  , PMINW ,
+    PABSW  , PCEQW  , PMINW ,
 	PADSBH , PABSH  , PCEQH  , PMINH ,
-	/*,*/    /*,*/    PCEQB  , /*,*/
-	/*,*/    /*,*/    /*,*/    /*,*/
-	PADDUW , PSUBUW , PEXTUW , /*,*/
-	PADDUH , PSUBUH , PEXTUH , /*,*/
+    PCEQB  ,
+	PADDUW , PSUBUW , PEXTUW ,
+	PADDUH , PSUBUH , PEXTUH ,
 	PADDUB , PSUBUB , PEXTUB , QFSRV ,
-	/*,*/    /*,*/    /*,*/    /*,*/
 
-	// MMI2
-	PMADDW , /*,*/    PSLLVW , PSRLVW ,
-	PMSUBW , /*,*/    /*,*/    /*,*/
-	PMFHI  , PMFLO  , PINTH  , /*,*/
-	PMULTW , PDIVW  , PCPYLD , /*,*/
+	PMADDW ,    PSLLVW , PSRLVW ,
+	PMSUBW ,
+	PMFHI  , PMFLO  , PINTH  ,
+	PMULTW , PDIVW  , PCPYLD ,
 	PMADDH , PHMADH , PAND   , PXOR   ,
-	PMSUBH , PHMSBH , /*,*/    /*,*/
-	/*,*/    /*,*/    PEXEH  , PREVH  ,
+	PMSUBH , PHMSBH ,
+    PEXEH  , PREVH  ,
 	PMULTH , PDIVBW , PEXEW  , PROT3W ,
 
-	// MMI3
-	PMADDUW , /*,*/    /*,*/    PSRAVW ,
-	/*,*/     /*,*/    /*,*/    /*,*/
-	PMTHI   , PMTLO  , PINTEH , /*,*/
-	PMULTUW , PDIVUW , PCPYUD , /*,*/
-	/*,*/     /*,*/    POR    , PNOR   ,
-	/*,*/     /*,*/    /*,*/    /*,*/
-	/*,*/     /*,*/    PEXCH  , PCPYH  ,
-	/*,*/     /*,*/    PEXCW  , /*,*/
+	PMADDUW ,    PSRAVW ,
+	PMTHI   , PMTLO  , PINTEH ,
+	PMULTUW , PDIVUW , PCPYUD ,
+    POR    , PNOR   ,
+    PEXCH  , PCPYH  ,
+    PEXCW  ,
 
-	// ADD COP0 ??
+	MFC1   ,    CFC1   ,   MTC1   ,    CTC1    ,
 
-	// "COP1"
-	MFC1   , /*,*/    CFC1   , /*,*/   MTC1   , /*,*/    CTC1    , /*,*/
+	BC1F   , BC1T   , BC1FL  , BC1TL ,
 
-	// "COP1 BC1"
-	BC1F   , BC1T   , BC1FL  , BC1TL , /*,*/    /*,*/    /*,*/     /*,*/
-
-	// "COP1 S"
 	ADD_F  , SUB_F  , MUL_F  , DIV_F , SQRT_F , ABS_F  , MOV_F   , NEG_F   ,
-	/*,*/    /*,*/    /*,*/    /*,*/   /*,*/    /*,*/    /*,*/     /*,*/
-	/*,*/    /*,*/    /*,*/    /*,*/   /*,*/    /*,*/    RSQRT_F , /*,*/
-	ADDA_F , SUBA_F , MULA_F , /*,*/   MADD_F , MSUB_F , MADDA_F , MSUBA_F ,
-	/*,*/    /*,*/    /*,*/    /*,*/   CVTW   , /*,*/    /*,*/     /*,*/
-	MAX_F  , MIN_F  , /*,*/    /*,*/   /*,*/    /*,*/    /*,*/     /*,*/
-	CF_F,    /*,*/    CEQ_F  , /*,*/   CLT_F  , /*,*/    CLE_F   , /*,*/
+    RSQRT_F ,
+	ADDA_F , SUBA_F , MULA_F ,   MADD_F , MSUB_F , MADDA_F , MSUBA_F ,
+   CVTW   ,
+	MAX_F  , MIN_F  ,
+	CF_F,    CEQ_F  ,   CLT_F  ,    CLE_F   ,
 
-	// "COP1 W"
-	CVTS_F,  /*,*/    /*,*/    /*,*/   /*,*/    /*,*/    /*,*/     /*,*/
+	CVTS_F,
 
 	LAST
 };
@@ -113,104 +92,84 @@ enum class eeOpcode
 #undef MOVN
 
 static const char eeOpcodeName[][16] = {
-	// "Core"
 	"special" , "regimm" , "J"    , "JAL"   , "BEQ"  , "BNE"  , "BLEZ"  , "BGTZ"  ,
 	"ADDI"    , "ADDIU"  , "SLTI" , "SLTIU" , "ANDI" , "ORI"  , "XORI"  , "LUI"   ,
-	"cop0"    , "cop1"   , "cop2" , /* , */   "BEQL" , "BNEL" , "BLEZL" , "BGTZL" ,
-	"DADDI"   , "DADDIU" , "LDL"  , "LDR"   , "mmi"  , /* , */  "LQ"    , "SQ"    ,
+	"cop0"    , "cop1"   , "cop2" ,   "BEQL" , "BNEL" , "BLEZL" , "BGTZL" ,
+	"DADDI"   , "DADDIU" , "LDL"  , "LDR"   , "mmi"  ,  "LQ"    , "SQ"    ,
 	"LB"      , "LH"     , "LWL"  , "LW"    , "LBU"  , "LHU"  , "LWR"   , "LWU"   ,
 	"SB"      , "SH"     , "SWL"  , "SW"    , "SDL"  , "SDR"  , "SWR"   , "CACHE" ,
-	/* , */     "LWC1"   , /* , */  "PREF"  , /* , */  /* , */  "LQC2"  , "LD"    ,
-	/* , */     "SWC1"   , /* , */  /* , */   /* , */  /* , */  "SQC2"  , "SD"    ,
+     "LWC1"   ,  "PREF"  ,  "LQC2"  , "LD"    ,
+     "SWC1"   ,  "SQC2"  , "SD"    ,
 
-	// "Special"
-	"SLL"  , /* , */   "SRL"  , "SRA"  , "SLLV"    , /* , */   "SRLV"   , "SRAV"   ,
-	"JR"   , "JALR"  , "MOVZ" , "MOVN" , "SYSCALL" , "BREAK" , /* , */    "SYNC"   ,
-	"MFHI" , "MTHI"  , "MFLO" , "MTLO" , "DSLLV"   , /* , */   "DSRLV"  , "DSRAV"  ,
-	"MULT" , "MULTU" , "DIV"  , "DIVU" , /* , */     /* , */   /* , */    /* , */
+	"SLL"  ,   "SRL"  , "SRA"  , "SLLV"    ,   "SRLV"   , "SRAV"   ,
+	"JR"   , "JALR"  , "MOVZ" , "MOVN" , "SYSCALL" , "BREAK" ,    "SYNC"   ,
+	"MFHI" , "MTHI"  , "MFLO" , "MTLO" , "DSLLV"   ,   "DSRLV"  , "DSRAV"  ,
+	"MULT" , "MULTU" , "DIV"  , "DIVU" ,
 	"ADD"  , "ADDU"  , "SUB"  , "SUBU" , "AND"     , "OR"    , "XOR"    , "NOR"    ,
 	"MFSA" , "MTSA"  , "SLT"  , "SLTU" , "DADD"    , "DADDU" , "DSUB"   , "DSUBU"  ,
-	"TGE"  , "TGEU"  , "TLT"  , "TLTU" , "TEQ"     , /* , */   "TNE"    , /* , */
-	"DSLL" , /* , */   "DSRL" , "DSRA" , "DSLL32"  , /* , */   "DSRL32" , "DSRA32" ,
+	"TGE"  , "TGEU"  , "TLT"  , "TLTU" , "TEQ"     ,   "TNE"    ,
+	"DSLL" ,   "DSRL" , "DSRA" , "DSLL32"  ,   "DSRL32" , "DSRA32" ,
 
-	// "Regimm"
-	"BLTZ"   , "BGEZ"   , "BLTZL"   , "BGEZL"   , /* , */  /* , */  /* , */  /* , */
-	"TGEI"   , "TGEIU"  , "TLTI"    , "TLTIU"   , "TEQI" , /* , */  "TNEI" , /* , */
-	"BLTZAL" , "BGEZAL" , "BLTZALL" , "BGEZALL" , /* , */  /* , */  /* , */  /* , */
-	"MTSAB"  , "MTSAH"  , /* , */     /* , */     /* , */  /* , */  /* , */  /* , */
+	"BLTZ"   , "BGEZ"   , "BLTZL"   , "BGEZL"   ,
+	"TGEI"   , "TGEIU"  , "TLTI"    , "TLTIU"   , "TEQI" ,  "TNEI" ,
+	"BLTZAL" , "BGEZAL" , "BLTZALL" , "BGEZALL" ,
+	"MTSAB"  , "MTSAH"  ,
 
-	// "MMI"
-	"MADD"  , "MADDU"  , /* , */   /* , */   "PLZCW" , /* , */  /* , */   /* , */
-	"MMI0"  , "MMI2"   , /* , */   /* , */   /* , */   /* , */  /* , */   /* , */
-	"MFHI1" , "MTHI1"  , "MFLO1" , "MTLO1" , /* , */   /* , */  /* , */   /* , */
-	"MULT1" , "MULTU1" , "DIV1"  , "DIVU1" , /* , */   /* , */  /* , */   /* , */
-	"MADD1" , "MADDU1" , /* , */   /* , */   /* , */   /* , */  /* , */   /* , */
-	"MMI1"  , "MMI3"   , /* , */   /* , */   /* , */   /* , */  /* , */   /* , */
-	"PMFHL" , "PMTHL"  , /* , */   /* , */   "PSLLH" , /* , */  "PSRLH" , "PSRAH" ,
-	/* , */   /* , */    /* , */   /* , */   "PSLLW" , /* , */  "PSRLW" , "PSRAW" ,
+	"MADD"  , "MADDU"  ,   "PLZCW" ,
+	"MMI0"  , "MMI2"   ,
+	"MFHI1" , "MTHI1"  , "MFLO1" , "MTLO1" ,
+	"MULT1" , "MULTU1" , "DIV1"  , "DIVU1" ,
+	"MADD1" , "MADDU1" ,
+	"MMI1"  , "MMI3"   ,
+	"PMFHL" , "PMTHL"  ,   "PSLLH" ,  "PSRLH" , "PSRAH" ,
+   "PSLLW" ,  "PSRLW" , "PSRAW" ,
 
-	// "MMI0"
 	"PADDW"  , "PSUBW"  , "PCGTW"  , "PMAXW" ,
 	"PADDH"  , "PSUBH"  , "PCGTH"  , "PMAXH" ,
-	"PADDB"  , "PSUBB"  , "PCGTB"  , /* , */
-	/* , */    /* , */    /* , */    /* , */
+	"PADDB"  , "PSUBB"  , "PCGTB"  ,
 	"PADDSW" , "PSUBSW" , "PEXTLW" , "PPACW" ,
 	"PADDSH" , "PSUBSH" , "PEXTLH" , "PPACH" ,
 	"PADDSB" , "PSUBSB" , "PEXTLB" , "PPACB" ,
-	/* , */    /* , */    "PEXT5"  , "PPAC5" ,
+    "PEXT5"  , "PPAC5" ,
 
-	// "MMI1"
-	/* , */    "PABSW"  , "PCEQW"  , "PMINW" ,
+    "PABSW"  , "PCEQW"  , "PMINW" ,
 	"PADSBH" , "PABSH"  , "PCEQH"  , "PMINH" ,
-	/* , */    /* , */    "PCEQB"  , /* , */
-	/* , */    /* , */    /* , */    /* , */
-	"PADDUW" , "PSUBUW" , "PEXTUW" , /* , */
-	"PADDUH" , "PSUBUH" , "PEXTUH" , /* , */
+    "PCEQB"  ,
+	"PADDUW" , "PSUBUW" , "PEXTUW" ,
+	"PADDUH" , "PSUBUH" , "PEXTUH" ,
 	"PADDUB" , "PSUBUB" , "PEXTUB" , "QFSRV" ,
-	/* , */    /* , */    /* , */    /* , */
 
-	// "MMI2"
-	"PMADDW" , /* , */    "PSLLVW" , "PSRLVW" ,
-	"PMSUBW" , /* , */    /* , */    /* , */
-	"PMFHI"  , "PMFLO"  , "PINTH"  , /* , */
-	"PMULTW" , "PDIVW"  , "PCPYLD" , /* , */
+	"PMADDW" ,    "PSLLVW" , "PSRLVW" ,
+	"PMSUBW" ,
+	"PMFHI"  , "PMFLO"  , "PINTH"  ,
+	"PMULTW" , "PDIVW"  , "PCPYLD" ,
 	"PMADDH" , "PHMADH" , "PAND"   , "PXOR"   ,
-	"PMSUBH" , "PHMSBH" , /* , */    /* , */
-	/* , */    /* , */    "PEXEH"  , "PREVH"  ,
+	"PMSUBH" , "PHMSBH" ,
+    "PEXEH"  , "PREVH"  ,
 	"PMULTH" , "PDIVBW" , "PEXEW"  , "PROT3W" ,
 
-	// "MMI3"
-	"PMADDUW" , /* , */    /* , */    "PSRAVW" ,
-	/* , */     /* , */    /* , */    /* , */
-	"PMTHI"   , "PMTLO"  , "PINTEH" , /* , */
-	"PMULTUW" , "PDIVUW" , "PCPYUD" , /* , */
-	/* , */     /* , */    "POR"    , "PNOR"   ,
-	/* , */     /* , */    /* , */    /* , */
-	/* , */     /* , */    "PEXCH"  , "PCPYH"  ,
-	/* , */     /* , */    "PEXCW"  , /* , */
+	"PMADDUW" ,    "PSRAVW" ,
+	"PMTHI"   , "PMTLO"  , "PINTEH" ,
+	"PMULTUW" , "PDIVUW" , "PCPYUD" ,
+    "POR"    , "PNOR"   ,
+    "PEXCH"  , "PCPYH"  ,
+    "PEXCW"  ,
 
-	// "COP1"
-	"MFC1"   , /* , */     "CFC1"    , /* , */   "MTC1"   , /* , */    "CTC1"    , /* , */
+	"MFC1"   ,     "CFC1"    ,   "MTC1"   ,    "CTC1"    ,
 
-	// "COP1 BC1"
-	"BC1F"   , "BC1T"    , "BC1FL"   , "BC1TL" , /* , */    /* , */    /* , */     /* , */
+	"BC1F"   , "BC1T"    , "BC1FL"   , "BC1TL" ,
 
-	// "COP1 S"
 	"ADD_F"  , "SUB_F"   , "MUL_F"   , "DIV_F" , "SQRT_F" , "ABS_F"  , "MOV_F"   , "NEG_F"   ,
-	/* , */    /* , */     /* , */     /* , */   /* , */    /* , */    /* , */     /* , */
-	/* , */    /* , */     /* , */     /* , */   /* , */    /* , */    "RSQRT_F" , /* , */
-	"ADDA_F" ,  "SUBA_F" ,  "MULA_F" , /* , */   "MADD_F" , "MSUB_F" , "MADDA_F" , "MSUBA_F" ,
-	/* , */    /* , */     /* , */     /* , */   "CVTW"   , /* , */    /* , */     /* , */
-	"MAX_F"  , "MIN_F"   , /* , */     /* , */   /* , */    /* , */    /* , */     /* , */
-	"C.F"    , /* , */     "C.EQ"    , /* , */   "C.LT"   , /* , */    "C.LE"    , /* , */
+    "RSQRT_F" ,
+	"ADDA_F" ,  "SUBA_F" ,  "MULA_F" ,   "MADD_F" , "MSUB_F" , "MADDA_F" , "MSUBA_F" ,
+   "CVTW"   ,
+	"MAX_F"  , "MIN_F"   ,
+	"C.F"    ,     "C.EQ"    ,   "C.LT"   ,    "C.LE"    ,
 
-	// "COP1 W"
-	"CVTS_F" , /* , */     /* , */     /* , */   /* , */    /* , */    /* , */     /* , */
+	"CVTS_F" ,
 
 	"!"
 };
-
-//#define eeProfileProg
 
 #ifdef eeProfileProg
 #include <utility>
@@ -257,7 +216,6 @@ struct eeProfiler
 
 	void Print()
 	{
-		// Compute opcode stat
 		u64 total = 0;
 		std::vector<std::pair<u32, u32>> v;
 		std::vector<std::pair<u32, u32>> vc;
@@ -279,19 +237,16 @@ struct eeProfiler
 			if (stat < 0.01)
 				break;
 		}
-		//DevCon.WriteLn("Total = 0x%x_%x", (u32)(u64)(total>>32),(u32)total);
 
-		// Compute memory stat
 		total = 0;
 		u64 reg = 0;
 		u64 gs  = 0;
 		u64 vu  = 0;
-		// FIXME: MAYBE count the scratch pad
 		for (size_t i = 0; i < memSpace; i++)
 			total += memStats[i];
 
-		int ou = 32 * _1kb; // user segment (0x10000000)
-		int ok = 352 * _1kb; // kernel segment (0xB0000000)
+		int ou = 32 * _1kb;
+		int ok = 352 * _1kb;
 		for (int i = 0; i < 4 * _1kb; i++) reg += memStats[ou + 0 * _1kb + i] + memStats[ok + 0 * _1kb + i];
 		for (int i = 0; i < 4 * _1kb; i++) gs  += memStats[ou + 4 * _1kb + i] + memStats[ok + 4 * _1kb + i];
 		for (int i = 0; i < 4 * _1kb; i++) vu  += memStats[ou + 8 * _1kb + i] + memStats[ok + 8 * _1kb + i];
@@ -303,7 +258,6 @@ struct eeProfiler
 		double gs_p  = per(gs, total);
 		double vu_p  = per(vu, total);
 
-		// Compute const memory stat
 		u64 total_const = 0;
 		u64 reg_const = 0;
 		for (size_t i = 0; i < memSpace; i++)
@@ -311,7 +265,7 @@ struct eeProfiler
 
 		for (int i = 0; i < 4 * _1kb; i++)
 			reg_const += memStatsConst[ou + i] + memStatsConst[ok + i];
-		u64 ram_const = total_const - reg_const; // value is slightly wrong but good enough
+		u64 ram_const = total_const - reg_const;
 
 		double ram_const_p = per(ram_const, ram);
 		double reg_const_p = per(reg_const, reg);
@@ -369,7 +323,6 @@ struct eeProfiler
 
 	void EmitMem(int addr_reg)
 	{
-		// Compact the 4GB virtual address to a 512KB virtual address
 		if (g_cpu.hasBMI2)
 		{
 			xPEXT(arg1regd, xRegister32(addr_reg), ptr[&memMask]);

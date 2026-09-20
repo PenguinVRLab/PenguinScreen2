@@ -200,7 +200,6 @@ static TextureLabel GetTextureLabel(GSTexture::Usage usage, GSTexture::Format fo
 	}
 }
 
-// Debug names
 static const char* TextureLabelString(TextureLabel label)
 {
 	switch (label)
@@ -248,7 +247,6 @@ GSDevice::GSDevice()
 
 GSDevice::~GSDevice()
 {
-	// should've been cleaned up in Destroy()
 	pxAssert(m_pool[0].empty() && m_pool[1].empty() && !m_merge && !m_weavebob && !m_blend && !m_mad && !m_target_tmp && !m_cas);
 }
 
@@ -344,12 +342,9 @@ void GSDevice::GenerateExpansionIndexBuffer(void* buffer)
 GSVector4i GSDevice::ProcessCopyArea(const GSVector4i& rtsize, const GSVector4i& drawarea)
 {
 	GSVector4i snapped_drawarea(drawarea);
-	// We don't want the snapped box adjustments when the rect is empty as it might make the copy to pass.
-	// The empty rect itself needs to be handled in renderer properly.
 	if (snapped_drawarea.rempty())
 		return snapped_drawarea;
 
-	// If copy area exceeds 95% coverage then we can do a full copy instead which should be faster.
 	const float rt_area = static_cast<float>(rtsize.width() * rtsize.height());
 	const float copy_area = static_cast<float>(drawarea.width() * drawarea.height());
 	constexpr float coverage = 0.95f;
@@ -359,8 +354,6 @@ GSVector4i GSDevice::ProcessCopyArea(const GSVector4i& rtsize, const GSVector4i&
 		return snapped_drawarea;
 	}
 
-	// Aligning bbox to 4 pixel boundaries so copies will be faster using Direct Memory Access,
-	// otherwise it may stall as more commands need to be issued.
 	snapped_drawarea = snapped_drawarea.ralign<Align_Outside>(GSVector2i(4, 4)).rintersect(rtsize);
 
 	return snapped_drawarea;
@@ -405,7 +398,6 @@ bool GSDevice::AcquireWindow(bool recreate_window)
 
 bool GSDevice::ShouldSkipPresentingFrame()
 {
-	// Only needed with FIFO.
 	if (!m_allow_present_throttle || m_vsync_mode != GSVSyncMode::FIFO)
 		return false;
 
@@ -423,15 +415,11 @@ bool GSDevice::ShouldSkipPresentingFrame()
 
 void GSDevice::ThrottlePresentation()
 {
-	// Manually throttle presentation when vsync isn't enabled, so we don't try to render the
-	// fullscreen UI at thousands of FPS and make the gpu go brrrrrrrr.
 	const float throttle_rate = (m_window_info.surface_refresh_rate > 0.0f) ? m_window_info.surface_refresh_rate : 60.0f;
 
 	const u64 sleep_period = static_cast<u64>(static_cast<double>(GetTickFrequency()) / static_cast<double>(throttle_rate));
 	const u64 current_ts = GetCPUTicks();
 
-	// Allow it to fall behind/run ahead up to 2*period. Sleep isn't that precise, plus we need to
-	// allow time for the actual rendering.
 	const u64 max_variance = sleep_period * 2;
 	if (static_cast<u64>(std::abs(static_cast<s64>(current_ts - m_last_frame_displayed_time))) > max_variance)
 		m_last_frame_displayed_time = current_ts + sleep_period;
@@ -455,7 +443,6 @@ bool GSDevice::ProcessClearsBeforeCopy(GSTexture* sTex, GSTexture* dTex, const b
 {
 	pxAssert(sTex->GetState() == GSTexture::State::Cleared && dTex->IsRenderTargetOrDepthStencil());
 
-	// Pass it forward if we're clearing the whole thing.
 	if (full_copy)
 	{
 		if (dTex->IsDepthStencil())
@@ -468,7 +455,6 @@ bool GSDevice::ProcessClearsBeforeCopy(GSTexture* sTex, GSTexture* dTex, const b
 		return true;
 	}
 
-	// Destination is cleared, if it's the same colour and rect, we can just avoid this entirely.
 	if (dTex->GetState() == GSTexture::State::Cleared)
 	{
 		if (dTex->IsDepthStencil())
@@ -493,7 +479,6 @@ void GSDevice::InvalidateRenderTarget(GSTexture* t)
 
 void GSDevice::UpdateImGuiTextures()
 {
-	// TODO, use ImDrawData https://github.com/ocornut/imgui/issues/8597#issuecomment-2871835598
 	for (ImTextureData* im_tex : ImGui::GetPlatformIO().Textures)
 	{
 		switch (im_tex->Status)
@@ -516,15 +501,11 @@ void GSDevice::UpdateImGuiTextures()
 			case ImTextureStatus_WantUpdates:
 				if (GSTexture* gs_tex = static_cast<GSTexture*>(im_tex->BackendUserData))
 				{
-					// If we fell through from WantCreate, then we are uploading the full size
-					// Otherwise, we are just updating the specified region
-					// clange-format off
 					const int upload_x = (im_tex->Status == ImTextureStatus_WantCreate) ? 0 : im_tex->UpdateRect.x;
 					const int upload_y = (im_tex->Status == ImTextureStatus_WantCreate) ? 0 : im_tex->UpdateRect.y;
 					const int upload_w = (im_tex->Status == ImTextureStatus_WantCreate) ? im_tex->Width : im_tex->UpdateRect.w;
 					const int upload_h = (im_tex->Status == ImTextureStatus_WantCreate) ? im_tex->Height : im_tex->UpdateRect.h;
 					const int upload_pitch = upload_w * im_tex->BytesPerPixel;
-					// clange-format on
 
 					const GSVector4i rect{
 						upload_x,
@@ -554,8 +535,6 @@ void GSDevice::UpdateImGuiTextures()
 			case ImTextureStatus_WantDestroy:
 				if (GSTexture* gs_tex = static_cast<GSTexture*>(im_tex->BackendUserData))
 				{
-					// While it's unlikely we're going to reuse the same size as imgui for rendering,
-					// imgui may request a new atlas of the same size if old font sizes are evicted.
 					Recycle(gs_tex);
 
 					im_tex->SetTexID(ImTextureID_Invalid);
@@ -709,8 +688,6 @@ void GSDevice::Recycle(GSTexture* t)
 	const u32 max_age = t->IsTexture() ? MAX_TEXTURE_AGE : MAX_TARGET_AGE;
 	while (pool.size() > max_size)
 	{
-		// Don't toss when the texture was last used in this frame.
-		// Because we're going to need to keep it alive anyway.
 		GSTexture* back = pool.back();
 		if ((m_frame - back->GetLastFrameUsed()) < max_age)
 			break;
@@ -732,7 +709,6 @@ void GSDevice::AgePool()
 {
 	m_frame++;
 
-	// Toss out textures when they're not too-recently used.
 	for (u32 pool_idx = 0; pool_idx < m_pool.size(); pool_idx++)
 	{
 		const u32 max_age = (pool_idx == 0) ? MAX_TEXTURE_AGE : MAX_TARGET_AGE;
@@ -826,7 +802,6 @@ GSTexture* GSDevice::CreateCompatible(GSTexture* tex, const GSVector2i& size, bo
 
 GSTexture* GSDevice::CreateCompatible(GSTexture* tex, int w, int h, bool clear, bool prefer_reuse)
 {
-	// PCSX2-VR (M4.3): inherit the layer count so resizing a stereo target keeps it stereo.
 	return FetchSurface(tex->GetUsage(), w, h, 1, tex->GetFormat(), clear, prefer_reuse, tex->GetArrayLayers());
 }
 
@@ -834,20 +809,11 @@ void GSDevice::DoStretchRectWithAssertions(GSTexture* sTex, const GSVector4& sRe
 	const GSVector4& dRect, ShaderConvertSelector shader, Filter filter)
 {
 	pxAssert((dTex && dTex->IsDepthLike()) == shader.Float32Output());
-	pxAssert(!(filter == Biln && shader.SupportsBilinear())); // Don't allow HW bilinear if SW bilinear is required.
+	pxAssert(!(filter == Biln && shader.SupportsBilinear()));
 	GL_INS("StretchRect(%s) {%d,%d} %dx%d -> {%d,%d) %dx%d", ShaderConvertName(shader.Shader()),
 		int(sRect.left), int(sRect.top),
 		int(sRect.right - sRect.left), int(sRect.bottom - sRect.top), int(dRect.left), int(dRect.top),
 		int(dRect.right - dRect.left), int(dRect.bottom - dRect.top));
-	// PCSX2-VR (ISS-001 round 3): route by SOURCE layer count. A >=2-layer source is
-	// real per-eye stereo — a plain stretch samples layer 0 only, and the mirror below
-	// would then cement left-into-right (the "stereo flatten" class: RTA scale/unscale,
-	// display rescale, colclip resolves). Stereo-to-stereo stretches therefore run per
-	// layer through the 1-layer proxy views. A 1-layer source into a >=2-layer
-	// destination is mono content by construction (uploads, page copies) and both eyes
-	// must see it identically — stretch, then mirror. A >=2-layer source into a 1-layer
-	// destination keeps the Phase-A rule (mono consumers read the left eye). Layer-aware
-	// callers pass 1-layer proxies and skip all of this.
 	if (sTex && dTex && sTex->GetArrayLayers() >= 2 && dTex->GetArrayLayers() >= 2)
 	{
 		const u32 layers = std::min(sTex->GetArrayLayers(), dTex->GetArrayLayers());
@@ -856,7 +822,6 @@ void GSDevice::DoStretchRectWithAssertions(GSTexture* sTex, const GSVector4& sRe
 	}
 	else
 	{
-		// PCSX2-VR (ISS-013 hunt): census stereo->mono stretches (Phase-A left-eye-only).
 		static const bool s_vr_drawcensus = (std::getenv("PCSX2_VR_DRAWCENSUS") != nullptr);
 		if (s_vr_drawcensus && sTex && sTex->GetArrayLayers() >= 2 &&
 			(!dTex || dTex->GetArrayLayers() < 2))
@@ -894,7 +859,6 @@ void GSDevice::StretchRectAuto(GSTexture* sTex, const GSVector4& sRect, GSTextur
 	ShaderConvertSelector shader = GetConvertShader(sTex, dTex, src_bpp, dst_bpp);
 	if (shader.SupportsBilinear() && filter == Biln)
 	{
-		// Bilinear is emulated in the shader.
 		shader.SetFilter(Biln);
 		filter = Nearest;
 	}
@@ -941,7 +905,6 @@ void GSDevice::DrawMultiStretchRects(
 
 void GSDevice::SortMultiStretchRects(MultiStretchRect* rects, u32 num_rects)
 {
-	// Depending on num_rects, insertion sort may be better here.
 	std::sort(rects, rects + num_rects, [](const MultiStretchRect& lhs, const MultiStretchRect& rhs) {
 		return lhs.src < rhs.src || lhs.filter < rhs.filter;
 	});
@@ -968,9 +931,6 @@ void GSDevice::ClearCurrent()
 
 void GSDevice::Merge(GSTexture* sTex[3], GSVector4* sRect, GSVector4* dRect, const GSVector2i& fs, const GSRegPMODE& PMODE, const GSRegEXTBUF& EXTBUF, u32 c)
 {
-	// PCSX2-VR (M4.3): stereo display targets are 2-layer; run the merge once per layer
-	// through single-layer proxies so every Do* implementation stays layer-blind. Mono
-	// (every non-VR path) has layers == 1 and proxies alias the textures themselves.
 	u32 layers = 1;
 	for (u32 i = 0; i < 3; i++)
 	{
@@ -978,9 +938,6 @@ void GSDevice::Merge(GSTexture* sTex[3], GSVector4* sRect, GSVector4* dRect, con
 			layers = std::max(layers, sTex[i]->GetArrayLayers());
 	}
 
-	// PCSX2-VR (ISS-001 diagnostic, PCSX2_VR_CHAINLOG=1): merge-side layer accounting —
-	// pairs with the compositor's per-visit line to separate "layer 1 never written"
-	// from "layer 1 written but stale content".
 	static const bool s_vr_chainlog = (std::getenv("PCSX2_VR_CHAINLOG") != nullptr);
 	if (s_vr_chainlog)
 	{
@@ -1020,7 +977,6 @@ void GSDevice::Interlace(const GSVector2i& ds, int field, int mode, float yoffse
 		GSVector4 sRect = GSVector4(0.0f, 0.0f, 1.0f, 1.0f);
 		GSVector4 dRect = GSVector4(0.0f, yoffset, ds.x, ds.y + yoffset);
 
-		// Select the top or bottom half for MAD buffering.
 		if (shader == ShaderInterlace::MAD_BUFFER)
 		{
 			const float half_size = ds.y * 0.5f;
@@ -1035,9 +991,6 @@ void GSDevice::Interlace(const GSVector2i& ds, int field, int mode, float yoffse
 		};
 
 		GL_PUSH("DoInterlace %dx%d Shader:%d Filter:%d", ds_i.x, ds_i.y, static_cast<int>(shader), filter);
-		// PCSX2-VR (M4.3): deinterlace each stereo layer independently — both eyes of one
-		// vsync are same-eye content, so blending fields can never mix eyes (the stage-1
-		// interleave failure this stage exists to fix).
 		const u32 layers = std::min(sTex->GetArrayLayers(), dTex->GetArrayLayers());
 		for (u32 l = 0; l < layers; l++)
 			DoInterlace(sTex->GetLayerProxyTexture(l), sRect, dTex->GetLayerProxyTexture(l), dRect, shader, filter, cb);
@@ -1047,25 +1000,24 @@ void GSDevice::Interlace(const GSVector2i& ds, int field, int mode, float yoffse
 
 	switch (mode)
 	{
-		case 0: // Weave
+		case 0:
 			ResizeRenderTarget(&m_weavebob, ds.x, ds.y, true, false, il_layers);
 			do_interlace(m_merge, m_weavebob, ShaderInterlace::WEAVE, Nearest, offset, field);
 			m_current = m_weavebob;
 			break;
-		case 1: // Bob
-			// Field is reversed here as we are countering the bounce.
+		case 1:
 			ResizeRenderTarget(&m_weavebob, ds.x, ds.y, true, false, il_layers);
 			do_interlace(m_merge, m_weavebob, ShaderInterlace::BOB, Biln, yoffset * (1 - field), 0);
 			m_current = m_weavebob;
 			break;
-		case 2: // Blend
+		case 2:
 			ResizeRenderTarget(&m_weavebob, ds.x, ds.y, true, false, il_layers);
 			do_interlace(m_merge, m_weavebob, ShaderInterlace::WEAVE, Nearest, offset, field);
 			ResizeRenderTarget(&m_blend, ds.x, ds.y, true, false, il_layers);
 			do_interlace(m_weavebob, m_blend, ShaderInterlace::BLEND, Biln, 0, 0);
 			m_current = m_blend;
 			break;
-		case 3: // FastMAD Motion Adaptive Deinterlacing
+		case 3:
 			bufIdx++;
 			bufIdx &= ~1;
 			bufIdx |= field;
@@ -1084,7 +1036,6 @@ void GSDevice::Interlace(const GSVector2i& ds, int field, int mode, float yoffse
 
 void GSDevice::FXAA()
 {
-	// Combining FXAA+ShadeBoost can't share the same target.
 	GSTexture*& dTex = (m_current == m_target_tmp) ? m_merge : m_target_tmp;
 	const u32 layers = m_current->GetArrayLayers();
 	if (ResizeRenderTarget(&dTex, m_current->GetWidth(), m_current->GetHeight(), false, false, layers))
@@ -1100,7 +1051,6 @@ void GSDevice::ShadeBoost()
 	const u32 layers = m_current->GetArrayLayers();
 	if (ResizeRenderTarget(&m_target_tmp, m_current->GetWidth(), m_current->GetHeight(), false, false, layers))
 	{
-		// predivide to avoid the divide (multiply) in the shader
 		const GSVector4 params(
 			static_cast<float>(GSConfig.ShadeBoost_Brightness) * (1.0f / 50.0f),
 			static_cast<float>(GSConfig.ShadeBoost_Contrast) * (1.0f / 50.0f),
@@ -1166,7 +1116,6 @@ bool GSDevice::ResizeRenderTarget(GSTexture** t, int w, int h, bool preserve_con
 	{
 		constexpr GSVector4 sRect = GSVector4::cxpr(0, 0, 1, 1);
 		const GSVector4 dRect = GSVector4(orig_tex->GetRect());
-		// PCSX2-VR (M4.3): preserve every shared layer (mono<->stereo transitions keep layer 0).
 		const u32 copy_layers = std::min(orig_tex->GetArrayLayers(), layers);
 		for (u32 l = 0; l < copy_layers; l++)
 		{
@@ -1189,7 +1138,6 @@ bool GSDevice::ResizeRenderTarget(GSTexture** t, int w, int h, bool preserve_con
 
 void GSDevice::BeginDSAsRT(GSTexture* ds, const GSVector4i& drawarea)
 {
-	// Create a temporary RT and copy the area needed for the draw.
 	const int w = ds->GetWidth();
 	const int h = ds->GetHeight();
 	if ((m_ds_as_rt = g_gs_device->CreateFeedbackTarget(w, h, GSTexture::Format::DepthColor, false, true)))
@@ -1215,11 +1163,10 @@ void GSDevice::EndDSAsRT()
 #pragma GCC diagnostic ignored "-Wignored-qualifiers"
 #endif
 
-// Kinda grotty, but better than copy/pasting the relevant bits in..
 #define A_CPU 1
 #include "bin/resources/shaders/common/ffx_a.h"
 #include "bin/resources/shaders/common/ffx_cas.h"
-#include <cstdlib> // PCSX2-VR: std::getenv (CHAINLOG diagnostic lane)
+#include <cstdlib>
 
 #if defined(__clang__)
 #pragma clang diagnostic pop
@@ -1234,7 +1181,6 @@ bool GSDevice::GetCASShaderSource(std::string* source)
 	if (!ffx_a_source.has_value() || !ffx_cas_source.has_value())
 		return false;
 
-	// Since our shader compilers don't support includes, and OpenGL doesn't at all... we'll do a really cheeky string replace.
 	StringUtil::ReplaceAll(source, "#include \"ffx_a.h\"", ffx_a_source.value());
 	StringUtil::ReplaceAll(source, "#include \"ffx_cas.h\"", ffx_cas_source.value());
 	return true;
@@ -1268,7 +1214,6 @@ void GSDevice::CAS(GSTexture*& tex, GSVector4i& src_rect, GSVector4& src_uv, con
 
 	if (!DoCAS(src_tex, m_cas, sharpen_only, consts))
 	{
-		// leave textures intact if we failed
 		Console.Warning("Applying CAS failed.");
 		return;
 	}
@@ -1290,7 +1235,6 @@ struct DrawConfigWriter
 	u32 indent = 0;
 	bool beginning_of_line = true;
 
-	/// Uses RAII to add 1 to indent on construction and remove on destruction
 	struct RAIIIndent
 	{
 		DrawConfigWriter& writer;
@@ -1909,7 +1853,7 @@ static constexpr bool RemapIndexIsValid(u32 idx)
 	bool depth_out = (idx >> 0) & 1;
 	Filter filter = static_cast<Filter>((idx >> 1) & 1);
 	if (HasVariableWriteMask(convert) && !depth_out && filter == Nearest)
-		return false; // Handled as variable write mask
+		return false;
 	if (depth_out && !HasFloat32Output(convert))
 		return false;
 	if (filter == Biln && !SupportsBilinear(convert))
@@ -1928,7 +1872,7 @@ static constexpr u32 CalcNumRemappedShaders()
 static constexpr u32 NUM_REMAPPED_SHADERS = CalcNumRemappedShaders();
 static constexpr u32 NUM_TOTAL_SHADERS = NUM_REMAPPED_SHADERS +
                                          16 * ShaderConvertSelector::NUM_VARIABLE_WRITE_MASK_SHADERS;
-static_assert(NUM_REMAPPED_SHADERS <= 256); // We use u8 for the remap indices.
+static_assert(NUM_REMAPPED_SHADERS <= 256);
 
 static constexpr std::array<u8, NUM_REMAP_INPUTS> GenRemapArray()
 {
@@ -1964,88 +1908,87 @@ const std::span<const ShaderConvertSelector> ShaderConvertSelector::SHADERS = PA
 
 // clang-format off
 
-// Maps PS2 blend modes to our best approximation of them with PC hardware
 const std::array<HWBlend, 3*3*3*3> GSDevice::m_blendMap =
 {{
-	{ BLEND_NO_REC             , OP_ADD          , CONST_ONE       , CONST_ZERO}      , // 0000: (Cs - Cs)*As + Cs ==> Cs
-	{ BLEND_CD                 , OP_ADD          , CONST_ZERO      , CONST_ONE}       , // 0001: (Cs - Cs)*As + Cd ==> Cd
-	{ BLEND_NO_REC             , OP_ADD          , CONST_ZERO      , CONST_ZERO}      , // 0002: (Cs - Cs)*As +  0 ==> 0
-	{ BLEND_NO_REC             , OP_ADD          , CONST_ONE       , CONST_ZERO}      , // 0010: (Cs - Cs)*Ad + Cs ==> Cs
-	{ BLEND_CD                 , OP_ADD          , CONST_ZERO      , CONST_ONE}       , // 0011: (Cs - Cs)*Ad + Cd ==> Cd
-	{ BLEND_NO_REC             , OP_ADD          , CONST_ZERO      , CONST_ZERO}      , // 0012: (Cs - Cs)*Ad +  0 ==> 0
-	{ BLEND_NO_REC             , OP_ADD          , CONST_ONE       , CONST_ZERO}      , // 0020: (Cs - Cs)*F  + Cs ==> Cs
-	{ BLEND_CD                 , OP_ADD          , CONST_ZERO      , CONST_ONE}       , // 0021: (Cs - Cs)*F  + Cd ==> Cd
-	{ BLEND_NO_REC             , OP_ADD          , CONST_ZERO      , CONST_ZERO}      , // 0022: (Cs - Cs)*F  +  0 ==> 0
-	{ BLEND_A_MAX | BLEND_MIX2 , OP_SUBTRACT     , CONST_ONE       , SRC1_COLOR}      , // 0100: (Cs - Cd)*As + Cs ==> Cs*(As + 1) - Cd*As
-	{ BLEND_MIX1               , OP_ADD          , SRC1_COLOR      , INV_SRC1_COLOR}  , // 0101: (Cs - Cd)*As + Cd ==> Cs*As + Cd*(1 - As)
-	{ BLEND_MIX1               , OP_SUBTRACT     , SRC1_COLOR      , SRC1_COLOR}      , // 0102: (Cs - Cd)*As +  0 ==> Cs*As - Cd*As
-	{ BLEND_A_MAX              , OP_SUBTRACT     , CONST_ONE       , DST_ALPHA}       , // 0110: (Cs - Cd)*Ad + Cs ==> Cs*(Ad + 1) - Cd*Ad
-	{ 0                        , OP_ADD          , DST_ALPHA       , INV_DST_ALPHA}   , // 0111: (Cs - Cd)*Ad + Cd ==> Cs*Ad + Cd*(1 - Ad)
-	{ BLEND_HW5                , OP_SUBTRACT     , DST_ALPHA       , DST_ALPHA}       , // 0112: (Cs - Cd)*Ad +  0 ==> Cs*Ad - Cd*Ad
-	{ BLEND_A_MAX | BLEND_MIX2 , OP_SUBTRACT     , CONST_ONE       , CONST_COLOR}     , // 0120: (Cs - Cd)*F  + Cs ==> Cs*(F + 1) - Cd*F
-	{ BLEND_MIX1               , OP_ADD          , CONST_COLOR     , INV_CONST_COLOR} , // 0121: (Cs - Cd)*F  + Cd ==> Cs*F + Cd*(1 - F)
-	{ BLEND_MIX1               , OP_SUBTRACT     , CONST_COLOR     , CONST_COLOR}     , // 0122: (Cs - Cd)*F  +  0 ==> Cs*F - Cd*F
-	{ BLEND_NO_REC             , OP_ADD          , CONST_ONE       , CONST_ZERO}      , // 0200: (Cs -  0)*As + Cs ==> Cs*(As + 1)
-	{ BLEND_ACCU               , OP_ADD          , SRC1_COLOR      , CONST_ONE}       , // 0201: (Cs -  0)*As + Cd ==> Cs*As + Cd
-	{ BLEND_NO_REC             , OP_ADD          , SRC1_COLOR      , CONST_ZERO}      , // 0202: (Cs -  0)*As +  0 ==> Cs*As
-	{ BLEND_A_MAX | BLEND_HW8  , OP_ADD          , CONST_ONE       , CONST_ZERO}      , // 0210: (Cs -  0)*Ad + Cs ==> Cs*(Ad + 1)
-	{ BLEND_HW3                , OP_ADD          , DST_ALPHA       , CONST_ONE}       , // 0211: (Cs -  0)*Ad + Cd ==> Cs*Ad + Cd
-	{ BLEND_HW3                , OP_ADD          , DST_ALPHA       , CONST_ZERO}      , // 0212: (Cs -  0)*Ad +  0 ==> Cs*Ad
-	{ BLEND_NO_REC             , OP_ADD          , CONST_ONE       , CONST_ZERO}      , // 0220: (Cs -  0)*F  + Cs ==> Cs*(F + 1)
-	{ BLEND_ACCU               , OP_ADD          , CONST_COLOR     , CONST_ONE}       , // 0221: (Cs -  0)*F  + Cd ==> Cs*F + Cd
-	{ BLEND_NO_REC             , OP_ADD          , CONST_COLOR     , CONST_ZERO}      , // 0222: (Cs -  0)*F  +  0 ==> Cs*F
-	{ BLEND_MIX3               , OP_ADD          , INV_SRC1_COLOR  , SRC1_COLOR}      , // 1000: (Cd - Cs)*As + Cs ==> Cd*As + Cs*(1 - As)
-	{ BLEND_A_MAX | BLEND_MIX1 , OP_REV_SUBTRACT , SRC1_COLOR      , CONST_ONE}       , // 1001: (Cd - Cs)*As + Cd ==> Cd*(As + 1) - Cs*As
-	{ BLEND_MIX1               , OP_REV_SUBTRACT , SRC1_COLOR      , SRC1_COLOR}      , // 1002: (Cd - Cs)*As +  0 ==> Cd*As - Cs*As
-	{ 0                        , OP_ADD          , INV_DST_ALPHA   , DST_ALPHA}       , // 1010: (Cd - Cs)*Ad + Cs ==> Cd*Ad + Cs*(1 - Ad)
-	{ BLEND_A_MAX              , OP_REV_SUBTRACT , DST_ALPHA       , CONST_ONE}       , // 1011: (Cd - Cs)*Ad + Cd ==> Cd*(Ad + 1) - Cs*Ad
-	{ BLEND_HW5                , OP_REV_SUBTRACT , DST_ALPHA       , DST_ALPHA}       , // 1012: (Cd - Cs)*Ad +  0 ==> Cd*Ad - Cs*Ad
-	{ BLEND_MIX3               , OP_ADD          , INV_CONST_COLOR , CONST_COLOR}     , // 1020: (Cd - Cs)*F  + Cs ==> Cd*F + Cs*(1 - F)
-	{ BLEND_A_MAX | BLEND_MIX1 , OP_REV_SUBTRACT , CONST_COLOR     , CONST_ONE}       , // 1021: (Cd - Cs)*F  + Cd ==> Cd*(F + 1) - Cs*F
-	{ BLEND_MIX1               , OP_REV_SUBTRACT , CONST_COLOR     , CONST_COLOR}     , // 1022: (Cd - Cs)*F  +  0 ==> Cd*F - Cs*F
-	{ BLEND_NO_REC             , OP_ADD          , CONST_ONE       , CONST_ZERO}      , // 1100: (Cd - Cd)*As + Cs ==> Cs
-	{ BLEND_CD                 , OP_ADD          , CONST_ZERO      , CONST_ONE}       , // 1101: (Cd - Cd)*As + Cd ==> Cd
-	{ BLEND_NO_REC             , OP_ADD          , CONST_ZERO      , CONST_ZERO}      , // 1102: (Cd - Cd)*As +  0 ==> 0
-	{ BLEND_NO_REC             , OP_ADD          , CONST_ONE       , CONST_ZERO}      , // 1110: (Cd - Cd)*Ad + Cs ==> Cs
-	{ BLEND_CD                 , OP_ADD          , CONST_ZERO      , CONST_ONE}       , // 1111: (Cd - Cd)*Ad + Cd ==> Cd
-	{ BLEND_NO_REC             , OP_ADD          , CONST_ZERO      , CONST_ZERO}      , // 1112: (Cd - Cd)*Ad +  0 ==> 0
-	{ BLEND_NO_REC             , OP_ADD          , CONST_ONE       , CONST_ZERO}      , // 1120: (Cd - Cd)*F  + Cs ==> Cs
-	{ BLEND_CD                 , OP_ADD          , CONST_ZERO      , CONST_ONE}       , // 1121: (Cd - Cd)*F  + Cd ==> Cd
-	{ BLEND_NO_REC             , OP_ADD          , CONST_ZERO      , CONST_ZERO}      , // 1122: (Cd - Cd)*F  +  0 ==> 0
-	{ BLEND_HW4                , OP_ADD          , CONST_ONE       , SRC1_COLOR}      , // 1200: (Cd -  0)*As + Cs ==> Cs + Cd*As
-	{ BLEND_HW1                , OP_ADD          , DST_COLOR       , SRC1_COLOR}      , // 1201: (Cd -  0)*As + Cd ==> Cd*(1 + As)
-	{ BLEND_HW2                , OP_ADD          , DST_COLOR       , SRC1_COLOR}      , // 1202: (Cd -  0)*As +  0 ==> Cd*As
-	{ BLEND_HW6                , OP_ADD          , CONST_ONE       , DST_ALPHA}       , // 1210: (Cd -  0)*Ad + Cs ==> Cs + Cd*Ad
-	{ BLEND_HW1                , OP_ADD          , DST_COLOR       , DST_ALPHA}       , // 1211: (Cd -  0)*Ad + Cd ==> Cd*(1 + Ad)
-	{ BLEND_HW5                , OP_ADD          , CONST_ZERO      , DST_ALPHA}       , // 1212: (Cd -  0)*Ad +  0 ==> Cd*Ad
-	{ BLEND_HW4                , OP_ADD          , CONST_ONE       , CONST_COLOR}     , // 1220: (Cd -  0)*F  + Cs ==> Cs + Cd*F
-	{ BLEND_HW1                , OP_ADD          , DST_COLOR       , CONST_COLOR}     , // 1221: (Cd -  0)*F  + Cd ==> Cd*(1 + F)
-	{ BLEND_HW2                , OP_ADD          , DST_COLOR       , CONST_COLOR}     , // 1222: (Cd -  0)*F  +  0 ==> Cd*F
-	{ BLEND_NO_REC             , OP_ADD          , INV_SRC1_COLOR  , CONST_ZERO}      , // 2000: (0  - Cs)*As + Cs ==> Cs*(1 - As)
-	{ BLEND_ACCU               , OP_REV_SUBTRACT , SRC1_COLOR      , CONST_ONE}       , // 2001: (0  - Cs)*As + Cd ==> Cd - Cs*As
-	{ BLEND_NO_REC             , OP_REV_SUBTRACT , SRC1_COLOR      , CONST_ZERO}      , // 2002: (0  - Cs)*As +  0 ==> 0 - Cs*As
-	{ BLEND_HW9                , OP_ADD          , INV_DST_ALPHA   , CONST_ZERO}      , // 2010: (0  - Cs)*Ad + Cs ==> Cs*(1 - Ad)
-	{ BLEND_HW3                , OP_REV_SUBTRACT , DST_ALPHA       , CONST_ONE}       , // 2011: (0  - Cs)*Ad + Cd ==> Cd - Cs*Ad
-	{ 0                        , OP_REV_SUBTRACT , DST_ALPHA       , CONST_ZERO}      , // 2012: (0  - Cs)*Ad +  0 ==> 0 - Cs*Ad
-	{ BLEND_NO_REC             , OP_ADD          , INV_CONST_COLOR , CONST_ZERO}      , // 2020: (0  - Cs)*F  + Cs ==> Cs*(1 - F)
-	{ BLEND_ACCU               , OP_REV_SUBTRACT , CONST_COLOR     , CONST_ONE}       , // 2021: (0  - Cs)*F  + Cd ==> Cd - Cs*F
-	{ BLEND_NO_REC             , OP_REV_SUBTRACT , CONST_COLOR     , CONST_ZERO}      , // 2022: (0  - Cs)*F  +  0 ==> 0 - Cs*F
-	{ BLEND_HW4                , OP_SUBTRACT     , CONST_ONE       , SRC1_COLOR}      , // 2100: (0  - Cd)*As + Cs ==> Cs - Cd*As
-	{ 0                        , OP_ADD          , CONST_ZERO      , INV_SRC1_COLOR}  , // 2101: (0  - Cd)*As + Cd ==> Cd*(1 - As)
-	{ 0                        , OP_SUBTRACT     , CONST_ZERO      , SRC1_COLOR}      , // 2102: (0  - Cd)*As +  0 ==> 0 - Cd*As
-	{ BLEND_HW6                , OP_SUBTRACT     , CONST_ONE       , DST_ALPHA}       , // 2110: (0  - Cd)*Ad + Cs ==> Cs - Cd*Ad
-	{ BLEND_HW7                , OP_ADD          , CONST_ZERO      , INV_DST_ALPHA}   , // 2111: (0  - Cd)*Ad + Cd ==> Cd*(1 - Ad)
-	{ 0                        , OP_SUBTRACT     , CONST_ZERO      , DST_ALPHA}       , // 2112: (0  - Cd)*Ad +  0 ==> 0 - Cd*Ad
-	{ BLEND_HW4                , OP_SUBTRACT     , CONST_ONE       , CONST_COLOR}     , // 2120: (0  - Cd)*F  + Cs ==> Cs - Cd*F
-	{ 0                        , OP_ADD          , CONST_ZERO      , INV_CONST_COLOR} , // 2121: (0  - Cd)*F  + Cd ==> Cd*(1 - F)
-	{ 0                        , OP_SUBTRACT     , CONST_ZERO      , CONST_COLOR}     , // 2122: (0  - Cd)*F  +  0 ==> 0 - Cd*F
-	{ BLEND_NO_REC             , OP_ADD          , CONST_ONE       , CONST_ZERO}      , // 2200: (0  -  0)*As + Cs ==> Cs
-	{ BLEND_CD                 , OP_ADD          , CONST_ZERO      , CONST_ONE}       , // 2201: (0  -  0)*As + Cd ==> Cd
-	{ BLEND_NO_REC             , OP_ADD          , CONST_ZERO      , CONST_ZERO}      , // 2202: (0  -  0)*As +  0 ==> 0
-	{ BLEND_NO_REC             , OP_ADD          , CONST_ONE       , CONST_ZERO}      , // 2210: (0  -  0)*Ad + Cs ==> Cs
-	{ BLEND_CD                 , OP_ADD          , CONST_ZERO      , CONST_ONE}       , // 2211: (0  -  0)*Ad + Cd ==> Cd
-	{ BLEND_NO_REC             , OP_ADD          , CONST_ZERO      , CONST_ZERO}      , // 2212: (0  -  0)*Ad +  0 ==> 0
-	{ BLEND_NO_REC             , OP_ADD          , CONST_ONE       , CONST_ZERO}      , // 2220: (0  -  0)*F  + Cs ==> Cs
-	{ BLEND_CD                 , OP_ADD          , CONST_ZERO      , CONST_ONE}       , // 2221: (0  -  0)*F  + Cd ==> Cd
-	{ BLEND_NO_REC             , OP_ADD          , CONST_ZERO      , CONST_ZERO}      , // 2222: (0  -  0)*F  +  0 ==> 0
+	{ BLEND_NO_REC             , OP_ADD          , CONST_ONE       , CONST_ZERO}      ,
+	{ BLEND_CD                 , OP_ADD          , CONST_ZERO      , CONST_ONE}       ,
+	{ BLEND_NO_REC             , OP_ADD          , CONST_ZERO      , CONST_ZERO}      ,
+	{ BLEND_NO_REC             , OP_ADD          , CONST_ONE       , CONST_ZERO}      ,
+	{ BLEND_CD                 , OP_ADD          , CONST_ZERO      , CONST_ONE}       ,
+	{ BLEND_NO_REC             , OP_ADD          , CONST_ZERO      , CONST_ZERO}      ,
+	{ BLEND_NO_REC             , OP_ADD          , CONST_ONE       , CONST_ZERO}      ,
+	{ BLEND_CD                 , OP_ADD          , CONST_ZERO      , CONST_ONE}       ,
+	{ BLEND_NO_REC             , OP_ADD          , CONST_ZERO      , CONST_ZERO}      ,
+	{ BLEND_A_MAX | BLEND_MIX2 , OP_SUBTRACT     , CONST_ONE       , SRC1_COLOR}      ,
+	{ BLEND_MIX1               , OP_ADD          , SRC1_COLOR      , INV_SRC1_COLOR}  ,
+	{ BLEND_MIX1               , OP_SUBTRACT     , SRC1_COLOR      , SRC1_COLOR}      ,
+	{ BLEND_A_MAX              , OP_SUBTRACT     , CONST_ONE       , DST_ALPHA}       ,
+	{ 0                        , OP_ADD          , DST_ALPHA       , INV_DST_ALPHA}   ,
+	{ BLEND_HW5                , OP_SUBTRACT     , DST_ALPHA       , DST_ALPHA}       ,
+	{ BLEND_A_MAX | BLEND_MIX2 , OP_SUBTRACT     , CONST_ONE       , CONST_COLOR}     ,
+	{ BLEND_MIX1               , OP_ADD          , CONST_COLOR     , INV_CONST_COLOR} ,
+	{ BLEND_MIX1               , OP_SUBTRACT     , CONST_COLOR     , CONST_COLOR}     ,
+	{ BLEND_NO_REC             , OP_ADD          , CONST_ONE       , CONST_ZERO}      ,
+	{ BLEND_ACCU               , OP_ADD          , SRC1_COLOR      , CONST_ONE}       ,
+	{ BLEND_NO_REC             , OP_ADD          , SRC1_COLOR      , CONST_ZERO}      ,
+	{ BLEND_A_MAX | BLEND_HW8  , OP_ADD          , CONST_ONE       , CONST_ZERO}      ,
+	{ BLEND_HW3                , OP_ADD          , DST_ALPHA       , CONST_ONE}       ,
+	{ BLEND_HW3                , OP_ADD          , DST_ALPHA       , CONST_ZERO}      ,
+	{ BLEND_NO_REC             , OP_ADD          , CONST_ONE       , CONST_ZERO}      ,
+	{ BLEND_ACCU               , OP_ADD          , CONST_COLOR     , CONST_ONE}       ,
+	{ BLEND_NO_REC             , OP_ADD          , CONST_COLOR     , CONST_ZERO}      ,
+	{ BLEND_MIX3               , OP_ADD          , INV_SRC1_COLOR  , SRC1_COLOR}      ,
+	{ BLEND_A_MAX | BLEND_MIX1 , OP_REV_SUBTRACT , SRC1_COLOR      , CONST_ONE}       ,
+	{ BLEND_MIX1               , OP_REV_SUBTRACT , SRC1_COLOR      , SRC1_COLOR}      ,
+	{ 0                        , OP_ADD          , INV_DST_ALPHA   , DST_ALPHA}       ,
+	{ BLEND_A_MAX              , OP_REV_SUBTRACT , DST_ALPHA       , CONST_ONE}       ,
+	{ BLEND_HW5                , OP_REV_SUBTRACT , DST_ALPHA       , DST_ALPHA}       ,
+	{ BLEND_MIX3               , OP_ADD          , INV_CONST_COLOR , CONST_COLOR}     ,
+	{ BLEND_A_MAX | BLEND_MIX1 , OP_REV_SUBTRACT , CONST_COLOR     , CONST_ONE}       ,
+	{ BLEND_MIX1               , OP_REV_SUBTRACT , CONST_COLOR     , CONST_COLOR}     ,
+	{ BLEND_NO_REC             , OP_ADD          , CONST_ONE       , CONST_ZERO}      ,
+	{ BLEND_CD                 , OP_ADD          , CONST_ZERO      , CONST_ONE}       ,
+	{ BLEND_NO_REC             , OP_ADD          , CONST_ZERO      , CONST_ZERO}      ,
+	{ BLEND_NO_REC             , OP_ADD          , CONST_ONE       , CONST_ZERO}      ,
+	{ BLEND_CD                 , OP_ADD          , CONST_ZERO      , CONST_ONE}       ,
+	{ BLEND_NO_REC             , OP_ADD          , CONST_ZERO      , CONST_ZERO}      ,
+	{ BLEND_NO_REC             , OP_ADD          , CONST_ONE       , CONST_ZERO}      ,
+	{ BLEND_CD                 , OP_ADD          , CONST_ZERO      , CONST_ONE}       ,
+	{ BLEND_NO_REC             , OP_ADD          , CONST_ZERO      , CONST_ZERO}      ,
+	{ BLEND_HW4                , OP_ADD          , CONST_ONE       , SRC1_COLOR}      ,
+	{ BLEND_HW1                , OP_ADD          , DST_COLOR       , SRC1_COLOR}      ,
+	{ BLEND_HW2                , OP_ADD          , DST_COLOR       , SRC1_COLOR}      ,
+	{ BLEND_HW6                , OP_ADD          , CONST_ONE       , DST_ALPHA}       ,
+	{ BLEND_HW1                , OP_ADD          , DST_COLOR       , DST_ALPHA}       ,
+	{ BLEND_HW5                , OP_ADD          , CONST_ZERO      , DST_ALPHA}       ,
+	{ BLEND_HW4                , OP_ADD          , CONST_ONE       , CONST_COLOR}     ,
+	{ BLEND_HW1                , OP_ADD          , DST_COLOR       , CONST_COLOR}     ,
+	{ BLEND_HW2                , OP_ADD          , DST_COLOR       , CONST_COLOR}     ,
+	{ BLEND_NO_REC             , OP_ADD          , INV_SRC1_COLOR  , CONST_ZERO}      ,
+	{ BLEND_ACCU               , OP_REV_SUBTRACT , SRC1_COLOR      , CONST_ONE}       ,
+	{ BLEND_NO_REC             , OP_REV_SUBTRACT , SRC1_COLOR      , CONST_ZERO}      ,
+	{ BLEND_HW9                , OP_ADD          , INV_DST_ALPHA   , CONST_ZERO}      ,
+	{ BLEND_HW3                , OP_REV_SUBTRACT , DST_ALPHA       , CONST_ONE}       ,
+	{ 0                        , OP_REV_SUBTRACT , DST_ALPHA       , CONST_ZERO}      ,
+	{ BLEND_NO_REC             , OP_ADD          , INV_CONST_COLOR , CONST_ZERO}      ,
+	{ BLEND_ACCU               , OP_REV_SUBTRACT , CONST_COLOR     , CONST_ONE}       ,
+	{ BLEND_NO_REC             , OP_REV_SUBTRACT , CONST_COLOR     , CONST_ZERO}      ,
+	{ BLEND_HW4                , OP_SUBTRACT     , CONST_ONE       , SRC1_COLOR}      ,
+	{ 0                        , OP_ADD          , CONST_ZERO      , INV_SRC1_COLOR}  ,
+	{ 0                        , OP_SUBTRACT     , CONST_ZERO      , SRC1_COLOR}      ,
+	{ BLEND_HW6                , OP_SUBTRACT     , CONST_ONE       , DST_ALPHA}       ,
+	{ BLEND_HW7                , OP_ADD          , CONST_ZERO      , INV_DST_ALPHA}   ,
+	{ 0                        , OP_SUBTRACT     , CONST_ZERO      , DST_ALPHA}       ,
+	{ BLEND_HW4                , OP_SUBTRACT     , CONST_ONE       , CONST_COLOR}     ,
+	{ 0                        , OP_ADD          , CONST_ZERO      , INV_CONST_COLOR} ,
+	{ 0                        , OP_SUBTRACT     , CONST_ZERO      , CONST_COLOR}     ,
+	{ BLEND_NO_REC             , OP_ADD          , CONST_ONE       , CONST_ZERO}      ,
+	{ BLEND_CD                 , OP_ADD          , CONST_ZERO      , CONST_ONE}       ,
+	{ BLEND_NO_REC             , OP_ADD          , CONST_ZERO      , CONST_ZERO}      ,
+	{ BLEND_NO_REC             , OP_ADD          , CONST_ONE       , CONST_ZERO}      ,
+	{ BLEND_CD                 , OP_ADD          , CONST_ZERO      , CONST_ONE}       ,
+	{ BLEND_NO_REC             , OP_ADD          , CONST_ZERO      , CONST_ZERO}      ,
+	{ BLEND_NO_REC             , OP_ADD          , CONST_ONE       , CONST_ZERO}      ,
+	{ BLEND_CD                 , OP_ADD          , CONST_ZERO      , CONST_ONE}       ,
+	{ BLEND_NO_REC             , OP_ADD          , CONST_ZERO      , CONST_ZERO}      ,
 }};

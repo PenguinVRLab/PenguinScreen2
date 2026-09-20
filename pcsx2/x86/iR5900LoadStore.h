@@ -3,11 +3,6 @@
 
 #pragma once
 
-/*********************************************************
-* Load and store for GPR                                 *
-* Format:  OP rt, offset(base)                           *
-*********************************************************/
-
 namespace R5900 {
 namespace Dynarec {
 namespace OpcodeImpl {
@@ -38,6 +33,6 @@ namespace OpcodeImpl {
 	void recLQC2();
 	void recSQC2();
 
-} // namespace OpcodeImpl
-} // namespace Dynarec
-} // namespace R5900
+}
+}
+}

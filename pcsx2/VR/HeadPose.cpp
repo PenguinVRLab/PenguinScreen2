@@ -9,7 +9,6 @@ namespace VR::HeadPose
 {
 	namespace
 	{
-
 		std::mutex s_mutex;
 		Snapshot s_pose;
 
@@ -18,7 +17,6 @@ namespace VR::HeadPose
 
 	void Publish(const Snapshot& pose)
 	{
-
 		std::lock_guard lock(s_mutex);
 		s_pose = pose;
 		s_pose.frame = ++s_frame;
@@ -26,7 +24,6 @@ namespace VR::HeadPose
 
 	void Invalidate()
 	{
-
 		std::lock_guard lock(s_mutex);
 		s_pose = Snapshot{};
 		s_pose.frame = ++s_frame;
@@ -34,7 +31,6 @@ namespace VR::HeadPose
 
 	Snapshot Get()
 	{
-
 		std::lock_guard lock(s_mutex);
 		return s_pose;
 	}

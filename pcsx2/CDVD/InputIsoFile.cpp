@@ -73,13 +73,10 @@ void InputIsoFile::BeginRead2(uint lsn)
 
 	if (lsn >= m_blocks)
 	{
-		// While this usually indicates that the ISO is corrupted, some games do attempt
-		// to read past the end of the disc, so don't error here.
 		ERROR_LOG("isoFile error: Block index is past the end of file! ({} >= {}).", lsn, m_blocks);
 		return;
 	}
 
-	// same sector?
 	if (lsn == m_read_lsn)
 		return;
 
@@ -91,10 +88,6 @@ void InputIsoFile::BeginRead2(uint lsn)
 
 int InputIsoFile::FinishRead3(u8* dst, uint mode)
 {
-	// Do nothing for out of bounds disc sector reads. It prevents some games
-	// from hanging (All-Star Baseball 2005, Hello Kitty: Roller Rescue,
-	// Hot Wheels: Beat That! (NTSC), Ratchet & Clank 3 (PAL),
-	// Test Drive: Eve of Destruction, etc.).
 	if (m_current_lsn >= m_blocks)
 		return 0;
 
@@ -212,7 +205,6 @@ bool InputIsoFile::Open(std::string srcfile, Error* error)
 	Console.WriteLn(Color_StrongBlue, "isoFile open ok: %s", m_filename.c_str());
 
 	Console.WriteLn("  Image type  = %s", nameFromType(m_type));
-	//Console.WriteLn("  Fileparts   = %u", m_numparts); // Pointless print, it's 1 unless it says otherwise above
 	DevCon.WriteLn("  blocks      = %u", m_blocks);
 	DevCon.WriteLn("  offset      = %d", m_offset);
 	DevCon.WriteLn("  blocksize   = %u", m_blocksize);
@@ -256,12 +248,12 @@ bool InputIsoFile::tryIsoType(u32 size, u32 offset, u32 blockofs)
 	if (ReadSync(buf, 16) < 0)
 		return false;
 
-	if (strncmp((char*)(buf + 25), "CD001", 5)) // Not ISO 9660 compliant
+	if (strncmp((char*)(buf + 25), "CD001", 5))
 		return false;
 
 	m_type = (*(u16*)(buf + 190) == 2048) ? ISOTYPE_CD : ISOTYPE_DVD;
 
-	return true; // We can deal with this.
+	return true;
 }
 
 // based on florin's CDVDbin detection code :)
@@ -273,10 +265,6 @@ bool InputIsoFile::Detect(bool readType)
 {
 	m_type = ISOTYPE_ILLEGAL;
 
-	// First sanity check: no sane CD image has less than 16 sectors, since that's what
-	// we need simply to contain a TOC.  So if the file size is not large enough to
-	// accommodate that, it is NOT a CD image --->
-
 	int sectors = m_reader->GetBlockCount();
 
 	if (sectors < 17)
@@ -285,20 +273,20 @@ bool InputIsoFile::Detect(bool readType)
 	m_blocks = 17;
 
 	if (tryIsoType(2048, 0, 24))
-		return true; // ISO 2048
+		return true;
 	if (tryIsoType(2336, 0, 16))
-		return true; // RAW 2336
+		return true;
 	if (tryIsoType(2352, 0, 0))
-		return true; // RAW 2352
+		return true;
 	if (tryIsoType(2448, 0, 0))
-		return true; // RAWQ 2448
+		return true;
 
 	if (tryIsoType(2048, 150 * 2048, 24))
-		return true; // NERO ISO 2048
+		return true;
 	if (tryIsoType(2352, 150 * 2048, 0))
-		return true; // NERO RAW 2352
+		return true;
 	if (tryIsoType(2448, 150 * 2048, 0))
-		return true; // NERO RAWQ 2448
+		return true;
 
 	m_offset = 0;
 	m_blocksize = CD_FRAMESIZE_RAW;
@@ -308,6 +296,5 @@ bool InputIsoFile::Detect(bool readType)
 	m_reader->SetDataOffset(m_offset);
 	m_reader->SetBlockSize(m_blocksize);
 
-	//BUG: This also detects a memory-card-file as a valid Audio-CD ISO... -avih
 	return true;
 }

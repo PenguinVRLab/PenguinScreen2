@@ -36,11 +36,7 @@ namespace AdapterUtils
 
 	u16 ReadAddressFamily(const sockaddr* unknownAddr);
 
-	// Adapter is a structure that contains ptrs to data stored within AdapterBuffer.
-	// We need to return this buffer the caller can free it after it's finished with Adapter.
-	// AdapterBuffer is a unique_ptr, so will be freed when it leaves scope.
 #ifdef _WIN32
-	// includeHidden sets GAA_FLAG_INCLUDE_ALL_INTERFACES, used by TAPAdapter
 	Adapter* GetAllAdapters(AdapterBuffer* buffer, bool includeHidden = false);
 #elif defined(__POSIX__)
 	Adapter* GetAllAdapters(AdapterBuffer* buffer);
@@ -50,7 +46,6 @@ namespace AdapterUtils
 
 	std::optional<PacketReader::MAC_Address> GetAdapterMAC(const Adapter* adapter);
 	std::optional<PacketReader::IP::IP_Address> GetAdapterIP(const Adapter* adapter);
-	// Mask.
 	std::vector<PacketReader::IP::IP_Address> GetGateways(const Adapter* adapter);
 	std::vector<PacketReader::IP::IP_Address> GetDNS(const Adapter* adapter);
-}; // namespace AdapterUtils
+};

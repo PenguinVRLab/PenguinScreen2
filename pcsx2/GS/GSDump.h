@@ -7,29 +7,10 @@
 #include "GS/GSRegs.h"
 #include "GS/Renderers/SW/GSVertexSW.h"
 
-/*
-
-Dump file format:
-- [0xFFFFFFFF] [Header] [state size/4] [state data/size] [PMODE/0x2000] [id/1] [data/?] .. [id/1] [data/?]
-
-Transfer data (id == 0)
-- [0/1] [path index/1] [size/4] [data/size]
-
-VSync data (id == 1)
-- [1/1] [field/1]
-
-ReadFIFO2 data (id == 2)
-- [2/1] [size/?]
-
-Regs data (id == 3)
-- [PMODE/0x2000]
-
-*/
-
 #pragma pack(push, 4)
 struct GSDumpHeader
 {
-	u32 state_version; ///< Must always be first in struct to safely prevent old PCSX2 versions from crashing.
+	u32 state_version;
 	u32 state_size;
 	u32 serial_offset;
 	u32 serial_size;

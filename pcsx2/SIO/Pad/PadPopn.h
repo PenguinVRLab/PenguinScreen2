@@ -7,13 +7,6 @@
 
 #include <array>
 
-// FIXME: For the brave soul. No one on earth seems to have a (functioning) real Pop'N controller.
-// Those who do don't seem to have a PS2 setup which they can run the pad ID homebrew on.
-// We are going with old information yanked out of Lilypad for this one, which basically means we
-// imitate a DS2, and then three buttons are always pressed down.
-// 
-// If any brave challengers wish to make this cleaner or more slim, track one of these things down
-// and figure out exactly what the inputs are and how they correlate.
 class PadPopn final : public PadBase
 {
 public:
@@ -50,26 +43,22 @@ private:
 
 	u32 buttons = 0xffffffffu;
 	Analogs analogs;
-	// Analog button can be held without changing its state.
-	// We track here if it is currently held down, to avoid flipping in
-	// and out of analog mode every frame.
 	bool analogPressed = false;
 	bool commandStage = false;
 	u32 responseBytes = 0;
 
-	// Since we reordered the buttons for better UI, we need to remap them here.
 	static constexpr std::array<u8, Inputs::LENGTH> bitmaskMapping = {{
-		5, // PAD_YELLOW_LEFT
-		12, // PAD_YELLOW_RIGHT
-		6, // PAD_BLUE_LEFT
-		7, // PAD_BLUE_RIGHT
-		4, // PAD_WHITE_LEFT
-		0, // PAD_WHITE_RIGHT
-		3, // PAD_GREEN_LEFT
-		1, // PAD_GREEN_RIGHT
-		2, // PAD_RED
-		11, // PAD_START
-		8, // PAD_SELECT
+		5,
+		12,
+		6,
+		7,
+		4,
+		0,
+		3,
+		1,
+		2,
+		11,
+		8,
 	}};
 
 	void ConfigLog();

@@ -41,7 +41,6 @@ bool BlockdumpFileReader::Open2(std::string filename, Error* error)
 		return false;
 	}
 
-	//m_flags = ISOFLAGS_BLOCKDUMP_V2;
 	if (std::fread(&m_dblocksize, sizeof(m_dblocksize), 1, m_file) != 1 ||
 		std::fread(&m_blocks, sizeof(m_blocks), 1, m_file) != 1 ||
 		std::fread(&m_blockofs, sizeof(m_blockofs), 1, m_file) != 1)
@@ -102,15 +101,11 @@ int BlockdumpFileReader::ReadChunk(void* dst, s64 blockID)
 {
 	pxAssert(blockID >= 0 && blockID < static_cast<s64>(m_blocks));
 	const u32 lsn = static_cast<u32>(blockID);
-	//	Console.WriteLn("_isoReadBlockD %u, blocksize=%u, blockofs=%u\n", static_cast<u32>(blockID), iso->blocksize, iso->blockofs);
 
 	for (int i = 0; i < m_dtablesize; ++i)
 	{
 		if (m_dtable[i] != lsn)
 			continue;
-
-			// We store the LSN (u32) along with each block inside of blockdumps, so the
-			// seek position ends up being based on (m_blocksize + 4) instead of just m_blocksize.
 
 #ifdef PCSX2_DEBUG
 		u32 check_lsn = 0;
@@ -128,7 +123,6 @@ int BlockdumpFileReader::ReadChunk(void* dst, s64 blockID)
 			return m_blocksize;
 	}
 
-	// Either we hit a sector that's not in the dump, and needed, or the threaded reader is just reading ahead.
 	return -1;
 }
 

@@ -16,7 +16,7 @@ namespace
 		jpeg_error_mgr err;
 		jmp_buf jbuf;
 	};
-} // namespace
+}
 
 static bool HandleJPEGError(JPEGErrorHandler* eh)
 {
@@ -58,7 +58,6 @@ bool CompressCamJPEG(std::vector<u8>* buffer, const u8* image, u32 width, u32 he
 	cb.mgr.empty_output_buffer = [](j_compress_ptr cinfo) -> boolean {
 		MemCallback* cb = (MemCallback*)cinfo->dest;
 
-		// double size
 		cb->buffer_used = cb->buffer->size();
 		cb->buffer->resize(cb->buffer->size() * 2);
 		cb->mgr.next_output_byte = cb->buffer->data() + cb->buffer_used;
@@ -68,7 +67,6 @@ bool CompressCamJPEG(std::vector<u8>* buffer, const u8* image, u32 width, u32 he
 	cb.mgr.term_destination = [](j_compress_ptr cinfo) {
 		MemCallback* cb = (MemCallback*)cinfo->dest;
 
-		// get final size
 		cb->buffer->resize(cb->buffer->size() - cb->mgr.free_in_buffer);
 	};
 
@@ -85,7 +83,6 @@ bool CompressCamJPEG(std::vector<u8>* buffer, const u8* image, u32 width, u32 he
 	jpeg_set_defaults(&info);
 	jpeg_set_quality(&info, quality, TRUE);
 
-	// H2V1
 	info.comp_info[0].h_samp_factor = 2;
 	info.comp_info[0].v_samp_factor = 1;
 	info.comp_info[1].h_samp_factor = 1;

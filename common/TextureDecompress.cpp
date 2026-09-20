@@ -69,21 +69,6 @@ static float Int8ToFloat_UNORM (const uint8_t input)
 	return (float)input / 255.0f;
 }
 
-/**
-Decompress a BC 16x3 index block stored as
-h g f e
-d c b a
-p o n m
-l k j i
-
-Bits packed as
-
-| h | g | f | e | d | c | b | a | // Entry
-|765 432 107 654 321 076 543 210| // Bit
-|0000000000111111111112222222222| // Byte
-
-into 16 8-bit indices.
-*/
 static void Decompress16x3bitIndices (const uint8_t* packed, uint8_t* unpacked)
 {
 	uint32_t tmp, block, i;
@@ -91,12 +76,10 @@ static void Decompress16x3bitIndices (const uint8_t* packed, uint8_t* unpacked)
 	for (block = 0; block < 2; ++block) {
 		tmp = 0;
 
-		// Read three bytes
 		for (i = 0; i < 3; ++i) {
 			tmp |= ((uint32_t)packed [i]) << (i * 8);
 		}
 
-		// Unpack 8x3 bit from last 3 byte block
 		for (i = 0; i < 8; ++i) {
 			unpacked [i] = (tmp >> (i*3)) & 0x7;
 		}
@@ -196,15 +179,6 @@ static void DecompressBlockBC1Internal (const uint8_t* block,
 	}
 }
 
-/*
-Decompresses one block of a BC1 (DXT1) texture and stores the resulting pixels at the appropriate offset in 'image'.
-
-uint32_t x:						x-coordinate of the first pixel in the block.
-uint32_t y:						y-coordinate of the first pixel in the block.
-uint32_t stride:				stride of a scanline in bytes.
-const uint8_t* blockStorage:	pointer to the block to decompress.
-uint32_t* image:				pointer to image where the decompressed pixel data should be stored.
-*/
 void DecompressBlockBC1 (uint32_t x, uint32_t y, uint32_t stride,
 	const uint8_t* blockStorage, unsigned char* image)
 {
@@ -219,15 +193,6 @@ void DecompressBlockBC1 (uint32_t x, uint32_t y, uint32_t stride,
 		image + x * sizeof (uint32_t) + (y * stride), stride, const_alpha);
 }
 
-/*
-Decompresses one block of a BC3 (DXT5) texture and stores the resulting pixels at the appropriate offset in 'image'.
-
-uint32_t x:						x-coordinate of the first pixel in the block.
-uint32_t y:						y-coordinate of the first pixel in the block.
-uint32_t stride:				stride of a scanline in bytes.
-const uint8_t *blockStorage:	pointer to the block to decompress.
-uint32_t *image:				pointer to image where the decompressed pixel data should be stored.
-*/
 void DecompressBlockBC3 (uint32_t x, uint32_t y, uint32_t stride,
 	const uint8_t* blockStorage, unsigned char* image)
 {
@@ -316,15 +281,6 @@ void DecompressBlockBC3 (uint32_t x, uint32_t y, uint32_t stride,
 	}
 }
 
-/*
-Decompresses one block of a BC2 (DXT3) texture and stores the resulting pixels at the appropriate offset in 'image'.
-
-uint32_t x:						x-coordinate of the first pixel in the block.
-uint32_t y:						y-coordinate of the first pixel in the block.
-uint32_t stride:				stride of a scanline in bytes.
-const uint8_t *blockStorage:	pointer to the block to decompress.
-uint32_t *image:				pointer to image where the decompressed pixel data should be stored.
-*/
 void DecompressBlockBC2 (uint32_t x, uint32_t y, uint32_t stride,
 	const uint8_t* blockStorage, unsigned char* image)
 {
@@ -365,15 +321,6 @@ static void DecompressBlockBC4Internal (
 	}
 }
 
-/*
-Decompresses one block of a BC4 texture and stores the resulting pixels at the appropriate offset in 'image'.
-
-uint32_t x:						x-coordinate of the first pixel in the block.
-uint32_t y:						y-coordinate of the first pixel in the block.
-uint32_t stride:				stride of a scanline in bytes.
-const uint8_t* blockStorage:	pointer to the block to decompress.
-float* image:					pointer to image where the decompressed pixel data should be stored.
-*/
 void DecompressBlockBC4 (uint32_t x, uint32_t y, uint32_t stride, enum BC4Mode mode,
 	const uint8_t* blockStorage, unsigned char* image)
 {
@@ -388,21 +335,19 @@ void DecompressBlockBC4 (uint32_t x, uint32_t y, uint32_t stride, enum BC4Mode m
 		colorTable [1] = r1;
 
 		if (r0 > r1) {
-			// 6 interpolated color values
-			colorTable [2] = (6*r0 + 1*r1)/7.0f; // bit code 010
-			colorTable [3] = (5*r0 + 2*r1)/7.0f; // bit code 011
-			colorTable [4] = (4*r0 + 3*r1)/7.0f; // bit code 100
-			colorTable [5] = (3*r0 + 4*r1)/7.0f; // bit code 101
-			colorTable [6] = (2*r0 + 5*r1)/7.0f; // bit code 110
-			colorTable [7] = (1*r0 + 6*r1)/7.0f; // bit code 111
+			colorTable [2] = (6*r0 + 1*r1)/7.0f;
+			colorTable [3] = (5*r0 + 2*r1)/7.0f;
+			colorTable [4] = (4*r0 + 3*r1)/7.0f;
+			colorTable [5] = (3*r0 + 4*r1)/7.0f;
+			colorTable [6] = (2*r0 + 5*r1)/7.0f;
+			colorTable [7] = (1*r0 + 6*r1)/7.0f;
 		} else {
-			// 4 interpolated color values
-			colorTable [2] = (4*r0 + 1*r1)/5.0f; // bit code 010
-			colorTable [3] = (3*r0 + 2*r1)/5.0f; // bit code 011
-			colorTable [4] = (2*r0 + 3*r1)/5.0f; // bit code 100
-			colorTable [5] = (1*r0 + 4*r1)/5.0f; // bit code 101
-			colorTable [6] = 0.0f;               // bit code 110
-			colorTable [7] = 1.0f;               // bit code 111
+			colorTable [2] = (4*r0 + 1*r1)/5.0f;
+			colorTable [3] = (3*r0 + 2*r1)/5.0f;
+			colorTable [4] = (2*r0 + 3*r1)/5.0f;
+			colorTable [5] = (1*r0 + 4*r1)/5.0f;
+			colorTable [6] = 0.0f;
+			colorTable [7] = 1.0f;
 		}
 	} else if (mode == BC4_SNORM) {
 		r0 = Int8ToFloat_SNORM (blockStorage [0]);
@@ -412,21 +357,19 @@ void DecompressBlockBC4 (uint32_t x, uint32_t y, uint32_t stride, enum BC4Mode m
 		colorTable [1] = r1;
 
 		if (r0 > r1) {
-		  // 6 interpolated color values
-		  colorTable [2] = (6*r0 + 1*r1)/7.0f; // bit code 010
-		  colorTable [3] = (5*r0 + 2*r1)/7.0f; // bit code 011
-		  colorTable [4] = (4*r0 + 3*r1)/7.0f; // bit code 100
-		  colorTable [5] = (3*r0 + 4*r1)/7.0f; // bit code 101
-		  colorTable [6] = (2*r0 + 5*r1)/7.0f; // bit code 110
-		  colorTable [7] = (1*r0 + 6*r1)/7.0f; // bit code 111
+		  colorTable [2] = (6*r0 + 1*r1)/7.0f;
+		  colorTable [3] = (5*r0 + 2*r1)/7.0f;
+		  colorTable [4] = (4*r0 + 3*r1)/7.0f;
+		  colorTable [5] = (3*r0 + 4*r1)/7.0f;
+		  colorTable [6] = (2*r0 + 5*r1)/7.0f;
+		  colorTable [7] = (1*r0 + 6*r1)/7.0f;
 		} else {
-		  // 4 interpolated color values
-		  colorTable [2] = (4*r0 + 1*r1)/5.0f; // bit code 010
-		  colorTable [3] = (3*r0 + 2*r1)/5.0f; // bit code 011
-		  colorTable [4] = (2*r0 + 3*r1)/5.0f; // bit code 100
-		  colorTable [5] = (1*r0 + 4*r1)/5.0f; // bit code 101
-		  colorTable [6] = -1.0f;              // bit code 110
-		  colorTable [7] =  1.0f;              // bit code 111
+		  colorTable [2] = (4*r0 + 1*r1)/5.0f;
+		  colorTable [3] = (3*r0 + 2*r1)/5.0f;
+		  colorTable [4] = (2*r0 + 3*r1)/5.0f;
+		  colorTable [5] = (1*r0 + 4*r1)/5.0f;
+		  colorTable [6] = -1.0f;
+		  colorTable [7] =  1.0f;
 		}
 	}
 
@@ -435,20 +378,9 @@ void DecompressBlockBC4 (uint32_t x, uint32_t y, uint32_t stride, enum BC4Mode m
 }
 
 
-/*
-Decompresses one block of a BC5 texture and stores the resulting pixels at the appropriate offset in 'image'.
-
-uint32_t x:						x-coordinate of the first pixel in the block.
-uint32_t y:						y-coordinate of the first pixel in the block.
-uint32_t stride:				stride of a scanline in bytes.
-const uint8_t* blockStorage:	pointer to the block to decompress.
-float* image:					pointer to image where the decompressed pixel data should be stored.
-*/
 void DecompressBlockBC5 (uint32_t x, uint32_t y, uint32_t stride, enum BC5Mode mode,
 	const uint8_t* blockStorage, unsigned char* image)
 {
-	// We decompress the two channels separately and interleave them when
-	// writing to the output
 	float c0 [16];
 	float c1 [16];
 
@@ -564,9 +496,6 @@ inline void insert_weight_zero(uint64_t& index_bits, uint32_t bits_per_index, ui
 	index_bits = ((index_bits & HIGH_BIT_MASK) << 1) | (index_bits & LOW_BIT_MASK);
 }
 
-// BC7 mode 0-7 decompression.
-// Instead of one monster routine to unpack all the BC7 modes, we're lumping the 3 subset, 2 subset, 1 subset, and dual plane modes together into simple shared routines.
-
 static inline uint32_t bc7_dequant(uint32_t val, uint32_t pbit, uint32_t val_bits) { assert(val < (1U << val_bits)); assert(pbit < 2); assert(val_bits >= 4 && val_bits <= 8); const uint32_t total_bits = val_bits + 1; val = (val << 1) | pbit; val <<= (8 - total_bits); val |= (val >> total_bits); assert(val <= 255); return val; }
 static inline uint32_t bc7_dequant(uint32_t val, uint32_t val_bits) { assert(val < (1U << val_bits)); assert(val_bits >= 4 && val_bits <= 8); val <<= (8 - val_bits); val |= (val >> val_bits); assert(val <= 255); return val; }
 
@@ -601,10 +530,8 @@ static inline void bc7_interp2_sse2(const color_rgba* endpoint_pair, color_rgba*
 
 	__m128i endpoints_16_swapped = _mm_shuffle_epi32(endpoints_16, _MM_SHUFFLE(1, 0, 3, 2));
 
-	// Interpolated colors will be color 1 and 2
 	__m128i interpolated_colors = bc7_interp_sse2(endpoints_16, endpoints_16_swapped, _mm_set1_epi16(21), _mm_set1_epi16(43));
 
-	// all_colors will be 1, 2, 0, 3
 	__m128i all_colors = _mm_packus_epi16(interpolated_colors, endpoints_16);
 
 	all_colors = _mm_shuffle_epi32(all_colors, _MM_SHUFFLE(3, 1, 0, 2));
@@ -635,7 +562,6 @@ static inline void bc7_interp3_sse2(const color_rgba* endpoint_pair, color_rgba*
 
 bool unpack_bc7_mode0_2(uint32_t mode, const uint64_t* data_chunks, color_rgba* pPixels)
 {
-	//const uint32_t SUBSETS = 3;
 	const uint32_t ENDPOINTS = 6;
 	const uint32_t COMPS = 3;
 	const uint32_t WEIGHT_BITS = (mode == 0) ? 3 : 2;
@@ -733,7 +659,6 @@ bool unpack_bc7_mode0_2(uint32_t mode, const uint64_t* data_chunks, color_rgba* 
 
 bool unpack_bc7_mode1_3_7(uint32_t mode, const uint64_t* data_chunks, color_rgba* pPixels)
 {
-	//const uint32_t SUBSETS = 2;
 	const uint32_t ENDPOINTS = 4;
 	const uint32_t COMPS = (mode == 7) ? 4 : 3;
 	const uint32_t WEIGHT_BITS = (mode == 1) ? 3 : 2;
@@ -839,7 +764,6 @@ bool unpack_bc7_mode1_3_7(uint32_t mode, const uint64_t* data_chunks, color_rgba
 bool unpack_bc7_mode4_5(uint32_t mode, const uint64_t* data_chunks, color_rgba* pPixels)
 {
 	const uint32_t ENDPOINTS = 2;
-	//const uint32_t COMPS = 4;
 	const uint32_t WEIGHT_BITS = 2;
 	const uint32_t WEIGHT_MASK = (1 << WEIGHT_BITS) - 1;
 	const uint32_t A_WEIGHT_BITS = (mode == 4) ? 3 : 2;
@@ -848,8 +772,6 @@ bool unpack_bc7_mode4_5(uint32_t mode, const uint64_t* data_chunks, color_rgba* 
 	const uint32_t ENDPOINT_MASK = (1 << ENDPOINT_BITS) - 1;
 	const uint32_t A_ENDPOINT_BITS = (mode == 4) ? 6 : 8;
 	const uint32_t A_ENDPOINT_MASK = (1 << A_ENDPOINT_BITS) - 1;
-	//const uint32_t WEIGHT_VALS = 1 << WEIGHT_BITS;
-	//const uint32_t A_WEIGHT_VALS = 1 << A_WEIGHT_BITS;
 
 	const uint64_t low_chunk = data_chunks[0];
 	const uint64_t high_chunk = data_chunks[1];
@@ -1105,7 +1027,7 @@ bool unpack_bc7(const void *pBlock, color_rgba *pPixels)
 	return false;
 }
 
-} // namespace bc7decomp
+}
 
 /*
 ------------------------------------------------------------------------------

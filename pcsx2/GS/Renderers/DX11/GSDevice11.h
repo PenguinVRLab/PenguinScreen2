@@ -143,10 +143,10 @@ private:
 	GSTexture* m_null_texture;
 
 	D3D_FEATURE_LEVEL m_feature_level = D3D_FEATURE_LEVEL_10_0;
-	u32 m_vb_pos = 0; // bytes
-	u32 m_ib_pos = 0; // indices/sizeof(u16)
-	u32 m_structured_vb_pos = 0; // bytes
-	u32 m_expand_ib_vs_pos = 0; // indices/sizeof(u16)
+	u32 m_vb_pos = 0;
+	u32 m_ib_pos = 0;
+	u32 m_structured_vb_pos = 0;
+	u32 m_expand_ib_vs_pos = 0;
 
 	bool m_allow_tearing_supported = false;
 	bool m_using_flip_model_swap_chain = true;
@@ -285,8 +285,6 @@ private:
 		GSVector4 vs_cb_uniforms[4];
 	} m_imgui;
 
-	// Shaders...
-
 	std::unordered_map<u32, GSVertexShader11> m_vs;
 	wil::com_ptr_nothrow<ID3D11Buffer> m_vs_cb;
 	wil::com_ptr_nothrow<ID3D11Buffer> m_vs_pc;
@@ -306,7 +304,7 @@ private:
 	std::string m_tfx_source;
 
 protected:
-	using GSDevice::DoStretchRect; // Suppress overloaded virtual function warning
+	using GSDevice::DoStretchRect;
 	virtual void DoStretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect,
 		ShaderConvertSelector shader, Filter filter) override;
 public:
@@ -342,13 +340,11 @@ public:
 	bool SetGPUPipelineStatisticsEnabled(bool enabled) override;
 	GPUPipelineStatistics GetAndResetAccumulatedGPUPipelineStatistics() override;
 
-	// Helpers and utility draws.
 	void DrawPrimitive();
 	void DrawIndexedPrimitive();
 	void DrawIndexedPrimitive(int offset, int count);
 	void DrawIndexedPrimitiveVSExpand(int offset, int count, bool vs_indexing, int vs_indexing_expansion);
 
-	// Main GS primitive draws.
 	void Draw(const GSHWDrawConfig& config);
 	void Draw(const GSHWDrawConfig& config, int offset, int count);
 

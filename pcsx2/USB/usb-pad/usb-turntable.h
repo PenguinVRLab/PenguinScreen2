@@ -62,7 +62,6 @@ namespace usb_pad
 
 		struct
 		{
-			// intermediate state, resolved at query time
 			s16 crossfader_left;
 			s16 crossfader_right;
 			s16 effectsknob_left;
@@ -76,9 +75,9 @@ namespace usb_pad
 			bool hat_up : 1;
 			bool hat_down : 1;
 
-			u8 hatswitch; // direction
-			u32 buttons; // active high
-			bool euphoria_led_state; // 1 = on, 0 = off
+			u8 hatswitch;
+			u32 buttons;
+			bool euphoria_led_state;
 		} data = {};
 	};
 	class DJTurntableDevice final : public DeviceProxy
@@ -96,4 +95,4 @@ namespace usb_pad
 		USBDevice* CreateDevice(SettingsInterface& si, u32 port, u32 subtype) const override;
 	};
 
-} // namespace usb_pad
+}

@@ -20,7 +20,6 @@ namespace PacketReader
 		virtual ~Payload() {}
 	};
 
-	//Data owned by class
 	class PayloadData : public Payload
 	{
 	public:
@@ -63,7 +62,6 @@ namespace PacketReader
 		}
 	};
 
-	//Pointer to bytes not owned by class
 	class PayloadPtr : public Payload
 	{
 	public:
@@ -85,8 +83,6 @@ namespace PacketReader
 		}
 		virtual void WriteBytes(u8* buffer, int* offset)
 		{
-			//If buffer & data point to the same location
-			//Then no copy is needed
 			if (data == buffer)
 				return;
 
@@ -101,7 +97,6 @@ namespace PacketReader
 		}
 	};
 
-	//Pointer to bytes not owned by class, used by *Editor classes only
 	class PayloadPtrEditor : public Payload
 	{
 	public:
@@ -132,4 +127,4 @@ namespace PacketReader
 			return ret;
 		}
 	};
-} // namespace PacketReader
+}

@@ -15,15 +15,13 @@ cbuffer cb0
 ** http://irrlicht.sourceforge.net/phpBB2/viewtopic.php?t=21057
 */
 
-// For all settings: 1.0 = 100% 0.5=50% 1.5 = 150% 
-float4 ContrastSaturationBrightness(float4 color) // Ported to HLSL
+float4 ContrastSaturationBrightness(float4 color)
 {
 	float brt = params.x;
 	float con = params.y;
 	float sat = params.z;
 	float gam = params.w;
 	
-	// Increase or decrease these values to adjust r, g and b color channels separately
 	const float AvgLumR = 0.5;
 	const float AvgLumG = 0.5;
 	const float AvgLumB = 0.5;

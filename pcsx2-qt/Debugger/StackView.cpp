@@ -75,7 +75,7 @@ void StackView::onDoubleClick(const QModelIndex& index)
 			goToInMemoryView(m_model->data(index, Qt::UserRole).toUInt(), true);
 			break;
 		}
-		default: // Default to PC
+		default:
 		{
 			QModelIndex pc_index = m_model->index(index.row(), StackModel::StackColumns::PC);
 			goToInDisassembler(m_model->data(pc_index, Qt::UserRole).toUInt(), true);

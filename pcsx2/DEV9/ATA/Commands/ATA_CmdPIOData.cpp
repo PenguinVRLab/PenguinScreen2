@@ -6,7 +6,6 @@
 
 void ATA::DRQCmdPIODataToHost(u8* buff, int buffLen, int buffIndex, int size, bool sendIRQ)
 {
-	//Data in PIO ready to be sent
 	pioPtr = 0;
 	pioEnd = size >> 1;
 
@@ -15,7 +14,6 @@ void ATA::DRQCmdPIODataToHost(u8* buff, int buffLen, int buffIndex, int size, bo
 	regStatus &= ~ATA_STAT_BUSY;
 	regStatus |= ATA_STAT_DRQ;
 
-	// Only set pendingInterrupt if nIEN is cleared
 	if (regControlEnableIRQ && sendIRQ)
 	{
 		pendingInterrupt = true;
@@ -26,35 +24,29 @@ void ATA::PostCmdPIODataToHost()
 {
 	pioPtr = 0;
 	pioEnd = 0;
-	//AnyMoreData?
 	if (pioDRQEndTransferFunc != nullptr)
 	{
 		regStatus |= ATA_STAT_BUSY;
 		regStatus &= ~ATA_STAT_DRQ;
-		//Call cmd to retrive more data
 		(this->*pioDRQEndTransferFunc)();
 	}
 	else
 		regStatus &= ~ATA_STAT_DRQ;
 }
 
-//FromHost
 u16 ATA::ATAreadPIO()
 {
-	//DevCon.WriteLn("DEV9: *ATA_R_DATA 16bit read, pio_count %i,  pio_size %i", pioPtr, pioEnd);
 	if (pioPtr < pioEnd)
 	{
 		const u16 ret = *(u16*)&pioBuffer[pioPtr * 2];
-		//DevCon.WriteLn("DEV9: *ATA_R_DATA returned value is  %x", ret);
 		pioPtr++;
-		if (pioPtr >= pioEnd) //Fnished transfer (Changed from MegaDev9)
+		if (pioPtr >= pioEnd)
 			PostCmdPIODataToHost();
 
 		return ret;
 	}
 	return 0xFF;
 }
-//ATAwritePIO
 
 void ATA::HDD_IdentifyDevice()
 {
@@ -62,14 +54,11 @@ void ATA::HDD_IdentifyDevice()
 		return;
 	DevCon.WriteLn("DEV9: HddidentifyDevice");
 
-	//IDE transfer start
 	CreateHDDinfo(hddImageSize / 512);
 
 	pioDRQEndTransferFunc = nullptr;
 	DRQCmdPIODataToHost(identifyData, 256 * 2, 0, 256 * 2, true);
 }
-
-//Read Buffer
 
 void ATA::HDD_ReadMultiple(bool isLBA48)
 {
@@ -85,7 +74,6 @@ void ATA::HDD_ReadSectors(bool isLBA48)
 
 void ATA::HDD_ReadPIO(bool isLBA48)
 {
-	//Log_Info("HDD_ReadPIO");
 	if (!PreCmd())
 		return;
 
@@ -114,18 +102,15 @@ void ATA::HDD_ReadPIO(bool isLBA48)
 
 void ATA::HDD_ReadPIOS2()
 {
-	//Log_Info("HDD_ReadPIO Stage 2");
 	pioDRQEndTransferFunc = &ATA::HDD_ReadPIOEndBlock;
 	DRQCmdPIODataToHost(readBuffer, readBufferLen, 0, 256 * 2, true);
 }
 
 void ATA::HDD_ReadPIOEndBlock()
 {
-	//Log_Info("HDD_ReadPIO End Block");
 	rdTransferred += 512;
 	if (rdTransferred >= nsector * 512)
 	{
-		//Log_Info("HDD_ReadPIO Done");
 		HDD_SetErrorAtTransferEnd();
 		regStatus &= ~ATA_STAT_BUSY;
 		pioDRQEndTransferFunc = nullptr;
@@ -140,10 +125,3 @@ void ATA::HDD_ReadPIOEndBlock()
 	}
 }
 
-//Write Buffer
-
-//Write Multiple
-
-//Write Sectors
-
-//Download Microcode (Used for FW updates)

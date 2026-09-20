@@ -9,7 +9,6 @@
 
 Gif_Unit gifUnit;
 
-// Returns true on stalling SIGNAL
 bool Gif_HandlerAD(u8* pMem)
 {
 	u32 reg = pMem[8];
@@ -19,10 +18,10 @@ bool Gif_HandlerAD(u8* pMem)
 		vif1.transfer_registers[reg - GIF_A_D_REG_BITBLTBUF] = *(u64*)pMem;
 	}
 	else if (reg == GIF_A_D_REG_TRXDIR)
-	{ // TRXDIR
+	{
 		if ((pMem[0] & 3) == 1)
-		{                // local -> host
-			u8 bpp = 32; // Onimusha does TRXDIR without BLTDIVIDE first, assume 32bit
+		{
+			u8 bpp = 32;
 			switch (vif1.BITBLTBUF.SPSM & 7)
 			{
 				case 0:
@@ -37,26 +36,24 @@ bool Gif_HandlerAD(u8* pMem)
 				case 3:
 					bpp = 8;
 					break;
-				default: // 4 is 4 bit but this is forbidden
+				default:
 					Console.Error("Illegal format for GS upload: SPSM=0%02o", vif1.BITBLTBUF.SPSM);
 					break;
 			}
-			// qwords, rounded down; any extra bits are lost
-			// games must take care to ensure transfer rectangles are exact multiples of a qword
 			vif1.GSLastDownloadSize = vif1.TRXREG.RRW * vif1.TRXREG.RRH * bpp >> 7;
 		}
 	}
 	else if (reg == GIF_A_D_REG_SIGNAL)
-	{ // SIGNAL
+	{
 		if (CSRreg.SIGNAL)
-		{ // Time to ignore all subsequent drawing operations.
+		{
 			GUNIT_WARN(Color_Orange, "GIF Handler - Stalling SIGNAL");
 			if (!gifUnit.gsSIGNAL.queued)
 			{
 				gifUnit.gsSIGNAL.queued = true;
 				gifUnit.gsSIGNAL.data[0] = data[0];
 				gifUnit.gsSIGNAL.data[1] = data[1];
-				return true; // Stalling SIGNAL
+				return true;
 			}
 		}
 		else
@@ -69,31 +66,29 @@ bool Gif_HandlerAD(u8* pMem)
 		}
 	}
 	else if (reg == GIF_A_D_REG_FINISH)
-	{ // FINISH
+	{
 		GUNIT_WARN("GIF Handler - FINISH");
 		gifUnit.gsFINISH.gsFINISHFired = false;
 		gifUnit.gsFINISH.gsFINISHPending = true;
 	}
 	else if (reg == GIF_A_D_REG_LABEL)
-	{ // LABEL
+	{
 		GUNIT_WARN("GIF Handler - LABEL");
 		GSSIGLBLID.LBLID = (GSSIGLBLID.LBLID & ~data[1]) | (data[0] & data[1]);
 	}
 	else if (reg >= 0x63 && reg != 0x7f)
 	{
-		//DevCon.Warning("GIF Handler - Write to unknown register! [reg=%x]", reg);
 	}
 	return false;
 }
 
 void Gif_HandlerAD_MTVU(u8* pMem)
 {
-	// Note: Atomic communication is with MTVU.cpp Get_GSChanges
 	const u8 reg = pMem[8] & 0x7f;
 	const u32* data = (u32*)pMem;
 
 	if (reg == GIF_A_D_REG_SIGNAL)
-	{ // SIGNAL
+	{
 		GUNIT_WARN("GIF Handler - SIGNAL");
 		if (vu1Thread.mtvuInterrupts.load(std::memory_order_acquire) & VU_Thread::InterruptFlagSignal)
 			Console.Error("GIF Handler MTVU - Double SIGNAL Not Handled");
@@ -101,16 +96,15 @@ void Gif_HandlerAD_MTVU(u8* pMem)
 		vu1Thread.mtvuInterrupts.fetch_or(VU_Thread::InterruptFlagSignal, std::memory_order_release);
 	}
 	else if (reg == GIF_A_D_REG_FINISH)
-	{ // FINISH
+	{
 		GUNIT_WARN("GIF Handler - FINISH");
 		u32 old = vu1Thread.mtvuInterrupts.fetch_or(VU_Thread::InterruptFlagFinish, std::memory_order_relaxed);
 		if (old & VU_Thread::InterruptFlagFinish)
 			Console.Error("GIF Handler MTVU - Double FINISH Not Handled");
 	}
 	else if (reg == GIF_A_D_REG_LABEL)
-	{ // LABEL
+	{
 		GUNIT_WARN("GIF Handler - LABEL");
-		// It's okay to coalesce label updates
 		u32 labelData = data[0];
 		u32 labelMsk = data[1];
 		u64 existing = 0;
@@ -131,7 +125,6 @@ void Gif_HandlerAD_MTVU(u8* pMem)
 	}
 }
 
-// Returns true if pcsx2 needed to process the packet...
 bool Gif_HandlerAD_Debug(u8* pMem)
 {
 	const u8 reg = pMem[8] & 0x7f;
@@ -195,13 +188,13 @@ bool SaveStateBase::gifPathFreeze(u32 path)
 	pxAssertMsg(!gifPath.GetPendingGSPackets(), "MTVU GS Pack Queue should be 0!");
 
 	if (!gifPath.isMTVU())
-	{ // FixMe: savestate freeze bug (Gust games) with MTVU enabled
+	{
 		if (IsSaving())
-		{                            // Move all the buffered data to the start of buffer
-			gifPath.RealignPacket(); // May add readAmount which we need to clear on load
+		{
+			gifPath.RealignPacket();
 		}
 	}
-	u8* bufferPtr = gifPath.buffer; // Backup current buffer ptr
+	u8* bufferPtr = gifPath.buffer;
 	Freeze(gifPath.mtvu.fakePackets);
 	FreezeMem(&gifPath, sizeof(gifPath) - sizeof(gifPath.mtvu));
 	FreezeMem(bufferPtr, gifPath.curSize);
@@ -236,7 +229,6 @@ bool SaveStateBase::gifFreeze()
 		if (mtvuMode != THREAD_VU1)
 		{
 			DevCon.Warning("gifUnit: MTVU Mode has switched between save/load state");
-			// ToDo: gifUnit.SwitchMTVU(mtvuMode);
 		}
 	}
 

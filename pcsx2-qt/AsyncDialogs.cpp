@@ -223,7 +223,6 @@ static void openAsyncMessageBox(QWidget* parent,
 	QMessageBox::StandardButton default_button,
 	std::function<void(QMessageBox::StandardButton)> callback)
 {
-	// Don't support the fallback for Qt 4.
 	pxAssert(!(default_button && !(buttons & default_button)));
 
 	QMessageBox* message_box = new QMessageBox(icon, title, text, QMessageBox::NoButton, parent);

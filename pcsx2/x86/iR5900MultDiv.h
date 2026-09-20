@@ -3,11 +3,6 @@
 
 #pragma once
 
-/*********************************************************
-* Register mult/div & Register trap logic                *
-* Format:  OP rs, rt                                     *
-*********************************************************/
-
 namespace R5900 {
 namespace Dynarec {
 namespace OpcodeImpl {
@@ -17,6 +12,6 @@ namespace OpcodeImpl {
 	void recDIV();
 	void recDIVU();
 
-} // namespace OpcodeImpl
-} // namespace Dynarec
-} // namespace R5900
+}
+}
+}

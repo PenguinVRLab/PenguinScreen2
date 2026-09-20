@@ -90,4 +90,4 @@ namespace GLState
 
 		std::fill(std::begin(tex_unit), std::end(tex_unit), 0);
 	}
-} // namespace GLState
+}

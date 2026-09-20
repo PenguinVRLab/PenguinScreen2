@@ -101,7 +101,6 @@ public:
 	}
 	void ManualEvict()
 	{
-		// evict if we went over
 		while (m_items.size() > m_max_capacity)
 			Evict(m_items.size() - m_max_capacity);
 	}

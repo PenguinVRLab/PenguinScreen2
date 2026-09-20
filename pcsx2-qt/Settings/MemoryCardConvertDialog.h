@@ -57,11 +57,10 @@ private:
 	static constexpr u32 FLAGS = FILESYSTEM_FIND_RECURSIVE | FILESYSTEM_FIND_FOLDERS | FILESYSTEM_FIND_FILES;
 };
 
-// Card capacities computed from freshly formatted superblocks.
 namespace CardCapacity
 {
-	static constexpr size_t _8_MB = 0x1f40 * 512 * 2; //(0x1fc7 - 0x29) * 2 * 512;
-	static constexpr size_t _16_MB = 0x3e80 * 512 * 2; //(0x3fa7 - 0x49) * 2 * 512;
-	static constexpr size_t _32_MB = 0x7d00 * 512 * 2; //(0x7f67 - 0x89) * 2 * 512;
-	static constexpr size_t _64_MB = 0xfde8 * 512 * 2; //(0xfee7 - 0x0109) * 2 * 512;
-} // namespace CardCapacity
+	static constexpr size_t _8_MB = 0x1f40 * 512 * 2;
+	static constexpr size_t _16_MB = 0x3e80 * 512 * 2;
+	static constexpr size_t _32_MB = 0x7d00 * 512 * 2;
+	static constexpr size_t _64_MB = 0xfde8 * 512 * 2;
+}

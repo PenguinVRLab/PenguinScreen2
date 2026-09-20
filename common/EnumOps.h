@@ -5,7 +5,6 @@
 
 #include <type_traits>
 
-// Template function for casting enumerations to their underlying type
 template <typename Enumeration>
 std::underlying_type_t<Enumeration> enum_cast(Enumeration E)
 {
@@ -14,11 +13,9 @@ std::underlying_type_t<Enumeration> enum_cast(Enumeration E)
 
 namespace detail
 {
-	/// Marks an enum as supporting boolean operators
 	template <typename T>
 	struct enum_is_flags : public std::false_type {};
 
-	/// For return types that should be convertible to bool
 	template <typename Enum>
 	struct enum_bool_helper
 	{

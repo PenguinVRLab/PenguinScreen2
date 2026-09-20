@@ -13,10 +13,6 @@
 
 class GSHwHack;
 
-// Only for debugging. Reads back every target to local memory after drawing, effectively
-// disabling caching between draws.
-//#define DISABLE_HW_TEXTURE_CACHE
-
 class GSTextureCache
 {
 public:
@@ -37,7 +33,6 @@ public:
 		u32 b_bp_start_synced = b_bp;
 		u32 b_bp_end_synced = b_bp_end;
 
-		// Check for wrapping
 		if (a_bp_end > GS_MAX_BLOCKS && b_bp_end < a_bp)
 		{
 			b_bp_start_synced += GS_MAX_BLOCKS;
@@ -71,29 +66,21 @@ public:
 		s32 GetWidth() const { return (GetMaxX() - GetMinX()); }
 		s32 GetHeight() const { return (GetMaxY() - GetMinY()); }
 
-		/// Returns true if the area of the region exceeds the TW/TH size (i.e. "fixed tex0").
 		bool IsFixedTEX0(GIFRegTEX0 TEX0) const;
 		bool IsFixedTEX0(int tw, int th) const;
 		bool IsFixedTEX0W(int tw) const;
 		bool IsFixedTEX0H(int th) const;
 
-		/// Returns the size that the region occupies.
 		GSVector2i GetSize(int tw, int th) const;
 
-		/// Returns the rectangle relative to the texture base pointer that the region occupies.
 		GSVector4i GetRect(int tw, int th) const;
 
-		/// When TW/TH is less than the extents covered by the region ("fixed tex0"), returns the offset
-		/// which should be applied to any coordinates to relocate them to the actual region.
 		GSVector4i GetOffset(int tw, int th) const;
 
-		/// Reduces the range of texels relative to the specified mipmap level.
 		SourceRegion AdjustForMipmap(u32 level) const;
 
-		/// Adjusts the texture base pointer and block width relative to the region.
 		void AdjustTEX0(GIFRegTEX0* TEX0) const;
 
-		/// Creates a new source region based on the CLAMP register.
 		static SourceRegion Create(GIFRegTEX0 TEX0, GIFRegCLAMP CLAMP);
 	};
 
@@ -151,8 +138,8 @@ public:
 		GSVector2i m_unscaled_size = {};
 		float m_scale = 0.0f;
 		int m_age = 0;
-		u32 m_end_block = MAX_BP; // Hint of the surface area.
-		bool m_32_bits_fmt = false; // Allow to detect the casting of 32 bits as 16 bits texture
+		u32 m_end_block = MAX_BP;
+		bool m_32_bits_fmt = false;
 		bool m_was_dst_matched = false;
 		bool m_shared_texture = false;
 
@@ -163,11 +150,8 @@ public:
 		__fi GSVector4i GetUnscaledRect() const { return GSVector4i::loadh(m_unscaled_size); }
 		__fi float GetScale() const { return m_scale; }
 
-		/// Returns true if the target wraps around the end of GS memory.
 		bool Wraps() const { return (m_end_block < m_TEX0.TBP0); }
 
-		/// Returns the end block for the target, but doesn't wrap at 0x3FFF.
-		/// Can be used for overlap tests.
 		u32 UnwrappedEndBlock() const { return (m_end_block + (Wraps() ? GS_MAX_BLOCKS : 0)); }
 
 		bool Inside(u32 bp, u32 bw, u32 psm, const GSVector4i& rect) const;
@@ -195,11 +179,9 @@ public:
 		__fi std::pair<u8, u8> GetAlphaMinMax() const { return m_alpha_minmax; }
 		std::pair<u8, u8> GetAlphaMinMax(u8 min_index, u8 max_index) const;
 
-		// Disable copy constructor and copy operator
 		Palette(const Palette&) = delete;
 		Palette& operator=(const Palette&) = delete;
 
-		// Disable move constructor and move operator
 		Palette(const Palette&&) = delete;
 		Palette& operator=(const Palette&&) = delete;
 
@@ -212,13 +194,11 @@ public:
 
 	struct PaletteKeyHash
 	{
-		// Calculate hash
 		u64 operator()(const PaletteKey& key) const;
 	};
 
 	struct PaletteKeyEqual
 	{
-		// Compare pal value and clut contents
 		bool operator()(const PaletteKey& lhs, const PaletteKey& rhs) const;
 	};
 
@@ -238,8 +218,6 @@ public:
 		int m_alpha_min = 0;
 		bool m_alpha_range = false;
 
-		// Valid alpha means "we have rendered to the alpha channel of this target".
-		// A false value means that the alpha in local memory is still valid/up-to-date.
 		bool m_valid_alpha_low = false;
 		bool m_valid_alpha_high = false;
 		bool m_valid_rgb = false;
@@ -276,22 +254,12 @@ public:
 
 		void Update(bool cannot_scale = false);
 
-		/// Updates the target, if the dirty area intersects with the specified rectangle.
 		void UpdateIfDirtyIntersects(const GSVector4i& rc);
 
-		/// Updates the valid alpha flag, based on PSM and fbmsk.
 		void UpdateValidChannels(u32 psm, u32 fbmsk);
 
-		/// Resizes target texture, DOES NOT RESCALE.
 		bool ResizeTexture(int new_unscaled_width, int new_unscaled_height, bool recycle_old = true, bool require_new_rect = false, GSVector4i new_rect = GSVector4i::zero(), bool keep_old = false);
 
-		/// PCSX2-VR (M4.3): swap this target's texture for a 2-layer stereo one (contents
-		/// broadcast to both layers). Draws to a 2-layer target run through a multiview
-		/// render pass with per-eye displacement — this is THE stereo classification act;
-		/// everything downstream derives structurally from the texture's layer count.
-		/// Called at scanout (display-chain classification, gated on device support +
-		/// stereo enabled) and at draw time to keep an rt/ds attachment pair
-		/// layer-consistent. No-op when already 2-layer; false only on alloc failure.
 		bool PromoteToStereo();
 
 
@@ -316,7 +284,7 @@ public:
 	public:
 		HashCacheEntry* m_from_hash_cache = nullptr;
 		std::shared_ptr<Palette> m_palette_obj;
-		std::unique_ptr<u32[]> m_valid; // each u32 bits map to the 32 blocks of that page
+		std::unique_ptr<u32[]> m_valid;
 		GSTexture* m_palette = nullptr;
 		GSVector4i m_valid_rect = {};
 		GSVector2i m_lod = {};
@@ -329,15 +297,10 @@ public:
 		bool m_valid_alpha_minmax = false;
 		std::pair<u8, u8> m_alpha_minmax = {0u, 255u};
 		std::vector<GSVector2i>* m_p2t = nullptr;
-		// Keep a trace of the target origin. There is no guarantee that pointer will
-		// still be valid on future. However it ought to be good when the source is created
-		// so it can be used to access un-converted data for the current draw call.
 		Target* m_from_target = nullptr;
-		GIFRegTEX0 m_from_target_TEX0 = {}; // TEX0 of the target texture, if any, else equal to texture TEX0
-		GIFRegTEX0 m_layer_TEX0[7] = {}; // Detect already loaded value
+		GIFRegTEX0 m_from_target_TEX0 = {};
+		GIFRegTEX0 m_layer_TEX0[7] = {};
 		HashType m_layer_hash[7] = {};
-		// Keep a GSTextureCache::SourceMap::m_map iterator to allow fast erase
-		// Deliberately not initialized to save cycles.
 		std::array<u16, GS_MAX_PAGES> m_erase_it;
 		GSOffset::PageLooper m_pages;
 
@@ -365,21 +328,17 @@ public:
 	class PaletteMap
 	{
 	private:
-		static const u16 MAX_CACHED_PALETES = 4096; // Max size of each map.
+		static const u16 MAX_CACHED_PALETES = 4096;
 
-		// Array of 2 maps, the first for 64B palettes and the second for 1024B palettes.
-		// Each map stores the key PaletteKey (clut copy, pal value) pointing to the relevant shared pointer to Palette object.
-		// There is one PaletteKey per Palette, and the hashing and comparison of PaletteKey is done with custom operators PaletteKeyHash and PaletteKeyEqual.
 		std::array<std::unordered_map<PaletteKey, std::shared_ptr<Palette>, PaletteKeyHash, PaletteKeyEqual>, 2> m_maps;
 
 	public:
 		PaletteMap();
 
-		// Retrieves a shared pointer to a valid Palette from m_maps or creates a new one adding it to the data structure
 		std::shared_ptr<Palette> LookupPalette(u16 pal, bool need_gs_texture);
 		std::shared_ptr<Palette> LookupPalette(const u32* clut, u16 pal, bool need_gs_texture);
 
-		void Clear(); // Clears m_maps, thus deletes Palette objects
+		void Clear();
 	};
 
 	class SourceMap
@@ -424,13 +383,13 @@ public:
 
 	struct SurfaceOffsetKey
 	{
-		std::array<SurfaceOffsetKeyElem, 2> elems; // A and B elems.
+		std::array<SurfaceOffsetKeyElem, 2> elems;
 	};
 
 	struct SurfaceOffset
 	{
 		bool is_valid;
-		GSVector4i b2a_offset; // B to A offset in B coords.
+		GSVector4i b2a_offset;
 	};
 
 	struct SurfaceOffsetKeyHash
@@ -463,14 +422,7 @@ protected:
 	constexpr static size_t S_SURFACE_OFFSET_CACHE_MAX_SIZE = std::numeric_limits<u16>::max();
 	std::unordered_map<SurfaceOffsetKey, SurfaceOffset, SurfaceOffsetKeyHash, SurfaceOffsetKeyEqual> m_surface_offset_cache;
 
-	Source* m_temporary_source = nullptr; // invalidated after the draw
-	// PCSX2-VR (ISS-039 use-after-free guard): the map-resident Source the CURRENT draw is
-	// holding by raw pointer (GSRendererHW::DrawPrims' `tex`). Anything that frees a Source
-	// while this is set has just dangled that pointer — DrawPrims then reads
-	// `tex->m_texture` into m_conf.tex, which is how a freed GSTextureVK* reaches
-	// PSSetShaderResource. SourceMap::RemoveAt reports/asserts on the match and counts it;
-	// m_in_stereo_promotion separates promotion-caused kills from any other path so the
-	// census is unambiguous. Purely diagnostic — it never changes what gets deleted.
+	Source* m_temporary_source = nullptr;
 	Source* m_draw_inflight_source = nullptr;
 	u32 m_draw_inflight_source_kills = 0;
 	u32 m_draw_inflight_source_kills_promo = 0;
@@ -479,7 +431,7 @@ protected:
 	u32 m_promo_inflight_dangerous = 0;
 	u32 m_promo_retargeted = 0;
 	bool m_in_stereo_promotion = false;
-	GSTexture* m_temporary_z = nullptr; // invalidated after the draw
+	GSTexture* m_temporary_z = nullptr;
 	TempZAddress m_temporary_z_info;
 
 	std::unique_ptr<GSDownloadTexture> m_color_download_texture;
@@ -491,14 +443,10 @@ protected:
 	bool PreloadTarget(GIFRegTEX0 TEX0, const GSVector2i& size, const GSVector2i& valid_size, bool is_frame,
 		bool preload, bool preserve_target, const GSVector4i draw_rect, Target* dst, GSTextureCache::Source* src = nullptr);
 
-	// Returns scaled texture size.
 	static GSVector2i ScaleRenderTargetSize(const GSVector2i& sz, float scale);
 
-	/// Expands a target when the block pointer for a display framebuffer is within another target, but the read offset
-	/// plus the height is larger than the current size of the target.
 	void ScaleTargetForDisplay(Target* t, const GIFRegTEX0& dispfb, int real_w, int real_h);
 
-	/// Resizes the download texture if needed.
 	bool PrepareDownloadTexture(u32 width, u32 height, GSTexture::Format format, std::unique_ptr<GSDownloadTexture>* tex);
 
 	HashCacheEntry* LookupHashCache(const GIFRegTEX0& TEX0, const GIFRegTEXA& TEXA, bool& paltex, const u32* clut, const GSVector2i* lod, SourceRegion region);
@@ -508,12 +456,8 @@ protected:
 	static void PreloadTexture(const GIFRegTEX0& TEX0, const GIFRegTEXA& TEXA, SourceRegion region, GSLocalMemory& mem, bool paltex, GSTexture* tex, u32 level, std::pair<u8, u8>* alpha_minmax);
 	static HashType HashTexture(const GIFRegTEX0& TEX0, const GIFRegTEXA& TEXA, SourceRegion region);
 
-	// TODO: virtual void Write(Source* s, const GSVector4i& r) = 0;
-	// TODO: virtual void Write(Target* t, const GSVector4i& r) = 0;
-
 	Source* CreateMergedSource(GIFRegTEX0 TEX0, GIFRegTEXA TEXA, SourceRegion region, float scale);
 
-	// Used in target lookup functions to determine new sizes of targets.
 	struct RescaleHelper
 	{
 		RescaleHelper(const GSVector2i& size, float scale);
@@ -572,11 +516,6 @@ public:
 
 	Target* LookupDisplayTarget(GIFRegTEX0 TEX0, const GSVector2i& size, float scale, bool is_feedback);
 
-	/// PCSX2-VR (M4.3): display-chain base pointers, remembered at scanout. Games that
-	/// clear/recreate their frame buffers every frame (NFL 2K5) get fresh MONO targets on
-	/// each flip — promoting only at scanout would leave every frame's draws mono. The
-	/// draw path consults this set and promotes known display-chain targets BEFORE the
-	/// frame's draws instead. Cleared with the targets in RemoveAll.
 	__fi bool IsDisplayChainBP(u32 bp) const { return m_vr_display_bps.find(bp) != m_vr_display_bps.end(); }
 	__fi void NoteDisplayChainBP(u32 bp) { m_vr_display_bps.insert(bp); }
 
@@ -589,7 +528,6 @@ public:
 		bool preload = GSConfig.PreloadFrameWithGSData, bool preserve_rgb = true, bool preserve_alpha = true,
 		const GSVector4i draw_rc = GSVector4i::zero(), bool is_shuffle = false, bool possible_clear = false, bool preserve_scale = false, GSTextureCache::Source* src = nullptr, GSTextureCache::Target* ds = nullptr, int offset = -1);
 
-	/// Looks up a target in the cache, and only returns it if the BP/BW match exactly.
 	Target* GetExactTarget(u32 BP, u32 BW, int type, u32 end_bp);
 	Target* GetTargetWithSharedBits(u32 BP, u32 PSM) const;
 	Target* FindOverlappingTarget(GSTextureCache::Target* target) const;
@@ -606,25 +544,17 @@ public:
 	void InvalidateVideoMem(const GSOffset& off, const GSVector4i& r, bool target = true);
 	void InvalidateLocalMem(const GSOffset& off, const GSVector4i& r, bool full_flush = false);
 
-	/// Removes any sources which point to the specified target.
 	void InvalidateSourcesFromTarget(const Target* t);
 
-	/// PCSX2-VR (ISS-039): re-points every Source aliasing a target's texture at its
-	/// replacement after Target::PromoteToStereo swaps in a 2-layer one. Destroys nothing, so
-	/// a raw Source* held across the promotion by the draw in progress stays valid.
 	void RetargetSourcesAfterPromotion(const Target* t, GSTexture* old_tex, GSTexture* new_tex);
 
-	/// Removes any sources which point to the same address as a new target.
 	void ReplaceSourceTexture(Source* s, GSTexture* new_texture, float new_scale, const GSVector2i& new_unscaled_size,
 		HashCacheEntry* hc_entry, bool new_texture_is_shared);
 
-	/// Converts single color value to depth using the specified shader expression.
 	static float ConvertColorToDepth(u32 c, u32 src_bpp, u32 dst_bpp);
 
-	/// Converts single depth value to colour using the specified shader expression.
 	static u32 ConvertDepthToColor(float d, u32 dst_bpp);
 
-	/// Copies RGB channels from depth target to a color target.
 	bool CopyRGBFromDepthToColor(Target* dst, Target* depth_src);
 
 	bool Move(u32 SBP, u32 SBW, u32 SPSM, int sx, int sy, u32 DBP, u32 DBW, u32 DPSM, int dx, int dy, int w, int h);
@@ -646,14 +576,9 @@ public:
 	SurfaceOffset ComputeSurfaceOffset(const uint32_t bp, const uint32_t bw, const uint32_t psm, const GSVector4i& r, const Target* t);
 	SurfaceOffset ComputeSurfaceOffset(const SurfaceOffsetKey& sok);
 
-	/// Invalidates a temporary source, a partial copy only created from the current RT/DS for the current draw.
 	void InvalidateTemporarySource();
 
-	/// PCSX2-VR (ISS-039): register/clear the Source the current draw holds by raw pointer,
-	/// so SourceMap::RemoveAt can prove whether the free-under-a-live-draw window is taken.
 	__fi void SetDrawInFlightSource(Source* s) { m_draw_inflight_source = s; }
-	/// PCSX2-VR (ISS-039): fault injection that frees the in-flight source on purpose, to
-	/// prove SRCGUARD can fire. Opt-in, one shot. Returns true if it did the deed.
 	bool ForceKillInFlightSourceForSelfTest();
 	__fi u32 GetDrawInFlightSourceKills() const { return m_draw_inflight_source_kills; }
 	__fi u32 GetDrawInFlightSourceKillsFromPromotion() const { return m_draw_inflight_source_kills_promo; }
@@ -662,10 +587,8 @@ public:
 	TempZAddress GetTemporaryZInfo();
 	void SetTemporaryZInfo(u32 address, u32 offset, u32 rt_offset);
 	void SetTemporaryZInfo(TempZAddress address_info);
-	/// Invalidates a temporary Z, a partial copy only created from the current DS for the current draw when Z is not offset but RT is.
 	void InvalidateTemporaryZ();
 
-	/// Injects a texture into the hash cache, by using GSTexture::Swap(), transitively applying to all sources. Ownership of tex is transferred.
 	void InjectHashCacheTexture(const HashCacheKey& key, GSTexture* tex, const std::pair<u8, u8>& alpha_minmax);
 };
 

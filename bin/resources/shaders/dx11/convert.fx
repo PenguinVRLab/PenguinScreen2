@@ -28,7 +28,7 @@ VS_OUTPUT vs_main(VS_INPUT input)
 	return output;
 }
 
-#endif // VERTEX_SHADER
+#endif
 
 #if defined(PIXEL_SHADER)
 
@@ -218,7 +218,6 @@ PS_OUTPUT ps_filter_transparency(PS_INPUT input)
 #if defined(__ps_convert_rgb5a1_16bits__)
 OUTPUT_TYPE ps_convert_rgb5a1_16bits(PS_INPUT input) : OUTPUT_SV
 {
-	// Need to be careful with precision here, it can break games like Spider-Man 3 and Dogs Life
 	return rgb5a1_to_uint(sample_c(input.t));
 }
 #endif
@@ -226,28 +225,28 @@ OUTPUT_TYPE ps_convert_rgb5a1_16bits(PS_INPUT input) : OUTPUT_SV
 #if defined(__ps_datm1__)
 void ps_datm1(PS_INPUT input)
 {
-	clip(sample_c(input.t).a - 127.5f / 255); // >= 0x80 pass
+	clip(sample_c(input.t).a - 127.5f / 255);
 }
 #endif
 
 #if defined(__ps_datm0__)
 void ps_datm0(PS_INPUT input)
 {
-	clip(127.5f / 255 - sample_c(input.t).a); // < 0x80 pass (== 0x80 should not pass)
+	clip(127.5f / 255 - sample_c(input.t).a);
 }
 #endif
 
 #if defined(__ps_datm1_rta_correction__)
 void ps_datm1_rta_correction(PS_INPUT input)
 {
-	clip(sample_c(input.t).a - 254.5f / 255); // >= 0x80 pass
+	clip(sample_c(input.t).a - 254.5f / 255);
 }
 #endif
 
 #if defined(__ps_datm0_rta_correction__)
 void ps_datm0_rta_correction(PS_INPUT input)
 {
-	clip(254.5f / 255 - sample_c(input.t).a); // < 0x80 pass (== 0x80 should not pass)
+	clip(254.5f / 255 - sample_c(input.t).a);
 }
 #endif
 
@@ -294,7 +293,6 @@ PS_OUTPUT ps_colclip_resolve(PS_INPUT input)
 #if defined(__ps_convert_depth32_32bits__)
 OUTPUT_TYPE ps_convert_depth32_32bits(PS_INPUT input) : OUTPUT_SV
 {
-	// Convert a depth texture into a 32 bits UINT texture
 	return depth_to_uint(sample_c(input.t));
 }
 #endif
@@ -302,7 +300,6 @@ OUTPUT_TYPE ps_convert_depth32_32bits(PS_INPUT input) : OUTPUT_SV
 #if defined(__ps_convert_depth32_rgba8__)
 OUTPUT_TYPE ps_convert_depth32_rgba8(PS_INPUT input) : OUTPUT_SV
 {
-	// Convert a depth texture into a RGBA color texture
 	return depth32_to_rgba8(sample_c(input.t));
 }
 #endif
@@ -310,7 +307,6 @@ OUTPUT_TYPE ps_convert_depth32_rgba8(PS_INPUT input) : OUTPUT_SV
 #if defined(__ps_convert_depth16_rgb5a1__)
 OUTPUT_TYPE ps_convert_depth16_rgb5a1(PS_INPUT input) : OUTPUT_SV
 {
-	// Convert depth (only 16 lsb) into a RGB5A1 color texture
 	return depth16_to_rgb5a1(sample_c(input.t));
 }
 #endif
@@ -318,7 +314,6 @@ OUTPUT_TYPE ps_convert_depth16_rgb5a1(PS_INPUT input) : OUTPUT_SV
 #if defined(__ps_convert_depth32_depth24__)
 OUTPUT_TYPE ps_convert_depth32_depth24(PS_INPUT input) : OUTPUT_SV
 {
-	// Truncates depth value to 24bits
 	return depth32_to_depth24(sample_c(input.t));
 }
 #endif
@@ -339,7 +334,6 @@ OUTPUT_TYPE ps_convert_depth32_depth24(PS_INPUT input) : OUTPUT_SV
 #if defined(__ps_convert_rgba8_depth32__)
 OUTPUT_TYPE ps_convert_rgba8_depth32(PS_INPUT input) : OUTPUT_SV
 {
-	// Convert an RGBA texture into a float depth texture
 #if HAS_BILN
 	SAMPLE_RGBA_DEPTH_BILN(rgba8_to_depth32);
 #else
@@ -351,8 +345,6 @@ OUTPUT_TYPE ps_convert_rgba8_depth32(PS_INPUT input) : OUTPUT_SV
 #if defined(__ps_convert_rgba8_depth24__)
 OUTPUT_TYPE ps_convert_rgba8_depth24(PS_INPUT input) : OUTPUT_SV
 {
-	// Same as above but without the alpha channel (24 bits Z)
-	// Convert an RGBA texture into a float depth texture
 #if HAS_BILN
 	SAMPLE_RGBA_DEPTH_BILN(rgba8_to_depth24);
 #else
@@ -364,8 +356,6 @@ OUTPUT_TYPE ps_convert_rgba8_depth24(PS_INPUT input) : OUTPUT_SV
 #if defined(__ps_convert_rgba8_depth16__)
 OUTPUT_TYPE ps_convert_rgba8_depth16(PS_INPUT input) : OUTPUT_SV
 {
-	// Same as above but without the A/B channels (16 bits Z)
-	// Convert an RGBA texture into a float depth texture
 #if HAS_BILN
 	SAMPLE_RGBA_DEPTH_BILN(rgba8_to_depth16);
 #else
@@ -377,7 +367,6 @@ OUTPUT_TYPE ps_convert_rgba8_depth16(PS_INPUT input) : OUTPUT_SV
 #if defined(__ps_convert_rgb5a1_depth16__)
 OUTPUT_TYPE ps_convert_rgb5a1_depth16(PS_INPUT input) : OUTPUT_SV
 {
-	// Convert an RGB5A1 (saved as RGBA8) color to a 16 bit Z
 #if HAS_BILN
 	SAMPLE_RGBA_DEPTH_BILN(rgb5a1_to_depth16);
 #else
@@ -391,18 +380,8 @@ PS_OUTPUT ps_convert_rgb5a1_8i(PS_INPUT input)
 {
 	PS_OUTPUT output;
 
-	// Convert a RGB5A1 texture into a 8 bits packed texture
-	// Input column: 16x2 RGB5A1 pixels
-	// 0: 16 RGBA
-	// 1: 16 RGBA
-	// Output column: 16x4 Index pixels
-	// 0: 16 R5G2
-	// 1: 16 R5G2
-	// 2: 16 G2B5A1
-	// 3: 16 G2B5A1
 	uint2 pos = uint2(input.p.xy);
 
-	// Collapse separate R G B A areas into their base pixel
 	uint2 column = (pos & ~uint2(0u, 3u)) / uint2(1u, 2u);
 	uint2 subcolumn = (pos & uint2(0u, 1u));
 	column.x -= (column.x / 128u) * 64u;
@@ -410,12 +389,11 @@ PS_OUTPUT ps_convert_rgb5a1_8i(PS_INPUT input)
 	
 	uint PSM = uint(DOFFSET);
 	
-	// Deal with swizzling differences
-	if ((PSM & 0x8u) != 0u) // PSMCT16S
+	if ((PSM & 0x8u) != 0u)
 	{
 		if ((pos.x & 32u) != 0u)
 		{
-			column.y += 32u; // 4 columns high times 4 to get bottom 4 blocks
+			column.y += 32u;
 			column.x &= ~32u;
 		}
 		
@@ -430,13 +408,13 @@ PS_OUTPUT ps_convert_rgb5a1_8i(PS_INPUT input)
 			column.y ^= 8u;
 		}
 		
-		if ((PSM & 0x30u) != 0u) // PSMZ16S - Untested but hopefully ok if anything uses it.
+		if ((PSM & 0x30u) != 0u)
 		{
 			column.x ^= 32u;
 			column.y ^= 16u;
 		}
 	}
-	else // PSMCT16
+	else
 	{
 		if ((pos.y & 32u) != 0u)
 		{
@@ -447,7 +425,7 @@ PS_OUTPUT ps_convert_rgb5a1_8i(PS_INPUT input)
 		if ((pos.x & 96u) != 0u)
 		{
 			uint multi = (pos.x & 96u) / 32u;
-			column.y += 16u * multi; // 4 columns high times 4 to get bottom 4 blocks
+			column.y += 16u * multi;
 			column.x -= (pos.x & 96u);
 		}
 		
@@ -457,7 +435,7 @@ PS_OUTPUT ps_convert_rgb5a1_8i(PS_INPUT input)
 			column.y ^= 8u;
 		}
 		
-		if ((PSM & 0x30u) != 0u) // PSMZ16 - Untested but hopefully ok if anything uses it.
+		if ((PSM & 0x30u) != 0u)
 		{
 			column.x ^= 32u;
 			column.y ^= 32u;
@@ -466,7 +444,6 @@ PS_OUTPUT ps_convert_rgb5a1_8i(PS_INPUT input)
 	
 	uint2 coord = column | subcolumn;
 
-	// Compensate for potentially differing page pitch.
 	uint SBW = uint(EMODA);
 	uint DBW = uint(EMODC);
 	uint2 block_xy = coord / uint2(64u, 64u);
@@ -474,11 +451,10 @@ PS_OUTPUT ps_convert_rgb5a1_8i(PS_INPUT input)
 	uint2 block_offset = uint2((block_num % (SBW / 64u)) * 64u, (block_num / (SBW / 64u)) * 64u);
 	coord = (coord % uint2(64u, 64u)) + block_offset;
 
-	// Apply offset to cols 1 and 2
 	uint is_col23 = pos.y & 4u;
 	uint is_col13 = pos.y & 2u;
 	uint is_col12 = is_col23 ^ (is_col13 << 1);
-	coord.x ^= is_col12; // If cols 1 or 2, flip bit 3 of x
+	coord.x ^= is_col12;
 
 	float ScaleFactor = BGColor.x;
 	if (floor(ScaleFactor) != ScaleFactor)
@@ -512,23 +488,12 @@ PS_OUTPUT ps_convert_rgba_8i(PS_INPUT input)
 {
 	PS_OUTPUT output;
 
-	// Convert a RGBA texture into a 8 bits packed texture
-	// Input column: 8x2 RGBA pixels
-	// 0: 8 RGBA
-	// 1: 8 RGBA
-	// Output column: 16x4 Index pixels
-	// 0: 8 R | 8 B
-	// 1: 8 R | 8 B
-	// 2: 8 G | 8 A
-	// 3: 8 G | 8 A
 	uint2 pos = uint2(input.p.xy);
 
-	// Collapse separate R G B A areas into their base pixel
 	uint2 block = (pos & ~uint2(15u, 3u)) >> 1;
 	uint2 subblock = pos & uint2(7u, 1u);
 	uint2 coord = block | subblock;
 
-	// Compensate for potentially differing page pitch.
 	uint SBW = uint(EMODA);
 	uint DBW = uint(EMODC);
 	uint2 block_xy = coord / uint2(64, 32);
@@ -536,11 +501,10 @@ PS_OUTPUT ps_convert_rgba_8i(PS_INPUT input)
 	uint2 block_offset = uint2((block_num % (SBW / 64)) * 64, (block_num / (SBW / 64)) * 32);
 	coord = (coord % uint2(64, 32)) + block_offset;
 
-	// Apply offset to cols 1 and 2
 	uint is_col23 = pos.y & 4u;
 	uint is_col13 = pos.y & 2u;
 	uint is_col12 = is_col23 ^ (is_col13 << 1);
-	coord.x ^= is_col12; // If cols 1 or 2, flip bit 3 of x
+	coord.x ^= is_col12;
 
 	float ScaleFactor = BGColor.x;
 	if (floor(ScaleFactor) != ScaleFactor)
@@ -551,7 +515,7 @@ PS_OUTPUT ps_convert_rgba_8i(PS_INPUT input)
 	float4 pixel = Texture.Load(int3(int2(coord), 0));
 	float2 sel0 = (pos.y & 2u) == 0u ? pixel.rb : pixel.ga;
 	float  sel1 = (pos.x & 8u) == 0u ? sel0.x : sel0.y;
-	output.o = (float4)(sel1); // Divide by something here?
+	output.o = (float4)(sel1);
 	return output;
 }
 #endif
@@ -559,11 +523,9 @@ PS_OUTPUT ps_convert_rgba_8i(PS_INPUT input)
 #if defined(__ps_convert_clut_4__)
 PS_OUTPUT ps_convert_clut_4(PS_INPUT input)
 {
-	// Borrowing the YUV constant buffer.
 	float scale = BGColor.x;
 	uint2 offset = uint2(uint(EMODA), uint(EMODC)) + uint(DOFFSET);
 
-	// CLUT4 is easy, just two rows of 8x8.
 	uint index = uint(input.p.x);
 	uint2 pos = uint2(index % 8u, index / 8u);
 
@@ -581,8 +543,6 @@ PS_OUTPUT ps_convert_clut_8(PS_INPUT input)
 	uint2 offset = uint2(uint(EMODA), uint(EMODC));
 	uint index = min(uint(input.p.x) + uint(DOFFSET), 255u);
 
-	// CLUT is arranged into 8 groups of 16x2, with the top-right and bottom-left quadrants swapped.
-	// This can probably be done better..
 	uint subgroup = (index / 8u) % 4u;
 	uint2 pos;
 	pos.x = (index % 8u) + ((subgroup >= 2u) ? 8u : 0u);
@@ -649,7 +609,7 @@ PS_OUTPUT ps_yuv(PS_INPUT input)
 float ps_primid_image_init_0(PS_INPUT input) : SV_Target
 {
 	float c;
-	if ((127.5f / 255.0f) < sample_c(input.t).a) // < 0x80 pass (== 0x80 should not pass)
+	if ((127.5f / 255.0f) < sample_c(input.t).a)
 		c = float(-1);
 	else
 		c = float(0x7FFFFFFF);
@@ -661,7 +621,7 @@ float ps_primid_image_init_0(PS_INPUT input) : SV_Target
 float ps_primid_image_init_1(PS_INPUT input) : SV_Target
 {
 	float c;
-	if (sample_c(input.t).a < (127.5f / 255.0f)) // >= 0x80 pass
+	if (sample_c(input.t).a < (127.5f / 255.0f))
 		c = float(-1);
 	else
 		c = float(0x7FFFFFFF);
@@ -673,7 +633,7 @@ float ps_primid_image_init_1(PS_INPUT input) : SV_Target
 float ps_primid_image_init_2(PS_INPUT input) : SV_Target
 {
 	float c;
-	if ((254.5f / 255.0f) < sample_c(input.t).a) // < 0x80 pass (== 0x80 should not pass)
+	if ((254.5f / 255.0f) < sample_c(input.t).a)
 		c = float(-1);
 	else
 		c = float(0x7FFFFFFF);
@@ -685,7 +645,7 @@ float ps_primid_image_init_2(PS_INPUT input) : SV_Target
 float ps_primid_image_init_3(PS_INPUT input) : SV_Target
 {
 	float c;
-	if (sample_c(input.t).a < (254.5f / 255.0f)) // >= 0x80 pass
+	if (sample_c(input.t).a < (254.5f / 255.0f))
 		c = float(-1);
 	else
 		c = float(0x7FFFFFFF);
@@ -693,4 +653,4 @@ float ps_primid_image_init_3(PS_INPUT input) : SV_Target
 }
 #endif
 
-#endif // PIXEL_SHADER
+#endif

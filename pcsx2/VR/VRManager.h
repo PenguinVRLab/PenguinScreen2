@@ -9,7 +9,6 @@ class GSTexture;
 
 namespace VR
 {
-
 	std::string GetRuntimeInfoReport();
 
 	void UpdateSettings();

@@ -4,20 +4,9 @@
 #include "Common.h"
 #include "COP0.h"
 
-// Updates the CPU's mode of operation (either, Kernel, Supervisor, or User modes).
-// Currently the different modes are not implemented.
-// Given this function is called so much, it's commented out for now. (rama)
 __ri void cpuUpdateOperationMode()
 {
 
-	//u32 value = cpuRegs.CP0.n.Status.val;
-
-	//if (value & 0x06 ||
-	//	(value & 0x18) == 0) { // Kernel Mode (KSU = 0 | EXL = 1 | ERL = 1)*/
-	//	memSetKernelMode();	// Kernel memory always
-	//} else { // User Mode
-	//	memSetUserMode();
-	//}
 }
 
 void WriteCP0Status(u32 value)
@@ -29,73 +18,44 @@ void WriteCP0Status(u32 value)
 
 void WriteCP0Config(u32 value)
 {
-	// Protect the read-only ICacheSize (IC) and DataCacheSize (DC) bits
 	cpuRegs.CP0.n.Config = value & ~0xFC0;
 	cpuRegs.CP0.n.Config |= 0x440;
 }
-
-//////////////////////////////////////////////////////////////////////////////////////////
-// Performance Counters Update Stuff!
-//
-// Note regarding updates of PERF and TIMR registers: never allow increment to be 0.
-// That happens when a game loads the MFC0 twice in the same recompiled block (before the
-// cpuRegs.cycles update), and can cause games to lock up since it's an unexpected result.
-//
-// PERF Overflow exceptions:  The exception is raised when the MSB of the Performance
-// Counter Register is set.  I'm assuming the exception continues to re-raise until the
-// app clears the bit manually (needs testing).
-//
-// PERF Events:
-//  * Event 0 on PCR 0 is unused (counter disable)
-//  * Event 16 is usable as a specific counter disable bit (since CTE affects both counters)
-//  * Events 17-31 are reserved (act as counter disable)
-//
-// Most event mode aren't supported, and issue a warning and do a standard instruction
-// count.  But only mode 1 (instruction counter) has been found to be used by games thus far.
-//
 
 static __fi bool PERF_ShouldCountEvent(uint evt)
 {
 	switch (evt)
 	{
-			// This is a rough table of actions for various PCR modes.  Some of these
-			// can be implemented more accurately later.  Others (WBBs in particular)
-			// probably cannot without some severe complications.
 
-			// left sides are PCR0 / right sides are PCR1
-
-		case 1: // cpu cycle counter.
-		case 2: // single/dual instruction issued
-		case 3: // Branch issued / Branch mispredicated
+		case 1:
+		case 2:
+		case 3:
 			return true;
 
-		case 4: // BTAC/TLB miss
-		case 5: // ITLB/DTLB miss
-		case 6: // Data/Instruction cache miss
+		case 4:
+		case 5:
+		case 6:
 			return false;
 
-		case 7: // Access to DTLB / WBB single request fail
-		case 8: // Non-blocking load / WBB burst request fail
+		case 7:
+		case 8:
 		case 9:
 		case 10:
 			return false;
 
-		case 11: // CPU address bus busy / CPU data bus busy
+		case 11:
 			return false;
 
-		case 12: // Instruction completed
-		case 13: // non-delayslot instruction completed
-		case 14: // COP2/COP1 instruction complete
-		case 15: // Load/Store completed
+		case 12:
+		case 13:
+		case 14:
+		case 15:
 			return true;
 	}
 
 	return false;
 }
 
-// Diagnostics for event modes that we just ignore for now.  Using these perf units could
-// cause compat issues in some very odd/rare games, so if this msg comes up who knows,
-// might save some debugging effort. :)
 void COP0_DiagnosticPCCR()
 {
 	if (cpuRegs.PERF.n.pccr.b.Event0 >= 7 && cpuRegs.PERF.n.pccr.b.Event0 <= 10)
@@ -107,8 +67,6 @@ void COP0_DiagnosticPCCR()
 extern int branch;
 __fi void COP0_UpdatePCCR()
 {
-	// Counting and counter exceptions are not performed if we are currently executing a Level 2 exception (ERL)
-	// or the counting function is not enabled (CTE)
 	if (cpuRegs.CP0.n.Status.b.ERL || !cpuRegs.PERF.n.pccr.b.CTE)
 	{
 		cpuRegs.lastPERFCycle[0] = cpuRegs.cycle;
@@ -116,13 +74,8 @@ __fi void COP0_UpdatePCCR()
 		return;
 	}
 
-	// Implemented memory mode check (kernel/super/user)
-
 	if (cpuRegs.PERF.n.pccr.val & ((1 << (cpuRegs.CP0.n.Status.b.KSU + 2)) | (cpuRegs.CP0.n.Status.b.EXL << 1)))
 	{
-		// ----------------------------------
-		//    Update Performance Counter 0
-		// ----------------------------------
 
 		if (PERF_ShouldCountEvent(cpuRegs.PERF.n.pccr.b.Event0))
 		{
@@ -130,50 +83,16 @@ __fi void COP0_UpdatePCCR()
 			if (incr == 0)
 				incr++;
 
-			// use prev/XOR method for one-time exceptions (but likely less correct)
-			//u32 prev = cpuRegs.PERF.n.pcr0;
 			cpuRegs.PERF.n.pcr0 += incr;
-			//DevCon.Warning("PCR VAL %x", cpuRegs.PERF.n.pccr.val);
-			//prev ^= (1UL<<31);		// XOR is fun!
-			//if( (prev & cpuRegs.PERF.n.pcr0) & (1UL<<31) )
 			if ((cpuRegs.PERF.n.pcr0 & 0x80000000))
 			{
-				// TODO: Vector to the appropriate exception here.
-				// This code *should* be correct, but is untested (and other parts of the emu are
-				// not prepared to handle proper Level 2 exception vectors yet)
 
-				//branch == 1 is probably not the best way to check for the delay slot, but it beats nothing! (Refraction)
-				/*	if( branch == 1 )
-				{
-					cpuRegs.CP0.n.ErrorEPC = cpuRegs.pc - 4;
-					cpuRegs.CP0.n.Cause |= 0x40000000;
-				}
-				else
-				{
-					cpuRegs.CP0.n.ErrorEPC = cpuRegs.pc;
-					cpuRegs.CP0.n.Cause &= ~0x40000000;
-				}
-
-				if( cpuRegs.CP0.n.Status.b.DEV )
-				{
-					// Bootstrap vector
-					cpuRegs.pc = 0xbfc00280;
-				}
-				else
-				{
-					cpuRegs.pc = 0x80000080;
-				}
-				cpuRegs.CP0.n.Status.b.ERL = 1;
-				cpuRegs.CP0.n.Cause |= 0x20000;*/
 			}
 		}
 	}
 
 	if (cpuRegs.PERF.n.pccr.val & ((1 << (cpuRegs.CP0.n.Status.b.KSU + 12)) | (cpuRegs.CP0.n.Status.b.EXL << 11)))
 	{
-		// ----------------------------------
-		//    Update Performance Counter 1
-		// ----------------------------------
 
 		if (PERF_ShouldCountEvent(cpuRegs.PERF.n.pccr.b.Event1))
 		{
@@ -185,44 +104,13 @@ __fi void COP0_UpdatePCCR()
 
 			if ((cpuRegs.PERF.n.pcr1 & 0x80000000))
 			{
-				// TODO: Vector to the appropriate exception here.
-				// This code *should* be correct, but is untested (and other parts of the emu are
-				// not prepared to handle proper Level 2 exception vectors yet)
 
-				//branch == 1 is probably not the best way to check for the delay slot, but it beats nothing! (Refraction)
-
-				/*if( branch == 1 )
-				{
-					cpuRegs.CP0.n.ErrorEPC = cpuRegs.pc - 4;
-					cpuRegs.CP0.n.Cause |= 0x40000000;
-				}
-				else
-				{
-					cpuRegs.CP0.n.ErrorEPC = cpuRegs.pc;
-					cpuRegs.CP0.n.Cause &= ~0x40000000;
-				}
-
-				if( cpuRegs.CP0.n.Status.b.DEV )
-				{
-					// Bootstrap vector
-					cpuRegs.pc = 0xbfc00280;
-				}
-				else
-				{
-					cpuRegs.pc = 0x80000080;
-				}
-				cpuRegs.CP0.n.Status.b.ERL = 1;
-				cpuRegs.CP0.n.Cause |= 0x20000;*/
 			}
 		}
 	}
 	cpuRegs.lastPERFCycle[0] = cpuRegs.cycle;
 	cpuRegs.lastPERFCycle[1] = cpuRegs.cycle;
 }
-
-//////////////////////////////////////////////////////////////////////////////////////////
-//
-
 
 void MapTLB(const tlbs& t, int i)
 {
@@ -233,10 +121,6 @@ void MapTLB(const tlbs& t, int i)
 		i, t.VPN2(), t.PFN0(), t.PFN1(), t.isSPR() >> 31, t.isGlobal(), t.EntryHi.ASID,
 		t.Mask(), t.EntryLo0.PFN, t.EntryLo0.C, t.EntryLo1.PFN, t.EntryLo1.C, t.VPN2());
 
-	// According to the manual
-	// 'It [SPR] must be mapped into a contiguous 16 KB of virtual address space that is
-	// aligned on a 16KB boundary.Results are not guaranteed if this restriction is not followed.'
-	// Assume that the game isn't doing anything less-than-ideal with the scratchpad mapping and map it directly to eeMem->Scratch.
 	if (t.isSPR())
 	{
 		if (t.VPN2() != 0x70000000)
@@ -255,7 +139,7 @@ void MapTLB(const tlbs& t, int i)
 			for (addr = saddr; addr < eaddr; addr++)
 			{
 				if ((addr & mask) == ((t.VPN2() >> 12) & mask))
-				{ //match
+				{
 					memSetPageAddr(addr << 12, t.PFN0() + ((addr - saddr) << 12));
 					Cpu->Clear(addr << 12, 0x400);
 				}
@@ -271,7 +155,7 @@ void MapTLB(const tlbs& t, int i)
 			for (addr = saddr; addr < eaddr; addr++)
 			{
 				if ((addr & mask) == ((t.VPN2() >> 12) & mask))
-				{ //match
+				{
 					memSetPageAddr(addr << 12, t.PFN1() + ((addr - saddr) << 12));
 					Cpu->Clear(addr << 12, 0x400);
 				}
@@ -291,7 +175,6 @@ __inline u32 ConvertPageMask(const u32 PageMask)
 
 void UnmapTLB(const tlbs& t, int i)
 {
-	//Console.WriteLn("Clear TLB %d: %08x-> [%08x %08x] S=%d G=%d ASID=%d Mask= %03X", i,t.VPN2,t.PFN0,t.PFN1,t.S,t.G,t.ASID,t.Mask);
 	u32 mask, addr;
 	u32 saddr, eaddr;
 
@@ -306,11 +189,10 @@ void UnmapTLB(const tlbs& t, int i)
 		mask = ((~t.Mask()) << 1) & 0xfffff;
 		saddr = t.VPN2() >> 12;
 		eaddr = saddr + t.Mask() + 1;
-		//	Console.WriteLn("Clear TLB: %08x ~ %08x",saddr,eaddr-1);
 		for (addr = saddr; addr < eaddr; addr++)
 		{
 			if ((addr & mask) == ((t.VPN2() >> 12) & mask))
-			{ //match
+			{
 				memClearPageAddr(addr << 12);
 				Cpu->Clear(addr << 12, 0x400);
 			}
@@ -322,11 +204,10 @@ void UnmapTLB(const tlbs& t, int i)
 		mask = ((~t.Mask()) << 1) & 0xfffff;
 		saddr = (t.VPN2() >> 12) + t.Mask() + 1;
 		eaddr = saddr + t.Mask() + 1;
-		//	Console.WriteLn("Clear TLB: %08x ~ %08x",saddr,eaddr-1);
 		for (addr = saddr; addr < eaddr; addr++)
 		{
 			if ((addr & mask) == ((t.VPN2() >> 12) & mask))
-			{ //match
+			{
 				memClearPageAddr(addr << 12);
 				Cpu->Clear(addr << 12, 0x400);
 			}
@@ -358,9 +239,6 @@ void WriteTLB(int i)
 	tlb[i].EntryLo0.UL = cpuRegs.CP0.n.EntryLo0;
 	tlb[i].EntryLo1.UL = cpuRegs.CP0.n.EntryLo1;
 
-	// Setting the cache mode to reserved values is vaguely defined in the manual.
-	// I found that SPR is set to cached regardless.
-	// Non-SPR entries default to uncached on reserved cache modes.
 	if (tlb[i].isSPR())
 	{
 		tlb[i].EntryLo0.C = 3;
@@ -412,8 +290,6 @@ namespace COP0 {
 		cpuRegs.CP0.n.EntryHi = tlb[i].EntryHi.UL & ~((tlb[i].PageMask.Mask << 13) | 0x1f00);
 		cpuRegs.CP0.n.EntryLo0 = tlb[i].EntryLo0.UL & ~(0xFC000000) & ~1;
 		cpuRegs.CP0.n.EntryLo1 = tlb[i].EntryLo1.UL & ~(0x7C000000) & ~1;
-		// "If both the Global bit of EntryLo0 and EntryLo1 are set to 1, the processor ignores the ASID during TLB lookup."
-		// This is reflected during TLBR, where G is only set if both EntryLo0 and EntryLo1 are global.
 		cpuRegs.CP0.n.EntryLo0 |= (tlb[i].EntryLo0.UL & 1) & (tlb[i].EntryLo1.UL & 1);
 		cpuRegs.CP0.n.EntryLo1 |= (tlb[i].EntryLo0.UL & 1) & (tlb[i].EntryLo1.UL & 1);
 	}
@@ -487,11 +363,9 @@ namespace COP0 {
 
 	void MFC0()
 	{
-		// Note on _Rd_ Condition 9: CP0.Count should be updated even if _Rt_ is 0.
 		if ((_Rd_ != 9) && !_Rt_)
 			return;
 
-		//if(bExecBIOS == FALSE && _Rd_ == 25) Console.WriteLn("MFC0 _Rd_ %x = %x", _Rd_, cpuRegs.CP0.r[_Rd_]);
 		switch (_Rd_)
 		{
 			case 12:
@@ -499,22 +373,20 @@ namespace COP0 {
 				break;
 
 			case 25:
-				if (0 == (_Imm_ & 1)) // MFPS, register value ignored
+				if (0 == (_Imm_ & 1))
 				{
 					cpuRegs.GPR.r[_Rt_].SD[0] = (s32)cpuRegs.PERF.n.pccr.val;
 				}
-				else if (0 == (_Imm_ & 2)) // MFPC 0, only LSB of register matters
+				else if (0 == (_Imm_ & 2))
 				{
 					COP0_UpdatePCCR();
 					cpuRegs.GPR.r[_Rt_].SD[0] = (s32)cpuRegs.PERF.n.pcr0;
 				}
-				else // MFPC 1
+				else
 				{
 					COP0_UpdatePCCR();
 					cpuRegs.GPR.r[_Rt_].SD[0] = (s32)cpuRegs.PERF.n.pcr1;
 				}
-				/*Console.WriteLn("MFC0 PCCR = %x PCR0 = %x PCR1 = %x IMM= %x",  params
-cpuRegs.PERF.n.pccr, cpuRegs.PERF.n.pcr0, cpuRegs.PERF.n.pcr1, _Imm_ & 0x3F);*/
 				break;
 
 			case 24:
@@ -540,7 +412,6 @@ cpuRegs.PERF.n.pccr, cpuRegs.PERF.n.pcr0, cpuRegs.PERF.n.pcr1, _Imm_ & 0x3F);*/
 
 	void MTC0()
 	{
-		//if(bExecBIOS == FALSE && _Rd_ == 25) Console.WriteLn("MTC0 _Rd_ %x = %x", _Rd_, cpuRegs.CP0.r[_Rd_]);
 		switch (_Rd_)
 		{
 			case 9:
@@ -561,23 +432,20 @@ cpuRegs.PERF.n.pccr, cpuRegs.PERF.n.pcr0, cpuRegs.PERF.n.pcr1, _Imm_ & 0x3F);*/
 				break;
 
 			case 25:
-				/*if(bExecBIOS == FALSE && _Rd_ == 25) Console.WriteLn("MTC0 PCCR = %x PCR0 = %x PCR1 = %x IMM= %x", params
-	cpuRegs.PERF.n.pccr, cpuRegs.PERF.n.pcr0, cpuRegs.PERF.n.pcr1, _Imm_ & 0x3F);*/
-				if (0 == (_Imm_ & 1)) // MTPS
+				if (0 == (_Imm_ & 1))
 				{
-					if (0 != (_Imm_ & 0x3E)) // only effective when the register is 0
+					if (0 != (_Imm_ & 0x3E))
 						break;
-					// Updates PCRs and sets the PCCR.
 					COP0_UpdatePCCR();
 					cpuRegs.PERF.n.pccr.val = cpuRegs.GPR.r[_Rt_].UL[0];
 					COP0_DiagnosticPCCR();
 				}
-				else if (0 == (_Imm_ & 2)) // MTPC 0, only LSB of register matters
+				else if (0 == (_Imm_ & 2))
 				{
 					cpuRegs.PERF.n.pcr0 = cpuRegs.GPR.r[_Rt_].UL[0];
 					cpuRegs.lastPERFCycle[0] = cpuRegs.cycle;
 				}
-				else // MTPC 1
+				else
 				{
 					cpuRegs.PERF.n.pcr1 = cpuRegs.GPR.r[_Rt_].UL[0];
 					cpuRegs.lastPERFCycle[1] = cpuRegs.cycle;
@@ -594,8 +462,6 @@ cpuRegs.PERF.n.pccr, cpuRegs.PERF.n.pcr0, cpuRegs.PERF.n.pcr1, _Imm_ & 0x3F);*/
 	{
 		return (((dmacRegs.stat.CIS | ~dmacRegs.pcr.CPC) & 0x3FF) == 0x3ff);
 	}
-
-	//#define CPCOND0	1
 
 	void BC0F()
 	{
@@ -628,14 +494,10 @@ cpuRegs.PERF.n.pccr, cpuRegs.PERF.n.pcr0, cpuRegs.PERF.n.pcr1, _Imm_ & 0x3F);*/
 	void ERET()
 	{
 #ifdef ENABLE_VTUNE
-		// Allow to stop vtune in a predictable way to compare runs
-		// Of course, the limit will depend on the game.
 		const u32 million = 1000 * 1000;
 		static u32 vtune = 0;
 		vtune++;
 
-		// quick_exit vs exit: quick_exit won't call static storage destructor (OS will manage). It helps
-		// avoiding the race condition between threads destruction.
 		if (vtune > 30 * million)
 		{
 			Console.WriteLn("VTUNE: quick_exit");
@@ -669,8 +531,6 @@ cpuRegs.PERF.n.pccr, cpuRegs.PERF.n.pcr0, cpuRegs.PERF.n.pcr1, _Imm_ & 0x3F);*/
 			cpuRegs.CP0.n.Status.b.ERL || (cpuRegs.CP0.n.Status.b.KSU == 0))
 		{
 			cpuRegs.CP0.n.Status.b.EIE = 0;
-			// IRQs are disabled so no need to do a cpu exception/event test...
-			//cpuSetNextEventDelta();
 		}
 	}
 
@@ -680,12 +540,11 @@ cpuRegs.PERF.n.pccr, cpuRegs.PERF.n.pcr0, cpuRegs.PERF.n.pcr1, _Imm_ & 0x3F);*/
 			cpuRegs.CP0.n.Status.b.ERL || (cpuRegs.CP0.n.Status.b.KSU == 0))
 		{
 			cpuRegs.CP0.n.Status.b.EIE = 1;
-			// schedule an event test, which will check for and raise pending IRQs.
 			cpuSetNextEventDelta(4);
 		}
 	}
 
-} // namespace COP0
-} // namespace OpcodeImpl
-} // namespace Interpreter
-} // namespace R5900
+}
+}
+}
+}

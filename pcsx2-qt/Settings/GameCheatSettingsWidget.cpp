@@ -129,7 +129,6 @@ void GameCheatSettingsWidget::onCheatListItemHovered(const QModelIndex& index)
 	int place_value = item->data(PLACE_ROLE).toInt(&ok);
 	if (ok)
 	{
-		// The patch commands in the group are all applied at the same time.
 		place = static_cast<Patch::patch_place_type>(place_value);
 	}
 
@@ -141,7 +140,6 @@ void GameCheatSettingsWidget::onReloadClicked()
 	reloadList();
 	m_ui.cheatList->expandAll();
 
-	// reload it on the emu thread too, so it picks up any changes
 	g_emu_thread->reloadPatches();
 }
 
@@ -222,7 +220,6 @@ void GameCheatSettingsWidget::setCheatEnabled(std::string name, bool enabled, bo
 
 void GameCheatSettingsWidget::setStateForAll(bool enabled)
 {
-	// Temporarily disconnect from itemChanged to prevent redundant saves
 	disconnect(m_model, &QStandardItemModel::itemChanged, this, &GameCheatSettingsWidget::onCheatListItemChanged);
 
 	setStateRecursively(nullptr, enabled);
@@ -280,7 +277,6 @@ void GameCheatSettingsWidget::reloadList()
 			m_model->appendRow(items);
 	}
 
-	// Hide root indicator when there's no groups, frees up some whitespace.
 	m_ui.cheatList->setRootIsDecorated(!m_parent_map.empty());
 
 	if (num_unlabelled_codes > 0)
@@ -305,7 +301,6 @@ QStandardItem* GameCheatSettingsWidget::getTreeViewParent(const std::string_view
 	const std::string_view::size_type pos = parent.rfind('\\');
 	if (pos != std::string::npos && pos != (parent.size() - 1))
 	{
-		// go up the chain until we find the real parent, then back down
 		parent_to_this = getTreeViewParent(parent.substr(0, pos));
 		this_part = parent.substr(pos + 1);
 	}

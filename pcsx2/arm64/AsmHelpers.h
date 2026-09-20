@@ -104,11 +104,8 @@ void armGetMemOperandInRegister(const vixl::aarch64::Register& addr_reg,
 
 void armLoadConstant128(const vixl::aarch64::VRegister& reg, const void* ptr);
 
-// may clobber RSCRATCH/RSCRATCH2. they shouldn't be inputs.
 void armEmitVTBL(const vixl::aarch64::VRegister& dst, const vixl::aarch64::VRegister& src1,
 	const vixl::aarch64::VRegister& src2, const vixl::aarch64::VRegister& tbl);
-
-//////////////////////////////////////////////////////////////////////////
 
 class ArmConstantPool
 {

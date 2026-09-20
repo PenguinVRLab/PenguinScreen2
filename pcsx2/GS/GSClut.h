@@ -80,17 +80,12 @@ class alignas(32) GSClut final : public GSAlignedClass<32>
 	static void WriteCLUT_T16_I4_CSM1(const u16* RESTRICT src, u16* RESTRICT clut);
 	static void ReadCLUT_T32_I8(const u16* RESTRICT clut, u32* RESTRICT dst, int offset);
 	static void ReadCLUT_T32_I4(const u16* RESTRICT clut, u32* RESTRICT dst);
-	//static void ReadCLUT_T32_I4(const u16* RESTRICT clut, u32* RESTRICT dst32, u64* RESTRICT dst64);
-	//static void ReadCLUT_T16_I8(const u16* RESTRICT clut, u32* RESTRICT dst);
-	//static void ReadCLUT_T16_I4(const u16* RESTRICT clut, u32* RESTRICT dst);
-	//static void ReadCLUT_T16_I4(const u16* RESTRICT clut, u32* RESTRICT dst32, u64* RESTRICT dst64);
 public:
 	static void ExpandCLUT64_T32_I8(const u32* RESTRICT src, u64* RESTRICT dst);
 
 private:
 	static void ExpandCLUT64_T32(const GSVector4i& hi, const GSVector4i& lo0, const GSVector4i& lo1, const GSVector4i& lo2, const GSVector4i& lo3, GSVector4i* dst);
 	static void ExpandCLUT64_T32(const GSVector4i& hi, const GSVector4i& lo, GSVector4i* dst);
-	//static void ExpandCLUT64_T16_I8(const u32* RESTRICT src, u64* RESTRICT dst);
 	static void ExpandCLUT64_T16(const GSVector4i& hi, const GSVector4i& lo0, const GSVector4i& lo1, const GSVector4i& lo2, const GSVector4i& lo3, GSVector4i* dst);
 	static void ExpandCLUT64_T16(const GSVector4i& hi, const GSVector4i& lo, GSVector4i* dst);
 
@@ -119,7 +114,6 @@ public:
 	bool CanLoadCLUT(const GIFRegTEX0& TEX0, const bool update_CBP = false);
 	bool WriteTest(const GIFRegTEX0& TEX0, const GIFRegTEXCLUT& TEXCLUT);
 	void Write(const GIFRegTEX0& TEX0, const GIFRegTEXCLUT& TEXCLUT);
-	//void Read(const GIFRegTEX0& TEX0);
 	void Read32(const GIFRegTEX0& TEX0, const GIFRegTEXA& TEXA);
 	void GetAlphaMinMax32(int& amin, int& amax);
 

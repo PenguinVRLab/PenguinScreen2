@@ -8,9 +8,6 @@
 #include <bit>
 #include <cstddef>
 
-// --------------------------------------------------------------------------------------
-// Dev / Debug conditionals - Consts for using if() statements instead of uglier #ifdef.
-// --------------------------------------------------------------------------------------
 #ifdef PCSX2_DEVBUILD
 static constexpr bool IsDevBuild = true;
 #else
@@ -31,18 +28,15 @@ static constexpr bool IsDebugBuild = false;
 	#error Unsupported Platform
 #endif
 
-// Defines the memory page size for the target platform at compilation.
 #if defined(OVERRIDE_HOST_PAGE_SIZE)
 	static constexpr unsigned int __pagesize = OVERRIDE_HOST_PAGE_SIZE;
 	static constexpr unsigned int __pagemask = __pagesize - 1;
 	static constexpr unsigned int __pageshift = std::bit_width(__pagemask);
 #elif defined(ARCH_ARM64)
-	// Apple Silicon uses 16KB pages and 128 byte cache lines.
 	static constexpr unsigned int __pagesize = 0x4000;
 	static constexpr unsigned int __pageshift = 14;
 	static constexpr unsigned int __pagemask = __pagesize - 1;
 #else
-	// X86 uses a 4KB granularity and 64 byte cache lines.
 	static constexpr unsigned int __pagesize = 0x1000;
 	static constexpr unsigned int __pageshift = 12;
 	static constexpr unsigned int __pagemask = __pagesize - 1;
@@ -55,13 +49,8 @@ static constexpr bool IsDebugBuild = false;
 	static constexpr unsigned int __cachelinesize = 64;
 #endif
 
-// We use 4KB alignment for globals for both Apple and x86 platforms, since computing the
-// address on ARM64 is a single instruction (adrp).
 static constexpr unsigned int __pagealignsize = 0x1000;
 
-// --------------------------------------------------------------------------------------
-//  Microsoft Visual Studio
-// --------------------------------------------------------------------------------------
 #ifdef _MSC_VER
 
 #define __forceinline_odr __forceinline
@@ -73,21 +62,9 @@ static constexpr unsigned int __pagealignsize = 0x1000;
 
 #else
 
-// --------------------------------------------------------------------------------------
-//  GCC / Clang Compilers Section
-// --------------------------------------------------------------------------------------
-
-// SysV ABI passes vector parameters through registers unconditionally.
 #ifndef _WIN32
 #define __vectorcall
 #endif
-
-// Inlining note: GCC needs ((unused)) attributes defined on inlined functions to suppress
-// warnings when a static inlined function isn't used in the scope of a single file (which
-// happens *by design* like all the friggen time >_<)
-
-// __forceinline_odr is for member functions that are defined in headers. MSVC can't specify
-// inline and __forceinline at the same time, but it required to not get ODR errors in GCC.
 
 #define __forceinline __attribute__((always_inline, unused))
 #define __forceinline_odr __forceinline inline
@@ -105,17 +82,6 @@ static constexpr unsigned int __pagealignsize = 0x1000;
 
 #endif
 
-// --------------------------------------------------------------------------------------
-// __releaseinline / __ri -- a forceinline macro that is enabled for RELEASE/PUBLIC builds ONLY.
-// --------------------------------------------------------------------------------------
-// This is useful because forceinline can make certain types of debugging problematic since
-// functions that look like they should be called won't breakpoint since their code is
-// inlined, and it can make stack traces confusing or near useless.
-//
-// Use __releaseinline for things which are generally large functions where trace debugging
-// from Devel builds is likely useful; but which should be inlined in an optimized Release
-// environment.
-//
 #define __fi __forceinline
 #ifdef PCSX2_DEVBUILD
 #define __ri
@@ -123,30 +89,16 @@ static constexpr unsigned int __pagealignsize = 0x1000;
 #define __ri __fi
 #endif
 
-//////////////////////////////////////////////////////////////////////////////////////////
-// Safe deallocation macros -- checks pointer validity (non-null) when needed, and sets
-// pointer to null after deallocation.
-
 #define safe_delete(ptr) (delete (ptr), (ptr) = nullptr)
 #define safe_delete_array(ptr) (delete[] (ptr), (ptr) = nullptr)
 #define safe_free(ptr) (std::free(ptr), (ptr) = nullptr)
 
-// --------------------------------------------------------------------------------------
-//  DeclareNoncopyableObject
-// --------------------------------------------------------------------------------------
-// This macro provides an easy and clean method for ensuring objects are not copyable.
-// Simply add the macro to the head or tail of your class declaration, and attempts to
-// copy the class will give you a moderately obtuse compiler error.
-//
 #ifndef DeclareNoncopyableObject
 #define DeclareNoncopyableObject(classname) \
 public: \
 	classname(const classname&) = delete; \
 	classname& operator=(const classname&) = delete
 #endif
-
-// --------------------------------------------------------------------------------------
-//  Handy Human-readable constants for common immediate values (_16kb -> _4gb)
 
 static constexpr sptr _1kb = 1024 * 1;
 static constexpr sptr _4kb = _1kb * 4;
@@ -165,9 +117,7 @@ static constexpr s64 _256mb = _1mb * 256;
 static constexpr s64 _1gb = _1mb * 1024;
 static constexpr s64 _4gb = _1gb * 4;
 
-// Disable some spammy warnings which wx appeared to disable.
-// We probably should fix these at some point.
 #ifdef _MSC_VER
-#pragma warning(disable : 4244) // warning C4244: 'initializing': conversion from 'uptr' to 'uint', possible loss of data
-#pragma warning(disable : 4267) // warning C4267: 'initializing': conversion from 'size_t' to 'uint', possible loss of data
+#pragma warning(disable : 4244)
+#pragma warning(disable : 4267)
 #endif

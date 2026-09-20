@@ -16,7 +16,7 @@ VULKAN_MODULE_ENTRY_POINT(vkEnumerateInstanceLayerProperties, true)
 VULKAN_MODULE_ENTRY_POINT(vkEnumerateInstanceVersion, false)
 VULKAN_MODULE_ENTRY_POINT(vkDestroyInstance, true)
 
-#endif // VULKAN_MODULE_ENTRY_POINT
+#endif
 
 #ifdef VULKAN_INSTANCE_ENTRY_POINT
 
@@ -56,7 +56,6 @@ VULKAN_INSTANCE_ENTRY_POINT(vkCreateWaylandSurfaceKHR, false)
 VULKAN_INSTANCE_ENTRY_POINT(vkCreateMetalSurfaceEXT, false)
 #endif
 
-// VK_EXT_debug_utils
 VULKAN_INSTANCE_ENTRY_POINT(vkCmdBeginDebugUtilsLabelEXT, false)
 VULKAN_INSTANCE_ENTRY_POINT(vkCmdEndDebugUtilsLabelEXT, false)
 VULKAN_INSTANCE_ENTRY_POINT(vkCmdInsertDebugUtilsLabelEXT, false)
@@ -79,15 +78,13 @@ VULKAN_INSTANCE_ENTRY_POINT(vkCreateDisplayModeKHR, false)
 VULKAN_INSTANCE_ENTRY_POINT(vkGetDisplayPlaneCapabilitiesKHR, false)
 VULKAN_INSTANCE_ENTRY_POINT(vkCreateDisplayPlaneSurfaceKHR, false)
 
-// Vulkan 1.1 functions.
 VULKAN_INSTANCE_ENTRY_POINT(vkGetPhysicalDeviceFeatures2, true)
 VULKAN_INSTANCE_ENTRY_POINT(vkGetPhysicalDeviceProperties2, true)
 VULKAN_INSTANCE_ENTRY_POINT(vkGetPhysicalDeviceMemoryProperties2, true)
 
-// VK_EXT_calibrated_timestamps
 VULKAN_INSTANCE_ENTRY_POINT(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT, false)
 
-#endif // VULKAN_INSTANCE_ENTRY_POINT
+#endif
 
 #ifdef VULKAN_DEVICE_ENTRY_POINT
 
@@ -217,13 +214,11 @@ VULKAN_DEVICE_ENTRY_POINT(vkGetSwapchainImagesKHR, false)
 VULKAN_DEVICE_ENTRY_POINT(vkAcquireNextImageKHR, false)
 VULKAN_DEVICE_ENTRY_POINT(vkQueuePresentKHR, false)
 
-// Vulkan 1.1 functions.
 VULKAN_DEVICE_ENTRY_POINT(vkGetBufferMemoryRequirements2, true)
 VULKAN_DEVICE_ENTRY_POINT(vkGetImageMemoryRequirements2, true)
 VULKAN_DEVICE_ENTRY_POINT(vkBindBufferMemory2, true)
 VULKAN_DEVICE_ENTRY_POINT(vkBindImageMemory2, true)
 
-// Vulkan 1.3 functions.
 VULKAN_DEVICE_ENTRY_POINT(vkGetDeviceBufferMemoryRequirements, false)
 VULKAN_DEVICE_ENTRY_POINT(vkGetDeviceImageMemoryRequirements, false)
 
@@ -232,16 +227,12 @@ VULKAN_DEVICE_ENTRY_POINT(vkAcquireFullScreenExclusiveModeEXT, false)
 VULKAN_DEVICE_ENTRY_POINT(vkReleaseFullScreenExclusiveModeEXT, false)
 #endif
 
-// VK_EXT_calibrated_timestamps
 VULKAN_DEVICE_ENTRY_POINT(vkGetCalibratedTimestampsEXT, false)
 
-// VK_KHR_push_descriptor
 VULKAN_DEVICE_ENTRY_POINT(vkCmdPushDescriptorSetKHR, false)
 
-// VK_EXT_swapchain_maintenance1
 VULKAN_DEVICE_ENTRY_POINT(vkReleaseSwapchainImagesEXT, false)
 
-// VK_KHR_swapchain_maintenance1
 VULKAN_DEVICE_ENTRY_POINT(vkReleaseSwapchainImagesKHR, false)
 
-#endif // VULKAN_DEVICE_ENTRY_POINT
+#endif

@@ -30,8 +30,8 @@ namespace usb_pad
 
 	static const USBDescStrings gtf_desc_strings = {
 		"",
-		"Logitech", //actual index @ 0x04
-		"Logitech GT Force" //actual index @ 0x20
+		"Logitech",
+		"Logitech GT Force"
 	};
 
 	static const USBDescStrings rb1_desc_strings = {
@@ -85,8 +85,8 @@ namespace usb_pad
 					{"Triangle", TRANSLATE_NOOP("USB", "Triangle"), nullptr, InputBindingInfo::Type::Button, CID_BUTTON3, GenericInputBinding::Triangle},
 					{"L1", TRANSLATE_NOOP("USB", "L1"), nullptr, InputBindingInfo::Type::Button, CID_BUTTON5, GenericInputBinding::L1},
 					{"R1", TRANSLATE_NOOP("USB", "R1"), nullptr, InputBindingInfo::Type::Button, CID_BUTTON4, GenericInputBinding::R1},
-					{"L2", TRANSLATE_NOOP("USB", "L2"), nullptr, InputBindingInfo::Type::Button, CID_BUTTON7, GenericInputBinding::Unknown}, // used L2 for brake
-					{"R2", TRANSLATE_NOOP("USB", "R2"), nullptr, InputBindingInfo::Type::Button, CID_BUTTON6, GenericInputBinding::Unknown}, // used R2 for throttle
+					{"L2", TRANSLATE_NOOP("USB", "L2"), nullptr, InputBindingInfo::Type::Button, CID_BUTTON7, GenericInputBinding::Unknown},
+					{"R2", TRANSLATE_NOOP("USB", "R2"), nullptr, InputBindingInfo::Type::Button, CID_BUTTON6, GenericInputBinding::Unknown},
 					{"Select", TRANSLATE_NOOP("USB", "Select"), nullptr, InputBindingInfo::Type::Button, CID_BUTTON8, GenericInputBinding::Select},
 					{"Start", TRANSLATE_NOOP("USB", "Start"), nullptr, InputBindingInfo::Type::Button, CID_BUTTON9, GenericInputBinding::Start},
 					{"FFDevice", TRANSLATE_NOOP("USB", "Force Feedback"), nullptr, InputBindingInfo::Type::Device, 0, GenericInputBinding::Unknown},
@@ -115,8 +115,8 @@ namespace usb_pad
 					{"L1", TRANSLATE_NOOP("USB", "Shift Down / L1"), nullptr, InputBindingInfo::Type::Button, CID_BUTTON5, GenericInputBinding::L1},
 					{"Select", TRANSLATE_NOOP("USB", "Select"), nullptr, InputBindingInfo::Type::Button, CID_BUTTON8, GenericInputBinding::Select},
 					{"Start", TRANSLATE_NOOP("USB", "Start"), nullptr, InputBindingInfo::Type::Button, CID_BUTTON9, GenericInputBinding::Start},
-					{"L2", TRANSLATE_NOOP("USB", "L2"), nullptr, InputBindingInfo::Type::Button, CID_BUTTON7, GenericInputBinding::Unknown}, // used L2 for brake
-					{"R2", TRANSLATE_NOOP("USB", "R2"), nullptr, InputBindingInfo::Type::Button, CID_BUTTON6, GenericInputBinding::Unknown}, // used R2 for throttle
+					{"L2", TRANSLATE_NOOP("USB", "L2"), nullptr, InputBindingInfo::Type::Button, CID_BUTTON7, GenericInputBinding::Unknown},
+					{"R2", TRANSLATE_NOOP("USB", "R2"), nullptr, InputBindingInfo::Type::Button, CID_BUTTON6, GenericInputBinding::Unknown},
 					{"L3", TRANSLATE_NOOP("USB", "L3"), nullptr, InputBindingInfo::Type::Button, CID_BUTTON11, GenericInputBinding::L3},
 					{"R3", TRANSLATE_NOOP("USB", "R3"), nullptr, InputBindingInfo::Type::Button, CID_BUTTON10, GenericInputBinding::R3},
 					{"FFDevice", "Force Feedback", nullptr, InputBindingInfo::Type::Device, 0, GenericInputBinding::Unknown},
@@ -192,11 +192,9 @@ namespace usb_pad
 
 		steering_step = std::numeric_limits<u16>::max();
 
-		// steering starts in the center
 		data.last_steering = steering_range;
 		data.steering = steering_range;
 
-		// throttle/brake start unpressed
 		data.throttle = 255;
 		data.brake = 255;
 
@@ -210,7 +208,6 @@ namespace usb_pad
 		const s32 smoothing_percent = USB::GetConfigInt(si, port, devname, "SteeringSmoothing", 0);
 		if (smoothing_percent <= 0)
 		{
-			// none, allow any amount of change
 			steering_step = std::numeric_limits<u16>::max();
 		}
 		else
@@ -247,7 +244,6 @@ namespace usb_pad
 
 	int PadState::TokenIn(u8* buf, int len)
 	{
-		// TODO: This is still pretty gross and needs cleaning up.
 
 		struct wheel_lohi
 		{
@@ -286,7 +282,7 @@ namespace usb_pad
 
 				w->lo = data.steering & 0x3FF;
 				w->lo |= (data.buttons & 0xFFF) << 10;
-				w->lo |= 1 << 16; // Tokyo Xtreme Racer (Zero) ignores the pedals unless the 3rd byte is different than zero
+				w->lo |= 1 << 16;
 				w->lo |= 0xFF << 24;
 
 				w->hi = (data.throttle & 0xFF);
@@ -306,8 +302,8 @@ namespace usb_pad
 
 				w->hi = 0x00;
 				w->hi |= data.throttle << 8;
-				w->hi |= data.brake << 16; //axis_rz
-				w->hi |= 0x11 << 24; //enables wheel and pedals?
+				w->hi |= data.brake << 16;
+				w->hi |= 0x11 << 24;
 
 				return len;
 			}
@@ -317,19 +313,16 @@ namespace usb_pad
 				UpdateSteering();
 				UpdateHatSwitch();
 
-				// what's up with the bitmap?
-				// xxxxxxxx xxxxxxbb bbbbbbbb bbbbhhhh ???????? ?01zzzzz 1rrrrrr1 10001000
 				w->lo = data.steering & 0x3FFF;
 				w->lo |= (data.buttons & 0x3FFF) << 14;
 				w->lo |= (data.hatswitch & 0xF) << 28;
 
 				w->hi = 0x00;
-				//w->hi |= 0 << 9; //bit 9 must be 0
-				w->hi |= (1 | (data.throttle * 0x3F) / 0xFF) << 10; //axis_z
-				w->hi |= 1 << 16; //bit 16 must be 1
-				w->hi |= ((0x3F - (data.brake * 0x3F) / 0xFF) & 0x3F) << 17; //axis_rz
-				w->hi |= 1 << 23; //bit 23 must be 1
-				w->hi |= 0x11 << 24; //enables wheel and pedals?
+				w->hi |= (1 | (data.throttle * 0x3F) / 0xFF) << 10;
+				w->hi |= 1 << 16;
+				w->hi |= ((0x3F - (data.brake * 0x3F) / 0xFF) & 0x3F) << 17;
+				w->hi |= 1 << 23;
+				w->hi |= 0x11 << 24;
 
 				return len;
 			}
@@ -352,9 +345,9 @@ namespace usb_pad
 				buf[0] = data.steering & 0xFF;
 				buf[1] = data.throttle & 0xFF;
 				buf[2] = data.brake & 0xFF;
-				buf[3] = data.hatswitch & 0x0F; // 4bits?
-				buf[3] |= (data.buttons & 0x0F) << 4; // 4 bits // TODO Or does it start at buf[4]?
-				buf[4] = (data.buttons >> 4) & 0x3F; // 10 - 4 = 6 bits
+				buf[3] = data.hatswitch & 0x0F;
+				buf[3] |= (data.buttons & 0x0F) << 4;
+				buf[4] = (data.buttons >> 4) & 0x3F;
 
 				return len;
 			}
@@ -564,8 +557,6 @@ namespace usb_pad
 		else
 			value = static_cast<u16>(std::min<int>(steering_range + data.steering_right, steering_range * 2));
 
-		// TODO: Smoothing, don't jump too much
-		//data.steering = value;
 		if (value < data.steering)
 			data.steering -= std::min<u16>(data.steering - value, steering_step);
 		else if (value > data.steering)
@@ -596,7 +587,6 @@ namespace usb_pad
 
 	bool PadState::HasFF() const
 	{
-		// only do force feedback for wheels...
 		return (type <= WT_GT_FORCE);
 	}
 
@@ -631,9 +621,6 @@ namespace usb_pad
 				}
 				break;
 			case USB_TOKEN_OUT:
-				/*Console.Warning("usb-pad: data token out len=0x%X %X,%X,%X,%X,%X,%X,%X,%X\n",len,
-			data[0],data[1],data[2],data[3],data[4],data[5],data[6],data[7]);*/
-				//Console.Warning("usb-pad: data token out len=0x%X\n",len);
 				s->TokenOut(p->buffer_ptr, p->buffer_size);
 				break;
 			default:
@@ -663,10 +650,9 @@ namespace usb_pad
 					goto fail;
 
 				break;
-			case InterfaceRequest | USB_REQ_GET_DESCRIPTOR: //GT3
+			case InterfaceRequest | USB_REQ_GET_DESCRIPTOR:
 				switch (value >> 8)
 				{
-					// TODO: Move to constructor
 					case USB_DT_REPORT:
 						if (s->type == WT_DRIVING_FORCE_PRO || s->type == WT_DRIVING_FORCE_PRO_1102)
 						{
@@ -695,18 +681,10 @@ namespace usb_pad
 				}
 				break;
 
-			/* hid specific requests */
 			case SET_REPORT:
-				// no idea, Rock Band 2 keeps spamming this
 				if (length > 0)
 				{
-					/* 0x01: Num Lock LED
-			 * 0x02: Caps Lock LED
-			 * 0x04: Scroll Lock LED
-			 * 0x08: Compose LED
-			 * 0x10: Kana LED */
 					p->actual_length = 0;
-					//p->status = USB_RET_SUCCESS;
 				}
 				break;
 			case SET_IDLE:
@@ -783,7 +761,7 @@ namespace usb_pad
 			{
 				dev_desc = gtf_dev_descriptor;
 				dev_desc_len = sizeof(gtf_dev_descriptor);
-				config_desc = gtforce_config_descriptor; //TODO
+				config_desc = gtforce_config_descriptor;
 				config_desc_len = sizeof(gtforce_config_descriptor);
 				s->desc.str = gtf_desc_strings;
 			}
@@ -882,8 +860,6 @@ namespace usb_pad
 			s->mFFdev.reset();
 	}
 
-	// ---- Rock Band drum kit ----
-
 	const char* RBDrumKitDevice::Name() const
 	{
 		return TRANSLATE_NOOP("USB", "Rock Band Drum Kit");
@@ -948,8 +924,6 @@ namespace usb_pad
 	{
 		return {};
 	}
-
-	// ---- Keyboardmania ----
 
 	const char* KeyboardmaniaDevice::Name() const
 	{
@@ -1033,4 +1007,4 @@ namespace usb_pad
 		pad_handle_destroy(&s->dev);
 		return nullptr;
 	}
-} // namespace usb_pad
+}

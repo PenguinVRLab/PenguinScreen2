@@ -27,16 +27,12 @@ namespace IopMemory {
 
 using namespace Internal;
 
-// Template-compatible version of the psxHu macro.  Used for writing.
 #define psxHu(mem)	(*(u32*)&iopHw[(mem) & 0xffff])
 
 
-//////////////////////////////////////////////////////////////////////////////////////////
-//
 template< typename T >
 static __fi void _generic_write( u32 addr, T val )
 {
-	//int bitsize = (sizeof(T) == 1) ? 8 : ( (sizeof(T) == 2) ? 16 : 32 );
 	IopHwTraceLog<T>( addr, val, false );
 	psxHu(addr) = val;
 }
@@ -45,12 +41,9 @@ void iopHwWrite8_generic( u32 addr, mem8_t val )		{ _generic_write<mem8_t>( addr
 void iopHwWrite16_generic( u32 addr, mem16_t val )	{ _generic_write<mem16_t>( addr, val ); }
 void iopHwWrite32_generic( u32 addr, mem32_t val )	{ _generic_write<mem32_t>( addr, val ); }
 
-//////////////////////////////////////////////////////////////////////////////////////////
-//
 template< typename T >
 static __fi T _generic_read( u32 addr )
 {
-	//int bitsize = (sizeof(T) == 1) ? 8 : ( (sizeof(T) == 2) ? 16 : 32 );
 
 	T ret = psxHu(addr);
 	IopHwTraceLog<T>( addr, ret, true );
@@ -62,11 +55,8 @@ mem16_t iopHwRead16_generic( u32 addr )	{ return _generic_read<mem16_t>( addr );
 mem32_t iopHwRead32_generic( u32 addr )	{ return _generic_read<mem32_t>( addr ); }
 
 
-//////////////////////////////////////////////////////////////////////////////////////////
-//
 void iopHwWrite8_Page1( u32 addr, mem8_t val )
 {
-	// all addresses are assumed to be prefixed with 0x1f801xxx:
 	pxAssert( (addr >> 12) == 0x1f801 );
 
 	u32 masked_addr = pgmsk( addr );
@@ -88,8 +78,6 @@ void iopHwWrite8_Page1( u32 addr, mem8_t val )
 		case (HW_SIO_BAUD & 0x0fff):
 			Sio0Log.Error("%s(%08X, %08X) Unexpected SIO0 BAUD 8 bit write", __FUNCTION__, addr, val);
 			break;
-		// for use of serial port ignore for now
-		//case 0x50: serial_write8( val ); break;
 
 		mcase(HW_DEV9_DATA): DEV9write8( addr, val ); break;
 
@@ -125,10 +113,9 @@ void iopHwWrite8_Page1( u32 addr, mem8_t val )
 
 void iopHwWrite8_Page3( u32 addr, mem8_t val )
 {
-	// all addresses are assumed to be prefixed with 0x1f803xxx:
 	pxAssert( (addr >> 12) == 0x1f803 );
 
-	if(ConsoleLogging.iopConsole.IsActive() && (addr == 0x1f80380c))	// STDOUT
+	if(ConsoleLogging.iopConsole.IsActive() && (addr == 0x1f80380c))
 	{
 		static char pbuf[1024];
 		static int pidx;
@@ -159,7 +146,6 @@ void iopHwWrite8_Page3( u32 addr, mem8_t val )
 
 void iopHwWrite8_Page8( u32 addr, mem8_t val )
 {
-	// all addresses are assumed to be prefixed with 0x1f808xxx:
 	pxAssert( (addr >> 12) == 0x1f808 );
 
 	if (addr == HW_SIO2_TX)
@@ -174,16 +160,11 @@ void iopHwWrite8_Page8( u32 addr, mem8_t val )
 	IopHwTraceLog<mem8_t>( addr, val, false );
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////
-// Templated handler for both 32 and 16 bit write operations, to Page 1 registers.
-//
 template< typename T >
 static __fi void _HwWrite_16or32_Page1( u32 addr, T val )
 {
-	// all addresses are assumed to be prefixed with 0x1f801xxx:
 	pxAssert( (addr >> 12) == 0x1f801 );
 
-	// all addresses should be aligned to the data operand size:
 	pxAssert(
 		( sizeof(T) == 2 && (addr & 1) == 0 ) ||
 		( sizeof(T) == 4 && (addr & 3) == 0 )
@@ -191,9 +172,6 @@ static __fi void _HwWrite_16or32_Page1( u32 addr, T val )
 
 	u32 masked_addr = addr & 0x0fff;
 
-	// ------------------------------------------------------------------------
-	// Counters, 16-bit varieties!
-	//
 	if( masked_addr >= 0x100 && masked_addr < 0x130 )
 	{
 		int cntidx = ( masked_addr >> 4 ) & 0xf;
@@ -216,9 +194,6 @@ static __fi void _HwWrite_16or32_Page1( u32 addr, T val )
 			break;
 		}
 	}
-	// ------------------------------------------------------------------------
-	// Counters, 32-bit varieties!
-	//
 	else if ( masked_addr >= 0x480 && masked_addr < 0x4b0 )
 	{
 		int cntidx = (( masked_addr >> 4 ) & 0xf) - 5;
@@ -228,7 +203,7 @@ static __fi void _HwWrite_16or32_Page1( u32 addr, T val )
 				psxRcntWcount32( cntidx, val );
 			break;
 
-			case 0x2:	// Count HiWord
+			case 0x2:
 				psxRcntWcount32( cntidx, (u32)val << 16 );
 			break;
 
@@ -240,7 +215,7 @@ static __fi void _HwWrite_16or32_Page1( u32 addr, T val )
 				psxRcntWtarget32( cntidx, val );
 			break;
 
-			case 0xa:	// Target HiWord
+			case 0xa:
 				psxRcntWtarget32( cntidx, (u32)val << 16);
 			break;
 
@@ -249,16 +224,10 @@ static __fi void _HwWrite_16or32_Page1( u32 addr, T val )
 			break;
 		}
 	}
-	// ------------------------------------------------------------------------
-	// USB, with both 16 and 32 bit interfaces
-	//
 	else if ( (masked_addr >= pgmsk(HW_USB_START)) && (masked_addr < pgmsk(HW_USB_END)) )
 	{
 		if( sizeof(T) == 2 ) USBwrite16( addr, val ); else USBwrite32( addr, val );
 	}
-	// ------------------------------------------------------------------------
-	// SPU2, accessible in 16 bit mode only!
-	//
 	else if ( (masked_addr >= pgmsk(HW_SPU2_START)) && (masked_addr < pgmsk(HW_SPU2_END)) )
 	{
 		if( sizeof(T) == 2 )
@@ -266,15 +235,10 @@ static __fi void _HwWrite_16or32_Page1( u32 addr, T val )
 		else
 		{
 			DbgCon.Warning( "HwWrite32 to SPU2? @ 0x%08X .. What manner of trickery is this?!", addr );
-			//psxHu(addr) = val;
 		}
 	}
-	// ------------------------------------------------------------------------
-	// PS1 GPU access
-	//
 	else if ( (masked_addr >= pgmsk(HW_PS1_GPU_START)) && (masked_addr < pgmsk(HW_PS1_GPU_END)) )
 	{
-		// todo: psx mode: this is new
 		if( sizeof(T) == 2 )
 			DevCon.Warning( "HwWrite16 to PS1 GPU? @ 0x%08X .. What manner of trickery is this?!", addr );
 
@@ -293,7 +257,6 @@ static __fi void _HwWrite_16or32_Page1( u32 addr, T val )
 					hwIntcIrq(INTC_SBUS);
 				}
 				break;
-			// ------------------------------------------------------------------------
 			case (HW_SIO_DATA & 0x0fff):
 				Console.Error("%s(%08X, %08X) Unexpected 16 or 32 bit write to SIO0 DATA!", __FUNCTION__, addr, val);
 				break;
@@ -317,13 +280,6 @@ static __fi void _HwWrite_16or32_Page1( u32 addr, T val )
 			case (HW_SIO_BAUD & 0x0fff):
 				g_Sio0.SetBaud(static_cast<u16>(val));
 				break;
-
-			// ------------------------------------------------------------------------
-			//Serial port stuff not support now ;P
-			// case 0x050: serial_write16( val ); break;
-			//	case 0x054: serial_status_write( val ); break;
-			//	case 0x05a: serial_control_write( val ); break;
-			//	case 0x05e: serial_baud_write( val ); break;
 
 			mcase(HW_ISTAT):
 				psxHu(addr) &= val;
@@ -357,17 +313,12 @@ static __fi void _HwWrite_16or32_Page1( u32 addr, T val )
 				iopTestIntc();
 			break;
 
-			// ------------------------------------------------------------------------
-			//
-
-			mcase(0x1f801088) :	// DMA0 CHCR -- MDEC IN
-				// psx mode
+			mcase(0x1f801088) :
 				HW_DMA0_CHCR = val;
 				psxDma0(HW_DMA0_MADR, HW_DMA0_BCR, HW_DMA0_CHCR);
 			break;
 
-			mcase(0x1f801098):	// DMA1 CHCR -- MDEC OUT
-				// psx mode
+			mcase(0x1f801098):
 				HW_DMA1_CHCR = val;
 				psxDma1(HW_DMA1_MADR, HW_DMA1_BCR, HW_DMA1_CHCR);
 			break;
@@ -376,69 +327,59 @@ static __fi void _HwWrite_16or32_Page1( u32 addr, T val )
 				psxHu(addr) = val;
 			break;
 
-			mcase(0x1f8010a8) :	// DMA2 CHCR -- GPU
-				// BIOS functions
-				// send_gpu_linked_list: [1F8010A8h]=1000401h
-				// gpu_abort_dma: [1F8010A8h]=401h
-				// gpu_send_dma: [1F8010A8h]=1000201h
+			mcase(0x1f8010a8) :
 				psxHu(addr) = val;
 				DmaExec(2);
 			break;
 
-			mcase(0x1f8010b8):	// DMA3 CHCR -- CDROM
+			mcase(0x1f8010b8):
 				psxHu(addr) = val;
 				DmaExec(3);
 			break;
 
-			mcase(0x1f8010c8):	// DMA4 CHCR -- SPU2 Core 1
+			mcase(0x1f8010c8):
 				psxHu(addr) = val;
 				DmaExec(4);
 			break;
 
-			mcase(0x1f8010e8):	// DMA6 CHCR -- OT clear
+			mcase(0x1f8010e8):
 				psxHu(addr) = val;
 				DmaExec(6);
 			break;
 
-			mcase(0x1f801508):	// DMA7 CHCR -- SPU2 core 2
+			mcase(0x1f801508):
 				psxHu(addr) = val;
 				DmaExec2(7);
 			break;
 
-			mcase(0x1f801518):	// DMA8 CHCR -- DEV9
+			mcase(0x1f801518):
 				psxHu(addr) = val;
 				DmaExec2(8);
 			break;
 
-			mcase(0x1f801528):	// DMA9 CHCR -- SIF0
+			mcase(0x1f801528):
 				psxHu(addr) = val;
 				DmaExec2(9);
 			break;
 
-			mcase(0x1f801538):	// DMA10 CHCR -- SIF1
+			mcase(0x1f801538):
 				psxHu(addr) = val;
 				DmaExec2(10);
 			break;
 
 
-			mcase(0x1f801548):	// DMA11 CHCR -- SIO2 IN
+			mcase(0x1f801548):
 				psxHu(addr) = val;
 				DmaExec2(11);
 			break;
 
-			mcase(0x1f801558):	// DMA12 CHCR -- SIO2 OUT
+			mcase(0x1f801558):
 				psxHu(addr) = val;
 				DmaExec2(12);
 			break;
 
-			// ------------------------------------------------------------------------
-			// DMA ICR handlers -- General XOR behavior!
-
 			mcase(0x1f8010f4):
 			{
-				//u32 tmp = (~val) & HW_DMA_ICR;
-				//u32 old = ((tmp ^ val) & 0xffffff) ^ tmp;
-				///psxHu(addr) = ((tmp ^ val) & 0xffffff) ^ tmp;
 				u32 newtmp = (HW_DMA_ICR & 0xff000000) | (val & 0xffffff);
 				newtmp &= ~(val & 0x7F000000);
 				if (((newtmp >> 15) & 0x1) || (((newtmp >> 23) & 0x1) == 0x1 && (((newtmp & 0x7F000000) >> 8) & (newtmp & 0x7F0000)) != 0)) {
@@ -447,8 +388,6 @@ static __fi void _HwWrite_16or32_Page1( u32 addr, T val )
 				else {
 					newtmp &= ~0x80000000;
 				}
-				//if (newtmp != old)
-				//	DevCon.Warning("ICR Old %x New %x", old, newtmp);
 				psxHu(addr) = newtmp;
 				if ((HW_DMA_ICR >> 15) & 0x1) {
 					DevCon.Warning("Force ICR IRQ!");
@@ -461,7 +400,7 @@ static __fi void _HwWrite_16or32_Page1( u32 addr, T val )
 			}
 			break;
 
-			mcase(0x1f8010f6):		// ICR_hi (16 bit?) [dunno if it ever happens]
+			mcase(0x1f8010f6):
 			{
 				DevCon.Warning("High ICR Write!!");
 				const u32 val2 = (u32)val << 16;
@@ -472,11 +411,6 @@ static __fi void _HwWrite_16or32_Page1( u32 addr, T val )
 
 			mcase(0x1f801574):
 			{
-				/*u32 tmp = (~val) & HW_DMA_ICR2;
-				psxHu(addr) = ((tmp ^ val) & 0xffffff) ^ tmp;*/
-				//u32 tmp = (~val) & HW_DMA_ICR2;
-				//u32 old = ((tmp ^ val) & 0xffffff) ^ tmp;
-				///psxHu(addr) = ((tmp ^ val) & 0xffffff) ^ tmp;
 				u32 newtmp = (HW_DMA_ICR2 & 0xff000000) | (val & 0xffffff);
 				newtmp &= ~(val & 0x7F000000);
 				if (((newtmp >> 15) & 0x1) || (((newtmp >> 23) & 0x1) == 0x1 && (((newtmp & 0x7F000000) >> 8) & (newtmp & 0x7F0000)) != 0)) {
@@ -485,8 +419,6 @@ static __fi void _HwWrite_16or32_Page1( u32 addr, T val )
 				else {
 					newtmp &= ~0x80000000;
 				}
-				//if (newtmp != old)
-				//	DevCon.Warning("ICR2 Old %x New %x", old, newtmp);
 				psxHu(addr) = newtmp;
 				if ((HW_DMA_ICR2 >> 15) & 0x1) {
 					DevCon.Warning("Force ICR2 IRQ!");
@@ -499,7 +431,7 @@ static __fi void _HwWrite_16or32_Page1( u32 addr, T val )
 			}
 			break;
 
-			mcase(0x1f801576):		// ICR2_hi (16 bit?) [dunno if it ever happens]
+			mcase(0x1f801576):
 			{
 				DevCon.Warning("ICR2 high write!");
 				const u32 val2 = (u32)val << 16;
@@ -508,28 +440,22 @@ static __fi void _HwWrite_16or32_Page1( u32 addr, T val )
 			}
 			break;
 
-			// ------------------------------------------------------------------------
-			// Legacy GPU  emulation
-			//
-
-			mcase(HW_PS1_GPU_DATA) : // HW_PS1_GPU_DATA = 0x1f801810
-				psxHu(addr) = val; // guess
+			mcase(HW_PS1_GPU_DATA) :
+				psxHu(addr) = val;
 				psxGPUw(addr, val);
 			break;
-			mcase (HW_PS1_GPU_STATUS): // HW_PS1_GPU_STATUS = 0x1f801814
-				psxHu(addr) = val; // guess
+			mcase (HW_PS1_GPU_STATUS):
+				psxHu(addr) = val;
 				psxGPUw(addr, val);
 			break;
-			mcase (0x1f801820): // MDEC
-				psxHu(addr) = val; // guess
+			mcase (0x1f801820):
+				psxHu(addr) = val;
 				mdecWrite0(val);
 			break;
-			mcase (0x1f801824): // MDEC
-				psxHu(addr) = val; // guess
+			mcase (0x1f801824):
+				psxHu(addr) = val;
 				mdecWrite1(val);
 			break;
-
-				// ------------------------------------------------------------------------
 
 			mcase(HW_DEV9_DATA):
 				DEV9write16( addr, val );
@@ -546,8 +472,6 @@ static __fi void _HwWrite_16or32_Page1( u32 addr, T val )
 }
 
 
-//////////////////////////////////////////////////////////////////////////////////////////
-//
 void iopHwWrite16_Page1( u32 addr, mem16_t val )
 {
 	_HwWrite_16or32_Page1<mem16_t>( addr, val );
@@ -555,7 +479,6 @@ void iopHwWrite16_Page1( u32 addr, mem16_t val )
 
 void iopHwWrite16_Page3( u32 addr, mem16_t val )
 {
-	// all addresses are assumed to be prefixed with 0x1f803xxx:
 	pxAssert( (addr >> 12) == 0x1f803 );
 	psxHu16(addr) = val;
 	IopHwTraceLog<mem16_t>( addr, val, false );
@@ -563,14 +486,11 @@ void iopHwWrite16_Page3( u32 addr, mem16_t val )
 
 void iopHwWrite16_Page8( u32 addr, mem16_t val )
 {
-	// all addresses are assumed to be prefixed with 0x1f808xxx:
 	pxAssert( (addr >> 12) == 0x1f808 );
 	psxHu16(addr) = val;
 	IopHwTraceLog<mem16_t>( addr, val, false );
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////
-//
 void iopHwWrite32_Page1( u32 addr, mem32_t val )
 {
 	_HwWrite_16or32_Page1<mem32_t >( addr, val );
@@ -578,7 +498,6 @@ void iopHwWrite32_Page1( u32 addr, mem32_t val )
 
 void iopHwWrite32_Page3( u32 addr, mem32_t val )
 {
-	// all addresses are assumed to be prefixed with 0x1f803xxx:
 	pxAssert( (addr >> 12) == 0x1f803 );
 	psxHu16(addr) = val;
 	IopHwTraceLog<mem32_t>( addr, val, false );
@@ -586,7 +505,6 @@ void iopHwWrite32_Page3( u32 addr, mem32_t val )
 
 void iopHwWrite32_Page8( u32 addr, mem32_t val )
 {
-	// all addresses are assumed to be prefixed with 0x1f808xxx:
 	pxAssert( (addr >> 12) == 0x1f808 );
 
 	u32 masked_addr = addr & 0x0fff;
@@ -601,8 +519,6 @@ void iopHwWrite32_Page8( u32 addr, mem32_t val )
 		}
 		else if ( masked_addr < 0x260 )
 		{
-			// SIO2 Send commands alternate registers.  First reg maps to Send1, second
-			// to Send2, third to Send1, etc.  And the following clever code does this:
 
 			const int parm = (masked_addr - 0x240) / 8;
 
@@ -655,7 +571,6 @@ void iopHwWrite32_Page8( u32 addr, mem32_t val )
 					Sio2Log.WriteLn("%s(%08X, %08X) SIO2 ISTAT Write", __FUNCTION__, addr, val);
 					g_Sio2.iStat &= ~val;
 					break;
-				// Other SIO2 registers are read-only, no-ops on write.
 				default:
 					psxHu32(addr) = val;
 				break;

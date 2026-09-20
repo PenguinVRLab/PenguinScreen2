@@ -20,208 +20,206 @@ namespace usb_pad
 	};
 
 	static const uint8_t dev_descriptor[] = {
-		/* bLength             */ 0x12, //(18)
-		/* bDescriptorType     */ 0x01, //(1)
-		/* bcdUSB              */ WBVAL(0x0110),
-		/* bDeviceClass        */ 0x00, //(0)
-		/* bDeviceSubClass     */ 0x00, //(0)
-		/* bDeviceProtocol     */ 0x00, //(0)
-		/* bMaxPacketSize0     */ 0x08, //(8)
-		/* idVendor            */ WBVAL(0x0B49),
-		/* idProduct           */ WBVAL(0x0644),
-		/* bcdDevice           */ WBVAL(0x0100),
-		/* iManufacturer       */ 0x01,
-		/* iProduct            */ 0x02,
-		/* iSerialNumber       */ 0x00,
-		/* bNumConfigurations  */ 0x01,
+ 0x12,
+ 0x01,
+ WBVAL(0x0110),
+ 0x00,
+ 0x00,
+ 0x00,
+ 0x08,
+ WBVAL(0x0B49),
+ WBVAL(0x0644),
+ WBVAL(0x0100),
+ 0x01,
+ 0x02,
+ 0x00,
+ 0x01,
 	};
 
 	static const uint8_t hid_report_descriptor[] = {
-		0x05, 0x01,       // Usage Page (Generic Desktop Ctrls)
-		0x09, 0x04,       // Usage (Joystick)
-		0xA1, 0x01,       // Collection (Application)
-		0x09, 0x01,       //   Usage (Pointer)
-		0xA1, 0x00,       //   Collection (Physical)
-		0x95, 0x03,       //     Report Count (3)
-		0x75, 0x08,       //     Report Size (8)
-		0x15, 0x00,       //     Logical Minimum (0)
-		0x26, 0xFF, 0x00, //     Logical Maximum (255)
-		0x35, 0x00,       //     Physical Minimum (0)
-		0x46, 0xFF, 0x00, //     Physical Maximum (255)
-		0x66, 0x00, 0x00, //     Unit (None)
-		0x05, 0x01,       //     Usage Page (Generic Desktop Ctrls)
-		0x09, 0x30,       //     Usage (X)
-		0x09, 0x31,       //     Usage (Y)
-		0x09, 0x32,       //     Usage (Z)
-		0x81, 0x02,       //     Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
-		0x95, 0x01,       //     Report Count (1)
-		0x75, 0x04,       //     Report Size (4)
-		0x15, 0x00,       //     Logical Minimum (0)
-		0x25, 0x07,       //     Logical Maximum (7)
-		0x35, 0x00,       //     Physical Minimum (0)
-		0x46, 0x3B, 0x01, //     Physical Maximum (315)
-		0x66, 0x14, 0x00, //     Unit (System: English Rotation, Length: Centimeter)
-		0x09, 0x39,       //     Usage (Hat switch)
-		0x81, 0x42,       //     Input (Data,Var,Abs,No Wrap,Linear,Preferred State,Null State)
-		0x95, 0x0A,       //     Report Count (10)
-		0x75, 0x01,       //     Report Size (1)
-		0x15, 0x00,       //     Logical Minimum (0)
-		0x25, 0x01,       //     Logical Maximum (1)
-		0x35, 0x00,       //     Physical Minimum (0)
-		0x45, 0x01,       //     Physical Maximum (1)
-		0x66, 0x00, 0x00, //     Unit (None)
-		0x05, 0x09,       //     Usage Page (Button)
-		0x19, 0x01,       //     Usage Minimum (0x01)
-		0x29, 0x0A,       //     Usage Maximum (0x0A)
-		0x81, 0x02,       //     Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
-		0x95, 0x02,       //     Report Count (2)
-		0x81, 0x01,       //     Input (Const,Array,Abs,No Wrap,Linear,Preferred State,No Null Position)
-		0x95, 0x08,       //     Report Count (8)
-		0x75, 0x01,       //     Report Size (1)
-		0x05, 0x08,       //     Usage Page (LEDs)
-		0x19, 0x01,       //     Usage Minimum (Num Lock)
-		0x29, 0x08,       //     Usage Maximum (Do Not Disturb)
-		0x91, 0x02,       //     Output (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position,Non-volatile)
-		0xC0,             //   End Collection
-		0xC0,             // End Collection
+		0x05, 0x01,
+		0x09, 0x04,
+		0xA1, 0x01,
+		0x09, 0x01,
+		0xA1, 0x00,
+		0x95, 0x03,
+		0x75, 0x08,
+		0x15, 0x00,
+		0x26, 0xFF, 0x00,
+		0x35, 0x00,
+		0x46, 0xFF, 0x00,
+		0x66, 0x00, 0x00,
+		0x05, 0x01,
+		0x09, 0x30,
+		0x09, 0x31,
+		0x09, 0x32,
+		0x81, 0x02,
+		0x95, 0x01,
+		0x75, 0x04,
+		0x15, 0x00,
+		0x25, 0x07,
+		0x35, 0x00,
+		0x46, 0x3B, 0x01,
+		0x66, 0x14, 0x00,
+		0x09, 0x39,
+		0x81, 0x42,
+		0x95, 0x0A,
+		0x75, 0x01,
+		0x15, 0x00,
+		0x25, 0x01,
+		0x35, 0x00,
+		0x45, 0x01,
+		0x66, 0x00, 0x00,
+		0x05, 0x09,
+		0x19, 0x01,
+		0x29, 0x0A,
+		0x81, 0x02,
+		0x95, 0x02,
+		0x81, 0x01,
+		0x95, 0x08,
+		0x75, 0x01,
+		0x05, 0x08,
+		0x19, 0x01,
+		0x29, 0x08,
+		0x91, 0x02,
+		0xC0,
+		0xC0,
 
-		// 98 bytes
 	};
 
 	static const uint8_t config_descriptor[] = {
-		0x09,       // bLength
-		0x02,       // bDescriptorType (Configuration)
-		0x86, 0x00, // wTotalLength 134
-		0x03,       // bNumInterfaces 3
-		0x01,       // bConfigurationValue
-		0x00,       // iConfiguration (String Index)
-		0x80,       // bmAttributes
-		0x31,       // bMaxPower 98mA
+		0x09,
+		0x02,
+		0x86, 0x00,
+		0x03,
+		0x01,
+		0x00,
+		0x80,
+		0x31,
 
-		0x09, // bLength
-		0x04, // bDescriptorType (Interface)
-		0x00, // bInterfaceNumber 0
-		0x00, // bAlternateSetting
-		0x00, // bNumEndpoints 0
-		0x01, // bInterfaceClass (Audio)
-		0x01, // bInterfaceSubClass (Audio Control)
-		0x00, // bInterfaceProtocol
-		0x00, // iInterface (String Index)
+		0x09,
+		0x04,
+		0x00,
+		0x00,
+		0x00,
+		0x01,
+		0x01,
+		0x00,
+		0x00,
 
-		0x09,       // bLength
-		0x24,       // bDescriptorType (See Next Line)
-		0x01,       // bDescriptorSubtype (CS_INTERFACE -> HEADER)
-		0x00, 0x01, // bcdADC 1.00
-		WBVAL(38),  // wTotalLength 38
-		0x01,       // binCollection 0x01
-		0x01,       // baInterfaceNr 1
+		0x09,
+		0x24,
+		0x01,
+		0x00, 0x01,
+		WBVAL(38),
+		0x01,
+		0x01,
 
-		0x0C,       // bLength
-		0x24,       // bDescriptorType (See Next Line)
-		0x02,       // bDescriptorSubtype (CS_INTERFACE -> INPUT_TERMINAL)
-		0x01,       // bTerminalID
-		0x01, 0x02, // wTerminalType (Microphone)
-		0x02,       // bAssocTerminal
-		0x01,       // bNrChannels 1
-		0x00, 0x00, // wChannelConfig
-		0x00,       // iChannelNames
-		0x00,       // iTerminal
+		0x0C,
+		0x24,
+		0x02,
+		0x01,
+		0x01, 0x02,
+		0x02,
+		0x01,
+		0x00, 0x00,
+		0x00,
+		0x00,
 
-		0x09,       // bLength
-		0x24,       // bDescriptorType (See Next Line)
-		0x03,       // bDescriptorSubtype (CS_INTERFACE -> OUTPUT_TERMINAL)
-		0x02,       // bTerminalID
-		0x01, 0x01, // wTerminalType (USB Streaming)
-		0x01,       // bAssocTerminal
-		0x03,       // bSourceID
-		0x00,       // iTerminal
+		0x09,
+		0x24,
+		0x03,
+		0x02,
+		0x01, 0x01,
+		0x01,
+		0x03,
+		0x00,
 
-		0x08,       // bLength
-		0x24,       // bDescriptorType (See Next Line)
-		0x06,       // bDescriptorSubtype (CS_INTERFACE -> FEATURE_UNIT)
-		0x03,       // bUnitID
-		0x01,       // bSourceID
-		0x01,       // bControlSize 1
-		0x03, 0x00, // bmaControls[0] (Mute,Volume)
+		0x08,
+		0x24,
+		0x06,
+		0x03,
+		0x01,
+		0x01,
+		0x03, 0x00,
 
-		0x09, // bLength
-		0x04, // bDescriptorType (Interface)
-		0x01, // bInterfaceNumber 1
-		0x00, // bAlternateSetting
-		0x00, // bNumEndpoints 0
-		0x01, // bInterfaceClass (Audio)
-		0x02, // bInterfaceSubClass (Audio Streaming)
-		0x00, // bInterfaceProtocol
-		0x00, // iInterface (String Index)
+		0x09,
+		0x04,
+		0x01,
+		0x00,
+		0x00,
+		0x01,
+		0x02,
+		0x00,
+		0x00,
 
-		0x09, // bLength
-		0x04, // bDescriptorType (Interface)
-		0x01, // bInterfaceNumber 1
-		0x01, // bAlternateSetting
-		0x01, // bNumEndpoints 1
-		0x01, // bInterfaceClass (Audio)
-		0x02, // bInterfaceSubClass (Audio Streaming)
-		0x00, // bInterfaceProtocol
-		0x00, // iInterface (String Index)
+		0x09,
+		0x04,
+		0x01,
+		0x01,
+		0x01,
+		0x01,
+		0x02,
+		0x00,
+		0x00,
 
-		0x07,       // bLength
-		0x24,       // bDescriptorType (See Next Line)
-		0x01,       // bDescriptorSubtype (CS_INTERFACE -> AS_GENERAL)
-		0x02,       // bTerminalLink
-		0x01,       // bDelay 1
-		0x01, 0x00, // wFormatTag (PCM)
+		0x07,
+		0x24,
+		0x01,
+		0x02,
+		0x01,
+		0x01, 0x00,
 
-		0x0E,         // bLength
-		0x24,         // bDescriptorType (See Next Line)
-		0x02,         // bDescriptorSubtype (CS_INTERFACE -> FORMAT_TYPE)
-		0x01,         // bFormatType 1
-		0x01,         // bNrChannels (Mono)
-		0x02,         // bSubFrameSize 2
-		0x10,         // bBitResolution 16
-		0x02,         // bSamFreqType 2
-		B3VAL(8000),  // tSamFreq[1] 8000 Hz
-		B3VAL(11025), // tSamFreq[2] 11025 Hz
+		0x0E,
+		0x24,
+		0x02,
+		0x01,
+		0x01,
+		0x02,
+		0x10,
+		0x02,
+		B3VAL(8000),
+		B3VAL(11025),
 
-		0x07,                         // bLength
-		USB_ENDPOINT_DESCRIPTOR_TYPE, // bDescriptorType (See Next Line)
-		USB_ENDPOINT_IN(1),           // bEndpointAddress (IN/D2H)
-		0x01,                         // bmAttributes (Isochronous, No Sync, Data EP)
-		WBVAL(100),                   // wMaxPacketSize 100
-		0x01,                         // bInterval 1 (unit depends on device speed)
+		0x07,
+		USB_ENDPOINT_DESCRIPTOR_TYPE,
+		USB_ENDPOINT_IN(1),
+		0x01,
+		WBVAL(100),
+		0x01,
 
-		0x07,       // bLength
-		0x25,       // bDescriptorType (See Next Line)
-		0x01,       // bDescriptorSubtype (CS_ENDPOINT -> EP_GENERAL)
-		0x01,       // bmAttributes (Sampling Freq Control)
-		0x00,       // bLockDelayUnits
-		0x00, 0x00, // wLockDelay 0
+		0x07,
+		0x25,
+		0x01,
+		0x01,
+		0x00,
+		0x00, 0x00,
 
-		USB_INTERFACE_DESC_SIZE,       // bLength
-		USB_INTERFACE_DESCRIPTOR_TYPE, // bDescriptorType (Interface)
-		0x02,                          // bInterfaceNumber 2
-		0x00,                          // bAlternateSetting
-		0x01,                          // bNumEndpoints 1
-		USB_CLASS_HID,                 // bInterfaceClass
-		0x00,                          // bInterfaceSubClass
-		0x00,                          // bInterfaceProtocol
-		0x00,                          // iInterface (String Index)
+		USB_INTERFACE_DESC_SIZE,
+		USB_INTERFACE_DESCRIPTOR_TYPE,
+		0x02,
+		0x00,
+		0x01,
+		USB_CLASS_HID,
+		0x00,
+		0x00,
+		0x00,
 
-		0x09,          // bLength
-		USB_DT_HID,    // bDescriptorType (HID)
-		WBVAL(0x0100), // bcdHID 1.00
-		0x00,          // bCountryCode
-		0x01,          // bNumDescriptors
-		USB_DT_REPORT, // bDescriptorType[0] (HID)
-		WBVAL(98),     // wDescriptorLength[0] 98
+		0x09,
+		USB_DT_HID,
+		WBVAL(0x0100),
+		0x00,
+		0x01,
+		USB_DT_REPORT,
+		WBVAL(98),
 
-		0x07,                         // bLength
-		USB_ENDPOINT_DESCRIPTOR_TYPE, // bDescriptorType (Endpoint)
-		USB_ENDPOINT_IN(2),           // bEndpointAddress (IN/D2H)
-		USB_ENDPOINT_TYPE_INTERRUPT,  // bmAttributes (Interrupt)
-		WBVAL(8),                     // wMaxPacketSize 8
-		0x0A,                         // bInterval 10 (unit depends on device speed)
+		0x07,
+		USB_ENDPOINT_DESCRIPTOR_TYPE,
+		USB_ENDPOINT_IN(2),
+		USB_ENDPOINT_TYPE_INTERRUPT,
+		WBVAL(8),
+		0x0A,
 
-		// 134 bytes
 	};
 
 	struct SeamicState : public PadState
@@ -304,7 +302,6 @@ namespace usb_pad
 						goto fail;
 				}
 				break;
-			/* hid specific requests */
 			case SET_REPORT:
 				if (length > 0)
 				{
@@ -354,7 +351,6 @@ namespace usb_pad
 
 	std::span<const InputBindingInfo> SeamicDevice::Bindings(u32 subtype) const
 	{
-		// TODO: This is likely wrong. Someone who cares can fix it.
 		static constexpr const InputBindingInfo bindings[] = {
 			{"StickLeft", TRANSLATE_NOOP("USB", "Stick Left"), nullptr, InputBindingInfo::Type::HalfAxis, CID_STEERING_L, GenericInputBinding::LeftStickLeft},
 			{"StickRight", TRANSLATE_NOOP("USB", "Stick Right"), nullptr, InputBindingInfo::Type::HalfAxis, CID_STEERING_R, GenericInputBinding::LeftStickRight},
@@ -421,7 +417,7 @@ namespace usb_pad
 		s->dev.klass.handle_data = pad_handle_data;
 		s->dev.klass.unrealize = pad_handle_destroy;
 		s->dev.klass.usb_desc = &s->desc;
-		s->dev.klass.product_desc = s->desc.str[2]; //not really used
+		s->dev.klass.product_desc = s->desc.str[2];
 		s->port = port;
 
 		usb_desc_init(&s->dev);
@@ -439,22 +435,6 @@ namespace usb_pad
 	{
 		Console.Warning("Not implemented!");
 		return true;
-		//  SeamicState *s = (SeamicState *)dev;
-		// 	switch (mode)
-		// 	{
-		// 		case FREEZE_LOAD:
-		// 			if (!s) return -1;
-		// 			s->f = *(SeamicState::freeze *)data;
-		// 			return sizeof(SeamicState::freeze);
-		// 		case FREEZE_SAVE:
-		// 			if (!s) return -1;
-		// 			return sizeof(SeamicState::freeze);
-		// 		case FREEZE_SIZE:
-		// 			return sizeof(SeamicState::freeze);
-		// 		default:
-		// 		break;
-		// 	}
-		// 	return -1;
 	}
 
-} // namespace usb_pad
+}

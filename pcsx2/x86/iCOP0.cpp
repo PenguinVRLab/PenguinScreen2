@@ -20,27 +20,12 @@ namespace Dynarec {
 namespace OpcodeImpl {
 namespace COP0 {
 
-/*********************************************************
-*   COP0 opcodes                                         *
-*                                                        *
-*********************************************************/
-
-// emits "setup" code for a COP0 branch test.  The instruction immediately following
-// this should be a conditional Jump -- JZ or JNZ normally.
 static void _setupBranchTest()
 {
 	_eeFlushAllDirty();
 
-	// COP0 branch conditionals are based on the following equation:
-	//  (((psHu16(DMAC_STAT) | ~psHu16(DMAC_PCR)) & 0x3ff) == 0x3ff)
-	// BC0F checks if the statement is false, BC0T checks if the statement is true.
-
-	// note: We only want to compare the 16 bit values of DMAC_STAT and PCR.
-	// But using 32-bit loads here is ok (and faster), because we mask off
-	// everything except the lower 10 bits away.
-
 	xMOV(eax, ptr[(&psHu32(DMAC_PCR))]);
-	xMOV(ecx, 0x3ff); // ECX is our 10-bit mask var
+	xMOV(ecx, 0x3ff);
 	xNOT(eax);
 	xOR(eax, ptr[(&psHu32(DMAC_STAT))]);
 	xAND(eax, ecx);
@@ -89,35 +74,22 @@ void recERET()
 
 void recEI()
 {
-	// must branch after enabling interrupts, so that anything
-	// pending gets triggered properly.
 	recBranchCall(Interp::EI);
 }
 
 void recDI()
 {
-	//// No need to branch after disabling interrupts...
 
-	//iFlushCall(0);
-
-	//xMOV(eax, ptr[&cpuRegs.cycle ]);
-	//xMOV(ptr[&g_nextBranchCycle], eax);
-
-	//xFastCall((void*)(uptr)Interp::DI );
-
-	// Fixes booting issues in the following games:
-	// Jak X, Namco 50th anniversary, Spongebob the Movie, Spongebob Battle for Bikini Bottom,
-	// The Incredibles, The Incredibles rize of the underminer, Soukou kihei armodyne, Garfield Saving Arlene, Tales of Fandom Vol. 2.
 	if (!g_recompilingDelaySlot)
-		recompileNextInstruction(false, false); // DI execution is delayed by one instruction
+		recompileNextInstruction(false, false);
 
 	xMOV(eax, ptr[&cpuRegs.CP0.n.Status]);
-	xTEST(eax, 0x20006); // EXL | ERL | EDI
+	xTEST(eax, 0x20006);
 	xForwardJNZ8 iHaveNoIdea;
-	xTEST(eax, 0x18); // KSU
+	xTEST(eax, 0x18);
 	xForwardJNZ8 inUserMode;
 	iHaveNoIdea.SetTarget();
-	xAND(eax, ~(u32)0x10000); // EIE
+	xAND(eax, ~(u32)0x10000);
 	xMOV(ptr[&cpuRegs.CP0.n.Status], eax);
 	inUserMode.SetTarget();
 }
@@ -134,10 +106,9 @@ void recMFC0()
 {
 	if (_Rd_ == 9)
 	{
-		// This case needs to be handled even if the write-back is ignored (_Rt_ == 0 )
 		xMOV(rcx, ptr64[&cpuRegs.cycle]);
 		xADD(rcx, scaleblockcycles_clear());
-		xMOV(ptr64[&cpuRegs.cycle], rcx); // update cycles
+		xMOV(ptr64[&cpuRegs.cycle], rcx);
 		xMOV(rax, rcx);
 		xSUB(rax, ptr[&cpuRegs.lastCOP0Cycle]);
 		xADD(ptr[&cpuRegs.CP0.n.Count], rax);
@@ -156,28 +127,28 @@ void recMFC0()
 
 	if (_Rd_ == 25)
 	{
-		if (0 == (_Imm_ & 1)) // MFPS, register value ignored
+		if (0 == (_Imm_ & 1))
 		{
 			const int regt = _allocX86reg(X86TYPE_GPR, _Rt_, MODE_WRITE);
 			xMOVSX(xRegister64(regt), ptr32[&cpuRegs.PERF.n.pccr]);
 		}
-		else if (0 == (_Imm_ & 2)) // MFPC 0, only LSB of register matters
+		else if (0 == (_Imm_ & 2))
 		{
 			iFlushCall(FLUSH_INTERPRETER);
 			xMOV(rax, ptr64[&cpuRegs.cycle]);
 			xADD(rax, scaleblockcycles_clear());
-			xMOV(ptr64[&cpuRegs.cycle], rax); // update cycles
+			xMOV(ptr64[&cpuRegs.cycle], rax);
 			xFastCall((void*)COP0_UpdatePCCR);
 
 			const int regt = _allocX86reg(X86TYPE_GPR, _Rt_, MODE_WRITE);
 			xMOVSX(xRegister64(regt), ptr32[&cpuRegs.PERF.n.pcr0]);
 		}
-		else // MFPC 1
+		else
 		{
 			iFlushCall(FLUSH_INTERPRETER);
 			xMOV(rax, ptr64[&cpuRegs.cycle]);
 			xADD(rax, scaleblockcycles_clear());
-			xMOV(ptr64[&cpuRegs.cycle], rax); // update cycles
+			xMOV(ptr64[&cpuRegs.cycle], rax);
 			xFastCall((void*)COP0_UpdatePCCR);
 
 			const int regt = _allocX86reg(X86TYPE_GPR, _Rt_, MODE_WRITE);
@@ -206,7 +177,7 @@ void recMTC0()
 				iFlushCall(FLUSH_INTERPRETER);
 				xMOV(rax, ptr64[&cpuRegs.cycle]);
 				xADD(rax, scaleblockcycles_clear());
-				xMOV(ptr64[&cpuRegs.cycle], rax); // update cycles
+				xMOV(ptr64[&cpuRegs.cycle], rax);
 				xFastCall((void*)WriteCP0Status, g_cpuConstRegs[_Rt_].UL[0]);
 				break;
 
@@ -218,38 +189,37 @@ void recMTC0()
 			case 9:
 				xMOV(rcx, ptr64[&cpuRegs.cycle]);
 				xADD(rcx, scaleblockcycles_clear());
-				xMOV(ptr64[&cpuRegs.cycle], rcx); // update cycles
+				xMOV(ptr64[&cpuRegs.cycle], rcx);
 				xMOV(ptr64[&cpuRegs.lastCOP0Cycle], rcx);
 				xMOV(ptr32[&cpuRegs.CP0.r[9]], g_cpuConstRegs[_Rt_].UL[0]);
 				break;
 
 			case 25:
-				if (0 == (_Imm_ & 1)) // MTPS
+				if (0 == (_Imm_ & 1))
 				{
-					if (0 != (_Imm_ & 0x3E)) // only effective when the register is 0
+					if (0 != (_Imm_ & 0x3E))
 						break;
-					// Updates PCRs and sets the PCCR.
 					iFlushCall(FLUSH_INTERPRETER);
 					xMOV(rax, ptr64[&cpuRegs.cycle]);
 					xADD(rax, scaleblockcycles_clear());
-					xMOV(ptr64[&cpuRegs.cycle], rax); // update cycles
+					xMOV(ptr64[&cpuRegs.cycle], rax);
 					xFastCall((void*)COP0_UpdatePCCR);
 					xMOV(ptr32[&cpuRegs.PERF.n.pccr], g_cpuConstRegs[_Rt_].UL[0]);
 					xFastCall((void*)COP0_DiagnosticPCCR);
 				}
-				else if (0 == (_Imm_ & 2)) // MTPC 0, only LSB of register matters
+				else if (0 == (_Imm_ & 2))
 				{
 					xMOV(rax, ptr64[&cpuRegs.cycle]);
 					xADD(rax, scaleblockcycles_clear());
-					xMOV(ptr64[&cpuRegs.cycle], rax); // update cycles
+					xMOV(ptr64[&cpuRegs.cycle], rax);
 					xMOV(ptr32[&cpuRegs.PERF.n.pcr0], g_cpuConstRegs[_Rt_].UL[0]);
 					xMOV(ptr64[&cpuRegs.lastPERFCycle[0]], rax);
 				}
-				else // MTPC 1
+				else
 				{
 					xMOV(rax, ptr64[&cpuRegs.cycle]);
 					xADD(rax, scaleblockcycles_clear());
-					xMOV(ptr64[&cpuRegs.cycle], rax); // update cycles
+					xMOV(ptr64[&cpuRegs.cycle], rax);
 					xMOV(ptr32[&cpuRegs.PERF.n.pcr1], g_cpuConstRegs[_Rt_].UL[0]);
 					xMOV(ptr64[&cpuRegs.lastPERFCycle[1]], rax);
 				}
@@ -273,7 +243,7 @@ void recMTC0()
 				iFlushCall(FLUSH_INTERPRETER);
 				xMOV(rax, ptr64[&cpuRegs.cycle]);
 				xADD(rax, scaleblockcycles_clear());
-				xMOV(ptr64[&cpuRegs.cycle], rax); // update cycles
+				xMOV(ptr64[&cpuRegs.cycle], rax);
 				xFastCall((void*)WriteCP0Status);
 				break;
 
@@ -286,37 +256,37 @@ void recMTC0()
 			case 9:
 				xMOV(rcx, ptr64[&cpuRegs.cycle]);
 				xADD(rcx, scaleblockcycles_clear());
-				xMOV(ptr64[&cpuRegs.cycle], rcx); // update cycles
+				xMOV(ptr64[&cpuRegs.cycle], rcx);
 				_eeMoveGPRtoM((uptr)&cpuRegs.CP0.r[9], _Rt_);
 				xMOV(ptr64[&cpuRegs.lastCOP0Cycle], rcx);
 				break;
 
 			case 25:
-				if (0 == (_Imm_ & 1)) // MTPS
+				if (0 == (_Imm_ & 1))
 				{
-					if (0 != (_Imm_ & 0x3E)) // only effective when the register is 0
+					if (0 != (_Imm_ & 0x3E))
 						break;
 					iFlushCall(FLUSH_INTERPRETER);
 					xMOV(rax, ptr64[&cpuRegs.cycle]);
 					xADD(rax, scaleblockcycles_clear());
-					xMOV(ptr64[&cpuRegs.cycle], rax); // update cycles
+					xMOV(ptr64[&cpuRegs.cycle], rax);
 					xFastCall((void*)COP0_UpdatePCCR);
 					_eeMoveGPRtoM((uptr)&cpuRegs.PERF.n.pccr, _Rt_);
 					xFastCall((void*)COP0_DiagnosticPCCR);
 				}
-				else if (0 == (_Imm_ & 2)) // MTPC 0, only LSB of register matters
+				else if (0 == (_Imm_ & 2))
 				{
 					xMOV(rcx, ptr64[&cpuRegs.cycle]);
 					xADD(rcx, scaleblockcycles_clear());
-					xMOV(ptr64[&cpuRegs.cycle], rcx); // update cycles
+					xMOV(ptr64[&cpuRegs.cycle], rcx);
 					_eeMoveGPRtoM((uptr)&cpuRegs.PERF.n.pcr0, _Rt_);
 					xMOV(ptr64[&cpuRegs.lastPERFCycle[0]], rcx);
 				}
-				else // MTPC 1
+				else
 				{
 					xMOV(rcx, ptr64[&cpuRegs.cycle]);
 					xADD(rcx, scaleblockcycles_clear());
-					xMOV(ptr64[&cpuRegs.cycle], rcx); // update cycles
+					xMOV(ptr64[&cpuRegs.cycle], rcx);
 					_eeMoveGPRtoM((uptr)&cpuRegs.PERF.n.pcr1, _Rt_);
 					xMOV(ptr64[&cpuRegs.lastPERFCycle[1]], rcx);
 				}
@@ -335,34 +305,7 @@ void recMTC0()
 #endif
 
 
-/*void rec(COP0) {
 }
-
-void rec(BC0F) {
 }
-
-void rec(BC0T) {
 }
-
-void rec(BC0FL) {
 }
-
-void rec(BC0TL) {
-}
-
-void rec(TLBR) {
-}
-
-void rec(TLBWI) {
-}
-
-void rec(TLBWR) {
-}
-
-void rec(TLBP) {
-}*/
-
-} // namespace COP0
-} // namespace OpcodeImpl
-} // namespace Dynarec
-} // namespace R5900

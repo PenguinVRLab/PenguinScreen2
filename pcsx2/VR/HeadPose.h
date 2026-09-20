@@ -7,10 +7,8 @@
 
 namespace VR::HeadPose
 {
-
 	struct Snapshot
 	{
-
 		float orientation_x = 0.0f;
 		float orientation_y = 0.0f;
 		float orientation_z = 0.0f;

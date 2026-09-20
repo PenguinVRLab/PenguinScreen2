@@ -120,14 +120,14 @@ namespace usb_eyetoy
 								{
 									int srcx = 4* (8*mx + x);
 									int srcy = 4* (8*my + y);
-									unsigned char* src = (unsigned char*)data + (srcy * frame_width + srcx) * 2/*Y+UV*/;
+									unsigned char* src = (unsigned char*)data + (srcy * frame_width + srcx) * 2 ;
 									if (srcy >= frame_height)
 									{
 										comprBuf[in_pos++] = 0x01;
 									}
 									else
 									{
-										comprBuf[in_pos++] = src[0];//Y
+										comprBuf[in_pos++] = src[0];
 									}
 								}
 					comprBuf.resize(80 * 64);
@@ -478,7 +478,7 @@ namespace usb_eyetoy
 					FD_ZERO(&fds);
 					FD_SET(fd, &fds);
 
-					struct timeval timeout = {2, 0}; // 2sec
+					struct timeval timeout = {2, 0};
 					int ret = select(fd + 1, &fds, NULL, NULL, &timeout);
 
 					if (ret < 0)
@@ -654,7 +654,7 @@ namespace usb_eyetoy
 		{
 			mirroring_enabled = state;
 		}
-	} // namespace linux_api
+	}
 
 	std::unique_ptr<VideoDevice> VideoDevice::CreateInstance()
 	{
@@ -665,4 +665,4 @@ namespace usb_eyetoy
 	{
 		return linux_api::getDevList();
 	}
-} // namespace usb_eyetoy
+}

@@ -9,7 +9,6 @@
 
 static std::string psxout_buf;
 
-// This filtering should almost certainly be done in the console classes instead
 static std::string psxout_last;
 static unsigned psxout_repeat;
 
@@ -47,17 +46,12 @@ void psxBiosReset()
     flush_stdout(true);
 }
 
-// Called for PlayStation BIOS calls at 0xA0, 0xB0 and 0xC0 in kernel reserved memory (seemingly by actually calling those addresses)
-// Returns true if we internally process the call, not that we're likely to do any such thing
 bool psxBiosCall()
 {
-    // TODO: Tracing
-    // TODO (maybe, psx is hardly a priority): HLE framework
 
     switch (((psxRegs.pc << 4) & 0xf00) | (psxRegs.GPR.n.t1 & 0xff)) {
         case 0xa03:
         case 0xb35:
-            // write(fd, data, size)
             {
                 int fd = psxRegs.GPR.n.a0;
                 if (fd != 1)
@@ -72,20 +66,16 @@ bool psxBiosCall()
             }
         case 0xa09:
         case 0xb3b:
-            // putc(c, fd)
             if (psxRegs.GPR.n.a1 != 1)
                 return false;
             [[fallthrough]];
-        // fd=1, fall through to putchar
         case 0xa3c:
         case 0xb3d:
-            // putchar(c)
             psxout_buf.push_back((char)psxRegs.GPR.n.a0);
             flush_stdout(false);
             return false;
         case 0xa3e:
         case 0xb3f:
-            // puts(s)
             {
                 u32 str = psxRegs.GPR.n.a0;
                 while (char c = iopMemRead8(str++))

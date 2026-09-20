@@ -4,7 +4,7 @@
 #include "common/AlignedMalloc.h"
 #include "R3000A.h"
 #include "Common.h"
-#include "ps2/pgif.h" // for PSX kernel TTY in iopMemWrite32
+#include "ps2/pgif.h"
 #include "SPU2/spu2.h"
 #include "DEV9/DEV9.h"
 #include "IopHw.h"
@@ -18,12 +18,11 @@ alignas(__pagealignsize) u8 iopHw[Ps2MemSize::IopHardware];
 
 void iopMemAlloc()
 {
-	// TODO: Move to memmap
 	psxMemWLUT = (uptr*)_aligned_malloc(0x2000 * sizeof(uptr) * 2, 16);
 	if (!psxMemWLUT)
 		pxFailRel("Failed to allocate IOP memory lookup table");
 
-	psxMemRLUT = psxMemWLUT + 0x2000; //(uptr*)_aligned_malloc(0x10000 * sizeof(uptr),16);
+	psxMemRLUT = psxMemWLUT + 0x2000;
 
 	iopMem = reinterpret_cast<IopVM_MemoryAllocMess*>(SysMemory::GetIOPMem());
 }
@@ -35,40 +34,28 @@ void iopMemRelease()
 	iopMem = nullptr;
 }
 
-// Note!  Resetting the IOP's memory state is dependent on having *all* psx memory allocated,
-// which is performed by MemInit and PsxMemInit()
 void iopMemReset()
 {
 	pxAssert(iopMem);
 
 	DbgCon.WriteLn("IOP resetting main memory...");
 
-	memset(psxMemWLUT, 0, 0x2000 * sizeof(uptr) * 2); // clears both allocations, RLUT and WLUT
+	memset(psxMemWLUT, 0, 0x2000 * sizeof(uptr) * 2);
 
-	// Trick!  We're accessing RLUT here through WLUT, since it's the non-const pointer.
-	// So the ones with a 0x2000 prefixed are RLUT tables.
-
-	// Map IOP main memory, which is Read/Write, and mirrored three times
-	// at 0x0, 0x8000, and 0xa000:
 	for (int i = 0; i < 0x0080; i++)
 	{
 		u32 mask = (Ps2MemSize::ExposedIopRam / _64kb) - 1;
 		psxMemWLUT[i + 0x0000] = (uptr)&iopMem->Main[(i & mask) << 16];
 
-		// RLUTs, accessed through WLUT.
 		psxMemWLUT[i + 0x2000] = (uptr)&iopMem->Main[(i & mask) << 16];
 	}
 
-	// A few single-page allocations for things we store in special locations.
 	psxMemWLUT[0x2000 + 0x1f00] = (uptr)iopMem->P;
 	psxMemWLUT[0x2000 + 0x1f80] = (uptr)iopHw;
-	//psxMemWLUT[0x1bf80] = (uptr)iopHw;
 
 	psxMemWLUT[0x1f00] = (uptr)iopMem->P;
 	psxMemWLUT[0x1f80] = (uptr)iopHw;
-	//psxMemWLUT[0xbf80] = (uptr)iopHw;
 
-	// Read-only memory areas, so don't map WLUT for these...
 	for (int i = 0; i < 0x0040; i++)
 	{
 		psxMemWLUT[i + 0x2000 + 0x1fc0] = (uptr)&eeMem->ROM[i << 16];
@@ -84,13 +71,7 @@ void iopMemReset()
 		psxMemWLUT[i + 0x2000 + 0x1e40] = (uptr)&eeMem->ROM2[i << 16];
 	}
 
-	// sif!! (which is read only? (air))
 	psxMemWLUT[0x2000 + 0x1d00] = (uptr)iopMem->Sif;
-	//psxMemWLUT[0x1bd00] = (uptr)iopMem->Sif;
-
-	// this one looks like an old hack for some special write-only memory area,
-	// but leaving it in for reference (air)
-	//for (i=0; i<0x0008; i++) psxMemWLUT[i + 0xbfc0] = (uptr)&psR[i << 16];
 
 	std::memset(iopMem, 0, sizeof(*iopMem));
 }
@@ -176,7 +157,6 @@ u16 iopMemRead16(u32 mem)
 					ret = psxHu16(mem);
 					break;
 				}
-				//SIF_LOG("Sif reg read %x value %x", mem, ret);
 				return ret;
 			}
 			return *(const u16 *)(p + (mem & 0xffff));
@@ -211,7 +191,6 @@ u32 iopMemRead32(u32 mem)
 		}
 	} else
 	{
-		//see also Hw.c
 		const u8* p = (const u8*)(psxMemRLUT[mem >> 16]);
 		if (p != NULL)
 		{
@@ -229,7 +208,7 @@ u32 iopMemRead32(u32 mem)
 				case 0x20:
 					ret= psHu32(SBUS_F220);
 					break;
-				case 0x30:	// EE Side
+				case 0x30:
 					ret= psHu32(SBUS_F230);
 					break;
 				case 0x40:
@@ -243,7 +222,6 @@ u32 iopMemRead32(u32 mem)
 					ret = psxHu32(mem);
 					break;
 				}
-				//SIF_LOG("Sif reg read %x value %x", mem, ret);
 				return ret;
 			}
 			return *(const u32 *)(p + (mem & 0xffff));
@@ -337,13 +315,11 @@ void iopMemWrite16(u32 mem, u16 value)
 				switch (mem & 0x8f0)
 				{
 					case 0x10:
-						// write to ps2 mem
 						psHu16(SBUS_F210) = value;
 						return;
 					case 0x40:
 					{
 						u32 temp = value & 0xF0;
-						// write to ps2 mem
 						if(value & 0x20 || value & 0x80)
 						{
 							psHu16(SBUS_F240) &= ~0xF000;
@@ -396,7 +372,6 @@ void iopMemWrite32(u32 mem, u32 value)
 		}
 	} else
 	{
-		//see also Hw.c
 		u8* p = (u8 *)(psxMemWLUT[mem >> 16]);
 		if( p != NULL && !(psxRegs.CP0.n.Status & 0x10000) )
 		{
@@ -410,22 +385,22 @@ void iopMemWrite32(u32 mem, u32 value)
 				MEM_LOG("iop Sif reg write %x value %x", mem, value);
 				switch (mem & 0x8f0)
 				{
-					case 0x00:		// EE write path (EE/IOP readable)
-						return;		// this is the IOP, so read-only (do nothing)
+					case 0x00:
+						return;
 
-					case 0x10:		// IOP write path (EE/IOP readable)
+					case 0x10:
 						psHu32(SBUS_F210) = value;
 						return;
 
-					case 0x20:		// Bits cleared when written from IOP.
+					case 0x20:
 						psHu32(SBUS_F220) &= ~value;
 						return;
 
-					case 0x30:		// bits set when written from IOP
+					case 0x30:
 						psHu32(SBUS_F230) |= value;
 						return;
 
-					case 0x40:		// Control Register
+					case 0x40:
 					{
 						u32 temp = value & 0xF0;
 						if (value & 0x20 || value & 0x80)
@@ -452,9 +427,6 @@ void iopMemWrite32(u32 mem, u32 value)
 #endif
 				psxSu32(mem) = value;
 
-				// wtf?  why were we writing to the EE's sif space?  Commenting this out doesn't
-				// break any of my games, and should be more correct, but I guess we'll see.  --air
-				//*(u32*)(eeHw+0xf200+(mem&0xf0)) = value;
 				return;
 			}
 			else if (t == 0x1000)
@@ -467,7 +439,6 @@ void iopMemWrite32(u32 mem, u32 value)
 
 int iopMemSafeCmpBytes(u32 mem, const void* src, u32 size)
 {
-	// can memcpy so long as pages aren't crossed
 	const u8* sptr = static_cast<const u8*>(src);
 	const u8* const sptr_end = sptr + size;
 	while (sptr != sptr_end)
@@ -490,7 +461,6 @@ int iopMemSafeCmpBytes(u32 mem, const void* src, u32 size)
 
 bool iopMemSafeReadBytes(u32 mem, void* dst, u32 size)
 {
-	// can memcpy so long as pages aren't crossed
 	u8* dptr = static_cast<u8*>(dst);
 	u8* const dptr_end = dptr + size;
 	while (dptr != dptr_end)
@@ -510,7 +480,6 @@ bool iopMemSafeReadBytes(u32 mem, void* dst, u32 size)
 
 bool iopMemSafeWriteBytes(u32 mem, const void* src, u32 size)
 {
-	// can memcpy so long as pages aren't crossed
 	const u8* sptr = static_cast<const u8*>(src);
 	const u8* const sptr_end = sptr + size;
 	while (sptr != sptr_end)

@@ -110,7 +110,7 @@ constexpr u8 columnTable16[8][16] =
 
 constexpr u8 columnTable8[16][16] =
 {
-	{   0,   4,  16,  20,  32,  36,  48,  52,	// column 0
+	{   0,   4,  16,  20,  32,  36,  48,  52,
 	    2,   6,  18,  22,  34,  38,  50,  54 },
 	{   8,  12,  24,  28,  40,  44,  56,  60,
 	   10,  14,  26,  30,  42,  46,  58,  62 },
@@ -118,7 +118,7 @@ constexpr u8 columnTable8[16][16] =
 	   35,  39,  51,  55,   3,   7,  19,  23 },
 	{  41,  45,  57,  61,   9,  13,  25,  29,
 	   43,  47,  59,  63,  11,  15,  27,  31 },
-	{  96, 100, 112, 116,  64,  68,  80,  84, 	// column 1
+	{  96, 100, 112, 116,  64,  68,  80,  84,
 	   98, 102, 114, 118,  66,  70,  82,  86 },
 	{ 104, 108, 120, 124,  72,  76,  88,  92,
 	  106, 110, 122, 126,  74,  78,  90,  94 },
@@ -126,7 +126,7 @@ constexpr u8 columnTable8[16][16] =
 	   67,  71,  83,  87,  99, 103, 115, 119 },
 	{  73,  77,  89,  93, 105, 109, 121, 125,
 	   75,  79,  91,  95, 107, 111, 123, 127 },
-	{ 128, 132, 144, 148, 160, 164, 176, 180,	// column 2
+	{ 128, 132, 144, 148, 160, 164, 176, 180,
 	  130, 134, 146, 150, 162, 166, 178, 182 },
 	{ 136, 140, 152, 156, 168, 172, 184, 188,
 	  138, 142, 154, 158, 170, 174, 186, 190 },
@@ -134,7 +134,7 @@ constexpr u8 columnTable8[16][16] =
 	  163, 167, 179, 183, 131, 135, 147, 151 },
 	{ 169, 173, 185, 189, 137, 141, 153, 157,
 	  171, 175, 187, 191, 139, 143, 155, 159 },
-	{ 224, 228, 240, 244, 192, 196, 208, 212,	// column 3
+	{ 224, 228, 240, 244, 192, 196, 208, 212,
 	  226, 230, 242, 246, 194, 198, 210, 214 },
 	{ 232, 236, 248, 252, 200, 204, 216, 220,
 	  234, 238, 250, 254, 202, 206, 218, 222 },
@@ -146,7 +146,7 @@ constexpr u8 columnTable8[16][16] =
 
 constexpr u16 columnTable4[16][32] =
 {
-	{   0,   8,  32,  40,  64,  72,  96, 104,	// column 0
+	{   0,   8,  32,  40,  64,  72,  96, 104,
 	    2,  10,  34,  42,  66,  74,  98, 106,
 	    4,  12,  36,  44,  68,  76, 100, 108,
 	    6,  14,  38,  46,  70,  78, 102, 110 },
@@ -162,7 +162,7 @@ constexpr u16 columnTable4[16][32] =
 	   83,  91, 115, 123,  19,  27,  51,  59,
 	   85,  93, 117, 125,  21,  29,  53,  61,
 	   87,  95, 119, 127,  23,  31,  55,  63 },
-	{ 192, 200, 224, 232, 128, 136, 160, 168,	// column 1
+	{ 192, 200, 224, 232, 128, 136, 160, 168,
 	  194, 202, 226, 234, 130, 138, 162, 170,
 	  196, 204, 228, 236, 132, 140, 164, 172,
 	  198, 206, 230, 238, 134, 142, 166, 174 },
@@ -178,7 +178,7 @@ constexpr u16 columnTable4[16][32] =
 	  147, 155, 179, 187, 211, 219, 243, 251,
 	  149, 157, 181, 189, 213, 221, 245, 253,
 	  151, 159, 183, 191, 215, 223, 247, 255 },
-	{ 256, 264, 288, 296, 320, 328, 352, 360,	// column 2
+	{ 256, 264, 288, 296, 320, 328, 352, 360,
 	  258, 266, 290, 298, 322, 330, 354, 362,
 	  260, 268, 292, 300, 324, 332, 356, 364,
 	  262, 270, 294, 302, 326, 334, 358, 366 },
@@ -194,7 +194,7 @@ constexpr u16 columnTable4[16][32] =
 	  339, 347, 371, 379, 275, 283, 307, 315,
 	  341, 349, 373, 381, 277, 285, 309, 317,
 	  343, 351, 375, 383, 279, 287, 311, 319 },
-	{ 448, 456, 480, 488, 384, 392, 416, 424,	// column 3
+	{ 448, 456, 480, 488, 384, 392, 416, 424,
 	  450, 458, 482, 490, 386, 394, 418, 426,
 	  452, 460, 484, 492, 388, 396, 420, 428,
 	  454, 462, 486, 494, 390, 398, 422, 430 },
@@ -286,7 +286,6 @@ constexpr GSPixelColOffsetTable< 64> pixelColOffset16   = makeColOffsetTable(_bl
 constexpr GSPixelColOffsetTable< 64> pixelColOffset16S  = makeColOffsetTable(_blockTable16S,  columnTable16);
 constexpr GSPixelColOffsetTable< 64> pixelColOffset8    = makeColOffsetTable(_blockTable8,    columnTable8);
 constexpr GSPixelColOffsetTable<128> pixelColOffset4    = makeColOffsetTable(_blockTable4,    columnTable4);
-// These can't be constexpr due to a GCC bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=99901
 constinit const GSSizedPixelRowOffsetTable< 64> GSTables::_pixelRowOffset32   = makeRowOffsetTable(_blockTable32,   columnTable32, 0);
 constinit const GSSizedPixelRowOffsetTable< 64> GSTables::_pixelRowOffset16   = makeRowOffsetTable(_blockTable16,   columnTable16, 0);
 constinit const GSSizedPixelRowOffsetTable< 64> GSTables::_pixelRowOffset16S  = makeRowOffsetTable(_blockTable16S,  columnTable16, 0);

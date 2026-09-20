@@ -70,7 +70,6 @@ AudioSettingsWidget::AudioSettingsWidget(SettingsWindow* settings_dialog, QWidge
 	onMinimalOutputLatencyChanged();
 	updateLatencyLabel();
 
-	// for per-game, just use the normal path, since it needs to re-read/apply
 	if (!dialog()->isPerGameSettings())
 	{
 		m_ui.standardVolume->setValue(dialog()->getEffectiveIntValue("SPU2/Output", "StandardVolume", 100));
@@ -252,7 +251,6 @@ void AudioSettingsWidget::updateLatencyLabel()
 	const u32 config_output_latency_ms = dialog()->getEffectiveIntValue("SPU2/Output", "OutputLatencyMS", AudioStreamParameters::DEFAULT_OUTPUT_LATENCY_MS);
 	const bool minimal_output = dialog()->getEffectiveBoolValue("SPU2/Output", "OutputLatencyMinimal", false);
 
-	//: Preserve the %1 variable, adapt the latter ms (and/or any possible spaces in between) to your language's ruleset.
 	m_ui.outputLatencyLabel->setText(minimal_output ? tr("N/A") : tr("%1 ms").arg(config_output_latency_ms));
 	m_ui.bufferMSLabel->setText(tr("%1 ms").arg(config_buffer_ms));
 
@@ -305,7 +303,6 @@ void AudioSettingsWidget::onMinimalOutputLatencyChanged()
 
 void AudioSettingsWidget::onStandardVolumeChanged(const int new_value)
 {
-	// only called for base settings
 	pxAssert(!dialog()->isPerGameSettings());
 	Host::SetBaseIntSettingValue("SPU2/Output", "StandardVolume", new_value);
 	Host::CommitBaseSettingChanges();
@@ -316,7 +313,6 @@ void AudioSettingsWidget::onStandardVolumeChanged(const int new_value)
 
 void AudioSettingsWidget::onFastForwardVolumeChanged(const int new_value)
 {
-	// only called for base settings
 	pxAssert(!dialog()->isPerGameSettings());
 	Host::SetBaseIntSettingValue("SPU2/Output", "FastForwardVolume", new_value);
 	Host::CommitBaseSettingChanges();
@@ -327,7 +323,6 @@ void AudioSettingsWidget::onFastForwardVolumeChanged(const int new_value)
 
 void AudioSettingsWidget::onOutputMutedChanged(const int new_state)
 {
-	// only called for base settings
 	pxAssert(!dialog()->isPerGameSettings());
 
 	const bool muted = (new_state != 0);
@@ -493,7 +488,6 @@ void AudioSettingsWidget::resetVolume(const bool fast_forward)
 		slider->setValue(value);
 		label->setText(QStringLiteral("%1%2").arg(value).arg(tr("%")));
 
-		// remove bold font if it was previously overridden
 		QFont font(label->font());
 		font.setBold(false);
 		label->setFont(font);

@@ -23,18 +23,17 @@
 #include <cstring>
 #include <limits>
 
-//#define LOG_UNDERRUN(...) DEV_LOG(__VA_ARGS__)
 #define LOG_UNDERRUN(...) (void)0
 static constexpr bool LOG_TIMESTRETCH_STATS = false;
 
 static constexpr const std::array<std::pair<u8, u8>, static_cast<size_t>(AudioExpansionMode::Count)>
 	s_expansion_channel_count = {{
-		{u8(2), u8(2)}, // Disabled
-		{u8(3), u8(3)}, // StereoLFE
-		{u8(5), u8(4)}, // Quadraphonic
-		{u8(5), u8(5)}, // QuadraphonicLFE
-		{u8(6), u8(6)}, // Surround51
-		{u8(8), u8(8)}, // Surround71
+		{u8(2), u8(2)},
+		{u8(3), u8(3)},
+		{u8(5), u8(4)},
+		{u8(5), u8(5)},
+		{u8(6), u8(6)},
+		{u8(8), u8(8)},
 	}};
 
 AudioStream::DeviceInfo::DeviceInfo(std::string name_, std::string display_name_, u32 minimum_latency_)
@@ -61,7 +60,6 @@ AudioStream::~AudioStream()
 
 std::unique_ptr<AudioStream> AudioStream::CreateNullStream(u32 sample_rate, u32 buffer_ms)
 {
-	// no point stretching with no output
 	AudioStreamParameters params;
 	params.expansion_mode = AudioExpansionMode::Disabled;
 	params.buffer_ms = static_cast<u16>(buffer_ms);
@@ -268,7 +266,6 @@ void AudioStream::ReadFrames(SampleType* samples, u32 num_frames)
 		if (end > frames_to_read)
 			end = frames_to_read;
 
-		// towards the end of the buffer
 		if (end > 0)
 		{
 			m_sample_reader(samples, &m_buffer[rpos * m_internal_channels], end);
@@ -276,7 +273,6 @@ void AudioStream::ReadFrames(SampleType* samples, u32 num_frames)
 			rpos = (rpos == m_buffer_size) ? 0 : rpos;
 		}
 
-		// after wrapping around
 		const u32 start = frames_to_read - end;
 		if (start > 0)
 		{
@@ -291,8 +287,6 @@ void AudioStream::ReadFrames(SampleType* samples, u32 num_frames)
 	{
 		if (frames_to_read > 0)
 		{
-			// super basic resampler - spread the input samples evenly across the output samples. will sound like ass and have
-			// aliasing, but better than popping by inserting silence.
 			const u32 increment =
 				static_cast<u32>(65536.0f * (static_cast<float>(frames_to_read) / static_cast<float>(num_frames)));
 
@@ -317,7 +311,6 @@ void AudioStream::ReadFrames(SampleType* samples, u32 num_frames)
 		}
 		else
 		{
-			// no data, fall back to silence
 			std::memset(samples + (frames_to_read * m_output_channels), 0, silence_frames * m_output_channels * sizeof(SampleType));
 		}
 	}
@@ -357,14 +350,11 @@ void AudioStream::InternalWriteFrames(const SampleType* data, u32 num_frames)
 
 	u32 wpos = m_wpos.load(std::memory_order_acquire);
 
-	// wrapping around the end of the buffer?
 	if ((m_buffer_size - wpos) <= num_frames)
 	{
-		// needs to be written in two parts
 		const u32 end = m_buffer_size - wpos;
 		const u32 start = num_frames - end;
 
-		// start is zero when this chunk reaches exactly the end
 		std::memcpy(&m_buffer[wpos * m_internal_channels], data, end * m_internal_channels * sizeof(SampleType));
 		if (start > 0)
 			std::memcpy(&m_buffer[0], data + end * m_internal_channels, start * m_internal_channels * sizeof(SampleType));
@@ -373,7 +363,6 @@ void AudioStream::InternalWriteFrames(const SampleType* data, u32 num_frames)
 	}
 	else
 	{
-		// no split
 		std::memcpy(&m_buffer[wpos * m_internal_channels], data, num_frames * m_internal_channels * sizeof(SampleType));
 		wpos += num_frames;
 	}
@@ -394,7 +383,6 @@ void AudioStream::BaseInitialize(SampleReader sample_reader, bool stretch_enable
 
 void AudioStream::AllocateBuffer()
 {
-	// use a larger buffer when time stretching, since we need more input
 	const u32 multiplier = IsStretchEnabled() ? 16 : 1;
 	m_buffer_size = GetAlignedBufferSize(((m_parameters.buffer_ms * multiplier) * m_sample_rate) / 1000);
 	m_target_buffer_size = GetAlignedBufferSize((m_sample_rate * m_parameters.buffer_ms) / 1000u);
@@ -450,7 +438,6 @@ void AudioStream::UpdateTargetTempo(float tempo)
 	if (!IsStretchEnabled())
 		return;
 
-	// undo sqrt()
 	if (tempo)
 		tempo *= tempo;
 
@@ -469,7 +456,6 @@ void AudioStream::SetStretchEnabled(bool enabled)
 	if (m_stretch_enabled == enabled)
 		return;
 
-	// can't resize the buffers while paused
 	const bool paused = m_paused;
 	if (!paused)
 		SetPaused(true);
@@ -517,12 +503,12 @@ void AudioStream::ExpandAllocate()
 	static constexpr std::array<std::pair<FreeSurroundDecoder::ChannelSetup, bool>,
 		static_cast<size_t>(AudioExpansionMode::Count)>
 		channel_setup_mapping = {{
-			{FreeSurroundDecoder::ChannelSetup::Stereo, false}, // Disabled
-			{FreeSurroundDecoder::ChannelSetup::Stereo, true}, // StereoLFE
-			{FreeSurroundDecoder::ChannelSetup::Surround41, false}, // Quadraphonic
-			{FreeSurroundDecoder::ChannelSetup::Surround41, true}, // QuadraphonicLFE
-			{FreeSurroundDecoder::ChannelSetup::Surround51, true}, // Surround51
-			{FreeSurroundDecoder::ChannelSetup::Surround71, true}, // Surround71
+			{FreeSurroundDecoder::ChannelSetup::Stereo, false},
+			{FreeSurroundDecoder::ChannelSetup::Stereo, true},
+			{FreeSurroundDecoder::ChannelSetup::Surround41, false},
+			{FreeSurroundDecoder::ChannelSetup::Surround41, true},
+			{FreeSurroundDecoder::ChannelSetup::Surround51, true},
+			{FreeSurroundDecoder::ChannelSetup::Surround71, true},
 		}};
 
 	const auto [fs_setup, fs_lfe] = channel_setup_mapping[static_cast<size_t>(m_parameters.expansion_mode)];
@@ -542,7 +528,6 @@ void AudioStream::ExpandAllocate()
 
 void AudioStream::EndWrite(u32 num_frames)
 {
-	// don't bother committing anything when muted
 	if (m_volume == 0)
 		return;
 
@@ -565,14 +550,11 @@ void AudioStream::WriteChunk(const SampleType* chunk)
 
 	if (IsExpansionEnabled())
 	{
-		// StretchWriteBlock() overwrites the staging buffer on output, so we need to copy into the expand buffer first.
 		std::memcpy(m_expand_buffer.get() + m_expand_buffer_pos * NUM_INPUT_CHANNELS, chunk, CHUNK_SIZE * NUM_INPUT_CHANNELS * sizeof(SampleType));
 
-		// Output the corresponding block.
 		if (m_expand_output_buffer)
 			StretchWriteBlock(m_expand_output_buffer + m_expand_buffer_pos * m_internal_channels);
 
-		// Decode the next block if we buffered enough.
 		m_expand_buffer_pos += CHUNK_SIZE;
 		if (m_expand_buffer_pos == m_parameters.expand_block_size)
 		{
@@ -672,7 +654,6 @@ void AudioStream::UpdateStretchTempo()
 	static constexpr float MIN_TEMPO = 0.05f;
 	static constexpr float MAX_TEMPO = 50.0f;
 
-	// Which range we will run in 1:1 mode for.
 	static constexpr float INACTIVE_GOOD_FACTOR = 1.04f;
 	static constexpr float INACTIVE_BAD_FACTOR = 1.2f;
 	static constexpr u32 INACTIVE_MIN_OK_COUNT = 50;
@@ -680,7 +661,6 @@ void AudioStream::UpdateStretchTempo()
 
 	float base_target_usage = static_cast<float>(m_target_buffer_size) * m_nominal_rate;
 
-	// state vars
 	if (m_stretch_reset >= STRETCH_RESET_THRESHOLD)
 	{
 		LOG_UNDERRUN("___ Stretcher is being reset.");
@@ -694,7 +674,6 @@ void AudioStream::UpdateStretchTempo()
 	float tempo = buffer_usage / m_dynamic_target_usage;
 	tempo = AddAndGetAverageTempo(tempo);
 
-	// Dampening when we get close to target.
 	if (tempo < 2.0f)
 		tempo = std::sqrt(tempo);
 
@@ -762,16 +741,13 @@ void AudioStream::UpdateStretchTempo()
 
 void AudioStream::StretchUnderrun()
 {
-	// Didn't produce enough frames in time.
 	m_stretch_reset++;
 }
 
 void AudioStream::StretchOverrun()
 {
-	// Produced more frames than can fit in the buffer.
 	m_stretch_reset++;
 
-	// Drop two packets to give the time stretcher a bit more time to slow things down.
 	const u32 discard = CHUNK_SIZE * 2;
 	m_rpos.store((m_rpos.load(std::memory_order_acquire) + discard) % m_buffer_size, std::memory_order_release);
 }
@@ -800,7 +776,6 @@ void AudioStreamParameters::LoadSave(SettingsWrapper& wrap, const char* section)
 	expand_low_cutoff = static_cast<u16>(std::clamp<int>(wrap.EntryBitfield(section, "ExpandLowCutoff", DEFAULT_EXPAND_LOW_CUTOFF), 0, std::numeric_limits<u8>::max()));
 	expand_high_cutoff = static_cast<u16>(std::clamp<int>(wrap.EntryBitfield(section, "ExpandHighCutoff", DEFAULT_EXPAND_HIGH_CUTOFF), 0, std::numeric_limits<u8>::max()));
 
-	// Clamping of values.
 	if (wrap.IsLoading())
 	{
 		stretch_sequence_length_ms = std::clamp<u16>(stretch_sequence_length_ms, 20, 100);

@@ -22,13 +22,6 @@
 namespace x86Emitter
 {
 
-	// =====================================================================================================
-	//  Group 1 Instructions - ADD, SUB, ADC, etc.
-	// =====================================================================================================
-
-	// Note on "[Indirect],Imm" forms : use int as the source operand since it's "reasonably inert" from a
-	// compiler perspective.  (using uint tends to make the compiler try and fail to match signed immediates
-	// with one of the other overloads).
 	void xImpl_Group1::operator()(const xIndirect64orLess& sibdest, int imm) const
 	{
 		if (sibdest.Is8BitOp())
@@ -103,11 +96,7 @@ namespace x86Emitter
 	const xImpl_Group1 xSBB = {G1Type_SBB};
 	const xImpl_Group1 xCMP = {G1Type_CMP};
 
-	// =====================================================================================================
-	//  Group 2 Instructions - SHR, SHL, etc.
-	// =====================================================================================================
-
-	void xImpl_Group2::operator()(const xRegisterInt& to, const xRegisterCL& /* from */) const
+	void xImpl_Group2::operator()(const xRegisterInt& to, const xRegisterCL& ) const
 	{
 		xOpWrite(to.GetPrefix16(), to.Is8BitOp() ? 0xd2 : 0xd3, InstType, to);
 	}
@@ -119,7 +108,6 @@ namespace x86Emitter
 
 		if (imm == 1)
 		{
-			// special encoding of 1's
 			xOpWrite(to.GetPrefix16(), to.Is8BitOp() ? 0xd0 : 0xd1, InstType, to);
 		}
 		else
@@ -129,7 +117,7 @@ namespace x86Emitter
 		}
 	}
 
-	void xImpl_Group2::operator()(const xIndirect64orLess& sibdest, const xRegisterCL& /* from */) const
+	void xImpl_Group2::operator()(const xIndirect64orLess& sibdest, const xRegisterCL& ) const
 	{
 		xOpWrite(sibdest.GetPrefix16(), sibdest.Is8BitOp() ? 0xd2 : 0xd3, InstType, sibdest);
 	}
@@ -141,7 +129,6 @@ namespace x86Emitter
 
 		if (imm == 1)
 		{
-			// special encoding of 1's
 			xOpWrite(sibdest.GetPrefix16(), sibdest.Is8BitOp() ? 0xd0 : 0xd1, InstType, sibdest);
 		}
 		else
@@ -159,10 +146,6 @@ namespace x86Emitter
 	const xImpl_Group2 xSHR = {G2Type_SHR};
 	const xImpl_Group2 xSAR = {G2Type_SAR};
 
-
-	// =====================================================================================================
-	//  Group 3 Instructions - NOT, NEG, MUL, DIV
-	// =====================================================================================================
 
 	static void _g3_EmitOp(G3Type InstType, const xRegisterInt& from)
 	{
@@ -215,10 +198,6 @@ namespace x86Emitter
 	const xImpl_iDiv xDIV = {{G3Type_iDIV}, {SIMDInstructionInfo(0x5e)}, {SIMDInstructionInfo(0x5e).p66()}, {SIMDInstructionInfo(0x5e).pf3()}, {SIMDInstructionInfo(0x5e).pf2()}};
 	const xImpl_iMul xMUL = {{G3Type_iMUL}, {SIMDInstructionInfo(0x59).commutative()}, {SIMDInstructionInfo(0x59).commutative().p66()}, {SIMDInstructionInfo(0x59).pf3()}, {SIMDInstructionInfo(0x59).pf2()}};
 
-	// =====================================================================================================
-	//  Group 8 Instructions
-	// =====================================================================================================
-
 	void xImpl_Group8::operator()(const xRegister16or32or64& bitbase, const xRegister16or32or64& bitoffset) const
 	{
 		pxAssert(bitbase->GetOperandSize() == bitoffset->GetOperandSize());
@@ -245,4 +224,4 @@ namespace x86Emitter
 
 
 
-} // End namespace x86Emitter
+}

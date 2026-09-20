@@ -31,7 +31,6 @@
 
 struct ConfigDEV9;
 
-// first three recognized by Xlink as Sony PS2
 const PacketReader::MAC_Address defaultMAC = {{{0x00, 0x04, 0x1F, 0x82, 0x30, 0x31}}};
 
 struct NetPacket
@@ -44,17 +43,12 @@ struct NetPacket
 	}
 
 	int size;
-	char buffer[2048 - sizeof(int)]; //1536 is realy needed, just pad up to 2048 bytes :)
+	char buffer[2048 - sizeof(int)];
 };
-/*
-extern mtfifo<NetPacket*> rx_fifo;
-extern mtfifo<NetPacket*> tx_fifo;
-*/
 
 struct AdapterEntry
 {
 	Pcsx2Config::DEV9Options::NetApi type;
-	//UTF8
 	std::string name;
 	std::string guid;
 };
@@ -88,7 +82,6 @@ protected:
 	static const PacketReader::MAC_Address internalMAC;
 
 private:
-	//Only set if packet sent to the internal IP address
 	PacketReader::IP::IP_Address ps2IP{};
 	std::thread internalRxThread;
 	std::atomic<bool> internalRxThreadRunning{false};
@@ -109,8 +102,8 @@ public:
 	NetAdapter();
 	virtual bool blocks() = 0;
 	virtual bool isInitialised() = 0;
-	virtual bool recv(NetPacket* pkt); //gets a packet
-	virtual bool send(NetPacket* pkt); //sends the packet and deletes it when done
+	virtual bool recv(NetPacket* pkt);
+	virtual bool send(NetPacket* pkt);
 	virtual void reset(){};
 	virtual void reloadSettings() = 0;
 	virtual void close(){};

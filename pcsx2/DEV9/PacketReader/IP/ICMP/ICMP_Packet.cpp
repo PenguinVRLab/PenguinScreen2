@@ -13,17 +13,13 @@ namespace PacketReader::IP::ICMP
 	ICMP_Packet::ICMP_Packet(const u8* buffer, int bufferSize)
 	{
 		int offset = 0;
-		//Bits 0-31
 		NetLib::ReadByte08(buffer, &offset, &type);
 		NetLib::ReadByte08(buffer, &offset, &code);
 		NetLib::ReadUInt16(buffer, &offset, &checksum);
 
-		//Bits 32-63
 		NetLib::ReadByteArray(buffer, &offset, 4, headerData);
 
-		//Bits 64+
 		payload = std::make_unique<PayloadPtr>(&buffer[offset], bufferSize - offset);
-		//AllDone
 	}
 	ICMP_Packet::ICMP_Packet(const ICMP_Packet& original)
 		: type{original.type}
@@ -78,7 +74,6 @@ namespace PacketReader::IP::ICMP
 		checksum = 0;
 		WriteBytes(segment, &counter);
 
-		//Zero alignment byte
 		if (counter != pHeaderLen)
 			NetLib::WriteByte08(segment, &counter, 0);
 
@@ -98,7 +93,6 @@ namespace PacketReader::IP::ICMP
 
 		WriteBytes(segment, &counter);
 
-		//Zero alignment byte
 		if (counter != pHeaderLen)
 			NetLib::WriteByte08(segment, &counter, 0);
 
@@ -125,4 +119,4 @@ namespace PacketReader::IP::ICMP
 		NetLib::WriteUInt16(headerData, &offset, identifier);
 		NetLib::WriteUInt16(headerData, &offset, sequenceNumber);
 	}
-} // namespace PacketReader::IP::ICMP
+}

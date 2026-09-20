@@ -104,7 +104,7 @@ public:
 
 	__forceinline GSVector8(__m128 m0, __m128 m1)
 	{
-#if 0 // _MSC_VER >= 1700
+#if 0
 
 		this->m = _mm256_permute2f128_ps(_mm256_castps128_ps256(m0), _mm256_castps128_ps256(m1), 0x20);
 
@@ -254,7 +254,6 @@ public:
 
 	__forceinline GSVector8 log2(int precision = 5) const
 	{
-		// NOTE: see GSVector4::log2
 
 		GSVector8 one = m_one;
 
@@ -282,8 +281,6 @@ public:
 				break;
 		}
 
-		// This effectively increases the polynomial degree by one, but ensures that log2(1) == 0
-
 		p = p * (m - one);
 
 		return p + e;
@@ -293,7 +290,7 @@ public:
 
 	__forceinline GSVector8 madd(const GSVector8& a, const GSVector8& b) const
 	{
-#if 0 //_M_SSE >= 0x501
+#if 0
 
 		return GSVector8(_mm256_fmadd_ps(m, a, b));
 
@@ -306,7 +303,7 @@ public:
 
 	__forceinline GSVector8 msub(const GSVector8& a, const GSVector8& b) const
 	{
-#if 0 //_M_SSE >= 0x501
+#if 0
 
 		return GSVector8(_mm256_fmsub_ps(m, a, b));
 
@@ -319,7 +316,7 @@ public:
 
 	__forceinline GSVector8 nmadd(const GSVector8& a, const GSVector8& b) const
 	{
-#if 0 //_M_SSE >= 0x501
+#if 0
 
 		return GSVector8(_mm256_fnmadd_ps(m, a, b));
 
@@ -332,7 +329,7 @@ public:
 
 	__forceinline GSVector8 nmsub(const GSVector8& a, const GSVector8& b) const
 	{
-#if 0 //_M_SSE >= 0x501
+#if 0
 
 		return GSVector8(_mm256_fnmsub_ps(m, a, b));
 
@@ -345,12 +342,12 @@ public:
 
 	__forceinline GSVector8 addm(const GSVector8& a, const GSVector8& b) const
 	{
-		return a.madd(b, *this); // *this + a * b
+		return a.madd(b, *this);
 	}
 
 	__forceinline GSVector8 subm(const GSVector8& a, const GSVector8& b) const
 	{
-		return a.nmadd(b, *this); // *this - a * b
+		return a.nmadd(b, *this);
 	}
 
 	__forceinline GSVector8 hadd() const
@@ -478,9 +475,8 @@ public:
 	template <int src, int dst>
 	__forceinline GSVector8 insert32(const GSVector8& v) const
 	{
-		// TODO: use blendps when src == dst
 
-		pxAssert(src < 4 && dst < 4); // not cross lane like extract32()
+		pxAssert(src < 4 && dst < 4);
 
 		switch (dst)
 		{
@@ -568,8 +564,6 @@ public:
 		return zero() == zero();
 	}
 
-	// TODO
-
 	__forceinline static GSVector8 loadl(const void* p)
 	{
 		return GSVector8(_mm256_castps128_ps256(_mm_load_ps((float*)p)));
@@ -596,8 +590,6 @@ public:
 		return GSVector8(aligned ? _mm256_load_ps((const float*)p) : _mm256_loadu_ps((const float*)p));
 	}
 
-	// TODO
-
 	__forceinline static void storel(void* p, const GSVector8& v)
 	{
 		_mm_store_ps((float*)p, _mm256_extractf128_ps(v.m, 0));
@@ -617,8 +609,6 @@ public:
 			_mm256_storeu_ps((float*)p, v.m);
 	}
 
-	//
-
 	__forceinline static void zeroupper()
 	{
 		_mm256_zeroupper();
@@ -628,8 +618,6 @@ public:
 	{
 		_mm256_zeroall();
 	}
-
-	//
 
 	__forceinline GSVector8 operator-() const
 	{
@@ -808,17 +796,9 @@ public:
 
 	// clang-format off
 
-	// x = v[31:0] / v[159:128]
-	// y = v[63:32] / v[191:160]
-	// z = v[95:64] / v[223:192]
-	// w = v[127:96] / v[255:224]
-
 	#define VECTOR8_SHUFFLE_4(xs, xn, ys, yn, zs, zn, ws, wn) \
 		__forceinline GSVector8 xs##ys##zs##ws() const { return GSVector8(_mm256_shuffle_ps(m, m, _MM_SHUFFLE(wn, zn, yn, xn))); } \
 		__forceinline GSVector8 xs##ys##zs##ws(const GSVector8& v) const { return GSVector8(_mm256_shuffle_ps(m, v.m, _MM_SHUFFLE(wn, zn, yn, xn))); }
-
-		// vs2012u3 cannot reuse the result of equivalent shuffles when it is done with _mm256_permute_ps (write v.xxxx() twice, and it will do it twice), but with _mm256_shuffle_ps it can.
-		//__forceinline GSVector8 xs##ys##zs##ws() const { return GSVector8(_mm256_permute_ps(m, _MM_SHUFFLE(wn, zn, yn, xn))); }
 
 	#define VECTOR8_SHUFFLE_3(xs, xn, ys, yn, zs, zn) \
 		VECTOR8_SHUFFLE_4(xs, xn, ys, yn, zs, zn, x, 0) \
@@ -843,12 +823,6 @@ public:
 	VECTOR8_SHUFFLE_1(z, 2)
 	VECTOR8_SHUFFLE_1(w, 3)
 
-	// a = v0[127:0]
-	// b = v0[255:128]
-	// c = v1[127:0]
-	// d = v1[255:128]
-	// _ = 0
-
 	#define VECTOR8_PERMUTE128_2(as, an, bs, bn) \
 		__forceinline GSVector8 as##bs() const { return GSVector8(_mm256_permute2f128_ps(m, m, an | (bn << 4))); } \
 		__forceinline GSVector8 as##bs(const GSVector8& v) const { return GSVector8(_mm256_permute2f128_ps(m, v.m, an | (bn << 4))); } \
@@ -867,11 +841,6 @@ public:
 	VECTOR8_PERMUTE128_1(_, 8)
 
 #if _M_SSE >= 0x501
-
-	// a = v[63:0]
-	// b = v[127:64]
-	// c = v[191:128]
-	// d = v[255:192]
 
 	#define VECTOR8_PERMUTE64_4(as, an, bs, bn, cs, cn, ds, dn) \
 		__forceinline GSVector8 as##bs##cs##ds() const { return GSVector8(_mm256_castpd_ps(_mm256_permute4x64_pd(_mm256_castps_pd(m), _MM_SHUFFLE(dn, cn, bn, an)))); } \
@@ -925,8 +894,6 @@ public:
 	{
 		return GSVector8(_mm256_broadcast_sd(static_cast<const double*>(d)));
 	}
-
-	// TODO: v.(x0|y0|z0|w0|x1|y1|z1|w1) // broadcast element
 
 #endif
 #endif

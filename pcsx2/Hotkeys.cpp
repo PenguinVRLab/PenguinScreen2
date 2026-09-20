@@ -50,7 +50,6 @@ static void HotkeyAdjustVolume(const s32 delta)
 	if (!VMManager::HasValidVM())
 		return;
 
-	// Volume-adjusting hotkeys override mute toggle hotkey. EmuConfig.SPU2.OutputMuted overrides hotkeys.
 	if (!SPU2::SetOutputMuted(false))
 	{
 		Host::AddIconOSDMessage("VolumeChanged", ICON_FA_VOLUME_XMARK, TRANSLATE_STR("Hotkeys_Volume", "Volume: Muted in Settings"));
@@ -81,7 +80,6 @@ static void HotkeyToggleMute()
 	if (!VMManager::HasValidVM())
 		return;
 
-	// Attempt to toggle output muting. EmuConfig.SPU2.OutputMuted overrides hotkeys.
 	if (SPU2::SetOutputMuted(!SPU2::IsOutputMuted()))
 	{
 		if (SPU2::IsOutputMuted())
@@ -99,7 +97,6 @@ static void HotkeyToggleMute()
 
 static void HotkeyLoadStateSlot(s32 slot)
 {
-	// Can reapply settings and thus binds, therefore must be deferred.
 	Host::RunOnCPUThread([slot]() {
 		if (!VMManager::HasSaveStateInSlot(VMManager::GetDiscSerial().c_str(), VMManager::GetDiscCRC(), slot))
 		{
@@ -163,14 +160,10 @@ DEFINE_HOTKEY("OpenPauseMenu", TRANSLATE_NOOP("Hotkeys", "Navigation"), TRANSLAT
 			FullscreenUI::OpenPauseMenu();
 	})
 #ifdef ENABLE_VR
-// Category "VR", not "Graphics": the docs say "Settings → Hotkeys → VR" and
-// more VR hotkeys are coming — make the docs true (strict-review #21).
 DEFINE_HOTKEY("VRRecenterHead", TRANSLATE_NOOP("Hotkeys", "VR"), TRANSLATE_NOOP("Hotkeys", "VR: Recenter Head Camera"),
 	[](s32 pressed) {
 		if (!pressed)
 		{
-			// Full recenter: head camera AND screen re-anchor (incl. vertical
-			// height) — same semantics as the L1+R1+L3+R3 pad chord (task #27).
 			VR::CameraDriver::RequestRecenter();
 			VR::XRCompositor::RequestScreenReanchor();
 			Host::AddKeyedOSDMessage("VRRecenter", TRANSLATE_STR("Hotkeys", "VR recentered (head + screen)."), 2.0f);

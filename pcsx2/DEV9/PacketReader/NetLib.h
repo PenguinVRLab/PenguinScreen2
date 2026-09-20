@@ -17,7 +17,6 @@
 
 namespace PacketReader::NetLib
 {
-	// Write.
 	inline void WriteByte08(u8* data, int* index, u8 value)
 	{
 		data[*index] = value;
@@ -34,7 +33,6 @@ namespace PacketReader::NetLib
 		*index += sizeof(u32);
 	}
 
-	// Special write.
 	inline void WriteMACAddress(u8* data, int* index, PacketReader::MAC_Address value)
 	{
 		*(PacketReader::MAC_Address*)&data[*index] = value;
@@ -51,7 +49,6 @@ namespace PacketReader::NetLib
 		*index += length;
 	}
 
-	// Read.
 	inline void ReadByte08(const u8* data, int* index, u8* value)
 	{
 		*value = data[*index];
@@ -68,7 +65,6 @@ namespace PacketReader::NetLib
 		*index += sizeof(u32);
 	}
 
-	// Special read.
 	inline void ReadMACAddress(const u8* data, int* index, PacketReader::MAC_Address* value)
 	{
 		*value = *(PacketReader::MAC_Address*)&data[*index];
@@ -84,4 +80,4 @@ namespace PacketReader::NetLib
 		memcpy(value, &data[*index], length);
 		*index += length;
 	}
-} // namespace PacketReader::NetLib
+}

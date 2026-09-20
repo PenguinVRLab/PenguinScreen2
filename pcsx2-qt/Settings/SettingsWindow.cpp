@@ -118,7 +118,6 @@ void SettingsWindow::setupUi(const GameList::Entry* game)
 		tr("<strong>Interface Settings</strong><hr>These options control how the software looks and behaves.<br><br>Mouse over an option "
 		   "for additional information, and Shift+Wheel to scroll this panel."));
 
-	// We don't include game list/bios settings in per-game settings.
 	if (!isPerGameSettings())
 	{
 		addWidget(m_game_list_settings = new GameListSettingsWidget(this, m_ui.settingsContainer), tr("Game List"),
@@ -130,7 +129,6 @@ void SettingsWindow::setupUi(const GameList::Entry* game)
 			   "and Shift+Wheel to scroll this panel."));
 	}
 
-	// Common to both per-game and global settings.
 	addWidget(m_emulation_settings = new EmulationSettingsWidget(this, m_ui.settingsContainer), tr("Emulation"),
 		QStringLiteral("emulation-line"),
 		tr("<strong>Emulation Settings</strong><hr>These options determine the configuration of frame pacing and game "
@@ -149,7 +147,6 @@ void SettingsWindow::setupUi(const GameList::Entry* game)
 			   "activate if the main cheat enable option is checked."));
 	}
 
-	// Only show the game fixes for per-game settings, there's really no reason to be setting them globally.
 	if (show_advanced_settings && isPerGameSettings())
 	{
 		addWidget(m_game_fix_settings_widget = new GameFixSettingsWidget(this, m_ui.settingsContainer), tr("Game Fixes"),
@@ -190,12 +187,6 @@ void SettingsWindow::setupUi(const GameList::Entry* game)
 		QString help_text =
 			tr("<strong>Achievements Settings</strong><hr>"
 			   "These options control the RetroAchievements implementation in PenguinScreen2, allowing you to earn achievements in your games.");
-		// Fork decision (see the force-disable in Pcsx2Config LoadSave):
-		// PenguinScreen2 is not registered with RetroAchievements as its own
-		// client, so the whole feature stays unreachable until it is — the old
-		// settings page's Login button performed a real credential POST to
-		// retroachievements.org while presenting as upstream PCSX2
-		// (strict-review #10). Show why instead of a dead-end page.
 		QLabel* placeholder_label = new QLabel(
 			tr("RetroAchievements support is disabled in this build.\n\n"
 			   "PenguinScreen2 is not yet registered with RetroAchievements as its own "
@@ -208,12 +199,6 @@ void SettingsWindow::setupUi(const GameList::Entry* game)
 	}
 
 #ifdef ENABLE_VR
-	// Shown in BOTH the global settings and a game's properties dialog. In
-	// the per-game dialog the checkboxes render tri-state on purpose — the
-	// filled-square third state is upstream's convention on every page for
-	// "no per-game override, use the global value". Shipped profiles carry
-	// the game-trait tuning; the per-game page carries the user's own
-	// per-game ergonomics (e.g. a bigger screen for one title).
 	addWidget(new VRSettingsWidget(this, m_ui.settingsContainer), tr("VR"), QStringLiteral("headset-line"),
 		tr("<strong>VR Settings</strong><hr>These options control the experimental OpenXR virtual reality output, which mirrors the "
 		   "emulated display onto a virtual screen inside a headset. VR requires the Vulkan renderer and a running OpenXR runtime; "
@@ -256,7 +241,6 @@ SettingsWindow::~SettingsWindow()
 
 void SettingsWindow::closeEvent(QCloseEvent*)
 {
-	// we need to clean up ourselves, since we're not modal
 	if (isPerGameSettings())
 		deleteLater();
 }
@@ -268,14 +252,12 @@ QString SettingsWindow::getCategory() const
 
 void SettingsWindow::setCategory(const char* category)
 {
-	// the titles in the category list will be translated.
 	const QString translated_category(tr(category));
 
 	for (int i = 0; i < m_ui.settingsCategory->count(); i++)
 	{
 		if (translated_category == m_ui.settingsCategory->item(i)->text())
 		{
-			// will also update the visible widget
 			m_ui.settingsCategory->setCurrentRow(i);
 			break;
 		}
@@ -354,11 +336,9 @@ void SettingsWindow::onClearSettingsClicked()
 
 void SettingsWindow::reopen(const QString& message)
 {
-	// This doesn't work for global settings, because MainWindow maintains a pointer.
 	if (!m_sif)
 		return;
 
-	// After closing, this pointer is freed. So we need to grab everything early.
 	std::unique_ptr<INISettingsInterface> new_sif = std::make_unique<INISettingsInterface>(m_sif->GetFileName());
 	if (FileSystem::FileExists(new_sif->GetFileName().c_str()))
 		new_sif->Load();
@@ -369,7 +349,6 @@ void SettingsWindow::reopen(const QString& message)
 	SettingsWindow* dlg = new SettingsWindow(std::move(new_sif), game, m_serial, m_disc_crc, m_filename);
 	dlg->QWidget::setWindowTitle(windowTitle());
 
-	// See note above.
 	QtHost::RunOnUIThread([this, dlg, message]() {
 		close();
 		dlg->show();
@@ -397,7 +376,6 @@ void SettingsWindow::registerWidgetHelp(QObject* object, QString title, QString 
 	if (!object)
 		return;
 
-	// construct rich text with formatted description
 	QString full_text;
 	full_text += "<table width='100%' cellpadding='0' cellspacing='0'><tr><td><strong>";
 	full_text += title;
@@ -683,7 +661,6 @@ void SettingsWindow::openGamePropertiesDialog(const GameList::Entry* game, const
 {
 	std::string filename = VMManager::GetGameSettingsPath(!is_elf ? serial : std::string_view(), disc_crc);
 
-	// check for an existing dialog with this filename
 	for (SettingsWindow* dialog : s_open_game_properties_dialogs)
 	{
 		if (dialog->isPerGameSettings() && static_cast<INISettingsInterface*>(dialog->m_sif.get())->GetFileName() == filename)

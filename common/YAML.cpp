@@ -6,7 +6,7 @@
 #include "Assertions.h"
 
 #if RYML_VERSION_MAJOR > 0 || RYML_VERSION_MINOR >= 11
-#include "c4/yml/error.def.hpp" // for ryml::err_basic_format etc
+#include "c4/yml/error.def.hpp"
 #endif
 
 #include <csetjmp>
@@ -29,7 +29,6 @@ std::optional<ryml::Tree> ParseYAMLFromString(ryml::csubstr yaml, ryml::csubstr 
 
 	callbacks.set_error_basic([](ryml::csubstr msg, const ryml::ErrorDataBasic& errdata, void* user_data) {
 		RapidYAMLContext* context = static_cast<RapidYAMLContext*>(user_data);
-		// This scope needs to stay, so all objects destruct before std::longjump
 		{
 			std::string description;
 			auto callback = [&description](ryml::csubstr string) {
@@ -59,7 +58,6 @@ std::optional<ryml::Tree> ParseYAMLFromString(ryml::csubstr yaml, ryml::csubstr 
 
 	callbacks.set_error_parse([](ryml::csubstr msg, const ryml::ErrorDataParse& errdata, void* user_data) {
 		RapidYAMLContext* context = static_cast<RapidYAMLContext*>(user_data);
-		// This scope needs to stay, so all objects destruct before std::longjump
 		{
 			std::string description;
 			auto callback = [&description](ryml::csubstr string) {
@@ -89,7 +87,6 @@ std::optional<ryml::Tree> ParseYAMLFromString(ryml::csubstr yaml, ryml::csubstr 
 
 	callbacks.set_error_visit([](ryml::csubstr msg, const ryml::ErrorDataVisit& errdata, void* user_data) {
 		RapidYAMLContext* context = static_cast<RapidYAMLContext*>(user_data);
-		// This scope needs to stay, so all objects destruct before std::longjump
 		{
 			std::string description;
 			auto callback = [&description](ryml::csubstr string) {
@@ -137,9 +134,6 @@ std::optional<ryml::Tree> ParseYAMLFromString(ryml::csubstr yaml, ryml::csubstr 
 
 	ryml::Tree tree(callbacks);
 
-	// The only options RapidYAML provides for recovering from errors are
-	// throwing an exception or using setjmp/longjmp. Since we have exceptions
-	// disabled we have to use the latter option.
 	if (setjmp(context.env) != 0)
 		return std::nullopt;
 
@@ -149,8 +143,6 @@ std::optional<ryml::Tree> ParseYAMLFromString(ryml::csubstr yaml, ryml::csubstr 
 		tree.resolve();
 	}
 
-	// Callbacks passed to ryml::Tree are used for value parsing errors later,
-	// so we need to clear the context before it goes out of scope.
 #if RYML_VERSION_MAJOR > 0 || RYML_VERSION_MINOR >= 11
 	callbacks.set_user_data(nullptr);
 #else

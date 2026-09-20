@@ -20,11 +20,8 @@ namespace DockTables
 	{
 		DebuggerView* (*create_widget)(const DebuggerViewParameters& parameters);
 
-		// The untranslated string displayed as the dock widget tab text.
 		const char* display_name;
 
-		// This is used to determine which group dock widgets of this type are
-		// added to when they're opened from the Windows menu.
 		DockUtils::PreferredLocation preferred_location;
 	};
 
@@ -70,7 +67,5 @@ namespace DockTables
 
 	const DefaultDockLayout* defaultLayout(const std::string& name);
 
-	// This is used to determine if the user has updated and we need to recreate
-	// the default layouts.
 	u32 hashDefaultLayouts();
-} // namespace DockTables
+}

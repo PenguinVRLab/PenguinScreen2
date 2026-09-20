@@ -11,7 +11,6 @@
 #include <tuple>
 #include <vector>
 
-/// Provides a buffer for streaming data to the GPU, ideally in write-combined memory.
 class GLStreamBuffer
 {
 public:
@@ -28,14 +27,13 @@ public:
 	{
 		void* pointer;
 		u32 buffer_offset;
-		u32 index_aligned; // offset / alignment, suitable for base vertex
-		u32 space_aligned; // remaining space / alignment
+		u32 index_aligned;
+		u32 space_aligned;
 	};
 
 	virtual MappingResult Map(u32 alignment, u32 min_size) = 0;
 	virtual void Unmap(u32 used_size) = 0;
 
-	/// Returns the minimum granularity of blocks which sync objects will be created around.
 	virtual u32 GetChunkSize() const = 0;
 
 	static std::unique_ptr<GLStreamBuffer> Create(GLenum target, u32 size);

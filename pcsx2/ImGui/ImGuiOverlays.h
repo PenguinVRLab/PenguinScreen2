@@ -35,7 +35,7 @@ namespace SaveStateSelectorUI
 	void LoadCurrentSlot();
 	void LoadCurrentBackupSlot();
 	void SaveCurrentSlot();
-} // namespace SaveStateSelectorUI
+}
 
 namespace InputRecordingUI
 {

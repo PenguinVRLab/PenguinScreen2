@@ -9,22 +9,13 @@
 #include <cstdlib>
 #include <memory>
 
-/// A ring buffer pretending to be a heap (screams if you don't actually use it like a ring buffer)
-/// Meant for one producer thread creating data and sharing it with multiple consumer threads
-/// Expectations:
-/// - One thread allocates and writes to allocations
-/// - Other threads read from allocations (once shared, no one writes)
-/// - Any thread can free
-/// - Frees are done in approximately the same order as allocations (but not exactly the same order)
 class GSRingHeap
 {
 	struct Buffer;
 	Buffer* m_current_buffer;
 
 	void orphanBuffer() noexcept;
-	/// Allocate a value of `size` bytes with `prefix_size` bytes before it (for allocation tracking) and alignment specified by `align_mask`
 	void* alloc_internal(size_t size, size_t align_mask, size_t prefix_size);
-	/// Free a value of size `size` (equal to prefix_size + size when allocated)
 	static void free_internal(void* ptr, size_t size) noexcept;
 
 	static constexpr size_t MIN_ALIGN = std::max(alignof(size_t), alignof(void*));
@@ -39,7 +30,6 @@ public:
 	GSRingHeap();
 	~GSRingHeap() noexcept;
 
-	/// Allocate a piece of memory with the given size and alignment
 	void* alloc(size_t size, size_t align)
 	{
 		size_t alloc_size = size + sizeof(size_t);
@@ -49,7 +39,6 @@ public:
 		return static_cast<void*>(header + 1);
 	};
 
-	/// Allocate and initialize a T*
 	template <typename T, typename... Args>
 	T* make(Args&&... args)
 	{
@@ -58,7 +47,6 @@ public:
 		return static_cast<T*>(ptr.release());
 	}
 
-	/// Allocate and default-initialize `count` `T`s
 	template <typename T>
 	T* make_array(size_t count)
 	{
@@ -67,14 +55,12 @@ public:
 		return static_cast<T*>(ptr.release());
 	}
 
-	/// Free a pointer allocated with `alloc`
 	static void free(void* ptr)
 	{
 		size_t* header = static_cast<size_t*>(ptr) - 1;
 		free_internal(static_cast<void*>(header), *header);
 	}
 
-	/// Deinitialize and free a pointer created with `make`
 	template <typename T>
 	static void destroy(T* ptr)
 	{
@@ -82,7 +68,6 @@ public:
 		free(ptr);
 	}
 
-	/// Deinitialize and free an array allocated with `make_array`
 	template <typename T>
 	static void destroy_array(T* ptr)
 	{
@@ -93,7 +78,6 @@ public:
 		free(ptr);
 	}
 
-	/// Like `std::shared_ptr` but holds a pointer on this allocator
 	template <typename T>
 	class SharedPtr
 	{
@@ -160,8 +144,6 @@ public:
 			if (!m_ptr)
 				return;
 			AllocationHeader* header = getHeader();
-			// (See top) Expectation: Once shared, no one writes
-			// Therefore we don't need acquire/release semantics here
 			if (header->refcnt.fetch_sub(1, std::memory_order_relaxed) == 1)
 			{
 				m_ptr->~T();
@@ -173,7 +155,6 @@ public:
 		T* operator->() const { return m_ptr; }
 		T* get() const { return m_ptr; }
 
-		/// static_cast the pointer to another type
 		template <typename Other>
 		SharedPtr<Other> cast() const&
 		{
@@ -181,7 +162,6 @@ public:
 			return SharedPtr<Other>(static_cast<Other*>(m_ptr));
 		}
 
-		/// static_cast the pointer to another type
 		template <typename Other>
 		SharedPtr<Other> cast() &&
 		{
@@ -191,7 +171,6 @@ public:
 		}
 	};
 
-	/// Make a shared pointer with a different alignment from what the type would normally expect
 	template <typename T, typename... Args>
 	SharedPtr<T> make_shared(Args&&... args)
 	{

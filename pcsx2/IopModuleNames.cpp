@@ -5,7 +5,6 @@
 #define END_MODULE }
 #define EXPORT(i, n) case (i): return #n;
 
-// machine generated
 MODULE(cdvdman)
 	EXPORT(  4, sceCdInit)
 	EXPORT(  5, sceCdStandby)
@@ -811,7 +810,6 @@ MODULE(vblank)
 	EXPORT(  9, ReleaseVblankHandler)
 END_MODULE
 
-// undocumented functions from old list
 #if 0
 MODULE(sysmem)
 	EXPORT(  3, return_addr_of_memsize)

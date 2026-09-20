@@ -13,7 +13,6 @@
 
 namespace VR::XRSession
 {
-
 	bool CreateInstanceAndSystem();
 
 	void DestroyInstance();
@@ -23,7 +22,6 @@ namespace VR::XRSession
 	XrSystemId GetSystemId();
 
 #ifdef ENABLE_VULKAN
-
 	bool QueryVulkanGraphicsRequirements();
 
 	bool CreateVulkanInstanceThroughXR(const VkInstanceCreateInfo* ci, VkInstance* out);

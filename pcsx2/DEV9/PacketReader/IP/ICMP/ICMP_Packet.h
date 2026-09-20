@@ -25,7 +25,6 @@ namespace PacketReader::IP::ICMP
 		std::unique_ptr<Payload> payload;
 
 	public:
-		//Takes ownership of payload
 		ICMP_Packet(Payload* data);
 		ICMP_Packet(const u8* buffer, int bufferSize);
 		ICMP_Packet(const ICMP_Packet&);
@@ -42,8 +41,6 @@ namespace PacketReader::IP::ICMP
 		virtual void CalculateChecksum(IP_Address srcIP, IP_Address dstIP);
 	};
 
-	//Helper Classes
-	//Do we want this? or do we do the same as with options?
 	class ICMP_HeaderDataIdentifier
 	{
 	public:
@@ -54,4 +51,4 @@ namespace PacketReader::IP::ICMP
 		ICMP_HeaderDataIdentifier(u8* headerData);
 		void WriteHeaderData(u8* headerData);
 	};
-} // namespace PacketReader::IP::ICMP
+}

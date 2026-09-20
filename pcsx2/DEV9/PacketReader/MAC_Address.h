@@ -24,4 +24,4 @@ namespace PacketReader
 		bool operator!=(const MAC_Address& other) const { return (this->u.integer03 != other.u.integer03) || (this->u.short45 != other.u.short45); }
 	};
 #pragma pack(pop)
-} // namespace PacketReader
+}

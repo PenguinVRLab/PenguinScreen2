@@ -35,7 +35,6 @@ namespace VR
 {
 	namespace
 	{
-
 		const char* ResultToString(XrResult result)
 		{
 			switch (result)
@@ -280,7 +279,6 @@ namespace VR
 
 	void UpdateSettings()
 	{
-
 		const Pcsx2Config::VROptions& new_settings = EmuConfig.VR;
 
 		bool enable_changed;
@@ -304,7 +302,6 @@ namespace VR
 			screen_height = profile->screen_height.value_or(screen_height);
 			screen_arc = profile->screen_arc_deg.value_or(screen_arc);
 		}
-
 		XRCompositor::UpdateScreenParams(screen_distance, screen_height, screen_arc,
 			new_settings.ScreenVerticalOffset);
 
@@ -322,9 +319,7 @@ namespace VR
 									? StereoState::Params::UvPolicy::World
 									: StereoState::Params::UvPolicy::Screen;
 			stereo.pin_uniform_q = profile->stereo->pin_uniform_q;
-
 			CopyCollimate(stereo, *profile->stereo);
-
 			CopyResolvedMap(stereo, profile->stereo->resolved);
 			from_profile = true;
 		}
@@ -348,7 +343,6 @@ namespace VR
 		{
 			const char* provenance = from_profile ? " (game profile)" : "";
 			osd_text = (osd_map.map == ProfileDB::StereoMap::Linear)
-
 			               ? fmt::format("Stereo: separation {:.3f}, convergence {:.4g}{}", stereo.separation,
 			                     stereo.convergence, provenance)
 			               : fmt::format("Stereo: {}{}",
@@ -380,11 +374,9 @@ namespace VR
 
 	void ApplySceneStereo()
 	{
-
 		const Pcsx2Config::VROptions& cfg = EmuConfig.VR;
 		if (!cfg.Enable || !cfg.StereoMode || !cfg.StereoUseProfile)
 		{
-
 			s_scene_published = -1;
 			s_scene_memo_valid = false;
 			s_scene_pending = -1;
@@ -451,16 +443,13 @@ namespace VR
 		                       StereoState::Params::UvPolicy::World :
 		                       StereoState::Params::UvPolicy::Screen;
 		stereo.pin_uniform_q = base.pin_uniform_q;
-
 		CopyCollimate(stereo, base);
-
 		CopyResolvedMap(stereo, base.resolved);
 		if (match >= 0)
 		{
 			const ProfileDB::StereoSceneRule& rule = base.scenes[static_cast<size_t>(match)];
 			stereo.separation = rule.separation.value_or(stereo.separation);
 			stereo.convergence = rule.convergence.value_or(stereo.convergence);
-
 			if (rule.map_override.has_value())
 				CopyResolvedMap(stereo, *rule.map_override);
 		}
@@ -471,12 +460,10 @@ namespace VR
 		{
 			const ProfileDB::StereoSceneRule& matched = base.scenes[static_cast<size_t>(match)];
 			const std::string& label = matched.label;
-
 			const bool scene_map = matched.map_override.has_value();
 			const ProfileDB::StereoResolvedMap& eff = scene_map ? *matched.map_override : base.resolved;
 			const std::string body =
 				(eff.map == ProfileDB::StereoMap::Linear)
-
 					? fmt::format("sep {:.3f}, conv {:.4g}", stereo.separation, stereo.convergence)
 					: fmt::format("{} - {}", FormatStereoMap(eff, stereo.separation, stereo.convergence),
 						  scene_map ? "scene map" : "base map");
@@ -496,7 +483,6 @@ namespace VR
 
 	bool LaunchRequestedVR()
 	{
-
 		static const bool requested = []() {
 			const char* v = std::getenv("XR_RUNTIME_JSON");
 			return v != nullptr && v[0] != '\0';
@@ -535,7 +521,6 @@ namespace VR
 
 	void EnsureFrameSubmitted()
 	{
-
 		if (!IsSessionActive())
 			return;
 		GSDeviceVK::GetInstance()->ExecuteCommandBuffer(false);
@@ -567,7 +552,6 @@ namespace VR
 		}
 		else
 		{
-
 			XRCompositor::EndOfFrame(current, XRCompositor::MonoEye);
 		}
 	}

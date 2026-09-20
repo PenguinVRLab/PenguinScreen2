@@ -94,171 +94,92 @@ namespace PINEServer
 	static int s_slot;
 
 #ifdef _WIN32
-	// windows claim to have support for AF_UNIX sockets but that is a blatant lie,
-	// their SDK won't even run their own examples, so we go on TCP sockets.
 	static SOCKET s_sock = INVALID_SOCKET;
-	// the message socket used in thread's accept().
 	static SOCKET s_msgsock = INVALID_SOCKET;
 #else
-	// absolute path of the socket. Stored in XDG_RUNTIME_DIR, if unset /tmp
 	static std::string s_socket_name;
 	static int s_sock = -1;
-	// the message socket used in thread's accept().
 	static int s_msgsock = -1;
 #endif
 
-	// Whether the socket processing thread should stop executing/is stopped.
 	static std::atomic_bool s_end{true};
 
-	/**
-	 * Maximum memory used by an IPC message request.
-	 * Equivalent to 50,000 Write64 requests.
-	 */
 #define MAX_IPC_SIZE 650000
 
-	/**
-	 * Maximum memory used by an IPC message reply.
-	 * Equivalent to 50,000 Read64 replies.
-	 */
 #define MAX_IPC_RETURN_SIZE 450000
 
-	/**
-	 * IPC return buffer.
-	 * A preallocated buffer used to store all IPC replies.
-	 * to the size of 50.000 MsgWrite64 IPC calls.
-	 */
 	static std::vector<u8> s_ret_buffer;
 
-	/**
-	 * IPC messages buffer.
-	 * A preallocated buffer used to store all IPC messages.
-	 */
 	static std::vector<u8> s_ipc_buffer;
 
-	/**
-	 * IPC Command messages opcodes.
-	 * A list of possible operations possible by the IPC.
-	 * Each one of them is what we call an "opcode" and is the first
-	 * byte sent by the IPC to differentiate between commands.
-	 */
 	enum IPCCommand : unsigned char
 	{
-		MsgRead8 = 0, /**< Read 8 bit value to memory. */
-		MsgRead16 = 1, /**< Read 16 bit value to memory. */
-		MsgRead32 = 2, /**< Read 32 bit value to memory. */
-		MsgRead64 = 3, /**< Read 64 bit value to memory. */
-		MsgWrite8 = 4, /**< Write 8 bit value to memory. */
-		MsgWrite16 = 5, /**< Write 16 bit value to memory. */
-		MsgWrite32 = 6, /**< Write 32 bit value to memory. */
-		MsgWrite64 = 7, /**< Write 64 bit value to memory. */
-		MsgVersion = 8, /**< Returns PCSX2 version. */
-		MsgSaveState = 9, /**< Saves a savestate. */
-		MsgLoadState = 0xA, /**< Loads a savestate. */
-		MsgTitle = 0xB, /**< Returns the game title. */
-		MsgID = 0xC, /**< Returns the game ID. */
-		MsgUUID = 0xD, /**< Returns the game UUID. */
-		MsgGameVersion = 0xE, /**< Returns the game verion. */
-		MsgStatus = 0xF, /**< Returns the emulator status. */
-		MsgUnimplemented = 0xFF /**< Unimplemented IPC message. */
+		MsgRead8 = 0,
+		MsgRead16 = 1,
+		MsgRead32 = 2,
+		MsgRead64 = 3,
+		MsgWrite8 = 4,
+		MsgWrite16 = 5,
+		MsgWrite32 = 6,
+		MsgWrite64 = 7,
+		MsgVersion = 8,
+		MsgSaveState = 9,
+		MsgLoadState = 0xA,
+		MsgTitle = 0xB,
+		MsgID = 0xC,
+		MsgUUID = 0xD,
+		MsgGameVersion = 0xE,
+		MsgStatus = 0xF,
+		MsgUnimplemented = 0xFF
 	};
 
-	/**
-	 * Emulator status enum.
-	 * A list of possible emulator statuses.
-	 */
 	enum EmuStatus : uint32_t
 	{
-		Running = 0, /**< Game is running */
-		Paused = 1, /**< Game is paused */
-		Shutdown = 2 /**< Game is shutdown */
+		Running = 0,
+		Paused = 1,
+		Shutdown = 2
 	};
 
-	/**
-	 * IPC message buffer.
-	 * A list of all needed fields to store an IPC message.
-	 */
 	struct IPCBuffer
 	{
-		int size; /**< Size of the buffer. */
-		std::vector<u8> buffer; /**< Buffer. */
+		int size;
+		std::vector<u8> buffer;
 	};
 
-	/**
-	 * IPC result codes.
-	 * A list of possible result codes the IPC can send back.
-	 * Each one of them is what we call an "opcode" or "tag" and is the
-	 * first byte sent by the IPC to differentiate between results.
-	 */
 	enum IPCResult : unsigned char
 	{
-		IPC_OK = 0, /**< IPC command successfully completed. */
-		IPC_FAIL = 0xFF /**< IPC command failed to complete. */
+		IPC_OK = 0,
+		IPC_FAIL = 0xFF
 	};
 
-	// Thread used to relay IPC commands.
 	void MainLoop();
 	void ClientLoop();
 
-	/**
-	 * Internal function, Parses an IPC command.
-	 * buf: buffer containing the IPC command.
-	 * buf_size: size of the buffer announced.
-	 * ret_buffer: buffer that will be used to send the reply.
-	 * return value: IPCBuffer containing a buffer with the result
-	 *               of the command and its size.
-	 */
 	static IPCBuffer ParseCommand(std::span<u8> buf, std::vector<u8>& ret_buffer, u32 buf_size);
 
-	/**
-	 * Formats an IPC buffer
-	 * ret_buffer: return buffer to use.
-	 * size: size of the IPC buffer.
-	 * return value: buffer containing the status code allocated of size
-	 */
 	static std::vector<u8>& MakeOkIPC(std::vector<u8>& ret_buffer, uint32_t size);
 	static std::vector<u8>& MakeFailIPC(std::vector<u8>& ret_buffer, uint32_t size);
 
-	/**
-	 * Initializes an open socket for IPC communication.
-	 */
 	bool AcceptClient();
 
-	/**
-	 * Converts a primitive value to bytes in little endian
-	 * res_vector: the vector to modify
-	 * res: the value to convert
-	 * i: where to insert it into the vector
-	 * NB: implicitely inlined
-	 */
 	template <typename T>
 	static void ToResultVector(std::vector<u8>& res_vector, T res, int i)
 	{
 		memcpy(&res_vector[i], (char*)&res, sizeof(T));
 	}
 
-	/**
-	 * Converts bytes in little endian to a primitive value
-	 * span: the span to convert
-	 * i: where to load it from the span
-	 * return value: the converted value
-	 * NB: implicitely inlined
-	 */
 	template <typename T>
 	static T FromSpan(std::span<u8> span, int i)
 	{
 		return *(T*)(&span[i]);
 	}
 
-	/**
-	 * Ensures an IPC message isn't too big.
-	 * return value: false if checks failed, true otherwise.
-	 */
 	static inline bool SafetyChecks(u32 command_len, int command_size, u32 reply_len, int reply_size = 0, u32 buf_size = MAX_IPC_SIZE - 1)
 	{
 		return !((command_len + command_size) > buf_size ||
 				 (reply_len + reply_size) >= MAX_IPC_RETURN_SIZE);
 	}
-} // namespace PINEServer
+}
 
 bool PINEServer::Initialize(int slot)
 {
@@ -283,7 +204,7 @@ bool PINEServer::Initialize(int slot)
 
 	sockaddr_in server = {};
 	server.sin_family = AF_INET;
-	server.sin_addr.s_addr = htonl(INADDR_LOOPBACK); // localhost only
+	server.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 	server.sin_port = htons(slot);
 
 	if (bind(s_sock, (struct sockaddr*)&server, sizeof(server)) == SOCKET_ERROR)
@@ -300,8 +221,6 @@ bool PINEServer::Initialize(int slot)
 #else
 	runtime_dir = std::getenv("XDG_RUNTIME_DIR");
 #endif
-	// fallback in case macOS or other OSes don't implement the XDG base
-	// spec
 	if (runtime_dir == nullptr)
 		s_socket_name = "/tmp/" PINE_EMULATOR_NAME ".sock";
 	else
@@ -325,8 +244,6 @@ bool PINEServer::Initialize(int slot)
 	server.sun_family = AF_UNIX;
 	StringUtil::Strlcpy(server.sun_path, s_socket_name, sizeof(server.sun_path));
 
-	// we unlink the socket so that when releasing this thread the socket gets
-	// freed even if we didn't close correctly the loop
 	unlink(s_socket_name.c_str());
 	if (bind(s_sock, (struct sockaddr*)&server, sizeof(struct sockaddr_un)))
 	{
@@ -336,9 +253,6 @@ bool PINEServer::Initialize(int slot)
 	}
 #endif
 
-	// maximum queue of 4096 commands before refusing, approximated to the
-	// nearest legal value. We do not use SOMAXCONN as windows have this idea
-	// that a "reasonable" value is 5, which is not.
 	if (listen(s_sock, 4096))
 	{
 		Console.WriteLn(Color_Red, "PINE: Cannot listen for connections! Shutting down...");
@@ -346,12 +260,9 @@ bool PINEServer::Initialize(int slot)
 		return false;
 	}
 
-	// we allocate once buffers to not have to do mallocs for each IPC
-	// request, as malloc is expansive when we optimize for µs.
 	s_ret_buffer.resize(MAX_IPC_RETURN_SIZE);
 	s_ipc_buffer.resize(MAX_IPC_SIZE);
 
-	// we start the thread
 	s_thread = std::thread(&PINEServer::MainLoop);
 
 	return true;
@@ -386,10 +297,6 @@ bool PINEServer::AcceptClient()
 	s_msgsock = accept(s_sock, 0, 0);
 	if (s_msgsock < 0)
 	{
-		// everything else is non recoverable in our scope
-		// we also mark as recoverable socket errors where it would block a
-		// non blocking socket, even though our socket is blocking, in case
-		// we ever have to implement a non blocking socket.
 #ifdef _WIN32
 		const int errno_w = WSAGetLastError();
 		if (!(errno_w == WSAECONNRESET || errno_w == WSAEINTR || errno_w == WSAEINPROGRESS || errno_w == WSAEMFILE || errno_w == WSAEWOULDBLOCK) && s_sock != INVALID_SOCKET)
@@ -407,7 +314,6 @@ bool PINEServer::AcceptClient()
 	setsockopt(s_msgsock, SOL_SOCKET, SO_NOSIGPIPE, &nosigpipe, sizeof(nosigpipe));
 #endif
 
-	// Gross C-style cast, but SOCKET is a handle on Windows.
 	Console.WriteLn("PINE: New client with FD %d connected.", (int)s_msgsock);
 	return true;
 }
@@ -432,29 +338,22 @@ void PINEServer::ClientLoop()
 {
 	while (!s_end.load(std::memory_order_acquire))
 	{
-		// either int or ssize_t depending on the platform, so we have to
-		// use a bunch of auto
 		auto receive_length = 0;
 		auto end_length = 4;
 		const std::span<u8> ipc_buffer_span(s_ipc_buffer);
 
-		// while we haven't received the entire packet, maybe due to
-		// socket datagram splittage, we continue to read
 		while (receive_length < end_length)
 		{
 			const auto tmp_length = read_portable(s_msgsock, &ipc_buffer_span[receive_length], MAX_IPC_SIZE - receive_length);
 
-			// we recreate the socket if an error happens
 			if (tmp_length <= 0)
 				return;
 
 			receive_length += tmp_length;
 
-			// if we got at least the final size then update
 			if (end_length == 4 && receive_length >= 4)
 			{
 				end_length = FromSpan<u32>(ipc_buffer_span, 0);
-				// we'd like to avoid a client trying to do OOB
 				if (end_length > MAX_IPC_SIZE || end_length < 4)
 				{
 					receive_length = 0;
@@ -464,16 +363,10 @@ void PINEServer::ClientLoop()
 		}
 		PINEServer::IPCBuffer res;
 
-		// we remove 4 bytes to get the message size out of the IPC command
-		// size in ParseCommand.
-		// also, if we got a failed command, let's reset the state so we don't
-		// end up deadlocking by getting out of sync, eg when a client
-		// disconnects
 		if (receive_length != 0)
 		{
 			res = ParseCommand(ipc_buffer_span.subspan(4), s_ret_buffer, (u32)end_length - 4);
 
-			// if we cannot send back our answer restart the socket
 			if (write_portable(s_msgsock, res.buffer.data(), res.size) < 0)
 				return;
 		}
@@ -492,7 +385,6 @@ void PINEServer::Deinitialize()
 	}
 #endif
 
-	// shutdown() is needed, otherwise accept() will still block.
 #ifdef _WIN32
 	if (s_sock != INVALID_SOCKET)
 		shutdown(s_sock, SD_BOTH);
@@ -518,17 +410,6 @@ PINEServer::IPCBuffer PINEServer::ParseCommand(std::span<u8> buf, std::vector<u8
 		if (!SafetyChecks(buf_cnt, 1, ret_cnt, 0, buf_size)) [[unlikely]]
 			return IPCBuffer{5, MakeFailIPC(ret_buffer)};
 		buf_cnt++;
-		// example IPC messages: MsgRead/Write
-		// refer to the client doc for more info on the format
-		//         IPC Message event (1 byte)
-		//         |  Memory address (4 byte)
-		//         |  |           argument (VLE)
-		//         |  |           |
-		// format: XX YY YY YY YY ZZ ZZ ZZ ZZ
-		//        reply code: 00 = OK, FF = NOT OK
-		//        |  return value (VLE)
-		//        |  |
-		// reply: XX ZZ ZZ ZZ ZZ
 		switch ((IPCCommand)buf[buf_cnt - 1])
 		{
 			case MsgRead8:

@@ -60,14 +60,12 @@ const std::vector<DockTables::DefaultDockLayout> DockTables::DEFAULT_DOCK_LAYOUT
 		.name = QT_TRANSLATE_NOOP("DebuggerLayout", "R5900"),
 		.cpu = BREAKPOINT_EE,
 		.groups = {
-			/* [DefaultDockGroup::TOP_RIGHT] = */ {KDDockWidgets::Location_OnRight, DefaultDockGroup::ROOT},
-			/* [DefaultDockGroup::BOTTOM]    = */ {KDDockWidgets::Location_OnBottom, DefaultDockGroup::TOP_RIGHT},
-			/* [DefaultDockGroup::TOP_LEFT]  = */ {KDDockWidgets::Location_OnLeft, DefaultDockGroup::TOP_RIGHT},
+ {KDDockWidgets::Location_OnRight, DefaultDockGroup::ROOT},
+ {KDDockWidgets::Location_OnBottom, DefaultDockGroup::TOP_RIGHT},
+ {KDDockWidgets::Location_OnLeft, DefaultDockGroup::TOP_RIGHT},
 		},
 		.widgets = {
-			/* DefaultDockGroup::TOP_RIGHT */
 			{"DisassemblyView", DefaultDockGroup::TOP_RIGHT},
-			/* DefaultDockGroup::BOTTOM */
 			{"MemoryView", DefaultDockGroup::BOTTOM},
 			{"BreakpointView", DefaultDockGroup::BOTTOM},
 			{"ThreadView", DefaultDockGroup::BOTTOM},
@@ -76,7 +74,6 @@ const std::vector<DockTables::DefaultDockLayout> DockTables::DEFAULT_DOCK_LAYOUT
 			{"GlobalVariableTreeView", DefaultDockGroup::BOTTOM},
 			{"LocalVariableTreeView", DefaultDockGroup::BOTTOM},
 			{"ParameterVariableTreeView", DefaultDockGroup::BOTTOM},
-			/* DefaultDockGroup::TOP_LEFT */
 			{"RegisterView", DefaultDockGroup::TOP_LEFT},
 			{"FunctionTreeView", DefaultDockGroup::TOP_LEFT},
 			{"MemorySearchView", DefaultDockGroup::TOP_LEFT},
@@ -90,14 +87,12 @@ const std::vector<DockTables::DefaultDockLayout> DockTables::DEFAULT_DOCK_LAYOUT
 		.name = QT_TRANSLATE_NOOP("DebuggerLayout", "R3000"),
 		.cpu = BREAKPOINT_IOP,
 		.groups = {
-			/* [DefaultDockGroup::TOP_RIGHT] = */ {KDDockWidgets::Location_OnRight, DefaultDockGroup::ROOT},
-			/* [DefaultDockGroup::BOTTOM]    = */ {KDDockWidgets::Location_OnBottom, DefaultDockGroup::TOP_RIGHT},
-			/* [DefaultDockGroup::TOP_LEFT]  = */ {KDDockWidgets::Location_OnLeft, DefaultDockGroup::TOP_RIGHT},
+ {KDDockWidgets::Location_OnRight, DefaultDockGroup::ROOT},
+ {KDDockWidgets::Location_OnBottom, DefaultDockGroup::TOP_RIGHT},
+ {KDDockWidgets::Location_OnLeft, DefaultDockGroup::TOP_RIGHT},
 		},
 		.widgets = {
-			/* DefaultDockGroup::TOP_RIGHT */
 			{"DisassemblyView", DefaultDockGroup::TOP_RIGHT},
-			/* DefaultDockGroup::BOTTOM */
 			{"MemoryView", DefaultDockGroup::BOTTOM},
 			{"BreakpointView", DefaultDockGroup::BOTTOM},
 			{"ThreadView", DefaultDockGroup::BOTTOM},
@@ -107,7 +102,6 @@ const std::vector<DockTables::DefaultDockLayout> DockTables::DEFAULT_DOCK_LAYOUT
 			{"GlobalVariableTreeView", DefaultDockGroup::BOTTOM},
 			{"LocalVariableTreeView", DefaultDockGroup::BOTTOM},
 			{"ParameterVariableTreeView", DefaultDockGroup::BOTTOM},
-			/* DefaultDockGroup::TOP_LEFT */
 			{"RegisterView", DefaultDockGroup::TOP_LEFT},
 			{"FunctionTreeView", DefaultDockGroup::TOP_LEFT},
 			{"MemorySearchView", DefaultDockGroup::TOP_LEFT},
@@ -166,8 +160,6 @@ static void hashDefaultLayout(const DockTables::DefaultDockLayout& layout, u32& 
 
 static void hashDefaultGroup(const DockTables::DefaultDockGroupDescription& group, u32& hash)
 {
-	// This is inline here so that it's obvious that changing it will affect the
-	// result of the hash.
 	const char* location = "";
 	switch (group.location)
 	{

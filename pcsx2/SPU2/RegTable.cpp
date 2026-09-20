@@ -6,7 +6,6 @@
 
 #define U16P(x) ((u16*)&(x))
 
-// Returns the hiword of a 32 bit integer.
 #define U16P_HI(x) (((u16*)&(x)) + 1)
 
 #define PCORE(c, p) \
@@ -44,7 +43,6 @@ static std::array<u16*, 0x401> ComputeRegTable()
 {
 	static const std::array<u16*, 0x401> orig_table =
 	{{
-		// Voice Params: 8 params, 24 voices = 0x180 bytes
 		PVC(0, 0), PVC(0, 1), PVC(0, 2), PVC(0, 3), PVC(0, 4), PVC(0, 5),
 		PVC(0, 6), PVC(0, 7), PVC(0, 8), PVC(0, 9), PVC(0, 10), PVC(0, 11),
 		PVC(0, 12), PVC(0, 13), PVC(0, 14), PVC(0, 15), PVC(0, 16), PVC(0, 17),
@@ -81,9 +79,8 @@ static std::array<u16*, 0x401> ComputeRegTable()
 
 		PCORE(0, AutoDMACtrl),
 
-		PRAW(0x1b2), PRAW(0x1b4), PRAW(0x1b6), PRAW(0x1b8), PRAW(0x1ba), PRAW(0x1bc), PRAW(0x1be), // unknown
+		PRAW(0x1b2), PRAW(0x1b4), PRAW(0x1b6), PRAW(0x1b8), PRAW(0x1ba), PRAW(0x1bc), PRAW(0x1be),
 
-		// Voice Addresses
 		PVCA(0, 0), PVCA(0, 1), PVCA(0, 2), PVCA(0, 3), PVCA(0, 4), PVCA(0, 5),
 		PVCA(0, 6), PVCA(0, 7), PVCA(0, 8), PVCA(0, 9), PVCA(0, 10), PVCA(0, 11),
 		PVCA(0, 12), PVCA(0, 13), PVCA(0, 14), PVCA(0, 15), PVCA(0, 16), PVCA(0, 17),
@@ -122,7 +119,6 @@ static std::array<u16*, 0x401> ComputeRegTable()
 		PCORE(0, Regs.ENDX) + 1,
 		PCORE(0, Regs.STATX),
 
-		//0x346 here
 		PRAW(0x346),
 		PRAW(0x348), PRAW(0x34A), PRAW(0x34C), PRAW(0x34E),
 		PRAW(0x350), PRAW(0x352), PRAW(0x354), PRAW(0x356),
@@ -148,8 +144,6 @@ static std::array<u16*, 0x401> ComputeRegTable()
 		PRAW(0x3F0), PRAW(0x3F2), PRAW(0x3F4), PRAW(0x3F6),
 		PRAW(0x3F8), PRAW(0x3FA), PRAW(0x3FC), PRAW(0x3FE),
 
-		//AND... we reached 0x400!
-		// Voice Params: 8 params, 24 voices = 0x180 bytes
 		PVC(1, 0), PVC(1, 1), PVC(1, 2), PVC(1, 3), PVC(1, 4), PVC(1, 5),
 		PVC(1, 6), PVC(1, 7), PVC(1, 8), PVC(1, 9), PVC(1, 10), PVC(1, 11),
 		PVC(1, 12), PVC(1, 13), PVC(1, 14), PVC(1, 15), PVC(1, 16), PVC(1, 17),
@@ -186,9 +180,8 @@ static std::array<u16*, 0x401> ComputeRegTable()
 
 		PCORE(1, AutoDMACtrl),
 
-		PRAW(0x5b2), PRAW(0x5b4), PRAW(0x5b6), PRAW(0x5b8), PRAW(0x5ba), PRAW(0x5bc), PRAW(0x5be), // unknown
+		PRAW(0x5b2), PRAW(0x5b4), PRAW(0x5b6), PRAW(0x5b8), PRAW(0x5ba), PRAW(0x5bc), PRAW(0x5be),
 
-		// Voice Addresses
 		PVCA(1, 0), PVCA(1, 1), PVCA(1, 2), PVCA(1, 3), PVCA(1, 4), PVCA(1, 5),
 		PVCA(1, 6), PVCA(1, 7), PVCA(1, 8), PVCA(1, 9), PVCA(1, 10), PVCA(1, 11),
 		PVCA(1, 12), PVCA(1, 13), PVCA(1, 14), PVCA(1, 15), PVCA(1, 16), PVCA(1, 17),
@@ -232,7 +225,6 @@ static std::array<u16*, 0x401> ComputeRegTable()
 		PRAW(0x750), PRAW(0x752), PRAW(0x754), PRAW(0x756),
 		PRAW(0x758), PRAW(0x75A), PRAW(0x75C), PRAW(0x75E),
 
-		//0x760: weird area
 		PCORE(0, MasterVol.Left.Reg_VOL),
 		PCORE(0, MasterVol.Right.Reg_VOL),
 		PCORE(0, FxVol.Left),
@@ -278,7 +270,6 @@ static std::array<u16*, 0x401> ComputeRegTable()
 		PRAW(0x7B0), PRAW(0x7B2), PRAW(0x7B4), PRAW(0x7B6),
 		PRAW(0x7B8), PRAW(0x7BA), PRAW(0x7BC), PRAW(0x7BE),
 
-		// SPDIF interface
 		U16P(Spdif.Out),
 		U16P(Spdif.Info),
 		U16P(Spdif.Unknown1),

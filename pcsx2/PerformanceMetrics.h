@@ -23,10 +23,8 @@ namespace PerformanceMetrics
 	void Update(bool gs_register_write, bool fb_blit, bool is_skipping_present);
 	void OnGPUPresent(float gpu_time, u64 vs_invocations, u64 ps_invocations);
 
-	/// Sets the EE thread for CPU usage calculations.
 	void SetCPUThread(Threading::ThreadHandle thread);
 
-	/// Sets timers for GS software threads.
 	void SetGSSWThreadCount(u32 count);
 	void SetGSSWThread(u32 index, Threading::ThreadHandle thread);
 
@@ -62,4 +60,4 @@ namespace PerformanceMetrics
 
 	const FrameTimeHistory& GetFrameTimeHistory();
 	u32 GetFrameTimeHistoryPos();
-} // namespace PerformanceMetrics
+}

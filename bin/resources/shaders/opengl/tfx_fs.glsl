@@ -40,10 +40,6 @@
 #define PS_AA1_TRIANGLE_SW_Z 3
 #endif
 
-// TEX_COORD_DEBUG output the uv coordinate as color. It is useful
-// to detect bad sampling due to upscaling
-//#define TEX_COORD_DEBUG
-// Just copy directly the texture coordinate
 #ifdef TEX_COORD_DEBUG
 #define PS_TFX 1
 #define PS_TCC 1
@@ -113,16 +109,13 @@ in SHADER
 		flat vec4 c;
 	#endif
 
-	float inv_cov; // We use the inverse to make it simpler to interpolate.
-	flat uint interior; // 1 for triangle interior; 0 for edge;
+	float inv_cov;
+	flat uint interior;
 } PSin;
 
 #define TARGET_0_QUALIFIER out
 
-// Only enable framebuffer fetch when we actually need it.
 #if HAS_FRAMEBUFFER_FETCH && NEEDS_RT
-	// We need to force the colour to be defined here, to read from it.
-	// Basically the only scenario where this'll happen is RGBA masked and DATE is active.
 	#undef PS_NO_COLOR
 	#define PS_NO_COLOR 0
 	#if defined(GL_EXT_shader_framebuffer_fetch)
@@ -135,15 +128,12 @@ in SHADER
 #endif
 
 #if !PS_NO_COLOR && !PS_NO_COLOR1
-	// Same buffer but 2 colors for dual source blending
 	layout(location = 0, index = 0) TARGET_0_QUALIFIER vec4 o_col0;
 	layout(location = 0, index = 1) out vec4 o_col1;
 #elif !PS_NO_COLOR
 	layout(location = 0) TARGET_0_QUALIFIER vec4 o_col0;
 #endif
 
-// Depth feedback mode 2 is for depth as color.
-// Use FB fetch for the feedback if it's available.
 #if SW_DEPTH && PS_NO_COLOR1 && (DEPTH_FEEDBACK_SUPPORT == 2)
 	#if HAS_FRAMEBUFFER_FETCH
 		layout(location = 1) inout float o_col1;
@@ -158,16 +148,13 @@ layout(binding = 1) uniform sampler2D PaletteSampler;
 #endif
 
 #if !HAS_FRAMEBUFFER_FETCH && NEEDS_RT
-layout(binding = 2) uniform sampler2D RtSampler; // note 2 already use by the image below
+layout(binding = 2) uniform sampler2D RtSampler;
 #endif
 
 #if PS_DATE == 3
 layout(binding = 3) uniform sampler2D img_prim_min;
 #endif
 
-// Depth feedback mode 1 binds depth buffer directly as a texture.
-// Depth feedback mode 2 (depth as color) can use FB fetch for the feedback,
-// in which case we don't need to explicitly bind depth as a texture.
 #if (DEPTH_FEEDBACK_SUPPORT == 1 || (DEPTH_FEEDBACK_SUPPORT == 2 && !HAS_FRAMEBUFFER_FETCH)) && SW_DEPTH
 layout(binding = 4) uniform sampler2D DepthSampler;
 #endif
@@ -203,15 +190,12 @@ float sample_from_depth()
 #if (PS_AUTOMATIC_LOD != 1) && (PS_MANUAL_LOD == 1)
 float manual_lod(float uv_w)
 {
-	// FIXME add LOD: K - ( LOG2(Q) * (1 << L))
 	float K = LODParams.x;
 	float L = LODParams.y;
 	float bias = LODParams.z;
 	float max_lod = LODParams.w;
 
 	float gs_lod = K - log2(abs(uv_w)) * L;
-	// FIXME max useful ?
-	//return max(min(gs_lod, max_lod) - bias, 0.0f);
 	return min(gs_lod, max_lod) - bias;
 }
 #endif
@@ -219,16 +203,10 @@ float manual_lod(float uv_w)
 #if PS_ANISOTROPIC_FILTERING > 1
 vec4 sample_c_af(vec2 uv, float uv_w)
 {
-	// HW sampler will reject bad UVs, match that here.
 	uv = (any(isnan(uv)) || any(isinf(uv))) ? vec2(0.0f, 0.0f) : uv;
 
-	// Large floating point values risk NaN/Inf values.
-	// Above this value floats lose decimal precision, so seems a resonable limit for UVs.
 	uv = clamp(uv, -8388608.0f, 8388608.0f);
 
-	// Below taken from https://microsoft.github.io/DirectX-Specs/d3d/archive/D3D11_3_FunctionalSpec.htm#7.18.11%20LOD%20Calculations
-	// And https://registry.khronos.org/OpenGL/extensions/EXT/EXT_texture_filter_anisotropic.txt
-	// With guidance from https://pema.dev/2025/05/09/mipmaps-too-much-detail/ 
 	vec2 sz = textureSize(TextureSampler, 0);
 	vec2 dX = dFdx(uv) * sz;
 	vec2 dY = dFdy(uv) * sz;
@@ -236,7 +214,6 @@ vec4 sample_c_af(vec2 uv, float uv_w)
 	float length_x = length(dX);
 	float length_y = length(dY);
 
-	// Calculate Ellipse Transform
 	bool d_zero = length_x < 0.001f || length_y < 0.001f;
 	float f = (dX.x * dY.y - dX.y * dY.x);
 	bool d_par = f < 0.001f;
@@ -284,7 +261,6 @@ vec4 sample_c_af(vec2 uv, float uv_w)
 		}
 	}
 
-	// Compute AF values
 	bool is_major_x = length_x > length_y;
 	float length_major = is_major_x ? length_x : length_y;
 	float length_minor = is_major_x ? length_y : length_x;
@@ -294,9 +270,6 @@ vec4 sample_c_af(vec2 uv, float uv_w)
 	vec2 aniso_line;
 	if (length_major <= 1.0f)
 	{
-		// A zero length_major would result in NaN Lod and break sampling.
-		// A small length_major would result in aniso_ratio getting clamped to 1.
-		// Perform isotropic filtering instead.
 		aniso_ratio = 1.0f;
 		length_lod = length_major;
 		aniso_line = vec2(0.0f, 0.0f);
@@ -308,7 +281,6 @@ vec4 sample_c_af(vec2 uv, float uv_w)
 		aniso_ratio = min(length_major / length_minor, PS_ANISOTROPIC_FILTERING);
 		length_lod = length_major / aniso_ratio;
 
-		// clamp to top Lod
 		if (length_lod < 1.0f)
 			aniso_ratio = max(1.0f, aniso_ratio * length_lod);
 
@@ -322,7 +294,7 @@ vec4 sample_c_af(vec2 uv, float uv_w)
 #elif PS_MANUAL_LOD == 1
 	float lod = manual_lod(uv_w);
 #else
-	float lod = 0.0f; // No Lod
+	float lod = 0.0f;
 #endif
 
 	vec4 colour;
@@ -376,7 +348,7 @@ vec4 sample_c(vec2 uv)
 #elif PS_MANUAL_LOD == 1
 	return textureLod(TextureSampler, uv, manual_lod(PSin.t_float.w));
 #else
-	return textureLod(TextureSampler, uv, 0.0f); // No lod
+	return textureLod(TextureSampler, uv, 0.0f);
 #endif
 
 #endif
@@ -407,14 +379,12 @@ vec4 clamp_wrap_uv(vec4 uv)
 	uv_out = clamp(uv, MinMax.xyxy, MinMax.zwzw);
 #elif PS_WMS == 3
 	#if PS_FST == 0
-	// wrap negative uv coords to avoid an off by one error that shifted
-	// textures. Fixes Xenosaga's hair issue.
 	uv = fract(uv);
 	#endif
 	uv_out = vec4((uvec4(uv * tex_size) & floatBitsToUint(MinMax.xyxy)) | floatBitsToUint(MinMax.zwzw)) / tex_size;
 #endif
 
-#else // PS_WMS != PS_WMT
+#else
 
 #if PS_REGION_RECT == 1 && PS_WMS == 0
 	uv.xz = fract(uv.xz);
@@ -452,7 +422,6 @@ vec4 clamp_wrap_uv(vec4 uv)
 #endif
 
 #if PS_REGION_RECT == 1
-	// Normalized -> Integer Coordinates.
 	uv_out = clamp(uv_out * WH.zwzw + STRange.xyxy, STRange.xyxy, STRange.zwzw);
 #endif
 
@@ -463,8 +432,6 @@ mat4 sample_4c(vec4 uv)
 {
 	mat4 c;
 
-	// Note: texture gather can't be used because of special clamping/wrapping
-	// Also it doesn't support lod
 	c[0] = sample_c(uv.xy);
 	c[1] = sample_c(uv.zy);
 	c[2] = sample_c(uv.xw);
@@ -477,32 +444,22 @@ uvec4 sample_4_index(vec4 uv)
 {
 	vec4 c;
 
-	// Either GS will send a texture that contains a single channel
-	// in this case the red channel is remapped as alpha channel
-	//
-	// Or we have an old RT (ie RGBA8) that contains index (4/8) in the alpha channel
-
-	// Note: texture gather can't be used because of special clamping/wrapping
-	// Also it doesn't support lod
 	c.x = sample_c(uv.xy).a;
 	c.y = sample_c(uv.zy).a;
 	c.z = sample_c(uv.xw).a;
 	c.w = sample_c(uv.zw).a;
 
 #if PS_RTA_SRC_CORRECTION
-	uvec4 i = uvec4(round(c * 128.25f)); // Denormalize value
+	uvec4 i = uvec4(round(c * 128.25f));
 #else
-	uvec4 i = uvec4(c * 255.5f); // Denormalize value
+	uvec4 i = uvec4(c * 255.5f);
 #endif
 
 #if PS_PAL_FMT == 1
-	// 4HL
 	return i & 0xFu;
 #elif PS_PAL_FMT == 2
-	// 4HH
 	return i >> 4u;
 #else
-	// 8
 	return i;
 #endif
 
@@ -549,15 +506,10 @@ vec4 fetch_c(ivec2 uv)
 #endif
 }
 
-//////////////////////////////////////////////////////////////////////
-// Depth sampling
-//////////////////////////////////////////////////////////////////////
 ivec2 clamp_wrap_uv_depth(ivec2 uv)
 {
 	ivec2 uv_out = uv;
 
-	// Keep the full precision
-	// It allow to multiply the ScalingFactor before the 1/16 coeff
 	ivec4 mask = floatBitsToInt(MinMax) << 4;
 
 #if PS_WMS == PS_WMT
@@ -568,7 +520,7 @@ ivec2 clamp_wrap_uv_depth(ivec2 uv)
 	uv_out = (uv & mask.xy) | mask.zw;
 #endif
 
-#else // PS_WMS != PS_WMT
+#else
 
 #if PS_WMS == 2
 	uv_out.x = clamp(uv.x, mask.x, mask.z);
@@ -599,26 +551,16 @@ vec4 sample_depth(vec2 st)
 	vec4 t = vec4(0.0f);
 
 #if PS_TALES_OF_ABYSS_HLE == 1
-	// Warning: UV can't be used in channel effect
 	uint depth = fetch_raw_depth();
 
-	// Convert msb based on the palette
 	t = texelFetch(PaletteSampler, ivec2((depth >> 8u) & 0xFFu, 0), 0) * 255.0f;
 
 #elif PS_URBAN_CHAOS_HLE == 1
-	// Depth buffer is read as a RGB5A1 texture. The game try to extract the green channel.
-	// So it will do a first channel trick to extract lsb, value is right-shifted.
-	// Then a new channel trick to extract msb which will shifted to the left.
-	// OpenGL uses a FLOAT32 format for the depth so it requires a couple of conversion.
-	// To be faster both steps (msb&lsb) are done in a single pass.
 
-	// Warning: UV can't be used in channel effect
 	uint depth = fetch_raw_depth();
 
-	// Convert lsb based on the palette
 	t = texelFetch(PaletteSampler, ivec2((depth & 0xFFu), 0), 0) * 255.0f;
 
-	// Msb is easier
 	float green = float((depth >> 8u) & 0xFFu) * 36.0f;
 	green = min(green, 255.0f);
 
@@ -626,24 +568,18 @@ vec4 sample_depth(vec2 st)
 
 
 #elif PS_DEPTH_FMT == 1
-	// Based on ps_convert_depth32_rgba8 of convert
-	// Convert a GL_FLOAT32 depth texture into a RGBA color texture
 	uint d = uint(fetch_c(uv).r * exp2(32.0f));
 	t = vec4(uvec4((d & 0xFFu), ((d >> 8) & 0xFFu), ((d >> 16) & 0xFFu), (d >> 24)));
 
 #elif PS_DEPTH_FMT == 2
-	// Based on ps_convert_depth16_rgb5a1 of convert
-	// Convert a GL_FLOAT32 (only 16 lsb) depth into a RGB5A1 color texture
 	uint d = uint(fetch_c(uv).r * exp2(32.0f));
 	t = vec4(uvec4((d & 0x1Fu), ((d >> 5) & 0x1Fu), ((d >> 10) & 0x1Fu), (d >> 15) & 0x01u)) * vec4(8.0f, 8.0f, 8.0f, 128.0f);
 
 #elif PS_DEPTH_FMT == 3
-	// Convert a RGBA/RGB5A1 color texture into a RGBA/RGB5A1 color texture
 	t = fetch_c(uv) * 255.0f;
 
 #endif
 
-	// warning t ranges from 0 to 255
 #if (PS_AEM_FMT == FMT_24)
 	t.a = ( (PS_AEM == 0) || any(bvec3(t.rgb))  ) ? 255.0f * TA.x : 0.0f;
 #elif (PS_AEM_FMT == FMT_16)
@@ -655,9 +591,6 @@ vec4 sample_depth(vec2 st)
 	return t;
 }
 
-//////////////////////////////////////////////////////////////////////
-// Fetch a Single Channel
-//////////////////////////////////////////////////////////////////////
 vec4 fetch_red()
 {
 #if PS_DEPTH_FMT == 1 || PS_DEPTH_FMT == 2
@@ -718,8 +651,6 @@ vec4 fetch_gXbY()
 #endif
 }
 
-//////////////////////////////////////////////////////////////////////
-
 vec4 sample_color(vec2 st)
 {
 #if (PS_TCOFFSETHACK == 1)
@@ -730,9 +661,7 @@ vec4 sample_color(vec2 st)
 	mat4 c;
 	vec2 dd;
 
-	// FIXME I'm not sure this condition is useful (I think code will be optimized)
 #if (PS_LTF == 0 && PS_AEM_FMT == FMT_32 && PS_PAL_FMT == 0 && PS_REGION_RECT == 0 && PS_WMS < 2 && PS_WMT < 2)
-	// No software LTF and pure 32 bits RGBA texure without special texture wrapping
 	c[0] = sample_c(st);
 #ifdef TEX_COORD_DEBUG
 	c[0].rg = st.xy;
@@ -746,9 +675,6 @@ vec4 sample_color(vec2 st)
 		uv = st.xyxy + HalfTexel;
 		dd = fract(uv.xy * WH.zw);
 #if (PS_FST == 0)
-		// Background in Shin Megami Tensei Lucifers
-		// I suspect that uv isn't a standard number, so fract is outside of the [0;1] range
-		// Note: it is free on GPU but let's do it only for float coordinate
 		dd = clamp(dd, vec2(0.0f), vec2(1.0f));
 #endif
 	}
@@ -774,17 +700,12 @@ vec4 sample_color(vec2 st)
 
 #endif
 
-	// PERF note: using dot product reduces by 1 the number of instruction
-	// but I'm not sure it is equivalent neither faster.
 	for (int i = 0; i < 4; i++)
 	{
-		//float sum = dot(c[i].rgb, vec3(1.0f));
 #if (PS_AEM_FMT == FMT_24)
 		c[i].a = ( (PS_AEM == 0) || any(bvec3(c[i].rgb))  ) ? TA.x : 0.0f;
-		//c[i].a = ( (PS_AEM == 0) || (sum > 0.0f) ) ? TA.x : 0.0f;
 #elif (PS_AEM_FMT == FMT_16)
 		c[i].a = c[i].a >= 0.5 ? TA.y : ( (PS_AEM == 0) || any(bvec3(ivec3(c[i].rgb * 255.0f) & ivec3(0xF8))) ) ? TA.x : 0.0f;
-		//c[i].a = c[i].a >= 0.5 ? TA.y : ( (PS_AEM == 0) || (sum > 0.0f) ) ? TA.x : 0.0f;
 #endif
 	}
 
@@ -798,13 +719,10 @@ vec4 sample_color(vec2 st)
 	t.a = t.a * (128.5f / 255.0f);
 #endif
 
-	// The 0.05f helps to fix the overbloom of sotc
-	// I think the issue is related to the rounding of texture coodinate. The linear (from fixed unit)
-	// interpolation could be slightly below the correct one.
 	return trunc(t * 255.0f + 0.05f);
 }
 
-#endif // NEEDS_TEX
+#endif
 
 vec4 tfx(vec4 T, vec4 C)
 {
@@ -830,7 +748,6 @@ vec4 tfx(vec4 T, vec4 C)
 #endif
 
 #if (PS_TFX == 0) || (PS_TFX == 2) || (PS_TFX == 3)
-	// Clamp only when it is useful
 	C_out = min(C_out, 255.0f);
 #endif
 
@@ -873,12 +790,10 @@ void fog(inout vec4 C, float f)
 
 vec4 ps_color()
 {
-	//FIXME: maybe we can set gl_Position.w = q in VS
 #if (PS_FST == 0)
 	vec2 st = PSin.t_float.xy / vec2(PSin.t_float.w);
 	vec2 st_int = PSin.t_int.zw / vec2(PSin.t_float.w);
 #else
-	// Note xy are normalized coordinate
 	vec2 st = PSin.t_int.xy;
 	vec2 st_int = PSin.t_int.zw;
 #endif
@@ -898,7 +813,6 @@ vec4 ps_color()
 #elif PS_CHANNEL_FETCH == 6
 	vec4 T = fetch_gXbY();
 #elif PS_DEPTH_FMT > 0
-	// Integral coordinate
 	vec4 T = sample_depth(st_int);
 #else
 	vec4 T = sample_color(st);
@@ -930,7 +844,6 @@ vec4 ps_color()
 
 void ps_fbmask(inout vec4 C)
 {
-	// FIXME do I need special case for 16 bits
 #if PS_FBMASK
 	#if PS_COLCLIP_HW == 1
 		vec4 RT = trunc(sample_from_rt() * 65535.0f);
@@ -951,8 +864,6 @@ void ps_dither(inout vec3 C, float As)
 	#endif
 		float value = DitherMatrix[fpos.y&3][fpos.x&3];
 
-	// The idea here is we add on the dither amount adjusted by the alpha before it goes to the hw blend
-	// so after the alpha blend the resulting value should be the same as (Cs - Cd) * As + Cd + Dither.
 	#if PS_DITHER_ADJUST
 		#if PS_BLEND_C == 2
 			float Alpha = Af;
@@ -973,28 +884,17 @@ void ps_dither(inout vec3 C, float As)
 
 void ps_color_clamp_wrap(inout vec3 C)
 {
-	// When dithering the bottom 3 bits become meaningless and cause lines in the picture
-	// so we need to limit the color depth on dithered items
 #if SW_BLEND || (PS_DITHER > 0 && PS_DITHER < 3) || PS_FBMASK
 
 #if PS_DST_FMT == FMT_16 && PS_BLEND_MIX == 0 && PS_ROUND_INV
-	C += 7.0f; // Need to round up, not down since the shader will invert
+	C += 7.0f;
 #endif
 
-	// Correct the Color value based on the output format
 #if PS_COLCLIP == 0 && PS_COLCLIP_HW == 0
-	// Standard Clamp
 	C = clamp(C, vec3(0.0f), vec3(255.0f));
 #endif
 
-	// FIXME rouding of negative float?
-	// compiler uses trunc but it might need floor
-
-	// Warning: normally blending equation is mult(A, B) = A * B >> 7. GPU have the full accuracy
-	// GS: Color = 1, Alpha = 255 => output 1
-	// GPU: Color = 1/255, Alpha = 255/255 * 255/128 => output 1.9921875
 #if PS_DST_FMT == FMT_16 && PS_DITHER < 3 && (PS_BLEND_MIX == 0 || PS_DITHER)
-	// In 16 bits format, only 5 bits of colors are used. It impacts shadows computation of Castlevania
 	C = vec3(ivec3(C) & ivec3(0xF8));
 #elif PS_COLCLIP == 1 || PS_COLCLIP_HW == 1
 	C = vec3(ivec3(C) & ivec3(0xFF));
@@ -1011,10 +911,7 @@ float As = As_rgba.a;
 
 #if SW_BLEND
 
-	// PABE
 #if PS_PABE
-	// As_rgba needed for accumulation blend to manipulate Cd.
-	// No blending so early exit
 	if (As < 1.0f)
 	{
 		As_rgba.rgb = vec3(0.0f);
@@ -1027,7 +924,6 @@ float As = As_rgba.a;
 #if SW_BLEND_NEEDS_RT
 	vec4 RT = sample_from_rt();
 #else
-	// Not used, but we define it to make the selection below simpler.
 	vec4 RT = vec4(0.0f);
 #endif
 
@@ -1052,7 +948,6 @@ float As = As_rgba.a;
 		#endif
 	#endif
 
-	// Let the compiler do its jobs !
 	#if PS_COLCLIP_HW == 1
 		vec3 Cd = trunc(RT.rgb * 65535.0f);
 	#else
@@ -1092,8 +987,6 @@ float As = As_rgba.a;
 	vec3 D = vec3(0.0f);
 #endif
 
-	// As/Af clamp alpha for Blend mix
-	// We shouldn't clamp blend mix with blend hw 1 as we want alpha higher
 	float C_clamped = C;
 #if PS_BLEND_MIX > 0 && PS_BLEND_HW != 1 && PS_BLEND_HW != 2
 	C_clamped = min(C_clamped, 1.0f);
@@ -1101,13 +994,6 @@ float As = As_rgba.a;
 
 #if PS_BLEND_A == PS_BLEND_B
 	Color.rgb = D;
-// In blend_mix, HW adds on some alpha factor * dst.
-// Truncating here wouldn't quite get the right result because it prevents the <1 bit here from combining with a <1 bit in dst to form a ≥1 amount that pushes over the truncation.
-// Instead, apply an offset to convert HW's round to a floor.
-// Since alpha is in 1/128 increments, subtracting (0.5 - 0.5/128 == 127/256) would get us what we want if GPUs blended in full precision.
-// But they don't.  Details here: https://github.com/PCSX2/pcsx2/pull/6809#issuecomment-1211473399
-// Based on the scripts at the above link, the ideal choice for Intel GPUs is 126/256, AMD 120/256.  Nvidia is a lost cause.
-// 124/256 seems like a reasonable compromise, providing the correct answer 99.3% of the time on Intel (vs 99.6% for 126/256), and 97% of the time on AMD (vs 97.4% for 120/256).
 #elif PS_BLEND_MIX == 2
 	Color.rgb = ((A - B) * C_clamped + D) + (124.0f/256.0f);
 #elif PS_BLEND_MIX == 1
@@ -1117,27 +1003,14 @@ float As = As_rgba.a;
 #endif
 
 #if PS_BLEND_HW == 1
-	// As or Af
 	As_rgba.rgb = vec3(C);
-	// Subtract 1 for alpha to compensate for the changed equation,
-	// if c.rgb > 255.0f then we further need to adjust alpha accordingly,
-	// we pick the lowest overflow from all colors because it's the safest,
-	// we divide by 255 the color because we don't know Cd value,
-	// changed alpha should only be done for hw blend.
 	vec3 alpha_compensate = max(vec3(1.0f), Color.rgb / vec3(255.0f));
 	As_rgba.rgb -= alpha_compensate;
 #elif PS_BLEND_HW == 2
-	// Since we can't do Cd*(Alpha + 1) - Cs*Alpha in hw blend
-	// what we can do is adjust the Cs value that will be
-	// subtracted, this way we can get a better result in hw blend.
-	// Result is still wrong but less wrong than before.
 	float division_alpha = 1.0f + C;
 	Color.rgb /= vec3(division_alpha);
 #elif PS_BLEND_HW == 3
-	// As, Ad or Af clamped.
 	As_rgba.rgb = vec3(C_clamped);
-	// Cs*(Alpha + 1) might overflow, if it does then adjust alpha value
-	// that is sent on second output to compensate.
 	vec3 overflow_check = (Color.rgb - vec3(255.0f)) / 255.0f;
 	vec3 alpha_compensate = max(vec3(0.0f), overflow_check);
 	As_rgba.rgb -= alpha_compensate;
@@ -1151,35 +1024,25 @@ float As = As_rgba.a;
 	vec3 Alpha = vec3(As);
 #endif
 
-	// Needed for Cd * (As/Ad/F + 1) blending modes
 #if PS_BLEND_HW == 1
 	Color.rgb = vec3(255.0f);
 #elif PS_BLEND_HW == 2
-	// Cd*As,Cd*Ad or Cd*F
 
 	Color.rgb = max(vec3(0.0f), (Alpha - vec3(1.0f)));
 	Color.rgb *= vec3(255.0f);
 #elif PS_BLEND_HW == 3 && PS_RTA_CORRECTION == 0
-	// Needed for Cs*Ad, Cs*Ad + Cd, Cd - Cs*Ad
-	// Multiply Color.rgb by (255/128) to compensate for wrong Ad/255 value when rgb are below 128.
-	// When any color channel is higher than 128 then adjust the compensation automatically
-	// to give us more accurate colors, otherwise they will be wrong.
-	// The higher the value (>128) the lower the compensation will be.
 	float max_color = max(max(Color.r, Color.g), Color.b);
 	float color_compensate = 255.0f / max(128.0f, max_color);
 	Color.rgb *= vec3(color_compensate);
 #elif PS_BLEND_HW == 4
-	// Needed for Cd * (1 - Ad) and Cd*(1 + Alpha).
 
 	As_rgba.rgb = Alpha * vec3(128.0f / 255.0f);
 	Color.rgb = vec3(127.5f);
 #elif PS_BLEND_HW == 5
-	// Needed for Cs*Alpha + Cd*(1 - Alpha).
 	Alpha *= vec3(128.0f / 255.0f);
 	As_rgba.rgb = (Alpha - vec3(0.5f));
 	Color.rgb = (Color.rgb * Alpha);
 #elif PS_BLEND_HW == 6
-	// Needed for Cd*Alpha + Cs*(1 - Alpha).
 	Alpha *= vec3(128.0f / 255.0f);
 	As_rgba.rgb = Alpha;
 	Color.rgb *= (Alpha - vec3(0.5f));
@@ -1192,7 +1055,6 @@ void ps_main()
 {
 	float input_z = gl_FragCoord.z;
 
-	// Must floor before depth testing.
 #if PS_ZFLOOR
 	input_z = floor(input_z * exp2(32.0f)) * exp2(-32.0f);
 #endif
@@ -1206,7 +1068,6 @@ void ps_main()
 #endif
 
 #if PS_SCANMSK & 2
-	// fail depth test on prohibited lines
 	if ((int(gl_FragCoord.y) & 1) == (PS_SCANMSK & 1))
 		discard;
 #endif
@@ -1214,21 +1075,18 @@ void ps_main()
 #if PS_DATE >= 5
 
 #if PS_WRITE_RG == 1
-	// Pseudo 16 bits access.
 	float rt_a = sample_from_rt().g;
 #else
 	float rt_a = sample_from_rt().a;
 #endif
 
 #if (PS_DATE & 3) == 1
-	// DATM == 0: Pixel with alpha equal to 1 will failed
 	#if PS_RTA_CORRECTION
 		bool bad = (254.5f / 255.0f) < rt_a;
 	#else
 		bool bad = (127.5f / 255.0f) < rt_a;
 	#endif
 #elif (PS_DATE & 3) == 2
-	// DATM == 1: Pixel with alpha equal to 0 will failed
 	#if PS_RTA_CORRECTION
 		bool bad = rt_a < (254.5f / 255.0f);
 	#else
@@ -1244,8 +1102,6 @@ void ps_main()
 
 #if PS_DATE == 3
 	int stencil_ceil = int(texelFetch(img_prim_min, ivec2(gl_FragCoord.xy), 0).r);
-	// Note gl_PrimitiveID == stencil_ceil will be the primitive that will update
-	// the bad alpha value so we must keep it.
 
 	if (gl_PrimitiveID > stencil_ceil) {
 		discard;
@@ -1256,19 +1112,17 @@ void ps_main()
 
 #if PS_AA1
 	#if PS_AA1 == PS_AA1_LINE
-		// Blur only outer part of the line by scaling coverage.
 		float cov = clamp(LineCovScale * (1.0f - abs(PSin.inv_cov)), 0.0f, 1.0f);
 	#else
 		float cov = clamp(1.0f - abs(PSin.inv_cov), 0.0f, 1.0f);
 	#endif
 	#if PS_ABE
-		if (floor(C.a) == 128.0f) // The coverage is only used if the fragment alpha is 128.
+		if (floor(C.a) == 128.0f)
 			C.a = 128.0f * cov;
 	#else
 		C.a = 128.0f * cov;
 	#endif
 #elif PS_FIXED_ONE_A
-	// AA (Fixed one) will output a coverage of 1.0 as alpha
 	C.a = 128.0f;
 #endif
 
@@ -1291,23 +1145,17 @@ void ps_main()
 	vec4 alpha_blend = vec4(C.a / 128.0f);
 #endif
 
-	// Correct the ALPHA value based on the output format
 #if (PS_DST_FMT == FMT_16)
-	float A_one = 128.0f; // alpha output will be 0x80
+	float A_one = 128.0f;
 	C.a = (PS_FBA != 0) ? A_one : step(128.0f, C.a) * A_one;
 #elif (PS_DST_FMT == FMT_32) && (PS_FBA != 0)
 	if(C.a < 128.0f) C.a += 128.0f;
 #endif
 
-	// Get first primitive that will write a failling alpha value
 #if PS_DATE == 1
-	// DATM == 0
-	// Pixel with alpha equal to 1 will failed (128-255)
 	o_col0 = (C.a > 127.5f) ? vec4(gl_PrimitiveID) : vec4(0x7FFFFFFF);
 	return;
 #elif PS_DATE == 2
-	// DATM == 1
-	// Pixel with alpha equal to 0 will failed (0-127)
 	o_col0 = (C.a < 127.5f) ? vec4(gl_PrimitiveID) : vec4(0x7FFFFFFF);
 	return;
 #endif
@@ -1326,7 +1174,6 @@ void ps_main()
 		#endif
 	#endif
 
-	// Special case for 32bit input and 16bit output, shuffle used by The Godfather
 	#if PS_SHUFFLE_SAME
 		uvec4 denorm_c = uvec4(C);
 	#if (PS_PROCESS_BA & SHUFFLE_READ)
@@ -1334,7 +1181,6 @@ void ps_main()
 	#else
 		C.ga = C.rg;
 	#endif
-	// Copy of a 16bit source in to this target
 	#elif PS_READ16_SRC
 		uvec4 denorm_c = uvec4(C);
 		uvec2 denorm_TA = uvec2(vec2(TA.xy) * 255.0f + 0.5f);
@@ -1351,19 +1197,17 @@ void ps_main()
 		#else
 			C.rb = C.rr;
 			C.ga = C.gg;
-		#endif // PS_PROCESS_BA
-	#endif // PS_SHUFFLE_ACROSS
-#endif // PS_SHUFFLE
+		#endif
+	#endif
+#endif
 
 	ps_dither(C.rgb, alpha_blend.a);
 
-	// Color clamp/wrap needs to be done after sw blending and dithering
 	ps_color_clamp_wrap(C.rgb);
 
 	ps_fbmask(C);
 
 #if (PS_AFAIL == AFAIL_RGB_ONLY_DSB) && !PS_NO_COLOR1
-	// Use alpha blend factor to determine whether to update A.
 	alpha_blend.a = float(atst_pass);
 #endif
 
@@ -1379,7 +1223,6 @@ void ps_main()
 		C.rgb = C.rgb / 255.0f;
 	#endif
 
-	// Alpha test with feedback
 	#if PS_AFAIL == AFAIL_FB_ONLY
 		if (!atst_pass)
 			input_z = sample_from_depth();
@@ -1396,8 +1239,6 @@ void ps_main()
 		}
 	#endif
 
-	// Warning: do not write o_col0 until the end since the value might be needed for
-	// FB fetch in sample_from_rt().
 	o_col0 = C;
 
 	#if !PS_NO_COLOR1
@@ -1411,19 +1252,13 @@ void ps_main()
 
 #if PS_AA1 == PS_AA1_TRIANGLE_SW_Z
 	if (!bool(PSin.interior))
-		input_z = sample_from_depth(); // No depth update for triangle edges.
+		input_z = sample_from_depth();
 #endif
 
-// Writing back depth
 #if ZWRITE
 	#if SW_DEPTH && PS_NO_COLOR1 && (DEPTH_FEEDBACK_SUPPORT == 2)
-		// Depth as color write. For depth as color feedback we write to both
-		// color copy and real depth to avoid having to copy back to real depth.
-		// Warning: do not write o_col1 until the end since the value might
-		// be needed for FB fetch in sample_from_depth().
 		o_col1 = input_z;
 	#endif
-	// Standard depth write.
 	gl_FragDepth = input_z;
 #endif
 }

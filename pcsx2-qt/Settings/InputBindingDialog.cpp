@@ -37,7 +37,6 @@ InputBindingDialog::InputBindingDialog(SettingsInterface* sif, InputBindingInfo:
 	connect(g_emu_thread, &EmuThread::onInputDeviceDisconnected, this, &InputBindingDialog::onInputDeviceDisconnected);
 	updateList();
 
-	// Only show the sensitivity controls for binds where it's applicable.
 	if (bind_type == InputBindingInfo::Type::Button || bind_type == InputBindingInfo::Type::Axis ||
 		bind_type == InputBindingInfo::Type::HalfAxis)
 	{
@@ -69,7 +68,6 @@ bool InputBindingDialog::eventFilter(QObject* watched, QEvent* event)
 {
 	const QEvent::Type event_type = event->type();
 
-	// if the key is being released, set the input
 	if (event_type == QEvent::KeyRelease || event_type == QEvent::MouseButtonRelease)
 	{
 		addNewBinding();
@@ -84,7 +82,6 @@ bool InputBindingDialog::eventFilter(QObject* watched, QEvent* event)
 	}
 	else if (event_type == QEvent::MouseButtonPress || event_type == QEvent::MouseButtonDblClick)
 	{
-		// double clicks get triggered if we click bind, then click again quickly.
 		if (const u32 button_mask = static_cast<u32>(static_cast<const QMouseEvent*>(event)->button()))
 			m_new_bindings.push_back(InputManager::MakePointerButtonKey(0, std::countr_zero(button_mask)));
 		return true;
@@ -118,8 +115,6 @@ bool InputBindingDialog::eventFilter(QObject* watched, QEvent* event)
 	}
 	else if (event_type == QEvent::MouseMove && m_mouse_mapping_enabled)
 	{
-		// if we've moved more than a decent distance from the center of the widget, bind it.
-		// this is so we don't accidentally bind to the mouse if you bump it while reaching for your pad.
 		static constexpr const s32 THRESHOLD = 50;
 		const QPoint diff(static_cast<QMouseEvent*>(event)->globalPosition().toPoint() - m_input_listen_start_position);
 		bool has_one = false;
@@ -310,25 +305,20 @@ void InputBindingDialog::inputManagerHookCallback(InputBindingKey key, float val
 	{
 		if (other_key.MaskDirection() == key.MaskDirection())
 		{
-			// for pedals, we wait for it to go back to near its starting point to commit the binding
 			if ((reverse_threshold ? ((initial_value - value) <= 0.25f) : (abs_value < 0.5f)))
 			{
-				// did we go the full range?
 				if (reverse_threshold && initial_value > 0.5f && min_value <= -0.5f)
 					other_key.modifier = InputModifier::FullAxis;
 
-				// if this key is in our new binding list, it's a "release", and we're done
 				addNewBinding();
 				stopListeningForInput();
 				return;
 			}
 
-			// otherwise, keep waiting
 			return;
 		}
 	}
 
-	// new binding, add it to the list, but wait for a decent distance first, and then wait for release
 	if ((reverse_threshold ? (abs_value < 0.5f) : (abs_value >= 0.5f)))
 	{
 		InputBindingKey key_to_add = key;

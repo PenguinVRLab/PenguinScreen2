@@ -18,7 +18,6 @@ static void* GetProcAddressCallback(const char* name)
 	if (addr)
 		return addr;
 
-	// try opengl32.dll
 	return ::GetProcAddress(GetModuleHandleA("opengl32.dll"), name);
 }
 
@@ -72,7 +71,6 @@ bool GLContextWGL::Initialize(std::span<const Version> versions_to_try, Error* e
 			return false;
 	}
 
-	// Everything including core/ES requires a dummy profile to load the WGL extensions.
 	if (!CreateAnyContext(nullptr, true, error))
 		return false;
 
@@ -118,7 +116,7 @@ bool GLContextWGL::ChangeSurface(const WindowInfo& new_wi)
 	return true;
 }
 
-void GLContextWGL::ResizeSurface(u32 new_surface_width /*= 0*/, u32 new_surface_height /*= 0*/)
+void GLContextWGL::ResizeSurface(u32 new_surface_width , u32 new_surface_height )
 {
 	RECT client_rc = {};
 	GetClientRect(GetHWND(), &client_rc);
@@ -331,7 +329,6 @@ bool GLContextWGL::CreatePBuffer(Error* error)
 
 	if (!GLAD_WGL_ARB_pbuffer)
 	{
-		// we're probably running completely surfaceless... need a temporary context.
 		temp_rc = wglCreateContext(hdc);
 		if (!temp_rc || !wglMakeCurrent(hdc, temp_rc))
 		{
@@ -391,7 +388,6 @@ bool GLContextWGL::CreateAnyContext(HGLRC share_context, bool make_current, Erro
 			return false;
 		}
 
-		// re-init glad-wgl
 		if (!gladLoadWGL(m_dc, [](const char* name) { return (GLADapiproc)wglGetProcAddress(name); }))
 		{
 			Error::SetStringView(error, "Loading GLAD WGL functions failed");
@@ -411,7 +407,6 @@ bool GLContextWGL::CreateAnyContext(HGLRC share_context, bool make_current, Erro
 bool GLContextWGL::CreateVersionContext(const Version& version, HGLRC share_context, bool make_current,
 	Error* error)
 {
-	// we need create context attribs
 	if (!GLAD_WGL_ARB_create_context)
 	{
 		Error::SetStringView(error, "Missing GLAD_WGL_ARB_create_context.");
@@ -438,7 +433,6 @@ bool GLContextWGL::CreateVersionContext(const Version& version, HGLRC share_cont
 	if (!new_rc)
 		return false;
 
-	// destroy and swap contexts
 	if (m_rc)
 	{
 		if (!wglMakeCurrent(m_dc, make_current ? new_rc : nullptr))
@@ -448,7 +442,6 @@ bool GLContextWGL::CreateVersionContext(const Version& version, HGLRC share_cont
 			return false;
 		}
 
-		// re-init glad-wgl
 		if (make_current && !ReloadWGL(m_dc))
 			return false;
 

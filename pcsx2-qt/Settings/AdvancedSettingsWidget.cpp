@@ -77,18 +77,15 @@ AdvancedSettingsWidget::AdvancedSettingsWidget(SettingsWindow* settings_dialog, 
 	dialog()->registerWidgetHelp(m_ui.eeRecompiler, tr("Enable Recompiler"), tr("Checked"),
 		tr("Performs just-in-time binary translation of 64-bit MIPS-IV machine code to x86."));
 
-	//: Wait loop: When the game makes the CPU do nothing (loop/spin) while it waits for something to happen (usually an interrupt).
 	dialog()->registerWidgetHelp(m_ui.eeWaitLoopDetection, tr("Wait Loop Detection"), tr("Checked"),
 		tr("Moderate speedup for some games, with no known side effects."));
 
 	dialog()->registerWidgetHelp(m_ui.eeCache, tr("Enable Cache (Slow)"), tr("Unchecked"), tr("Interpreter only, provided for diagnostic."));
 
-	//: INTC = Name of a PS2 register, leave as-is. "spin" = to make a cpu (or gpu) actively do nothing while you wait for something.  Like spinning in a circle, you're moving but not actually going anywhere.
 	dialog()->registerWidgetHelp(m_ui.eeINTCSpinDetection, tr("INTC Spin Detection"), tr("Checked"),
 		tr("Huge speedup for some games, with almost no compatibility side effects."));
 
 	dialog()->registerWidgetHelp(m_ui.eeFastmem, tr("Enable Fast Memory Access"), tr("Checked"),
-		//: "Backpatching" = To edit previously generated code to change what it does (in this case, we generate direct memory accesses, then backpatch them to jump to a fancier handler function when we realize they need the fancier handler function)
 		tr("Uses backpatching to avoid register flushing on every memory access."));
 
 	dialog()->registerWidgetHelp(m_ui.pauseOnTLBMiss, tr("Pause On TLB Miss"), tr("Unchecked"),
@@ -116,14 +113,11 @@ AdvancedSettingsWidget::AdvancedSettingsWidget(SettingsWindow* settings_dialog, 
 		tr("Runs VU1 instantly. Provides a modest speed improvement in most games. "
 		   "Safe for most games, but a few games may exhibit graphical errors."));
 
-	//: VU0 = Vector Unit 0. One of the PS2's processors.
 	dialog()->registerWidgetHelp(m_ui.vu0Recompiler, tr("Enable VU0 Recompiler (Micro Mode)"), tr("Checked"), tr("Enables VU0 Recompiler."));
 
-	//: VU1 = Vector Unit 1. One of the PS2's processors.
 	dialog()->registerWidgetHelp(m_ui.vu1Recompiler, tr("Enable VU1 Recompiler"), tr("Checked"), tr("Enables VU1 Recompiler."));
 
 	dialog()->registerWidgetHelp(
-		//: mVU = PCSX2's recompiler for VU (Vector Unit) code (full name: microVU)
 		m_ui.vuFlagHack, tr("mVU Flag Hack"), tr("Checked"), tr("Good speedup and high compatibility, may cause graphical errors."));
 
 	dialog()->registerWidgetHelp(m_ui.iopRecompiler, tr("Enable Recompiler"), tr("Checked"),
@@ -146,7 +140,6 @@ AdvancedSettingsWidget::AdvancedSettingsWidget(SettingsWindow* settings_dialog, 
 		   "resume directly from where you left off next time."));
 
 	dialog()->registerWidgetHelp(m_ui.backupSaveStates, tr("Create Save State Backups"), tr("Checked"),
-		//: Do not translate the ".backup" extension.
 		tr("Creates a backup copy of a save state if it already exists when the save is created. The backup copy has a .backup suffix."));
 }
 
@@ -171,7 +164,6 @@ int AdvancedSettingsWidget::getGlobalClampingModeIndex(int vunum) const
 
 int AdvancedSettingsWidget::getClampingModeIndex(int vunum) const
 {
-	// This is so messy... maybe we should just make the mode an int in the settings too...
 	const bool base = dialog()->isPerGameSettings() ? 1 : 0;
 	std::optional<bool> default_false = dialog()->isPerGameSettings() ? std::nullopt : std::optional<bool>(false);
 	std::optional<bool> default_true = dialog()->isPerGameSettings() ? std::nullopt : std::optional<bool>(true);
@@ -190,9 +182,9 @@ int AdvancedSettingsWidget::getClampingModeIndex(int vunum) const
 	if (first.has_value() && first.value())
 		return base + 1;
 	else if (first.has_value())
-		return base + 0; // none
+		return base + 0;
 	else
-		return 0; // no per game override
+		return 0;
 }
 
 void AdvancedSettingsWidget::setClampingMode(int vunum, int index)

@@ -77,8 +77,6 @@ void DockMenuBar::updateTheme()
 	delete m_style;
 	m_style = style;
 
-	// Vertically centre the layout switcher tabs for the Windows 11 style
-	// because I think it looks better. Do the same for macOS too.
 	if (style->baseStyle()->name() == "windows11" || style->baseStyle()->name() == "macOS")
 	{
 		m_layout_switcher_layout->setContentsMargins(0, 0, 0, 0);
@@ -113,8 +111,6 @@ void DockMenuBar::updateLayoutSwitcher(DockLayout::Index current_index, const st
 	else
 		m_layout_switcher->setCurrentIndex(m_plus_tab_index);
 
-	// If we don't have any layouts, the currently selected tab will never be
-	// changed, so we respond to all clicks instead.
 	if (m_plus_tab_index > 0)
 		m_tab_connection = connect(m_layout_switcher, &QTabBar::currentChanged, this, &DockMenuBar::tabChanged);
 	else
@@ -200,8 +196,6 @@ void DockMenuBar::paintEvent(QPaintEvent* event)
 {
 	QPainter painter(this);
 
-	// This fixes the background colour of the menu bar when using the Windows
-	// Vista style.
 	QStyleOptionMenuItem menu_option;
 	menu_option.palette = palette();
 	menu_option.state = QStyle::State_None;
@@ -214,7 +208,6 @@ void DockMenuBar::paintEvent(QPaintEvent* event)
 
 void DockMenuBar::tabChanged(int index)
 {
-	// Prevent recursion.
 	if (m_ignore_current_tab_changed)
 		return;
 
@@ -228,8 +221,6 @@ void DockMenuBar::tabChanged(int index)
 		emit newButtonClicked();
 	}
 }
-
-// *****************************************************************************
 
 DockMenuBarStyle::DockMenuBarStyle(QObject* parent)
 	: QProxyStyle(QStyleFactory::create(qApp->style()->name()))
@@ -249,7 +240,6 @@ void DockMenuBarStyle::drawControl(
 		{
 			QProxyStyle::drawControl(element, option, painter, widget);
 
-			// Draw a slick-looking highlight under the currently selected tab.
 			if (baseStyle()->name() == "fusion")
 			{
 				const QStyleOptionTab* tab = qstyleoption_cast<const QStyleOptionTab*>(option);
@@ -271,12 +261,9 @@ void DockMenuBarStyle::drawControl(
 			if (baseStyle()->name() != "fusion")
 				break;
 
-			// This mirrors a check in QFusionStyle::drawControl. If act is
-			// false, QFusionStyle will try to draw a border along the bottom.
 			bool act = opt->state & State_Selected && opt->state & State_Sunken;
 			if (act)
 			{
-				// Cancel out an unwanted adjustment that QFusionStyle does.
 				QStyleOptionMenuItem item = *opt;
 				item.rect = opt->rect.adjusted(0, -1, 0, 3);
 
@@ -291,7 +278,6 @@ void DockMenuBarStyle::drawControl(
 		}
 		case CE_MenuBarEmptyArea:
 		{
-			// Prevent it from drawing a border in the wrong position.
 			return;
 		}
 		default:
@@ -311,7 +297,6 @@ QSize DockMenuBarStyle::sizeFromContents(
 {
 	QSize size = QProxyStyle::sizeFromContents(type, option, contents_size, widget);
 
-	// Adjust the sizes of the layout switcher tabs depending on the theme.
 	if (type == CT_TabBarTab)
 	{
 		const QStyleOptionTab* opt = qstyleoption_cast<const QStyleOptionTab*>(option);
@@ -320,7 +305,6 @@ QSize DockMenuBarStyle::sizeFromContents(
 
 		if (baseStyle()->name() == "windows11")
 		{
-			// Make the tabs a bit taller, otherwise there's an awkward margin.
 			size.setHeight(size.height() + 4);
 		}
 	}

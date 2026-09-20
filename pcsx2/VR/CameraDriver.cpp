@@ -831,7 +831,7 @@ namespace VR::CameraDriver
 			}
 		}
 
-		int s_padlook_latch = 0;
+		PadLookState s_padlook{};
 
 		bool s_armed_logged = false;
 
@@ -884,6 +884,51 @@ namespace VR::CameraDriver
 		}
 	}
 
+	float PadLookDeflection(const ProfileDB::CameraPadLook& pl, float yaw_deg, PadLookState& st)
+	{
+		const float mag = std::abs(yaw_deg);
+		const int dir = (yaw_deg > 0.0f) ? 1 : (yaw_deg < 0.0f) ? -1 : 0;
+
+		const bool holding = (st.gate != 0) && (dir == st.gate);
+		const bool engaged = (dir != 0) && (holding ? (mag >= pl.release_deg) : (mag > pl.engage_deg));
+
+		float deflection = 0.0f;
+		if (engaged)
+		{
+			const float t =
+				std::clamp((mag - pl.engage_deg) / (pl.max_look_deg - pl.engage_deg), 0.0f, 1.0f);
+			const float stick = pl.stick_floor + std::pow(t, pl.curve) * (1.0f - pl.stick_floor);
+			deflection = std::copysign(stick, yaw_deg);
+			st.gate = dir;
+		}
+		else
+		{
+			st.gate = 0;
+		}
+
+		if (pl.latch)
+		{
+			if (deflection >= 1.0f)
+				st.latch = 1;
+			else if (deflection <= -1.0f)
+				st.latch = -1;
+			else if (st.latch != 0)
+			{
+				const bool settled = (mag < pl.release_deg);
+				const bool opposite = (mag > pl.engage_deg) && ((yaw_deg > 0.0f) != (st.latch > 0));
+				if (settled || opposite)
+					st.latch = 0;
+				else
+					deflection = static_cast<float>(st.latch);
+			}
+		}
+		else
+		{
+			st.latch = 0;
+		}
+		return deflection;
+	}
+
 	void Apply()
 	{
 		s_vsync_counter++;
@@ -899,7 +944,7 @@ namespace VR::CameraDriver
 			s_silence_applied = false;
 			s_hooks_installed = false;
 			s_base.valid = false;
-			s_padlook_latch = 0;
+			s_padlook = PadLookState{};
 			ResetDeltaState();
 			PadLook::Publish(0.0f);
 			return;
@@ -914,7 +959,7 @@ namespace VR::CameraDriver
 			s_silence_applied = false;
 			s_hooks_installed = false;
 			s_base.valid = false;
-			s_padlook_latch = 0;
+			s_padlook = PadLookState{};
 			ResetDeltaState();
 			PadLook::Publish(0.0f);
 			return;
@@ -970,7 +1015,7 @@ namespace VR::CameraDriver
 					an.has = false;
 				}
 			}
-			s_padlook_latch = 0;
+			s_padlook = PadLookState{};
 			ResetDeltaState();
 			PadLook::Publish(0.0f);
 			return;
@@ -991,6 +1036,7 @@ namespace VR::CameraDriver
 			s_has_reference = true;
 			s_reference_crc = crc;
 			ResetDeltaState();
+			s_padlook.gate = 0;
 			DevCon.WriteLn("(VR) CameraDriver: view recentered.");
 		}
 
@@ -1082,42 +1128,11 @@ namespace VR::CameraDriver
 		if (cam.pad_look.has_value())
 		{
 			const float yaw_deg = euler.yaw * (180.0f / PI_F);
-			const float mag = std::abs(yaw_deg);
-			const ProfileDB::CameraPadLook& pl = cam.pad_look.value();
-			float deflection = 0.0f;
-			if (mag > pl.engage_deg)
-			{
-				const float t =
-					std::min((mag - pl.engage_deg) / (pl.max_look_deg - pl.engage_deg), 1.0f);
-				deflection = std::copysign(std::pow(t, pl.curve), yaw_deg);
-			}
-
-			if (pl.latch)
-			{
-				if (deflection >= 1.0f)
-					s_padlook_latch = 1;
-				else if (deflection <= -1.0f)
-					s_padlook_latch = -1;
-				else if (s_padlook_latch != 0)
-				{
-					const bool settled = (mag < pl.release_deg);
-					const bool opposite = (mag > pl.engage_deg) &&
-										  ((yaw_deg > 0.0f) != (s_padlook_latch > 0));
-					if (settled || opposite)
-						s_padlook_latch = 0;
-					else
-						deflection = static_cast<float>(s_padlook_latch);
-				}
-			}
-			else
-			{
-				s_padlook_latch = 0;
-			}
-			PadLook::Publish(deflection);
+			PadLook::Publish(PadLookDeflection(cam.pad_look.value(), yaw_deg, s_padlook));
 		}
 		else
 		{
-			s_padlook_latch = 0;
+			s_padlook = PadLookState{};
 			PadLook::Publish(0.0f);
 		}
 	}

@@ -108,6 +108,8 @@ namespace VR::ProfileDB
 
 		bool pin_uniform_q = false;
 
+		bool z_driven_depth = false;
+
 		std::vector<StereoSceneRule> scenes;
 
 		std::optional<HudCollimate> hud_collimate;
@@ -249,7 +251,10 @@ namespace VR::ProfileDB
 		float engage_deg = 12.0f;
 		float curve = 1.0f;
 		bool latch = false;
+
 		float release_deg = 4.0f;
+
+		float stick_floor = 0.0f;
 	};
 
 	struct CameraProfile
@@ -307,6 +312,15 @@ namespace VR::ProfileDB
 	};
 
 	const std::vector<StereoRailFinding>& StereoRailFindings();
+
+	struct ProfileAdvisory
+	{
+		std::string serial;
+		std::string site;
+		std::string message;
+	};
+
+	const std::vector<ProfileAdvisory>& ProfileAdvisories();
 
 	struct Summary
 	{

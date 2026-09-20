@@ -23,6 +23,14 @@ namespace VR
 
 	bool LaunchRequestedVR();
 
+	void SetLaunchSeat(int seat);
+	void SetSeatCastTarget(int seat);
+	int SeatCastTarget();
+	bool SeatCastArmed();
+	int GetLaunchSeat();
+	std::string ResolveSeatRuntimeDir(int seat);
+	std::string ResolveSeatRuntimeJson(int seat);
+
 	void SetStereoRenderArmed(bool armed);
 
 	bool StereoRenderArmed();

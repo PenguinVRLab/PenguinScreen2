@@ -1283,6 +1283,9 @@ struct Pcsx2Config
 	{
 		bool Enable = false;
 
+		std::string XrSeatRuntimeDirs;
+		std::string XrSeatRuntimeJsons;
+
 		float ScreenDistance = 2.0f;
 		float ScreenHeight = 1.4f;
 

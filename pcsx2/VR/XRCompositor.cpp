@@ -3,6 +3,10 @@
 
 #include "VR/XRCompositor.h"
 #include "VR/SplitState.h"
+#include "VR/VRManager.h"
+#include "VR/SeatCast.h"
+#include "GS/Renderers/Common/GSDevice.h"
+#include "VR/SeatSession.h"
 #include "VR/HeadPose.h"
 #include "VR/VRInternal.h"
 #include "VR/XRSession.h"
@@ -957,6 +961,57 @@ namespace VR::XRCompositor
 			const bool l1 = s.chains[1].ever_released;
 			if (split_snap.split_active && (l0 || l1))
 			{
+				if (VR::SeatCastArmed() && current)
+				{
+					const int ovp = 1 - split_snap.local_view;
+					GSTexture* src = current;
+					const s32 full_w = static_cast<s32>(src->GetWidth());
+					const s32 full_h = static_cast<s32>(src->GetHeight());
+					GSVector4i crop(
+						static_cast<int>(split_snap.rect_x[ovp] * full_w),
+						static_cast<int>(split_snap.rect_y[ovp] * full_h),
+						static_cast<int>((split_snap.rect_x[ovp] + split_snap.rect_w[ovp]) * full_w),
+						static_cast<int>((split_snap.rect_y[ovp] + split_snap.rect_h[ovp]) * full_h));
+					u32 out_w = static_cast<u32>(crop.width());
+					u32 out_h = static_cast<u32>(crop.height());
+					static GSTexture* s_cast_rt = nullptr;
+					if (out_w > SeatCast::kMaxWidth)
+					{
+						const float scale = static_cast<float>(SeatCast::kMaxWidth) / out_w;
+						out_w = SeatCast::kMaxWidth;
+						out_h = static_cast<u32>(out_h * scale);
+					}
+					if (!s_cast_rt || s_cast_rt->GetWidth() != static_cast<int>(out_w) ||
+						s_cast_rt->GetHeight() != static_cast<int>(out_h))
+					{
+						if (s_cast_rt)
+							g_gs_device->Recycle(s_cast_rt);
+						s_cast_rt = g_gs_device->CreateRenderTarget(out_w, out_h, GSTexture::Format::Color, false);
+					}
+					static std::unique_ptr<GSDownloadTexture> s_cast_dl;
+					if (s_cast_rt)
+					{
+						const GSVector4 src_uv(
+							static_cast<float>(crop.x) / full_w, static_cast<float>(crop.y) / full_h,
+							static_cast<float>(crop.z) / full_w, static_cast<float>(crop.w) / full_h);
+						g_gs_device->StretchRect(src, src_uv, s_cast_rt,
+							GSVector4(0.0f, 0.0f, static_cast<float>(out_w), static_cast<float>(out_h)),
+							ShaderConvertSelector(ShaderConvert::COPY), Filter::Biln);
+						if (!s_cast_dl || s_cast_dl->GetWidth() < out_w || s_cast_dl->GetHeight() < out_h)
+							s_cast_dl = g_gs_device->CreateDownloadTexture(out_w, out_h, GSTexture::Format::Color);
+						const GSVector4i rc(0, 0, out_w, out_h);
+						if (s_cast_dl)
+						{
+							s_cast_dl->CopyFromTexture(rc, s_cast_rt, rc, 0);
+							s_cast_dl->Flush();
+							if (s_cast_dl->Map(rc))
+							{
+								SeatCast::Publish(s_cast_dl->GetMapPointer(), out_w, out_h, s_cast_dl->GetMapPitch());
+								s_cast_dl->Unmap();
+							}
+						}
+					}
+				}
 				const bool split_stereo = stereo && split_snap.stereo_on && l0 && l1;
 				for (int vp = 0; vp < 2; vp++)
 				{

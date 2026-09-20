@@ -1929,6 +1929,8 @@ void Pcsx2Config::VROptions::LoadSave(SettingsWrapper& wrap)
 	SettingsWrapEntry(StereoSeparation);
 	SettingsWrapEntry(StereoConvergence);
 	SettingsWrapEntry(HeadCamera);
+	SettingsWrapEntry(XrSeatRuntimeDirs);
+	SettingsWrapEntry(XrSeatRuntimeJsons);
 
 	if (wrap.IsLoading())
 	{

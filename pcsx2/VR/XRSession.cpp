@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0
 
 #include "VR/XRSession.h"
+#include <cstdlib>
+#include "VR/VRManager.h"
 
 #include "common/Assertions.h"
 #include "common/Console.h"
@@ -109,9 +111,54 @@ namespace VR::XRSession
 		}
 	}
 
+	class ScopedSeatRuntimeDir
+	{
+	public:
+		ScopedSeatRuntimeDir()
+		{
+			const int seat = VR::GetLaunchSeat();
+			if (seat <= 1)
+				return;
+			const std::string dir = VR::ResolveSeatRuntimeDir(seat);
+			if (dir.empty())
+			{
+				Console.Error("(VR) --vr-seat %d has no entry in [VR] XrSeatRuntimeDirs — refusing to bind the default seat instead.", seat);
+				m_refuse = true;
+				return;
+			}
+			const char* old = std::getenv("XDG_RUNTIME_DIR");
+			if (old)
+				m_saved = old;
+			m_had_old = (old != nullptr);
+			setenv("XDG_RUNTIME_DIR", dir.c_str(), 1);
+			m_swapped = true;
+			Console.WriteLn("(VR) XR seat %d: binding runtime socket %s/wivrn/comp_ipc", seat, dir.c_str());
+		}
+		~ScopedSeatRuntimeDir()
+		{
+			if (!m_swapped)
+				return;
+			if (m_had_old)
+				setenv("XDG_RUNTIME_DIR", m_saved.c_str(), 1);
+			else
+				unsetenv("XDG_RUNTIME_DIR");
+		}
+		bool refused() const { return m_refuse; }
+
+	private:
+		std::string m_saved;
+		bool m_had_old = false;
+		bool m_swapped = false;
+		bool m_refuse = false;
+	};
+
 	bool CreateInstanceAndSystem()
 	{
 		pxAssertRel(s_instance == XR_NULL_HANDLE, "XR instance created twice");
+
+		const ScopedSeatRuntimeDir seat_binding;
+		if (seat_binding.refused())
+			return false;
 
 		XrInstanceCreateInfo ici = {XR_TYPE_INSTANCE_CREATE_INFO};
 		std::strncpy(ici.applicationInfo.applicationName, "PenguinScreen2", XR_MAX_APPLICATION_NAME_SIZE - 1);
@@ -208,7 +255,14 @@ namespace VR::XRSession
 
 		if (s_instance != XR_NULL_HANDLE)
 		{
-			xrDestroyInstance(s_instance);
+			try
+			{
+				xrDestroyInstance(s_instance);
+			}
+			catch (...)
+			{
+				Console.Warning("(VR) xrDestroyInstance threw during teardown — continuing.");
+			}
 			s_instance = XR_NULL_HANDLE;
 		}
 
@@ -351,16 +405,37 @@ namespace VR::XRSession
 		if (s_session_running.load(std::memory_order_acquire))
 		{
 			s_session_running.store(false, std::memory_order_release);
-			xrEndSession(s_session);
+			try
+			{
+				xrEndSession(s_session);
+			}
+			catch (...)
+			{
+				Console.Warning("(VR) xrEndSession threw (connection already dead) — continuing teardown.");
+			}
 		}
 
 		if (s_space != XR_NULL_HANDLE)
 		{
-			xrDestroySpace(s_space);
+			try
+			{
+				xrDestroySpace(s_space);
+			}
+			catch (...)
+			{
+				Console.Warning("(VR) xrDestroySpace threw during teardown — continuing.");
+			}
 			s_space = XR_NULL_HANDLE;
 		}
 
-		xrDestroySession(s_session);
+		try
+		{
+			xrDestroySession(s_session);
+		}
+		catch (...)
+		{
+			Console.Warning("(VR) xrDestroySession threw during teardown — continuing.");
+		}
 		s_session = XR_NULL_HANDLE;
 		s_session_state = XR_SESSION_STATE_UNKNOWN;
 		Console.WriteLn("(VR) XR session destroyed.");

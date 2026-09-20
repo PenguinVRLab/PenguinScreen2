@@ -2135,6 +2135,8 @@ void QtHost::PrintCommandLineHelp(const std::string_view progname)
 	std::fprintf(stderr, "  -raintegration: Use RAIntegration instead of built-in achievement support.\n");
 #endif
 #ifdef ENABLE_VR
+	std::fprintf(stderr, "  --vr-seat <n>: Arm VR bound to XR seat n (1..4; 1 = default runtime). Implies --vr.\n");
+	std::fprintf(stderr, "  --vr-cast <n>: Also show the other split-screen player's view on XR seat n (2..4).\n");
 	std::fprintf(stderr, "  --vr: Arm VR for THIS launch (explicit per-invocation signal; no environment\n"
 						 "    variable ever arms VR). Without it the binary runs flat and never creates\n"
 						 "    an OpenXR instance. The shipped launch-vr-session.sh passes it.\n");
@@ -2183,6 +2185,32 @@ bool QtHost::ParseCommandLineOptions(const QStringList& args, std::shared_ptr<VM
 #ifdef ENABLE_VR
 			else if (CHECK_ARG(QStringLiteral("--vr")) || CHECK_ARG(QStringLiteral("-vr")))
 			{
+				VR::SetLaunchRequestedVR(true);
+				continue;
+			}
+			else if (CHECK_ARG_PARAM(QStringLiteral("--vr-seat")) || CHECK_ARG_PARAM(QStringLiteral("-vr-seat")))
+			{
+				bool seat_ok = false;
+				const int seat = (++it)->toInt(&seat_ok);
+				if (!seat_ok || seat < 1 || seat > 4)
+				{
+					std::fprintf(stderr, "--vr-seat wants 1..4\n");
+					return false;
+				}
+				VR::SetLaunchSeat(seat);
+				VR::SetLaunchRequestedVR(true);
+				continue;
+			}
+			else if (CHECK_ARG_PARAM(QStringLiteral("--vr-cast")) || CHECK_ARG_PARAM(QStringLiteral("-vr-cast")))
+			{
+				bool cast_ok = false;
+				const int cseat = (++it)->toInt(&cast_ok);
+				if (!cast_ok || cseat < 2 || cseat > 4)
+				{
+					std::fprintf(stderr, "--vr-cast wants a seat 2..4\n");
+					return false;
+				}
+				VR::SetSeatCastTarget(cseat);
 				VR::SetLaunchRequestedVR(true);
 				continue;
 			}

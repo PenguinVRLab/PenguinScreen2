@@ -8,6 +8,16 @@
 #include "SaveState.h"
 #include "PINE.h"
 #include "VMManager.h"
+#ifdef ENABLE_VR
+#include "Counters.h"
+#include "MTGS.h"
+#include "VR/DepthHistogram.h"
+#include "fmt/format.h"
+#include <chrono>
+#include <condition_variable>
+#include <memory>
+#include <mutex>
+#endif
 #include "vtlb.h"
 #include "common/Error.h"
 #include "common/Threading.h"
@@ -130,6 +140,7 @@ namespace PINEServer
 		MsgUUID = 0xD,
 		MsgGameVersion = 0xE,
 		MsgStatus = 0xF,
+		MsgVRQhistFlush = 0xE0,
 		MsgUnimplemented = 0xFF
 	};
 
@@ -508,6 +519,74 @@ PINEServer::IPCBuffer PINEServer::ParseCommand(std::span<u8> buf, std::vector<u8
 				buf_cnt += 12;
 				break;
 			}
+#ifdef ENABLE_VR
+			case MsgVRQhistFlush:
+			{
+				if (!VMManager::HasValidVM() || !VR::DepthHistogramArmed() || VR::QhistLiveDir().empty())
+				{
+					Console.Warning("(PINE) MsgVRQhistFlush refused: %s",
+						!VMManager::HasValidVM() ? "no VM" :
+							(!VR::DepthHistogramArmed() ? "histogram not armed (launch with --qhist-live <dir>)" :
+															"no live dir"));
+					goto error;
+				}
+				struct FlushState
+				{
+					std::mutex m;
+					std::condition_variable cv;
+					bool done = false;
+					bool ok = false;
+					std::string path;
+					std::string err;
+				};
+				auto st = std::make_shared<FlushState>();
+				Host::RunOnCPUThread([st]() {
+					MTGS::RunOnGSThread([st]() {
+					static std::atomic<u32> s_seq{0};
+					VR::DepthHistogram& h = VR::GlobalDepthHistogram();
+					h.key.serial = VMManager::GetDiscSerial();
+					h.key.crc = fmt::format("0x{:08x}", VMManager::GetDiscCRC());
+					h.key.dump = std::string();
+					h.key.frame = g_FrameCount;
+					h.key.widescreen_hack = EmuConfig.EnableWideScreenPatches;
+					const u32 seq = s_seq.fetch_add(1) + 1;
+					const std::string path = fmt::format("{}/qhist-live-{}-{:03d}-f{}.json",
+						VR::QhistLiveDir(), h.key.serial.empty() ? "unknown" : h.key.serial, seq, h.key.frame);
+					std::string err;
+					const bool ok = h.WriteJson(path, &err);
+					if (ok)
+						h.Reset();
+					std::lock_guard<std::mutex> lock(st->m);
+					st->ok = ok;
+					st->path = path;
+					st->err = err;
+					st->done = true;
+					st->cv.notify_one();
+					});
+				});
+				{
+					std::unique_lock<std::mutex> lock(st->m);
+					if (!st->cv.wait_for(lock, std::chrono::seconds(10), [&st] { return st->done; }))
+					{
+						Console.Warning("(PINE) MsgVRQhistFlush: GS thread did not service the flush in 10s (VM paused?)");
+						goto error;
+					}
+					if (!st->ok)
+					{
+						Console.ErrorFmt("(PINE) MsgVRQhistFlush: {}", st->err);
+						goto error;
+					}
+				}
+				const u32 size = static_cast<u32>(st->path.size()) + 1;
+				if (!SafetyChecks(buf_cnt, 0, ret_cnt, size + 4, buf_size)) [[unlikely]]
+					goto error;
+				ToResultVector(ret_buffer, size, ret_cnt);
+				ret_cnt += 4;
+				memcpy(&ret_buffer[ret_cnt], st->path.c_str(), size);
+				ret_cnt += size;
+				break;
+			}
+#endif
 			case MsgVersion:
 			{
 				u32 size = strlen(BuildVersion::GitRev) + 7;

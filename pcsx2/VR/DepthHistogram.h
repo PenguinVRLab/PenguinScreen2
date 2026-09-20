@@ -23,7 +23,7 @@ namespace VR
 
 	struct DepthHistogram
 	{
-		static constexpr int kSchema = 2;
+		static constexpr int kSchema = 3;
 		static constexpr int kBinsPerOctave = 6;
 		static constexpr int kLog2WMin = -6;
 		static constexpr int kLog2WMax = 10;
@@ -37,8 +37,14 @@ namespace VR
 			u64 prims = 0;
 			u64 verts = 0;
 
+			double density_moment = 0.0;
+			double density_cov = 0.0;
+			double dom_coverage = 0.0;
+
 			void Add(double area_fraction, double q, u32 n_prims, u32 n_verts);
+			void AddRegime(double area_fraction, double density);
 			double MeanQ() const;
+			double MeanDensity() const;
 		};
 
 		struct Census
@@ -85,7 +91,8 @@ namespace VR
 
 		void Reset();
 
-		void AddDraw(double area_fraction, double q_min, double q_max, u32 prims, u32 verts, DrawClass cls);
+		void AddDraw(double area_fraction, double q_min, double q_max, u32 prims, u32 verts, DrawClass cls,
+			double texel_density = -1.0);
 
 		void NoteTargetSize(int unscaled_w, int unscaled_h);
 
@@ -105,6 +112,8 @@ namespace VR
 	}
 
 	void ArmDepthHistogram(bool armed);
+	void SetQhistLiveDir(std::string dir);
+	const std::string& QhistLiveDir();
 	inline bool DepthHistogramArmed()
 	{
 		return detail::g_qhist_armed;

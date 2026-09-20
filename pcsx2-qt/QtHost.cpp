@@ -37,6 +37,7 @@
 #ifdef ENABLE_VR
 #include "pcsx2/VR/VRManager.h"
 #include "pcsx2/VR/VRProfileDB.h"
+#include "pcsx2/VR/DepthHistogram.h"
 #endif
 
 #include "common/Assertions.h"
@@ -2219,6 +2220,18 @@ bool QtHost::ParseCommandLineOptions(const QStringList& args, std::shared_ptr<VM
 				PrintCommandLineVersion();
 				std::fprintf(stderr, "%s", VR::GetRuntimeInfoReport().c_str());
 				return false;
+			}
+			else if (CHECK_ARG_PARAM(QStringLiteral("--qhist-live")) || CHECK_ARG_PARAM(QStringLiteral("-qhist-live")))
+			{
+				const std::string qdir = (++it)->toStdString();
+				if (qdir.empty())
+				{
+					std::fprintf(stderr, "--qhist-live wants a destination directory\n");
+					return false;
+				}
+				VR::SetQhistLiveDir(qdir);
+				VR::ArmDepthHistogram(true);
+				continue;
 			}
 #endif
 			else if (CHECK_ARG(QStringLiteral("-batch")))

@@ -10,11 +10,6 @@
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/qfiledialog.h>
 
-// TODO - for now this uses a very naive implementation that fills the entire table
-// this needs to be replaced with a lazy-loading QTableView implementation
-//
-// For now, especially for just debugging input recording issues, its good enough!
-
 InputRecordingViewer::InputRecordingViewer(QWidget* parent)
 	: QMainWindow(parent)
 {
@@ -49,7 +44,6 @@ void InputRecordingViewer::loadTable()
 	m_ui.tableWidget->setColumnCount(headers.length());
 	m_ui.tableWidget->setHorizontalHeaderLabels(headers);
 
-	// TODO - only port 1 for now
 	auto dataColl = m_file.bulkReadPadData(0, m_file.getTotalFrames(), 0);
 	m_ui.tableWidget->setRowCount(dataColl.size());
 
@@ -115,7 +109,7 @@ void InputRecordingViewer::closeFile()
 			m_ui.tableWidget->clearContents();
 			m_ui.tableWidget->setRowCount(0);
 		}
-	} // TODO else error
+	}
 	m_ui.actionClose->setEnabled(m_file_open);
 }
 

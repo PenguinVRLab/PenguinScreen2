@@ -49,9 +49,6 @@ namespace usb_lightgun
 		BID_RELATIVE_DOWN = 21,
 	};
 
-	// Right pain in the arse. Different games seem to have different scales..
-	// Not worth putting these in the gamedb for such few games.
-	// Values are from the old nuvee plugin.
 	struct GameConfig
 	{
 		const char* serial;
@@ -61,36 +58,33 @@ namespace usb_lightgun
 	};
 
 	static constexpr const GameConfig s_game_config[] = {
-		{"SLES-50930", 90.25f, 94.5f, 390, 132, 640, 256}, // Dino Stalker (E, English)
-		{"SLES-51095", 90.25f, 94.5f, 390, 132, 640, 256}, // Dino Stalker (E, French)
-		{"SLES-51096", 90.25f, 94.5f, 390, 132, 640, 256}, // Dino Stalker (E, German)
-		{"SLUS-20485", 90.25f, 92.5f, 390, 132, 640, 240}, // Dino Stalker (U)
-		{"SLUS-20389", 89.25f, 93.5f, 422, 141, 640, 240}, // Endgame (U)
-		{"SLES-50936", 112.0f, 100.0f, 320, 120, 512, 256}, // Endgame (E) (Guncon2 needs to be connected to USB port 2)
-		{"SLPM-65139", 90.0f, 91.5f, 320, 120, 640, 240}, // Gun Survivor 3: Dino Crisis (J)
-		{"SLES-52620", 89.5f, 112.3f, 390, 147, 640, 256}, // Guncom 2 (E)
-		{"SLES-51289", 84.5f, 89.0f, 456, 164, 640, 256}, // Gunfighter 2 - Jesse James (E)
-		{"SLPS-25165", 90.25f, 98.0f, 390, 138, 640, 240}, // Gunvari Collection (J) (480i)
-		// {"SLPS-25165", 86.75f, 96.0f, 454, 164, 640, 256}, // Gunvari Collection (J) (480p)
-		{"SCES-50889", 90.25f, 94.5f, 390, 169, 640, 256}, // Ninja Assault (E)
-		{"SLPS-20218", 90.0f, 92.0f, 320, 134, 640, 240}, // Ninja Assault (J)
-		{"SLUS-20492", 90.25f, 92.5f, 390, 132, 640, 240}, // Ninja Assault (U)
-		{"SLES-50650", 84.75f, 96.0f, 454, 164, 640, 240}, // Resident Evil Survivor 2 (E)
-		{"SLES-51448", 90.25f, 95.0f, 420, 132, 640, 240}, // Resident Evil - Dead Aim (E)
-		{"SLUS-20669", 90.25f, 93.5f, 420, 132, 640, 240}, // Resident Evil - Dead Aim (U)
-		{"SLUS-20619", 90.25f, 91.75f, 453, 154, 640, 256}, // Starsky & Hutch (U)
-		{"SCES-50300", 90.25f, 102.75f, 390, 138, 640, 256}, // Time Crisis II (E)
-		{"SLUS-20219", 90.25f, 97.5f, 390, 154, 640, 240}, // Time Crisis 2 (U)
-		{"SCES-51844", 90.25f, 102.75f, 390, 138, 640, 256}, // Time Crisis 3 (E)
-		{"SLUS-20645", 90.25f, 97.5f, 390, 154, 640, 240}, // Time Crisis 3 (U)
-		{"SCES-52530", 90.25f, 99.0f, 390, 153, 640, 256}, // Crisis Zone (E)
-		{"SLUS-20927", 90.25f, 99.0f, 390, 153, 640, 240}, // Time Crisis - Crisis Zone (U) (480i)
-		// {"SLUS-20927", 94.5f, 104.75f, 423, 407, 768, 768}, // Time Crisis - Crisis Zone (U) (480p)
-		{"SCES-50411", 89.8f, 99.9f, 421, 138, 640, 256}, // Vampire Night (E)
-		{"SLPS-25077", 90.0f, 97.5f, 422, 118, 640, 240}, // Vampire Night (J)
-		{"SLUS-20221", 89.8f, 102.5f, 422, 124, 640, 228}, // Vampire Night (U)
-		{"SLES-51229", 110.15f, 100.0f, 433, 159, 512, 256}, // Virtua Cop - Elite Edition (E,J) (480i)
-		// {"SLES-51229", 85.75f, 92.0f, 456, 164, 640, 256}, // Virtua Cop - Elite Edition (E,J) (480p)
+		{"SLES-50930", 90.25f, 94.5f, 390, 132, 640, 256},
+		{"SLES-51095", 90.25f, 94.5f, 390, 132, 640, 256},
+		{"SLES-51096", 90.25f, 94.5f, 390, 132, 640, 256},
+		{"SLUS-20485", 90.25f, 92.5f, 390, 132, 640, 240},
+		{"SLUS-20389", 89.25f, 93.5f, 422, 141, 640, 240},
+		{"SLES-50936", 112.0f, 100.0f, 320, 120, 512, 256},
+		{"SLPM-65139", 90.0f, 91.5f, 320, 120, 640, 240},
+		{"SLES-52620", 89.5f, 112.3f, 390, 147, 640, 256},
+		{"SLES-51289", 84.5f, 89.0f, 456, 164, 640, 256},
+		{"SLPS-25165", 90.25f, 98.0f, 390, 138, 640, 240},
+		{"SCES-50889", 90.25f, 94.5f, 390, 169, 640, 256},
+		{"SLPS-20218", 90.0f, 92.0f, 320, 134, 640, 240},
+		{"SLUS-20492", 90.25f, 92.5f, 390, 132, 640, 240},
+		{"SLES-50650", 84.75f, 96.0f, 454, 164, 640, 240},
+		{"SLES-51448", 90.25f, 95.0f, 420, 132, 640, 240},
+		{"SLUS-20669", 90.25f, 93.5f, 420, 132, 640, 240},
+		{"SLUS-20619", 90.25f, 91.75f, 453, 154, 640, 256},
+		{"SCES-50300", 90.25f, 102.75f, 390, 138, 640, 256},
+		{"SLUS-20219", 90.25f, 97.5f, 390, 154, 640, 240},
+		{"SCES-51844", 90.25f, 102.75f, 390, 138, 640, 256},
+		{"SLUS-20645", 90.25f, 97.5f, 390, 154, 640, 240},
+		{"SCES-52530", 90.25f, 99.0f, 390, 153, 640, 256},
+		{"SLUS-20927", 90.25f, 99.0f, 390, 153, 640, 240},
+		{"SCES-50411", 89.8f, 99.9f, 421, 138, 640, 256},
+		{"SLPS-25077", 90.0f, 97.5f, 422, 118, 640, 240},
+		{"SLUS-20221", 89.8f, 102.5f, 422, 124, 640, 228},
+		{"SLES-51229", 110.15f, 100.0f, 433, 159, 512, 256},
 	};
 
 	static constexpr s32 DEFAULT_SCREEN_WIDTH = 640;
@@ -125,9 +119,6 @@ namespace usb_lightgun
 
 		u32 port = 0;
 
-		//////////////////////////////////////////////////////////////////////////
-		// Configuration
-		//////////////////////////////////////////////////////////////////////////
 		bool has_relative_binds = false;
 		bool custom_config = false;
 		u32 screen_width = 640;
@@ -137,18 +128,12 @@ namespace usb_lightgun
 		float scale_x = 1.0f;
 		float scale_y = 1.0f;
 
-		//////////////////////////////////////////////////////////////////////////
-		// Host State (Not Saved)
-		//////////////////////////////////////////////////////////////////////////
 		u32 button_state = 0;
 		std::string cursor_path;
 		float cursor_scale = 1.0f;
 		u32 cursor_color = 0xFFFFFFFF;
 		float relative_pos[4] = {};
 
-		//////////////////////////////////////////////////////////////////////////
-		// Device State (Saved)
-		//////////////////////////////////////////////////////////////////////////
 		s16 param_x = 0;
 		s16 param_y = 0;
 		u16 param_mode = 0;
@@ -163,7 +148,6 @@ namespace usb_lightgun
 
 		std::tuple<s16, s16> CalculatePosition();
 
-		// 0..1, not -1..1.
 		std::pair<float, float> GetAbsolutePositionFromRelativeAxes() const;
 		u32 GetSoftwarePointerIndex() const;
 		void UpdateSoftwarePointerPosition();
@@ -173,59 +157,56 @@ namespace usb_lightgun
 		"Namco GunCon2",
 	};
 
-	/* mostly the same values as the Bochs USB Keyboard device */
 	static const uint8_t guncon2_dev_desc[] = {
-		/* bLength             */ 0x12,
-		/* bDescriptorType     */ 0x01,
-		/* bcdUSB              */ WBVAL(0x0100),
-		/* bDeviceClass        */ 0x00,
-		/* bDeviceSubClass     */ 0x00,
-		/* bDeviceProtocol     */ 0x00,
-		/* bMaxPacketSize0     */ 0x08,
-		/* idVendor            */ WBVAL(0x0b9a),
-		/* idProduct           */ WBVAL(0x016a),
-		/* bcdDevice           */ WBVAL(0x0100),
-		/* iManufacturer       */ 0x00,
-		/* iProduct            */ 0x00,
-		/* iSerialNumber       */ 0x00,
-		/* bNumConfigurations  */ 0x01,
+ 0x12,
+ 0x01,
+ WBVAL(0x0100),
+ 0x00,
+ 0x00,
+ 0x00,
+ 0x08,
+ WBVAL(0x0b9a),
+ WBVAL(0x016a),
+ WBVAL(0x0100),
+ 0x00,
+ 0x00,
+ 0x00,
+ 0x01,
 	};
 
 	static const uint8_t guncon2_config_desc[] = {
-		0x09, // Length
-		0x02, // Type (Config)
-		0x19, 0x00, // Total size
+		0x09,
+		0x02,
+		0x19, 0x00,
 
-		0x01, // # interfaces
-		0x01, // Configuration #
-		0x00, // index of string descriptor
-		0x80, // Attributes (bus powered)
-		0x19, // Max power in mA
-
-
-		// Interface
-		0x09, // Length
-		0x04, // Type (Interface)
-
-		0x00, // Interface #
-		0x00, // Alternative #
-		0x01, // # endpoints
-
-		0xff, // Class
-		0x6a, // Subclass
-		0x00, // Protocol
-		0x00, // index of string descriptor
+		0x01,
+		0x01,
+		0x00,
+		0x80,
+		0x19,
 
 
-		// Endpoint
-		0x07, // Length
-		0x05, // Type (Endpoint)
+		0x09,
+		0x04,
 
-		0x81, // Address
-		0x03, // Attributes (interrupt transfers)
-		0x08, 0x00, // Max packet size
+		0x00,
+		0x00,
+		0x01,
 
-		0x08, // Polling interval (frame counts)
+		0xff,
+		0x6a,
+		0x00,
+		0x00,
+
+
+		0x07,
+		0x05,
+
+		0x81,
+		0x03,
+		0x08, 0x00,
+
+		0x08,
 	};
 
 	static void guncon2_handle_control(
@@ -233,8 +214,6 @@ namespace usb_lightgun
 	{
 		GunCon2State* const us = USB_CONTAINER_OF(dev, GunCon2State, dev);
 
-		// Apply configuration on the first control packet.
-		// The ELF should be well and truely loaded by then.
 		if (!us->auto_config_done && !us->custom_config)
 		{
 			us->AutoConfigure();
@@ -269,11 +248,6 @@ namespace usb_lightgun
 				{
 					const auto [pos_x, pos_y] = us->CalculatePosition();
 
-					// Time Crisis games do a "calibration" by displaying a black frame for a single frame,
-					// waiting for the gun to report (0, 0), and then computing an offset on the first non-zero
-					// value. So, after the trigger is pulled, we wait for a few frames, then send the (0, 0)
-					// report, then go back to normal values. To reduce error if the mouse is moving during
-					// these frames (unlikely), we store the fire position and keep returning that.
 					if (us->button_state & (1u << BID_RECALIBRATE) && us->calibration_timer == 0)
 					{
 						us->calibration_timer = GUNCON2_CALIBRATION_DELAY;
@@ -281,7 +255,6 @@ namespace usb_lightgun
 						us->calibration_pos_y = pos_y;
 					}
 
-					// Buttons are active low.
 					GunCon2Out out;
 					out.buttons = static_cast<u16>(~us->button_state) | (us->param_mode & GUNCON2_FLAG_PROGRESSIVE);
 					out.pos_x = pos_x;
@@ -289,7 +262,6 @@ namespace usb_lightgun
 
 					if (us->calibration_timer > 0)
 					{
-						// Force trigger down while calibrating.
 						out.buttons &= ~(1u << BID_TRIGGER);
 						out.pos_x = us->calibration_pos_x;
 						out.pos_y = us->calibration_pos_y;
@@ -303,7 +275,6 @@ namespace usb_lightgun
 					}
 					else if (us->button_state & (1u << BID_SHOOT_OFFSCREEN))
 					{
-						// Offscreen shot - use 0,0.
 						out.buttons &= ~(1u << BID_TRIGGER);
 						out.pos_x = 0;
 						out.pos_y = 0;
@@ -375,25 +346,20 @@ namespace usb_lightgun
 		s16 pos_x, pos_y;
 		if (pointer_x < 0.0f || pointer_y < 0.0f)
 		{
-			// off-screen
 			pos_x = 0;
 			pos_y = 0;
 		}
 		else
 		{
-			// scale to internal coordinate system and center
 			float fx = (pointer_x * static_cast<float>(screen_width)) - static_cast<float>(screen_width / 2u);
 			float fy = (pointer_y * static_cast<float>(screen_height)) - static_cast<float>(screen_height / 2u);
 
-			// apply curvature scale
 			fx *= scale_x;
 			fy *= scale_y;
 
-			// and re-center based on game center
 			s32 x = static_cast<s32>(std::round(fx + center_x));
 			s32 y = static_cast<s32>(std::round(fy + center_y));
 
-			// apply game-configured offset
 			if (param_mode & GUNCON2_FLAG_PROGRESSIVE)
 			{
 				x -= param_x / 2;
@@ -405,7 +371,6 @@ namespace usb_lightgun
 				y -= param_y;
 			}
 
-			// 0,0 is reserved for offscreen, so ensure we don't send that
 			pos_x = static_cast<s16>(std::max(x, 1));
 			pos_y = static_cast<s16>(std::max(y, 1));
 		}
@@ -486,7 +451,6 @@ namespace usb_lightgun
 
 		s->custom_config = USB::GetConfigBool(si, s->port, TypeName(), "custom_config", false);
 
-		// Don't override auto config if we've set it.
 		if (!s->auto_config_done || s->custom_config)
 		{
 			s->screen_width = USB::GetConfigInt(si, s->port, TypeName(), "screen_width", DEFAULT_SCREEN_WIDTH);
@@ -497,14 +461,12 @@ namespace usb_lightgun
 			s->scale_y = USB::GetConfigFloat(si, s->port, TypeName(), "scale_y", DEFAULT_SCALE_Y) / 100.0f;
 		}
 
-		// Pointer settings.
 		const std::string pointer_binding = USB::GetConfigString(si, s->port, TypeName(), "Pointer", "");
 		std::string cursor_path(USB::GetConfigString(si, s->port, TypeName(), "cursor_path"));
 		const float cursor_scale = USB::GetConfigFloat(si, s->port, TypeName(), "cursor_scale", 1.0f);
 		u32 cursor_color = 0xFFFFFF;
 		if (std::string cursor_color_str(USB::GetConfigString(si, s->port, TypeName(), "cursor_color")); !cursor_color_str.empty())
 		{
-			// Strip the leading hash, if it's a CSS style colour.
 			const std::optional<u32> cursor_color_opt(
 				StringUtil::FromChars<u32>(cursor_color_str[0] == '#' ?
 					std::string_view(cursor_color_str).substr(1) : std::string_view(cursor_color_str), 16));
@@ -527,7 +489,6 @@ namespace usb_lightgun
 			if (prev_pointer_index != new_pointer_index)
 				ImGuiManager::ClearSoftwareCursor(prev_pointer_index);
 
-			// Pointer changed, so need to update software cursor.
 			const bool had_software_cursor = !s->cursor_path.empty();
 			s->cursor_path = std::move(cursor_path);
 			s->cursor_scale = cursor_scale;
@@ -578,7 +539,6 @@ namespace usb_lightgun
 	std::span<const InputBindingInfo> GunCon2Device::Bindings(u32 subtype) const
 	{
 		static constexpr const InputBindingInfo bindings[] = {
-			//{"pointer", "Pointer/Aiming", InputBindingInfo::Type::Pointer, BID_POINTER_X, GenericInputBinding::Unknown},
 			{"Up", TRANSLATE_NOOP("USB", "D-Pad Up"), nullptr, InputBindingInfo::Type::Button, BID_DPAD_UP, GenericInputBinding::DPadUp},
 			{"Down", TRANSLATE_NOOP("USB", "D-Pad Down"), nullptr, InputBindingInfo::Type::Button, BID_DPAD_DOWN, GenericInputBinding::DPadDown},
 			{"Left", TRANSLATE_NOOP("USB", "D-Pad Left"), nullptr, InputBindingInfo::Type::Button, BID_DPAD_LEFT, GenericInputBinding::DPadLeft},
@@ -671,7 +631,6 @@ namespace usb_lightgun
 		sw.Do(&screen_width);
 		sw.Do(&screen_height);
 
-		// Only save automatic settings to state.
 		if (sw.IsReading() && !s->custom_config && s->auto_config_done)
 		{
 			s->scale_x = scale_x;
@@ -684,4 +643,4 @@ namespace usb_lightgun
 
 		return !sw.HasError();
 	}
-} // namespace usb_lightgun
+}

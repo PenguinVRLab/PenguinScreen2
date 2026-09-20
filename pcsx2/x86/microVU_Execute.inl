@@ -6,20 +6,14 @@
 #include "Config.h"
 #include "GS/MultiISA.h"
 
-//------------------------------------------------------------------
-// Dispatcher Functions
-//------------------------------------------------------------------
 static bool mvuNeedsFPCRUpdate(mV)
 {
-	// always update on the vu1 thread
 	if (isVU1 && THREAD_VU1)
 		return true;
 
-	// otherwise only emit when it's different to the EE
 	return EmuConfig.Cpu.FPUFPCR.bitmask != (isVU0 ? EmuConfig.Cpu.VU0FPCR.bitmask : EmuConfig.Cpu.VU1FPCR.bitmask);
 }
 
-// Generates the code for entering/exit recompiled blocks
 void mVUdispatcherAB(mV)
 {
 	mVU.startFunct = xGetAlignedCallTarget();
@@ -27,27 +21,22 @@ void mVUdispatcherAB(mV)
 	{
 		xScopedStackFrame frame(false, true);
 
-		// = The caller has already put the needed parameters in ecx/edx:
 		if (!isVU1) xFastCall((void*)mVUexecuteVU0, arg1reg, arg2reg);
 		else        xFastCall((void*)mVUexecuteVU1, arg1reg, arg2reg);
 
-		// Load VU's MXCSR state
 		if (mvuNeedsFPCRUpdate(mVU))
 			xLDMXCSR(ptr32[isVU0 ? &EmuConfig.Cpu.VU0FPCR.bitmask : &EmuConfig.Cpu.VU1FPCR.bitmask]);
 
-		// Load Regs
 		xMOVAPS (xmmT1, ptr128[&mVU.regs().VI[REG_P].UL]);
 		xMOVAPS (xmmPQ, ptr128[&mVU.regs().VI[REG_Q].UL]);
 		xMOVDZX (xmmT2, ptr32[&mVU.regs().pending_q]);
-		xSHUF.PS(xmmPQ, xmmT1, 0); // wzyx = PPQQ
-		//Load in other Q instance
+		xSHUF.PS(xmmPQ, xmmT1, 0);
 		xPSHUF.D(xmmPQ, xmmPQ, 0xe1);
 		xMOVSS(xmmPQ, xmmT2);
 		xPSHUF.D(xmmPQ, xmmPQ, 0xe1);
 
 		if (isVU1)
 		{
-			//Load in other P instance
 			xMOVDZX(xmmT2, ptr32[&mVU.regs().pending_p]);
 			xPSHUF.D(xmmPQ, xmmPQ, 0x1B);
 			xMOVSS(xmmPQ, xmmT2);
@@ -66,17 +55,13 @@ void mVUdispatcherAB(mV)
 		xMOV(gprF2, ptr32[&mVU.regs().micro_statusflags[2]]);
 		xMOV(gprF3, ptr32[&mVU.regs().micro_statusflags[3]]);
 
-		// Jump to Recompiled Code Block
 		xJMP(rax);
 
 		mVU.exitFunct = x86Ptr;
 
-		// Load EE's MXCSR state
 		if (mvuNeedsFPCRUpdate(mVU))
 			xLDMXCSR(ptr32[&EmuConfig.Cpu.FPUFPCR.bitmask]);
 
-		// = The first two DWORD or smaller arguments are passed in ECX and EDX registers;
-		//              all other arguments are passed right to left.
 		if (!isVU1) xFastCall((void*)mVUcleanUpVU0);
 		else        xFastCall((void*)mVUcleanUpVU1);
 	}
@@ -87,7 +72,6 @@ void mVUdispatcherAB(mV)
 		mVU.index ? "VU1StartFunc" : "VU0StartFunc");
 }
 
-// Generates the code for resuming/exit xgkick
 void mVUdispatcherCD(mV)
 {
 	mVU.startFunctXG = xGetAlignedCallTarget();
@@ -95,7 +79,6 @@ void mVUdispatcherCD(mV)
 	{
 		xScopedStackFrame frame(false, true);
 
-		// Load VU's MXCSR state
 		if (mvuNeedsFPCRUpdate(mVU))
 			xLDMXCSR(ptr32[isVU0 ? &EmuConfig.Cpu.VU0FPCR.bitmask : &EmuConfig.Cpu.VU1FPCR.bitmask]);
 
@@ -105,18 +88,15 @@ void mVUdispatcherCD(mV)
 		xMOV(gprF2, ptr32[&mVU.regs().micro_statusflags[2]]);
 		xMOV(gprF3, ptr32[&mVU.regs().micro_statusflags[3]]);
 
-		// Jump to Recompiled Code Block
 		xJMP(ptrNative[&mVU.resumePtrXG]);
 
 		mVU.exitFunctXG = x86Ptr;
 
-		// Backup Status Flag (other regs were backed up on xgkick)
 		xMOV(ptr32[&mVU.regs().micro_statusflags[0]], gprF0);
 		xMOV(ptr32[&mVU.regs().micro_statusflags[1]], gprF1);
 		xMOV(ptr32[&mVU.regs().micro_statusflags[2]], gprF2);
 		xMOV(ptr32[&mVU.regs().micro_statusflags[3]], gprF3);
 
-		// Load EE's MXCSR state
 		if (mvuNeedsFPCRUpdate(mVU))
 			xLDMXCSR(ptr32[&EmuConfig.Cpu.FPUFPCR.bitmask]);
 	}
@@ -138,8 +118,6 @@ static void mVUGenerateWaitMTVU(mV)
 		if (!xRegister32::IsCallerSaved(i) || i == rsp.GetId())
 			continue;
 
-		// T1 often contains the address we're loading when waiting for VU1.
-		// T2 isn't used until afterwards, so don't bother saving it.
 		if (i == gprT2.GetId())
 			continue;
 
@@ -155,8 +133,6 @@ static void mVUGenerateWaitMTVU(mV)
 		num_xmms++;
 	}
 
-	// We need 16 byte alignment on the stack.
-	// Since the stack is unaligned at entry to this function, we add 8 when it's even, not odd.
 	const int stack_size = (num_xmms * sizeof(u128)) + ((~num_gprs & 1) * sizeof(u64)) + SHADOW_STACK_SIZE;
 	int stack_offset = SHADOW_STACK_SIZE;
 
@@ -244,12 +220,6 @@ static void mVUGenerateCopyPipelineState(mV)
 		mVU.index ? "VU1CopyPLState" : "VU0CopyPLState");
 }
 
-//------------------------------------------------------------------
-// Micro VU - Custom Quick Search
-//------------------------------------------------------------------
-
-// Generates a custom optimized block-search function
-// Note: Structs must be 16-byte aligned! (GCC doesn't guarantee this)
 static void mVUGenerateCompareState(mV)
 {
 	mVU.compareStateF = xGetAlignedCallTarget();
@@ -286,7 +256,6 @@ static void mVUGenerateCompareState(mV)
 	}
 	else
 	{
-		// We have to use unaligned loads here, because the blocks are only 16 byte aligned.
 		xMOVUPS(ymm0, ptr[arg1reg]);
 		xPCMP.EQD(ymm0, ymm0, ptr[arg2reg]);
 		xPMOVMSKB(eax, ymm0);
@@ -310,11 +279,6 @@ static void mVUGenerateCompareState(mV)
 }
 
 
-//------------------------------------------------------------------
-// Execution Functions
-//------------------------------------------------------------------
-
-// Executes for number of cycles
 _mVUt void* mVUexecute(u32 startPC, u32 cycles)
 {
 
@@ -329,13 +293,9 @@ _mVUt void* mVUexecute(u32 startPC, u32 cycles)
 	mVU.totalCycles = cycles;
 
 	xSetTextPtr(mVU.textPtr());
-	xSetPtr(mVU.prog.x86ptr); // Set x86ptr to where last program left off
-	return mVUsearchProg<vuIndex>(startPC & vuLimit, (uptr)&mVU.prog.lpState); // Find and set correct program
+	xSetPtr(mVU.prog.x86ptr);
+	return mVUsearchProg<vuIndex>(startPC & vuLimit, (uptr)&mVU.prog.lpState);
 }
-
-//------------------------------------------------------------------
-// Cleanup Functions
-//------------------------------------------------------------------
 
 _mVUt void mVUcleanUp()
 {
@@ -360,8 +320,6 @@ _mVUt void mVUcleanUp()
 			s64 vu0_offset = VU0.cycle - cpuRegs.cycle;
 			cpuRegs.cycle += cycles_passed;
 
-			// VU0 needs to stay in sync with the CPU otherwise things get messy
-			// So we need to adjust when VU1 skips cycles also
 			if (!vuIndex)
 				VU0.cycle = cpuRegs.cycle + vu0_offset;
 			else
@@ -370,10 +328,6 @@ _mVUt void mVUcleanUp()
 	}
 	mVU.profiler.Print();
 }
-
-//------------------------------------------------------------------
-// Caller Functions
-//------------------------------------------------------------------
 
 void* mVUexecuteVU0(u32 startPC, u32 cycles) { return mVUexecute<0>(startPC, cycles); }
 void* mVUexecuteVU1(u32 startPC, u32 cycles) { return mVUexecute<1>(startPC, cycles); }

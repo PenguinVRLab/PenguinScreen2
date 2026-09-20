@@ -27,17 +27,17 @@ struct MipsImmediate
 };
 
 struct MipsOpcodeRegisters {
-	MipsRegisterInfo grs;			// general source reg
-	MipsRegisterInfo grt;			// general target reg
-	MipsRegisterInfo grd;			// general dest reg
+	MipsRegisterInfo grs;
+	MipsRegisterInfo grt;
+	MipsRegisterInfo grd;
 
-	MipsRegisterInfo frs;			// float source reg
-	MipsRegisterInfo frt;			// float target reg
-	MipsRegisterInfo frd;			// float dest reg
+	MipsRegisterInfo frs;
+	MipsRegisterInfo frt;
+	MipsRegisterInfo frd;
 
-	MipsRegisterInfo ps2vrs;		// ps2 vector source reg
-	MipsRegisterInfo ps2vrt;		// ps2 vector target reg
-	MipsRegisterInfo ps2vrd;		// ps2 vector dest reg
+	MipsRegisterInfo ps2vrs;
+	MipsRegisterInfo ps2vrt;
+	MipsRegisterInfo ps2vrd;
 
 	void reset()
 	{
@@ -68,7 +68,6 @@ private:
 	bool Loaded;
 	int RamPos;
 
-	// opcode variables
 	MipsOpcodeRegisters registers;
 	MipsImmediateType immediateType;
 	MipsImmediate immediate;

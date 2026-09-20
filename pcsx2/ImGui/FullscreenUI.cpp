@@ -44,10 +44,6 @@
 
 #include "fmt/chrono.h"
 
-//////////////////////////////////////////////////////////////////////////
-// Utility
-//////////////////////////////////////////////////////////////////////////
-
 TinyString FullscreenUI::TimeToPrintableString(time_t t)
 {
 	struct tm lt = {};
@@ -158,9 +154,7 @@ void FullscreenUI::ApplyLayoutSettings(const SettingsInterface* bsi)
 
 	SmallString swap_mode = GET_SETTINGS_VALUE(SmallString, "UI", "SwapOKFullscreenUI", "auto");
 
-	// Check Nintendo Setting
 	SmallString sdl2_nintendo_mode = GET_SETTINGS_VALUE(SmallString, "UI", "SDL2NintendoLayout", "false");
-	// Check glyph preference
 	SmallString glyph_mode = GET_SETTINGS_VALUE(SmallString, "UI", "FullscreenUIGlyphStyle", "auto");
 
 	const auto parse_glyph_layout = [](const SmallString& mode) -> InputLayout {
@@ -193,10 +187,8 @@ void FullscreenUI::ApplyLayoutSettings(const SettingsInterface* bsi)
 
 	if ((sdl2_nintendo_mode == "true" || sdl2_nintendo_mode == "auto") && layout == InputLayout::Nintendo)
 	{
-		// Apply
 		ImGuiManager::SwapGamepadNorthWest(true);
 
-		// Check swap_mode if A/B should also be swapped
 		if (swap_mode == "auto")
 		{
 			io.ConfigNavSwapGamepadButtons = true;
@@ -212,21 +204,18 @@ void FullscreenUI::ApplyLayoutSettings(const SettingsInterface* bsi)
 		io.ConfigNavSwapGamepadButtons = false;
 	else if (swap_mode == "auto")
 	{
-		// Check gamepad
 		if (layout == InputLayout::Nintendo)
 		{
 			io.ConfigNavSwapGamepadButtons = true;
 			return;
 		}
 
-		// Check language
 		if (Host::LocaleCircleConfirm())
 		{
 			io.ConfigNavSwapGamepadButtons = true;
 			return;
 		}
 
-		// Check BIOS
 		SmallString bios_selection = GET_SETTINGS_VALUE(SmallString, "Filenames", "BIOS", "");
 
 		if (bios_selection != "")
@@ -235,7 +224,6 @@ void FullscreenUI::ApplyLayoutSettings(const SettingsInterface* bsi)
 			std::string bios_description, bios_zone;
 			if (IsBIOS(Path::Combine(EmuFolders::Bios, bios_selection).c_str(), bios_version, bios_description, bios_region, bios_zone))
 			{
-				// Japan, Asia, China
 				if (bios_region == 0 || bios_region == 4 || bios_region == 6)
 				{
 					io.ConfigNavSwapGamepadButtons = true;
@@ -244,11 +232,9 @@ void FullscreenUI::ApplyLayoutSettings(const SettingsInterface* bsi)
 			}
 		}
 
-		// X is confirm
 		io.ConfigNavSwapGamepadButtons = false;
 		return;
 	}
-	// Invalid setting
 	else
 		io.ConfigNavSwapGamepadButtons = false;
 #undef GET_SETTINGS_VALUE
@@ -269,9 +255,6 @@ void FullscreenUI::PreferEnglishGameListChanged()
 	s_prefer_english_titles = Host::GetBaseBoolSettingValue("UI", "PreferEnglishGameList", false);
 }
 
-// When drawing an svg to a non-integer size, we get a padded texture.
-// This function crops off this padding by setting the image UV for the draw.
-// We currently only use integer sizes for images, but I wrote this before checking that.
 void FullscreenUI::DrawSvgTexture(GSTexture* padded_texture, ImVec2 unpadded_size)
 {
 	if (padded_texture != GetPlaceholderTexture().get())
@@ -282,7 +265,6 @@ void FullscreenUI::DrawSvgTexture(GSTexture* padded_texture, ImVec2 unpadded_siz
 	}
 	else
 	{
-		// Placeholder is a png file and should be scaled by ImGui
 		ImGui::Image(reinterpret_cast<ImTextureID>(padded_texture->GetNativeHandle()), unpadded_size);
 	}
 }
@@ -297,7 +279,6 @@ void FullscreenUI::DrawCachedSvgTextureAsync(const std::string& path, ImVec2 siz
 	DrawSvgTexture(GetCachedSvgTextureAsync(path, size, mode), size);
 }
 
-// p_unpadded_max should be equal to p_min + unpadded_size
 void FullscreenUI::DrawListSvgTexture(ImDrawList* drawList, GSTexture* padded_texture, const ImVec2& p_min, const ImVec2& p_unpadded_max)
 {
 	const ImVec2 unpadded_size = p_unpadded_max - p_min;
@@ -309,14 +290,9 @@ void FullscreenUI::DrawListSvgTexture(ImDrawList* drawList, GSTexture* padded_te
 	}
 	else
 	{
-		// Placeholder is a png file and should be scaled by ImGui
 		drawList->AddImage(reinterpret_cast<ImTextureID>(padded_texture->GetNativeHandle()), p_min, p_unpadded_max);
 	}
 }
-
-//////////////////////////////////////////////////////////////////////////
-// Main
-//////////////////////////////////////////////////////////////////////////
 
 bool FullscreenUI::Initialize()
 {
@@ -395,11 +371,8 @@ void FullscreenUI::CheckForConfigChanges(const Pcsx2Config& old_config)
 		LoadCustomBackground();
 	});
 
-	// If achievements got disabled, we might have the menu open...
-	// That means we're going to be reaching achievement state.
 	if (old_config.Achievements.Enabled && !EmuConfig.Achievements.Enabled)
 	{
-		// So, wait just in case.
 		MTGS::RunOnGSThread([]() {
 			if (s_current_main_window == MainWindowType::Achievements || s_current_main_window == MainWindowType::Leaderboards)
 			{
@@ -571,7 +544,6 @@ void FullscreenUI::Render()
 	if (!s_initialized)
 		return;
 
-	// see if background setting changed
 	static std::string s_last_background_path;
 	std::string current_path = Host::GetBaseStringSettingValue("UI", "FSUIBackgroundPath");
 	if (s_last_background_path != current_path)
@@ -602,7 +574,6 @@ void FullscreenUI::Render()
 		DrawCustomBackground();
 	}
 
-	// Primed achievements must come first, because we don't want the pause screen to be behind them.
 	if (s_current_main_window == MainWindowType::None && (EmuConfig.Achievements.Overlays || EmuConfig.Achievements.LBOverlays))
 		Achievements::DrawGameOverlays();
 
@@ -770,10 +741,6 @@ void FullscreenUI::DestroyResources()
 		g_gs_device->Recycle(tex.release());
 }
 
-//////////////////////////////////////////////////////////////////////////
-// Utility
-//////////////////////////////////////////////////////////////////////////
-
 ImGuiFullscreen::FileSelectorFilters FullscreenUI::GetOpenFileFilters()
 {
 	return {"*.bin", "*.iso", "*.cue", "*.mdf", "*.chd", "*.cso", "*.zso", "*.gz", "*.elf", "*.irx", "*.gs", "*.gs.xz", "*.gs.zst", "*.dump"};
@@ -843,7 +810,6 @@ void FullscreenUI::DoStartPath(const std::string& path, std::optional<s32> state
 	params.state_index = state_index;
 	params.fast_boot = fast_boot;
 
-	// switch to nothing, we'll get brought back if init fails
 	Host::RunOnCPUThread([params = std::move(params)]() {
 		DoVMInitialize(std::move(params), false);
 	});
@@ -871,7 +837,6 @@ void FullscreenUI::DoStartBIOS()
 		DoVMInitialize(std::move(params), true);
 	});
 
-	// switch to nothing, we'll get brought back if init fails
 	s_current_main_window = MainWindowType::None;
 }
 
@@ -898,7 +863,6 @@ void FullscreenUI::DoStartDisc()
 		return;
 	}
 
-	// if there's only one, select it automatically
 	if (devices.size() == 1)
 	{
 		DoStartDisc(devices.front());
@@ -1041,10 +1005,6 @@ bool FullscreenUI::ShouldDefaultToGameList()
 	return Host::GetBaseBoolSettingValue("UI", "FullscreenUIDefaultToGameList", false);
 }
 
-//////////////////////////////////////////////////////////////////////////
-// Custom Background
-//////////////////////////////////////////////////////////////////////////
-
 void FullscreenUI::LoadCustomBackground()
 {
 	std::string path = Host::GetBaseStringSettingValue("UI", "FSUIBackgroundPath");
@@ -1121,8 +1081,6 @@ void FullscreenUI::DrawCustomBackground()
 	const float tex_width = static_cast<float>(s_custom_background_texture->GetWidth());
 	const float tex_height = static_cast<float>(s_custom_background_texture->GetHeight());
 
-	// Override the UIBackgroundColor that windows use
-	// We need to make windows transparent so our background image shows through
 	const ImVec4 transparent_bg = ImVec4(UIBackgroundColor.x, UIBackgroundColor.y, UIBackgroundColor.z, 0.0f);
 	ImGuiFullscreen::UIBackgroundColor = transparent_bg;
 
@@ -1132,24 +1090,20 @@ void FullscreenUI::DrawCustomBackground()
 
 	if (mode == "stretch")
 	{
-		// stretch to fill entire display (ignores aspect ratio)
 		bg_draw_list->AddImage(tex_id, ImVec2(0.0f, 0.0f), display_size, ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f), col);
 	}
 	else if (mode == "fill")
 	{
-		// Fill display while preserving aspect ratio (could crop edges)
 		const float display_aspect = display_size.x / display_size.y;
 		const float tex_aspect = tex_width / tex_height;
 
 		float scale;
 		if (tex_aspect > display_aspect)
 		{
-			// Image is wider scale to height and crop sides
 			scale = display_size.y / tex_height;
 		}
 		else
 		{
-			// Image is taller scale to width and crop top/bottom
 			scale = display_size.x / tex_width;
 		}
 
@@ -1165,7 +1119,6 @@ void FullscreenUI::DrawCustomBackground()
 	}
 	else if (mode == "center")
 	{
-		// Center image at original size
 		const float offset_x = (display_size.x - tex_width) * 0.5f;
 		const float offset_y = (display_size.y - tex_height) * 0.5f;
 
@@ -1176,10 +1129,6 @@ void FullscreenUI::DrawCustomBackground()
 	}
 	else if (mode == "tile")
 	{
-		// Tile image across entire display
-		// If the image is extremely small, this approach can generate millions of quads
-		// and overflow the backend stream buffer (e.g. Vulkan assertion in VKStreamBuffer).
-		// Since we cannot switch ImGui's sampler to wrap (yet), clamp the maximum number of quads
 		constexpr int MAX_TILE_QUADS = 16384;
 
 		float tile_width = tex_width;
@@ -1206,7 +1155,6 @@ void FullscreenUI::DrawCustomBackground()
 				const float tile_max_x = std::min(tile_x + tile_width, display_size.x);
 				const float tile_max_y = std::min(tile_y + tile_height, display_size.y);
 
-				// get uvs for partial tiles at edges
 				const float uv_max_x = (tile_max_x - tile_x) / tile_width;
 				const float uv_max_y = (tile_max_y - tile_y) / tile_height;
 
@@ -1217,21 +1165,18 @@ void FullscreenUI::DrawCustomBackground()
 			}
 		}
 	}
-	else // "fit" or default
+	else
 	{
-		// Fit on screen while preserving aspect ratio (no cropping)
 		const float display_aspect = display_size.x / display_size.y;
 		const float tex_aspect = tex_width / tex_height;
 
 		float scale;
 		if (tex_aspect > display_aspect)
 		{
-			// Image is wider than display
 			scale = display_size.x / tex_width;
 		}
 		else
 		{
-			// Image is taller than display
 			scale = display_size.y / tex_height;
 		}
 
@@ -1246,10 +1191,6 @@ void FullscreenUI::DrawCustomBackground()
 			ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f), col);
 	}
 }
-
-//////////////////////////////////////////////////////////////////////////
-// Landing Window
-//////////////////////////////////////////////////////////////////////////
 
 void FullscreenUI::SwitchToLanding()
 {
@@ -1275,7 +1216,6 @@ void FullscreenUI::DrawLandingTemplate(ImVec2* menu_pos, ImVec2* menu_size)
 		ImGui::PushFont(heading_font.first, heading_font.second);
 		ImGui::PushStyleColor(ImGuiCol_Text, UIPrimaryTextColor);
 
-		// draw branding
 		{
 			const ImVec2 logo_pos = LayoutScale(LAYOUT_MENU_BUTTON_X_PADDING, LAYOUT_MENU_BUTTON_Y_PADDING);
 			const ImVec2 logo_size = LayoutScale(LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY, LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY);
@@ -1285,11 +1225,8 @@ void FullscreenUI::DrawLandingTemplate(ImVec2* menu_pos, ImVec2* menu_size)
 			ImGuiFullscreen::AddTextWithShadow(dl, heading_font, branding_pos, ImGui::GetColorU32(ImGuiCol_Text), "PenguinScreen2");
 		}
 
-		// draw time
 		ImVec2 time_pos;
 		{
-			// Waiting on (apple)clang support for P0355R7
-			// Migrate to std::chrono::current_zone and zoned_time then
 			const auto utc_now = std::chrono::system_clock::now();
 			const auto utc_time_t = std::chrono::system_clock::to_time_t(utc_now);
 			std::tm tm_local = {};
@@ -1310,7 +1247,6 @@ void FullscreenUI::DrawLandingTemplate(ImVec2* menu_pos, ImVec2* menu_size)
 			ImGui::RenderTextClipped(time_pos, time_pos + time_size, heading_str.c_str(), heading_str.end_ptr(), &time_size);
 		}
 
-		// draw achievements info
 		if (Achievements::IsActive())
 		{
 			const auto lock = Achievements::GetLock();
@@ -1323,7 +1259,6 @@ void FullscreenUI::DrawLandingTemplate(ImVec2* menu_pos, ImVec2* menu_size)
 				ImGuiFullscreen::AddTextWithShadow(dl, heading_font, name_pos, ImGui::GetColorU32(ImGuiCol_Text), username, nullptr);
 				ImGui::RenderTextClipped(name_pos, name_pos + name_size, username, nullptr, &name_size);
 
-				// TODO: should we cache this? heap allocations bad...
 				std::string badge_path = Achievements::GetLoggedInUserBadgePath();
 				if (!badge_path.empty()) [[likely]]
 				{
@@ -1560,7 +1495,6 @@ void FullscreenUI::DrawPauseMenu(MainWindowType type)
 	dl->AddRectFilled(
 		ImVec2(0.0f, 0.0f), display_size, IM_COL32(UIBackgroundColor.x * 255, UIBackgroundColor.y * 255, UIBackgroundColor.z * 255, 200));
 
-	// title info
 	{
 		const float image_width = 60.0f;
 		const float image_height = 90.0f;
@@ -1582,7 +1516,6 @@ void FullscreenUI::DrawPauseMenu(MainWindowType type)
 				const ImVec2 rp_size = g_medium_font.first->CalcTextSizeA(
 					g_medium_font.second, std::numeric_limits<float>::max(), wrap_width, rp.data(), rp.data() + rp.length());
 
-				// Add a small extra gap if any Rich Presence is displayed
 				rp_height = rp_size.y - g_medium_font.second + LayoutScale(2.0f);
 
 				const ImVec2 rp_pos(LayoutScale(10.0f + image_width + 20.0f),
@@ -1612,7 +1545,6 @@ void FullscreenUI::DrawPauseMenu(MainWindowType type)
 		}
 	}
 
-	// current time / play time
 	{
 		char buf[256];
 		struct tm ltime;
@@ -1657,9 +1589,9 @@ void FullscreenUI::DrawPauseMenu(MainWindowType type)
 			ImVec2(10.0f, 10.0f), ImGuiWindowFlags_NoBackground))
 	{
 		static constexpr u32 submenu_item_count[] = {
-			11, // None
-			4, // Exit
-			3, // Achievements
+			11,
+			4,
+			3,
 		};
 
 		const bool just_focused = ResetFocusHere();
@@ -1710,7 +1642,6 @@ void FullscreenUI::DrawPauseMenu(MainWindowType type)
 		{
 			case PauseSubMenu::None:
 			{
-				// NOTE: Menu close must come first, because otherwise VM destruction options will race.
 				const bool can_load_state = s_current_disc_crc != 0 && !Achievements::IsHardcoreModeActive();
 				const bool can_save_state = s_current_disc_crc != 0;
 
@@ -1745,7 +1676,6 @@ void FullscreenUI::DrawPauseMenu(MainWindowType type)
 
 				if (ActiveButton(FSUI_ICONSTR(ICON_FA_TROPHY, "Achievements"), false, Achievements::HasAchievementsOrLeaderboards()))
 				{
-					// skip second menu and go straight to cheevos if there's no lbs
 					if (!Achievements::HasLeaderboards())
 						OpenAchievementsWindow();
 					else
@@ -1777,7 +1707,6 @@ void FullscreenUI::DrawPauseMenu(MainWindowType type)
 
 				if (ActiveButton(FSUI_ICONSTR(ICON_FA_POWER_OFF, "Close Game"), false))
 				{
-					// skip submenu when we can't save anyway
 					if (!can_save_state)
 						RequestShutdown(false);
 					else
@@ -1831,7 +1760,6 @@ void FullscreenUI::DrawPauseMenu(MainWindowType type)
 		EndFullscreenWindow();
 	}
 
-	// Primed achievements must come first, because we don't want the pause screen to be behind them.
 	if (Achievements::HasAchievementsOrLeaderboards())
 		Achievements::DrawPauseMenuOverlays();
 
@@ -2070,7 +1998,6 @@ void FullscreenUI::DrawSaveStateSelector(bool is_loading)
 			{
 				SaveStateListEntry& entry = s_save_state_selector_slots[i];
 
-				// can't use a choice dialog here, because we're already in a modal...
 				ImGuiFullscreen::PushResetLayout();
 				ImGui::PushFont(g_large_font.first, g_large_font.second);
 				ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, LayoutScale(10.0f));
@@ -2090,7 +2017,6 @@ void FullscreenUI::DrawSaveStateSelector(bool is_loading)
 				ImGui::SetNextWindowPos(ImGui::GetIO().DisplaySize * 0.5f, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 				ImGui::OpenPopup(entry.title.c_str());
 
-				// don't let the back button flow through to the main window
 				bool submenu_open = !WantsToCloseMenu();
 				close_handled ^= submenu_open;
 
@@ -2131,7 +2057,6 @@ void FullscreenUI::DrawSaveStateSelector(bool is_loading)
 							else
 								InitializePlaceholderSaveStateListEntry(&entry, entry.slot);
 
-							// Close if this was the last state.
 							if (s_save_state_selector_slots.empty())
 							{
 								CloseSaveStateSelector();
@@ -2447,7 +2372,6 @@ void FullscreenUI::PopulateGameListEntryList()
 	static bool s_last_prefer_eng = false;
 	static std::vector<const GameList::Entry*> s_last_unsorted_entries;
 
-	// Sort can be expensive, try to avoid when possible
 	const u32 count = GameList::GetEntryCount();
 	bool needs_update = sort != s_last_sort || reverse != s_last_reverse || s_last_prefer_eng != s_prefer_english_titles;
 	needs_update |= count != s_last_unsorted_entries.size();
@@ -2482,24 +2406,24 @@ void FullscreenUI::PopulateGameListEntryList()
 		[sort, reverse](const GameList::Entry* lhs, const GameList::Entry* rhs) {
 			switch (sort)
 			{
-				case 0: // Type
+				case 0:
 				{
 					if (lhs->type != rhs->type)
 						return reverse ? (lhs->type > rhs->type) : (lhs->type < rhs->type);
 				}
 				break;
 
-				case 1: // Serial
+				case 1:
 				{
 					if (lhs->serial != rhs->serial)
 						return reverse ? (lhs->serial > rhs->serial) : (lhs->serial < rhs->serial);
 				}
 				break;
 
-				case 2: // Title
+				case 2:
 					break;
 
-				case 3: // File Title
+				case 3:
 				{
 					const std::string_view lhs_title(Path::GetFileTitle(lhs->path));
 					const std::string_view rhs_title(Path::GetFileTitle(rhs->path));
@@ -2510,14 +2434,14 @@ void FullscreenUI::PopulateGameListEntryList()
 				}
 				break;
 
-				case 4: // CRC
+				case 4:
 				{
 					if (lhs->crc != rhs->crc)
 						return reverse ? (lhs->crc > rhs->crc) : (lhs->crc < rhs->crc);
 				}
 				break;
 
-				case 5: // Time Played
+				case 5:
 				{
 					if (lhs->total_played_time != rhs->total_played_time)
 					{
@@ -2527,7 +2451,7 @@ void FullscreenUI::PopulateGameListEntryList()
 				}
 				break;
 
-				case 6: // Last Played (reversed by default)
+				case 6:
 				{
 					if (lhs->last_played_time != rhs->last_played_time)
 					{
@@ -2536,7 +2460,7 @@ void FullscreenUI::PopulateGameListEntryList()
 				}
 				break;
 
-				case 7: // Size
+				case 7:
 				{
 					if (lhs->total_size != rhs->total_size)
 					{
@@ -2546,7 +2470,6 @@ void FullscreenUI::PopulateGameListEntryList()
 				break;
 			}
 
-			// fallback to title when all else is equal
 			const int res = Host::LocaleSensitiveCompare(lhs->GetTitleSort(s_prefer_english_titles), rhs->GetTitleSort(s_prefer_english_titles));
 			return reverse ? (res > 0) : (res < 0);
 		});
@@ -2621,7 +2544,6 @@ void FullscreenUI::DrawGameListWindow()
 
 	if (VMManager::GetState() != VMState::Shutdown)
 	{
-		// Dummy window to prevent interacting with the game list while loading.
 		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
 		ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
 		ImGui::SetNextWindowPos(ImVec2(0, 0));
@@ -2697,7 +2619,6 @@ void FullscreenUI::DrawGameList(const ImVec2& heading_size)
 
 		BeginMenuButtons();
 
-		// TODO: replace with something not heap allocating
 		std::string summary;
 
 		for (const GameList::Entry* entry : s_game_list_sorted_entries)
@@ -2759,23 +2680,17 @@ void FullscreenUI::DrawGameList(const ImVec2& heading_size)
 	if (BeginFullscreenColumnWindow(-530.0f, 0.0f, "game_list_info", UIPrimaryDarkColor))
 	{
 		const float img_padding_y = LayoutScale(20.0f);
-		// Spacing between each text item
 		const float text_spacing_y = LayoutScale(8.0f);
-		// Space between title/serial and details, is in addition to text_spacing_y
 		const float title_padding_below_y = LayoutScale(12.0f);
 
-		// Estimate how much space is needed for text
-		// Do this even when nothing is selected, to ensure cover/icon is in a consistant size/position
 		const float title_detail_height =
-			LayoutScale(LAYOUT_LARGE_FONT_SIZE) + text_spacing_y + // Title
-			LayoutScale(LAYOUT_MEDIUM_FONT_SIZE) + text_spacing_y + // Serial
+			LayoutScale(LAYOUT_LARGE_FONT_SIZE) + text_spacing_y +
+			LayoutScale(LAYOUT_MEDIUM_FONT_SIZE) + text_spacing_y +
 			title_padding_below_y +
-			7.0f * (LayoutScale(LAYOUT_MEDIUM_FONT_SIZE) + text_spacing_y) + // File, CRC, Region, Compat, Time/Last Played, Size
-			LayoutScale(12.0f); // Extra padding
+			7.0f * (LayoutScale(LAYOUT_MEDIUM_FONT_SIZE) + text_spacing_y) +
+			LayoutScale(12.0f);
 
-		// Limit cover height to avoid pushing text off the screen
 		const ImGuiWindow* window = ImGui::GetCurrentWindow();
-		// Based on ImGui code for WorkRect, with scrolling logic removed
 		const float window_height = std::trunc(window->InnerRect.GetHeight() - 2.0f * std::max(window->WindowPadding.y, window->WindowBorderSize));
 
 		const float free_height = window_height - title_detail_height;
@@ -2802,7 +2717,6 @@ void FullscreenUI::DrawGameList(const ImVec2& heading_size)
 
 		if (selected_entry)
 		{
-			// title
 			ImGui::PushFont(g_large_font.first, g_large_font.second);
 			const std::string_view full_title(selected_entry->GetTitle(s_prefer_english_titles));
 			std::string_view title = TrimString(g_large_font, full_title, work_width);
@@ -2816,19 +2730,15 @@ void FullscreenUI::DrawGameList(const ImVec2& heading_size)
 
 			ImGui::PushFont(g_medium_font.first, g_medium_font.second);
 
-			// code
 			text_width = ImGui::CalcTextSize(selected_entry->serial.c_str(), nullptr, false, work_width).x;
 			ImGui::SetCursorPosX((work_width - text_width) / 2.0f);
 			ImGui::TextWrapped("%s", selected_entry->serial.c_str());
 			ImGui::SetCursorPosY(ImGui::GetCursorPosY() + title_padding_below_y);
 
-			// file tile
 			ImGui::TextWrapped("%s", SmallString::from_format(FSUI_FSTR("File: {}"), Path::GetFileName(selected_entry->path)).c_str());
 
-			// crc
 			ImGui::TextUnformatted(TinyString::from_format(FSUI_FSTR("CRC: {:08X}"), selected_entry->crc));
 
-			// region
 			{
 				std::string flag_texture(fmt::format("icons/flags/{}.svg", GameList::RegionToFlagFilename(selected_entry->region)));
 				ImGui::TextUnformatted(FSUI_CSTR("Region: "));
@@ -2838,7 +2748,6 @@ void FullscreenUI::DrawGameList(const ImVec2& heading_size)
 				ImGui::Text(" (%s)", GameList::RegionToString(selected_entry->region, true));
 			}
 
-			// compatibility
 			ImGui::TextUnformatted(FSUI_CSTR("Compatibility: "));
 			ImGui::SameLine();
 			if (selected_entry->compatibility_rating != GameDatabaseSchema::Compatibility::Unknown)
@@ -2848,13 +2757,11 @@ void FullscreenUI::DrawGameList(const ImVec2& heading_size)
 			}
 			ImGui::Text(" (%s)", GameList::EntryCompatibilityRatingToString(selected_entry->compatibility_rating, true));
 
-			// play time
 			ImGui::TextUnformatted(
 				SmallString::from_format(FSUI_FSTR("Time Played: {}"), GameList::FormatTimespan(selected_entry->total_played_time)));
 			ImGui::TextUnformatted(
 				SmallString::from_format(FSUI_FSTR("Last Played: {}"), GameList::FormatTimestamp(selected_entry->last_played_time)));
 
-			// size
 			ImGui::TextUnformatted(
 				SmallString::from_format(FSUI_FSTR("Size: {:.2f} MB"), static_cast<float>(selected_entry->total_size) / 1048576.0f));
 
@@ -2862,7 +2769,6 @@ void FullscreenUI::DrawGameList(const ImVec2& heading_size)
 		}
 		else
 		{
-			// title
 			const char* title = FSUI_CSTR("No Game Selected");
 			ImGui::PushFont(g_large_font.first, g_large_font.second);
 			text_width = ImGui::CalcTextSize(title, nullptr, false, work_width).x;
@@ -2996,7 +2902,6 @@ void FullscreenUI::DrawGameGrid(const ImVec2& heading_size)
 
 void FullscreenUI::HandleGameListActivate(const GameList::Entry* entry)
 {
-	// launch game
 	if (!OpenLoadStateSelectorForGameResume(entry))
 		DoStartPath(entry->path);
 }
@@ -3023,31 +2928,29 @@ void FullscreenUI::HandleGameListOptions(const GameList::Entry* entry)
 		(s32 index, const std::string& title, bool checked) {
 			switch (index)
 			{
-				case 0: // Open Game Properties
+				case 0:
 					SwitchToGameSettings(entry_path);
 					break;
-				case 1: // Resume Game
+				case 1:
 					DoStartPath(entry_path, has_resume_state ? std::optional<s32>(-1) : std::optional<s32>());
 					break;
-				case 2: // Load State
+				case 2:
 					OpenLoadStateSelectorForGame(entry_path);
 					break;
-				case 3: // Default Boot
+				case 3:
 					DoStartPath(entry_path);
 					break;
-				case 4: // Fast Boot
+				case 4:
 					DoStartPath(entry_path, std::nullopt, true);
 					break;
-				case 5: // Full Boot
+				case 5:
 					DoStartPath(entry_path, std::nullopt, false);
 					break;
 				case 6:
 					{
-						// Close Menu
 						if (!entry_played_time)
 							break;
 
-						// Reset Play Time
 						OpenConfirmMessageDialog(FSUI_ICONSTR(ICON_FA_STOPWATCH, "Confirm Reset"),
 							fmt::format(FSUI_FSTR("Are you sure you want to reset the play time for '{}' ({})?\n\n"
 												  "Your current play time is {}.\n\nThis action cannot be undone."),
@@ -3060,7 +2963,7 @@ void FullscreenUI::HandleGameListOptions(const GameList::Entry* entry)
 							}, false);
 					}
 					break;
-				default: // Close Menu
+				default:
 					break;
 			}
 
@@ -3153,12 +3056,10 @@ void FullscreenUI::DrawGameListSettingsWindow()
 
 					if (index == 0)
 					{
-						// Open In File Browser.
 						ExitFullscreenAndOpenURL(Path::CreateFileURL(dir));
 					}
 					else if (index == 1)
 					{
-						// Toggle Subdirectory Scanning.
 						{
 							auto lock = Host::GetSettingsLock();
 							SettingsInterface* bsi = Host::Internal::GetBaseSettingsLayer();
@@ -3181,7 +3082,6 @@ void FullscreenUI::DrawGameListSettingsWindow()
 					}
 					else if (index == 2)
 					{
-						// Remove From List.
 						auto lock = Host::GetSettingsLock();
 						SettingsInterface* bsi = Host::Internal::GetBaseSettingsLayer();
 						bsi->RemoveFromStringList("GameList", "Paths", dir.c_str());
@@ -3259,7 +3159,6 @@ void FullscreenUI::SwitchToGameList()
 
 GSTexture* FullscreenUI::GetGameListCover(const GameList::Entry* entry)
 {
-	// lookup and grab cover image
 	auto cover_it = s_cover_image_map.find(entry->path);
 	if (cover_it == s_cover_image_map.end())
 	{
@@ -3286,7 +3185,6 @@ GSTexture* FullscreenUI::GetTextureForGameListEntryType(GameList::EntryType type
 
 void FullscreenUI::DrawGameCover(const GameList::Entry* entry, const ImVec2& size)
 {
-	// Used in DrawGameList (selected preview)
 	const GSTexture* cover_texture = GetGameListCover(entry);
 
 	pxAssert(ImGui::GetCurrentContext()->Style.ImageBorderSize == 0);
@@ -3311,14 +3209,12 @@ void FullscreenUI::DrawGameCover(const GameList::Entry* entry, const ImVec2& siz
 		ImGui::SetCursorPos(origin + image_rect.Min);
 		DrawSvgTexture(icon_texture, image_square);
 	}
-	// Pretend the image we drew was the the size passed to us
 	ImGui::SetCursorPos(origin);
 	ImGui::Dummy(size);
 }
 
 void FullscreenUI::DrawGameCover(const GameList::Entry* entry, ImDrawList* draw_list, const ImVec2& min, const ImVec2& max)
 {
-	// Used in DrawPauseMenu, DrawGameList (list item), DrawGameGrid
 	const GSTexture* cover_texture = GetGameListCover(entry);
 
 	if (cover_texture)
@@ -3355,7 +3251,6 @@ void FullscreenUI::DrawFallbackCover(const ImVec2& size)
 	ImGui::SetCursorPos(origin + image_rect.Min);
 	DrawSvgTexture(icon_texture, image_square);
 
-	// Pretend the image we drew was the the size passed to us
 	ImGui::SetCursorPos(origin);
 	ImGui::Dummy(size);
 }
@@ -3370,10 +3265,6 @@ void FullscreenUI::DrawFallbackCover(ImDrawList* draw_list, const ImVec2& min, c
 	DrawListSvgTexture(draw_list, GetTextureForGameListEntryType(GameList::EntryType::PS2Disc, image_square, SvgScaling::Fit),
 		image_rect.Min, image_rect.Max);
 }
-
-//////////////////////////////////////////////////////////////////////////
-// Overlays
-//////////////////////////////////////////////////////////////////////////
 
 void FullscreenUI::ExitFullscreenAndOpenURL(const std::string_view url)
 {
@@ -3623,7 +3514,6 @@ void FullscreenUI::CoverDownloaderThreadFunc(const std::vector<std::string>& url
 				ShowToast(FSUI_STR("Download Failed"), error_message, 5.0f);
 			});
 		}
-		// We clear the cover image cache so the newly downloaded covers are picked up
 		MTGS::RunOnGSThread([]() {
 			s_cover_image_map.clear();
 		});
@@ -3669,7 +3559,6 @@ void FullscreenUI::DrawCoverDownloaderWindow()
 		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + LayoutScale(10.0f));
 
 
-		// URLs input section
 		bool is_downloading;
 		{
 			std::lock_guard<std::mutex> lock(s_cover_downloader_mutex);
@@ -3705,7 +3594,6 @@ void FullscreenUI::DrawCoverDownloaderWindow()
 
 		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + LayoutScale(10.0f));
 
-		// Use Title File Names toggle
 		{
 			bool use_title;
 			{
@@ -3722,7 +3610,6 @@ void FullscreenUI::DrawCoverDownloaderWindow()
 			}
 		}
 
-		// Progress display
 		{
 			std::lock_guard<std::mutex> lock(s_cover_downloader_mutex);
 
@@ -3993,15 +3880,7 @@ void FullscreenUI::ReportStateSaveError(const std::string& message, std::optiona
 	});
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Translation String Area
-// To avoid having to type T_RANSLATE("FullscreenUI", ...) everywhere, we use the shorter macros in the internal
-// header file, then preprocess and generate a bunch of noops here to define the strings. Sadly that means
-// the view in Linguist is gonna suck, but you can search the file for the string for more context.
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 #if 0
-// TRANSLATION-STRING-AREA-BEGIN
 TRANSLATE_NOOP("FullscreenUI", "Error");
 TRANSLATE_NOOP("FullscreenUI", "Could not find any CD/DVD-ROM devices. Please ensure you have a drive connected and sufficient permissions to access it.");
 TRANSLATE_NOOP("FullscreenUI", "Your memory card is still saving data.\n\nWARNING: Shutting down now can IRREVERSIBLY CORRUPT YOUR MEMORY CARD.\n\nYou are strongly advised to select 'No' and let the save finish.\n\nDo you want to shutdown anyway and IRREVERSIBLY CORRUPT YOUR MEMORY CARD?");
@@ -4158,5 +4037,4 @@ TRANSLATE_NOOP("FullscreenUI", "Close");
 TRANSLATE_NOOP("FullscreenUI", "Use Title File Names");
 TRANSLATE_NOOP("FullscreenUI", "Stop");
 TRANSLATE_NOOP("FullscreenUI", "Start");
-// TRANSLATION-STRING-AREA-END
 #endif

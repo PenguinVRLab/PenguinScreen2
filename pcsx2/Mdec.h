@@ -3,7 +3,6 @@
 
 #pragma once
 
-// mdec status:
 #define MDEC_BUSY 0x20000000
 #define MDEC_DREQ 0x18000000
 #define MDEC_FIFO	0xc0000000
@@ -50,7 +49,7 @@
 #endif
 
 #define	MAKERGB15(r,g,b)	( (((r)>>3)<<10)|(((g)>>3)<<5)|((b)>>3) )
-#define	ROUND(c)	roundtbl[((c)+128+256)]//&0x3ff]
+#define	ROUND(c)	roundtbl[((c)+128+256)]
 
 #define RGB15(n, Y) \
 	image[n] = MAKERGB15(ROUND(Y + R),ROUND(Y + G),ROUND(Y + B));
@@ -75,7 +74,6 @@ extern u32  mdecRead0();
 extern u32  mdecRead1();
 extern void psxDma0(u32 madr, u32 bcr, u32 chcr);
 extern void psxDma1(u32 madr, u32 bcr, u32 chcr);
-//int  mdecFreeze(gzFile f, int Mode);
 
 
 u16* rl2blk(int *blk,u16 *mdec_rl);

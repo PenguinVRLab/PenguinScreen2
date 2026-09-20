@@ -35,8 +35,6 @@ void GSDrawingEnvironment::Dump(const std::string& filename) const
 	if (!fp)
 		return;
 
-	// Warning: The indentation must be consistent with GSDrawingContext::Dump().
-
 	fprintf(fp, "PRIM:\n"
 	            "    PRIM: %u # %s\n"
 	            "    IIP: %u\n"

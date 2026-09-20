@@ -47,7 +47,6 @@ static void FontSearchContextDestroy(void*) {}
 #endif
 
 #if 0
-// Qt internal strings we'd like to have translated
 QT_TRANSLATE_NOOP("MAC_APPLICATION_MENU", "Services")
 QT_TRANSLATE_NOOP("MAC_APPLICATION_MENU", "Hide %1")
 QT_TRANSLATE_NOOP("MAC_APPLICATION_MENU", "Hide Others")
@@ -56,7 +55,6 @@ QT_TRANSLATE_NOOP("MAC_APPLICATION_MENU", "Preferences...")
 QT_TRANSLATE_NOOP("MAC_APPLICATION_MENU", "Quit %1")
 QT_TRANSLATE_NOOP("MAC_APPLICATION_MENU", "About %1")
 
-// Strings that will be parsed out by our build system and sent to fun places
 QT_TRANSLATE_NOOP("PermissionsDialogMicrophone", "PenguinScreen2 uses your microphone to emulate a USB microphone plugged into the virtual PS2.")
 QT_TRANSLATE_NOOP("PermissionsDialogCamera", "PenguinScreen2 uses your camera to emulate an EyeToy camera plugged into the virtual PS2.")
 #endif
@@ -74,20 +72,18 @@ namespace QtHost
 	static std::mutex s_collator_mtx;
 
 	static std::vector<QTranslator*> s_translators;
-} // namespace QtHost
+}
 
 static QString getSystemLanguage()
 {
 	std::vector<std::pair<QString, QString>> available = QtHost::GetAvailableLanguageList();
 	QString locale = QLocale::system().name();
 	locale.replace('_', '-');
-	// Can we find an exact match?
 	for (const std::pair<QString, QString>& entry : available)
 	{
 		if (entry.second == locale)
 			return locale;
 	}
-	// How about a partial match?
 	QStringView lang = QStringView(locale);
 	lang = lang.left(lang.indexOf('-'));
 	for (const std::pair<QString, QString>& entry : available)
@@ -101,7 +97,6 @@ static QString getSystemLanguage()
 			return entry.second;
 		}
 	}
-	// No matches :(
 	Console.Warning("Couldn't find translation for system language %s, using en instead", locale.toStdString().c_str());
 	return QStringLiteral("en-US");
 }
@@ -128,7 +123,6 @@ void QtHost::InstallTranslator(QWidget* dialog_parent)
 		s_current_collator = QCollator(s_current_locale);
 	}
 
-	// Install the base qt translation first.
 #if defined(__APPLE__)
 	const QString base_dir = QStringLiteral("%1/../Resources/translations").arg(qApp->applicationDirPath());
 #elif defined(PCSX2_APP_DATADIR)
@@ -137,13 +131,11 @@ void QtHost::InstallTranslator(QWidget* dialog_parent)
 	const QString base_dir = QStringLiteral("%1/translations").arg(qApp->applicationDirPath());
 #endif
 
-	// Qt base uses underscores instead of hyphens.
 	const QString qt_language = QString(language).replace(QChar('-'), QChar('_'));
 	QString base_path = QStringLiteral("%1/qt_%2.qm").arg(base_dir).arg(qt_language);
 	bool has_base_ts = QFile::exists(base_path);
 	if (!has_base_ts)
 	{
-		// Try without the country suffix.
 		const qsizetype index = language.lastIndexOf('-');
 		if (index > 0)
 		{
@@ -189,7 +181,6 @@ void QtHost::InstallTranslator(QWidget* dialog_parent)
 	else
 	{
 #ifdef PCSX2_DEVBUILD
-		// For now, until we're sure this works on all platforms, we won't block users from starting if they're missing.
 		QMessageBox::warning(nullptr, QStringLiteral("Translation Error"),
 			QStringLiteral("Failed to find translation file for language '%1':\n%2").arg(language).arg(path));
 #endif
@@ -219,7 +210,6 @@ const char* QtHost::GetDefaultLanguage()
 s32 Host::Internal::GetTranslatedStringImpl(
 	const std::string_view context, const std::string_view msg, char* tbuf, size_t tbuf_space)
 {
-	// This is really awful. Thankfully we're caching the results...
 	const std::string temp_context(context);
 	const std::string temp_msg(msg);
 	const QString translated_msg = qApp->translate(temp_context.c_str(), temp_msg.c_str());
@@ -320,14 +310,12 @@ namespace FontNames
 	static constexpr FontLoadInfo ChineseSimplified[] = {
 		{"NotoSansSC-Regular.ttf"},
 		{"Msyh.ttc"},
-		// {nullptr, "PingFang SC"}, // Freetype fails to load PingFang ttc
 		{nullptr, "Heiti SC"},
 		{nullptr, "Noto Sans CJK SC"},
 	};
 	static constexpr FontLoadInfo ChineseTraditional[] = {
 		{"NotoSansTC-Regular.ttf"},
 		{"Msjh.ttc"},
-		// {nullptr, "PingFang TC"}, // Freetype fails to load PingFang ttc
 		{nullptr, "Heiti TC"},
 		{nullptr, "Noto Sans CJK TC"},
 	};
@@ -340,9 +328,7 @@ namespace FontNames
 	static constexpr FontLoadInfo Emoji[] = {
 		{"Twemoji.Mozilla.ttf"},
 		{"Seguiemj.ttf"},
-		// {nullptr, "Apple Color Emoji"}, // Freetype can't properly render Apple Color Emoji.
 		{nullptr, "Twemoji Mozilla"},
-		// {nullptr, "Noto Color Emoji"}, // Noto Color Emoji comes in bitmap, SVG, and COLRv1 variants, none of which are supported
 		{nullptr, "Noto Emoji"},
 	};
 	static constexpr FontLoadInfo Hebrew[] = {
@@ -365,10 +351,9 @@ namespace FontNames
 		{nullptr, "Noto Sans CJK KR"},
 	};
 	static constexpr FontLoadInfo Latin[] = {
-		// We ship this with PCSX2 so no fallbacks are needed
 		{"Roboto-Regular.ttf"},
 	};
-} // namespace FontNames
+}
 
 static constexpr std::span<const FontLoadInfo> GetFontNames(FontScript script)
 {
@@ -432,7 +417,7 @@ static std::span<const u8> TryLoadFont(FontSearchContext* ctx, const FontLoadInf
 #elif defined(__APPLE__)
 	const char* name = info.face_name;
 	if (!name)
-		return {}; // Don't bother looking up file names
+		return {};
 	std::span<const u8> res = {};
 	CFStringRef cfname = CFStringCreateWithBytesNoCopy(nullptr, reinterpret_cast<const u8*>(name), strlen(name), kCFStringEncodingUTF8, false, kCFAllocatorNull);
 	CTFontDescriptorRef desc = CTFontDescriptorCreateWithNameAndSize(cfname, 0);
@@ -449,7 +434,7 @@ static std::span<const u8> TryLoadFont(FontSearchContext* ctx, const FontLoadInf
 #else
 	const char* name = info.face_name;
 	if (!name)
-		return {}; // Don't bother looking up file names
+		return {};
 	if (!*ctx)
 		*ctx = FcInitLoadConfigAndFonts();
 	std::span<const u8> res = {};
@@ -475,7 +460,6 @@ static std::span<const u8> TryLoadFont(FontSearchContext* ctx, const FontLoadInf
 
 static bool ValidateFont(const FontLoadInfo& info, std::span<const u8> data)
 {
-	// We currently don't search for any fonts that might have unsupported versions installed on some OSes
 	return true;
 }
 
@@ -542,7 +526,7 @@ static void DownloadFontIfMissing(FontSearchContext* ctx, QWidget* dialog_parent
 {
 	if (s_font_data[static_cast<size_t>(script)])
 		return;
-	const char* name = g_font_load_info[static_cast<size_t>(script)][0].file_name; // Downloadable font is always first
+	const char* name = g_font_load_info[static_cast<size_t>(script)][0].file_name;
 	std::string path = Path::Combine(EmuFolders::UserResources, GetFontPath(name));
 	if (QtHost::DownloadMissingFont(dialog_parent, name, path))
 		TryLoadFonts(ctx);
@@ -575,11 +559,9 @@ void QtHost::UpdateGlyphRangesAndClearCache(QWidget* dialog_parent, const std::s
 		return &res;
 	};
 
-	// Use latin script for its characters regardless of language
 	ImGuiManager::FontInfo* latin = AddFont(FontScript::Latin);
 	if (latin && scriptPrimary != FontScript::Latin)
 	{
-		// Ellipsis is vertically centered in e.g. Japanese fonts, use the main language's version instead of the latin one
 		static constexpr uint32_t exclude_ellipsis[] = {0x2026, 0x2026};
 		if (HasCenteredElipsis(scriptPrimary))
 			latin->exclude_ranges = exclude_ellipsis;
@@ -595,7 +577,6 @@ void QtHost::UpdateGlyphRangesAndClearCache(QWidget* dialog_parent, const std::s
 			AddFont(script);
 	}
 
-	// Called on UI thread, so we need to do this on the CPU/GS thread if it's active.
 	if (g_emu_thread)
 	{
 		Host::RunOnCPUThread([fonts = std::move(fonts)]() mutable {
@@ -615,7 +596,6 @@ void QtHost::UpdateGlyphRangesAndClearCache(QWidget* dialog_parent, const std::s
 	}
 	else
 	{
-		// Startup, safe to set directly.
 		ImGuiManager::SetFonts(std::move(fonts));
 		Host::ClearTranslationCache();
 	}

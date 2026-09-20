@@ -13,7 +13,7 @@
 #include "IconsPromptFont.h"
 
 #ifdef ENABLE_VR
-#include "VR/PadLook.h" // PCSX2-VR: head-look RX injection (poll byte 5)
+#include "VR/PadLook.h"
 #endif
 
 static const InputBindingInfo s_bindings[] = {
@@ -144,11 +144,6 @@ void PadDualshock2::ConfigLog()
 			break;
 	}
 
-	// AL: Analog Light (is it turned on right now)
-	// AB: Analog Button (is it useable or is it locked in its current state)
-	// VS: Vibration Small (how is the small vibration motor mapped)
-	// VL: Vibration Large (how is the large vibration motor mapped)
-	// RB: Response Bytes (what data is included in the controller's responses - D = Digital, A = Analog, P = Pressure)
 	Console.WriteLn(fmt::format("Pad: DS2 Config Finished - P{0}/S{1} - AL: {2} - AB: {3} - VS: {4} - VL: {5} - RB: {6} (0x{7:08X})",
 		port + 1,
 		slot + 1,
@@ -208,10 +203,6 @@ u8 PadDualshock2::Poll(u8 commandByte)
 {
 	const u32 buttons = GetButtons();
 #ifdef ENABLE_VR
-	// PCSX2-VR: device-independent recenter chord (L1+R1+L3+R3), read from the
-	// virtual pad AFTER mapping so any bound device works (ISS-015: SDL-index
-	// bindings drift). Bit indices follow this word's wire-swapped layout, the
-	// same literals the pressure cases below use. Port 0; edge logic VR-side.
 	if (this->unifiedSlot == 0)
 		VR::PadLook::UpdateRecenterChord(IsButtonBitSet(buttons, 2), IsButtonBitSet(buttons, 3),
 			IsButtonBitSet(buttons, 9), IsButtonBitSet(buttons, 10));
@@ -227,7 +218,6 @@ u8 PadDualshock2::Poll(u8 commandByte)
 		case 4:
 			this->vibrationMotors[1] = commandByte;
 
-			// Apply the vibration mapping to the motors
 			switch (this->largeMotorLastConfig)
 			{
 				case 0x00:
@@ -240,9 +230,6 @@ u8 PadDualshock2::Poll(u8 commandByte)
 					break;
 			}
 
-			// Small motor on the controller is only controlled by the LSB.
-			// Any value can be sent by the software, but only odd numbers
-			// (LSB set) will turn on the motor.
 			switch (this->smallMotorLastConfig)
 			{
 				case 0x00:
@@ -255,15 +242,11 @@ u8 PadDualshock2::Poll(u8 commandByte)
 					break;
 			}
 
-			// Order is reversed here - SetPadVibrationIntensity takes large motor first, then small. PS2 orders small motor first, large motor second.
 			InputManager::SetPadVibrationIntensity(this->unifiedSlot,
 				std::min(static_cast<float>(largeMotor) * GetVibrationScale(1) * (1.0f / 255.0f), 1.0f),
-				// Small motor on the PS2 is either on full power or zero power, it has no variable speed. If the game supplies any value here at all,
-				// the pad in turn supplies full power to the motor, or no power at all if zero.
 				std::min(static_cast<float>((smallMotor ? 0xff : 0)) * GetVibrationScale(0) * (1.0f / 255.0f), 1.0f)
 			);
 
-			// PS1 mode: If the controller is still in digital mode, it is time to stop acknowledging.
 			if (this->currentMode == Pad::Mode::DIGITAL)
 			{
 				g_Sio0.SetAcknowledge(false);
@@ -272,9 +255,6 @@ u8 PadDualshock2::Poll(u8 commandByte)
 			return buttons & 0xff;
 		case 5:
 #ifdef ENABLE_VR
-			// PCSX2-VR: blend the head-look deflection into the RX byte the game
-			// polls (port 0 only). Inert (published deflection 0) unless a game
-			// profile arms camera.padLook — see VR/PadLook.h.
 			if (this->unifiedSlot == 0)
 				return VR::PadLook::ApplyRx(GetPressure(Inputs::PAD_R_RIGHT));
 #endif
@@ -284,8 +264,6 @@ u8 PadDualshock2::Poll(u8 commandByte)
 		case 7:
 			return GetPressure(Inputs::PAD_L_RIGHT);
 		case 8:
-			// PS1 mode: If the controller reaches this byte, it is in analog mode and has irrefutably reached the last byte.
-			// There's simply nothing to check, we know it's done and time to stop acknowledgements.
 			g_Sio0.SetAcknowledge(false);
 			return GetPressure(Inputs::PAD_L_UP);
 		case 9:
@@ -347,9 +325,6 @@ u8 PadDualshock2::Config(u8 commandByte)
 		}
 	}
 	
-	// PS1 mode: Config mode would have been triggered by a prior byte in this command sequence;
-	// if we are now in config mode, check the current mode and if this is the last byte. If so,
-	// don't acknowledge.
 	if (this->isInConfig)
 	{
 		if ((this->currentMode == Pad::Mode::DIGITAL && this->commandBytesReceived == 4) || (this->currentMode == Pad::Mode::ANALOG && this->commandBytesReceived == 8))
@@ -361,7 +336,6 @@ u8 PadDualshock2::Config(u8 commandByte)
 	return 0x00;
 }
 
-// Changes the mode of the controller between digital and analog, and adjusts the analog LED accordingly.
 u8 PadDualshock2::ModeSwitch(u8 commandByte)
 {
 	switch (commandBytesReceived)
@@ -489,13 +463,6 @@ u8 PadDualshock2::Constant3(u8 commandByte)
 	}
 }
 
-// Set which byte of the poll command will correspond to a motor's power level.
-// In all known cases, games never rearrange the motors. We've hard coded pad polls
-// to always use the first vibration byte as small motor, and the second as big motor.
-// There is no reason to rearrange these. Games never rearrange these. If someone does
-// try to rearrange these, they should suffer.
-//
-// The return values for cases 3 and 4 are just to notify the pad module of what the mapping was, prior to this command.
 u8 PadDualshock2::VibrationMap(u8 commandByte)
 {
 	u8 ret = 0xff;
@@ -584,30 +551,19 @@ void PadDualshock2::Set(u32 index, float value)
 	{
 		this->rawInputs[index] = static_cast<u8>(std::clamp(value * this->axisScale * 255.0f, 0.0f, 255.0f));
 
-		//                          Left -> -- -> Right
-		// Value range :        FFFF8002 -> 0  -> 7FFE
-		// Force range :			  80 -> 0  -> 7F
-		// Normal mode : expect value 0  -> 80 -> FF
-		// Reverse mode: expect value FF -> 7F -> 0
-
-		// merge left/right or up/down into rx or ry
-
 #define MERGE(pos, neg) ((this->rawInputs[pos] != 0) ? (127u + ((this->rawInputs[pos] + 1u) / 2u)) : (127u - (this->rawInputs[neg] / 2u)))
 		if (index <= Inputs::PAD_L_LEFT)
 		{
-			// Left Stick
 			this->analogs.lx = this->analogs.lxInvert ? MERGE(Inputs::PAD_L_LEFT, Inputs::PAD_L_RIGHT) : MERGE(Inputs::PAD_L_RIGHT, Inputs::PAD_L_LEFT);
 			this->analogs.ly = this->analogs.lyInvert ? MERGE(Inputs::PAD_L_UP, Inputs::PAD_L_DOWN) : MERGE(Inputs::PAD_L_DOWN, Inputs::PAD_L_UP);
 		}
 		else
 		{
-			// Right Stick
 			this->analogs.rx = this->analogs.rxInvert ? MERGE(Inputs::PAD_R_LEFT, Inputs::PAD_R_RIGHT) : MERGE(Inputs::PAD_R_RIGHT, Inputs::PAD_R_LEFT);
 			this->analogs.ry = this->analogs.ryInvert ? MERGE(Inputs::PAD_R_UP, Inputs::PAD_R_DOWN) : MERGE(Inputs::PAD_R_DOWN, Inputs::PAD_R_UP);
 		}
 #undef MERGE
 
-		// Deadzone computation.
 		const float dz = this->axisDeadzone;
 
 		if (dz > 0.0f)
@@ -625,23 +581,18 @@ void PadDualshock2::Set(u32 index, float value)
 				posY = this->analogs.ryInvert ? MERGE_F(Inputs::PAD_R_UP, Inputs::PAD_R_DOWN) : MERGE_F(Inputs::PAD_R_DOWN, Inputs::PAD_R_UP);
 			}
 
-			// No point checking if we're at dead center (usually keyboard with no buttons pressed).
 			if (posX != 0.0f || posY != 0.0f)
 			{
-				// Compute the angle at the given position in the stick's square bounding box.
 				const float theta = std::atan2(posY, posX);
 
-				// Compute the position that the edge of the circle would be at, given the angle.
 				const float dzX = std::cos(theta) * dz;
 				const float dzY = std::sin(theta) * dz;
 
-				// We're in the deadzone if our position is less than the circle edge.
 				const bool inX = (posX < 0.0f) ? (posX > dzX) : (posX <= dzX);
 				const bool inY = (posY < 0.0f) ? (posY > dzY) : (posY <= dzY);
 				
 				if (inX && inY)
 				{
-					// In deadzone. Set to 127 (center).
 					if (index <= Inputs::PAD_L_LEFT)
 					{
 						this->analogs.lx = this->analogs.ly = 127;
@@ -667,7 +618,6 @@ void PadDualshock2::Set(u32 index, float value)
 	}
 	else
 	{
-		// Don't affect L2/R2, since they are analog on most pads.
 		const float pMod = ((this->buttons & (1u << Inputs::PAD_PRESSURE)) == 0 && !IsTriggerKey(index)) ? this->pressureModifier : 1.0f;
 		const float dzValue = (value < this->buttonDeadzone) ? 0.0f : value;
 		this->rawInputs[index] = static_cast<u8>(std::clamp(dzValue * pMod * 255.0f, 0.0f, 255.0f));
@@ -681,7 +631,6 @@ void PadDualshock2::Set(u32 index, float value)
 			this->buttons |= (1u << bitmaskMapping[index]);
 		}
 
-		// Adjust pressure of all other face buttons which are active when pressure modifier is pressed..
 		if (index == Inputs::PAD_PRESSURE)
 		{
 			const float adjustPMod = ((this->buttons & (1u << Inputs::PAD_PRESSURE)) == 0) ? this->pressureModifier : (1.0f / this->pressureModifier);
@@ -693,7 +642,6 @@ void PadDualshock2::Set(u32 index, float value)
 					continue;
 				}
 
-				// We add 0.5 here so that the round trip between 255->127->255 when applying works as expected.
 				const float add = (this->rawInputs[i] != 0) ? 0.5f : 0.0f;
 				this->rawInputs[i] = static_cast<u8>(std::clamp((static_cast<float>(this->rawInputs[i]) + add) * adjustPMod, 0.0f, 255.0f));
 			}
@@ -888,7 +836,6 @@ bool PadDualshock2::Freeze(StateWrapper& sw)
 	if (!PadBase::Freeze(sw) || !sw.DoMarker("PadDualshock2"))
 		return false;
 
-	// Private PadDualshock2 members
 	sw.Do(&analogLight);
 	sw.Do(&analogLocked);
 	sw.Do(&analogPressed);

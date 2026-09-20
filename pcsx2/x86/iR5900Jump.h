@@ -3,11 +3,6 @@
 
 #pragma once
 
-/*********************************************************
-* Jump to target                                         *
-* Format:  OP target                                     *
-*********************************************************/
-
 namespace R5900 {
 namespace Dynarec {
 namespace OpcodeImpl {
@@ -17,6 +12,6 @@ namespace OpcodeImpl {
 	void recJR();
 	void recJALR();
 
-} // namespace OpcodeImpl
-} // namespace Dynarec
-} // namespace R5900
+}
+}
+}

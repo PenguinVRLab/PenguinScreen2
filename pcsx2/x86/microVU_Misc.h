@@ -10,10 +10,6 @@ typedef xRegister32 x32;
 
 struct microVU;
 
-//------------------------------------------------------------------
-// Global Variables
-//------------------------------------------------------------------
-
 struct mVU_Globals
 {
 #define __four(val) { val, val, val, val }
@@ -70,17 +66,13 @@ static const char branchSTR[16][8] = {
 	"N/A",   "N/A",   "N/A",   "N/A"
 };
 
-//------------------------------------------------------------------
-// Helper Macros
-//------------------------------------------------------------------
+#define _Ft_ ((mVU.code >> 16) & 0x1F)
+#define _Fs_ ((mVU.code >> 11) & 0x1F)
+#define _Fd_ ((mVU.code >>  6) & 0x1F)
 
-#define _Ft_ ((mVU.code >> 16) & 0x1F) // The ft part of the instruction register
-#define _Fs_ ((mVU.code >> 11) & 0x1F) // The fs part of the instruction register
-#define _Fd_ ((mVU.code >>  6) & 0x1F) // The fd part of the instruction register
-
-#define _It_ ((mVU.code >> 16) & 0xF)  // The it part of the instruction register
-#define _Is_ ((mVU.code >> 11) & 0xF)  // The is part of the instruction register
-#define _Id_ ((mVU.code >>  6) & 0xF)  // The id part of the instruction register
+#define _It_ ((mVU.code >> 16) & 0xF)
+#define _Is_ ((mVU.code >> 11) & 0xF)
+#define _Id_ ((mVU.code >>  6) & 0xF)
 
 #define _X ((mVU.code >> 24) & 0x1)
 #define _Y ((mVU.code >> 23) & 0x1)
@@ -125,28 +117,27 @@ static const char branchSTR[16][8] = {
 #define offsetSS    ((_X) ? (0) : ((_Y) ? (4) : ((_Z) ? 8 : 12)))
 #define offsetReg   ((_X) ? (0) : ((_Y) ? (1) : ((_Z) ? 2 :  3)))
 
-#define xmmT1  xmm0 // Used for regAlloc
-#define xmmT2  xmm1 // Used for regAlloc
-#define xmmT3  xmm2 // Used for regAlloc
-#define xmmT4  xmm3 // Used for regAlloc
-#define xmmT5  xmm4 // Used for regAlloc
-#define xmmT6  xmm5 // Used for regAlloc
-#define xmmT7  xmm6 // Used for regAlloc
-#define xmmPQ  xmm15 // Holds the Value and Backup Values of P and Q regs
+#define xmmT1  xmm0
+#define xmmT2  xmm1
+#define xmmT3  xmm2
+#define xmmT4  xmm3
+#define xmmT5  xmm4
+#define xmmT6  xmm5
+#define xmmT7  xmm6
+#define xmmPQ  xmm15
 
-#define gprT1  eax // eax - Temp Reg
-#define gprT2  ecx // ecx - Temp Reg
-#define gprT1q rax // eax - Temp Reg
-#define gprT2q rcx // ecx - Temp Reg
-#define gprT1b ax  // Low 16-bit of gprT1 (eax)
-#define gprT2b cx  // Low 16-bit of gprT2 (ecx)
+#define gprT1  eax
+#define gprT2  ecx
+#define gprT1q rax
+#define gprT2q rcx
+#define gprT1b ax
+#define gprT2b cx
 
-#define gprF0 r12d // Status Flag 0
-#define gprF1 r13d // Status Flag 1
-#define gprF2 r14d // Status Flag 2
-#define gprF3 r15d // Status Flag 3
+#define gprF0 r12d
+#define gprF1 r13d
+#define gprF2 r14d
+#define gprF3 r15d
 
-// Function Params
 #define mP microVU& mVU, int recPass
 #define mV microVU& mVU
 #define mF int recPass
@@ -155,24 +146,20 @@ static const char branchSTR[16][8] = {
 typedef void Fntype_mVUrecInst(microVU& mVU, int recPass);
 typedef Fntype_mVUrecInst* Fnptr_mVUrecInst;
 
-// Function/Template Stuff
 #define mVUx (vuIndex ? microVU1 : microVU0)
 #define mVUop(opName) static void opName(mP)
 #define _mVUt template <int vuIndex>
 
-// Define Passes
-#define pass1 if (recPass == 0) // Analyze
-#define pass2 if (recPass == 1) // Recompile
-#define pass3 if (recPass == 2) // Logging
-#define pass4 if (recPass == 3) // Flag stuff
+#define pass1 if (recPass == 0)
+#define pass2 if (recPass == 1)
+#define pass3 if (recPass == 2)
+#define pass4 if (recPass == 3)
 
-// Upper Opcode Cases
-#define opCase1 if (opCase == 1) // Normal Opcodes
-#define opCase2 if (opCase == 2) // BC Opcodes
-#define opCase3 if (opCase == 3) // I  Opcodes
-#define opCase4 if (opCase == 4) // Q  Opcodes
+#define opCase1 if (opCase == 1)
+#define opCase2 if (opCase == 2)
+#define opCase3 if (opCase == 3)
+#define opCase4 if (opCase == 4)
 
-// Misc Macros...
 #define mVUcurProg   mVU.prog.cur[0]
 #define mVUblocks    mVU.prog.cur->block
 #define mVUir        mVU.prog.IRinfo
@@ -199,7 +186,7 @@ typedef Fntype_mVUrecInst* Fnptr_mVUrecInst;
 #define isBadOrEvil  (mVUlow.badBranch || mVUlow.evilBranch)
 #define isConditional (mVUlow.branch > 2 && mVUlow.branch < 9)
 #define xPC          ((iPC / 2) * 8)
-#define curI         ((u32*)mVU.regs().Micro)[iPC] //mVUcurProg.data[iPC]
+#define curI         ((u32*)mVU.regs().Micro)[iPC]
 #define setCode()    { mVU.code = curI; }
 #define bSaveAddr    (((xPC + 16) & (mVU.microMemSize-8)) / 8)
 #define shufflePQ    (((mVU.p) ? 0xb0 : 0xe0) | ((mVU.q) ? 0x01 : 0x04))
@@ -216,17 +203,13 @@ typedef Fntype_mVUrecInst* Fnptr_mVUrecInst;
 			mVUblocks[addr] = new microBlockManager(); \
 	}
 
-// Fetches the PC and instruction opcode relative to the current PC.  Used to rewind and
-// fast-forward the IR state while calculating VU pipeline conditions (branches, writebacks, etc)
 #define incPC(x)  { iPC = ((iPC + (x)) & mVU.progMemMask); mVU.code = curI; }
 #define incPC2(x) { iPC = ((iPC + (x)) & mVU.progMemMask); }
 
-// Flag Info (Set if next-block's first 4 ops will read current-block's flags)
 #define __Status (mVUregs.needExactMatch & 1)
 #define __Mac    (mVUregs.needExactMatch & 2)
 #define __Clip   (mVUregs.needExactMatch & 4)
 
-// Pass 3 Helper Macros (Used for program logging)
 #define _Fsf_String ((_Fsf_ == 3) ? "w" : ((_Fsf_ == 2) ? "z" : ((_Fsf_ == 1) ? "y" : "x")))
 #define _Ftf_String ((_Ftf_ == 3) ? "w" : ((_Ftf_ == 2) ? "z" : ((_Ftf_ == 1) ? "y" : "x")))
 #define xyzwStr(x, s) (_X_Y_Z_W == x) ? s:
@@ -241,7 +224,6 @@ typedef Fntype_mVUrecInst* Fnptr_mVUrecInst;
 #define mVUlogQ()    { mVUlog(", Q"); }
 #define mVUlogCLIP() { mVUlog("w.xyz vf%02d, vf%02dw", _Fs_, _Ft_); }
 
-// Program Logging...
 #ifdef mVUlogProg
 	#define mVUlog      ((isVU1) ? __mVULog<1> : __mVULog<0>)
 	#define mVUdumpProg __mVUdumpProgram
@@ -250,85 +232,27 @@ typedef Fntype_mVUrecInst* Fnptr_mVUrecInst;
 	#define mVUdumpProg(...) if (0) {}
 #endif
 
-//------------------------------------------------------------------
-// Optimization / Debug Options
-//------------------------------------------------------------------
+static constexpr bool doRegAlloc = true;
 
-// Reg Alloc
-static constexpr bool doRegAlloc = true; // Set to false to flush every 32bit Instruction
-// This turns off reg alloc for the most part, but reg alloc will still
-// be done within instructions... Also on doSwapOp() regAlloc is needed between
-// Lower and Upper instructions, so in this case it flushes after the full
-// 64bit instruction (lower and upper)
+static constexpr bool noFlagOpts = false;
 
-// No Flag Optimizations
-static constexpr bool noFlagOpts = false; // Set to true to disable all flag setting optimizations
-// Note: The flag optimizations this disables should all be harmless, so
-// this option is mainly just for debugging... it effectively forces mVU
-// to always update Mac and Status Flags (both sticky and non-sticky) whenever
-// an Upper Instruction updates them. It also always transfers the 4 possible
-// flag instances between blocks...
+static constexpr bool doSFlagInsts = true;
+static constexpr bool doMFlagInsts = true;
+static constexpr bool doCFlagInsts = true;
 
-// Multiple Flag Instances
-static constexpr bool doSFlagInsts = true; // Set to true to enable multiple status flag instances
-static constexpr bool doMFlagInsts = true; // Set to true to enable multiple mac    flag instances
-static constexpr bool doCFlagInsts = true; // Set to true to enable multiple clip   flag instances
-// This is the correct behavior of the VU's. Due to the pipeline of the VU's
-// there can be up to 4 different instances of values to keep track of
-// for the 3 different types of flags: Status, Mac, Clip flags.
-// Setting one of these to 0 acts as if there is only 1 instance of the
-// corresponding flag, which may be useful when debugging flag pipeline bugs.
+static constexpr bool doBranchInDelaySlot = true;
 
-// Branch in Branch Delay Slots
-static constexpr bool doBranchInDelaySlot = true; // Set to true to enable evil-branches
-// This attempts to emulate the correct behavior for branches in branch delay
-// slots. It is evil that games do this, and handling the different possible
-// cases is tricky and bug prone. If this option is disabled then the second
-// branch is treated as a NOP and effectively ignored.
+static constexpr bool doConstProp = false;
 
-// Constant Propagation
-static constexpr bool doConstProp = false; // Set to true to turn on vi15 const propagation
-// Enables Constant Propagation for Jumps based on vi15 'link-register'
-// allowing us to know many indirect jump target addresses.
-// Makes GoW a lot slower due to extra recompilation time and extra code-gen!
+static constexpr bool doJumpCaching = true;
 
-// Indirect Jump Caching
-static constexpr bool doJumpCaching = true; // Set to true to enable jump caching
-// Indirect jumps (JR/JALR) will remember the entry points to their previously
-// jumped-to addresses. This allows us to skip the microBlockManager::search()
-// routine that is performed every indirect jump in order to find a block within a
-// program that matches the correct pipeline state.
+static constexpr bool doJumpAsSameProgram = false;
 
-// Indirect Jumps are part of same cached microProgram
-static constexpr bool doJumpAsSameProgram = false; // Set to true to treat jumps as same program
-// Enabling this treats indirect jumps (JR/JALR) as part of the same microProgram
-// when determining the valid ranges for the microProgram cache. Disabling this
-// counts indirect jumps as separate cached microPrograms which generally leads
-// to more microPrograms being cached, but the programs created are smaller and
-// the overall cache usage ends up being more optimal; it can also help prevent
-// constant recompilation problems in certain games.
-// Note: You MUST disable doJumpCaching if you enable this option.
-
-// Handling of D-Bit in Micro Programs
 static constexpr bool doDBitHandling = false;
-// This flag shouldn't be enabled in released versions of games. Any games which
-// need this method of pausing the VU should be using the T-Bit instead, however
-// this could prove useful for VU debugging.
 
-// Whole program comparison on search
 static constexpr bool doWholeProgCompare = false;
-// This shouldn't be needed and could inflate program generation.
-// Compares the entire VU memory with the stored micro program's memory, regardless of if it's used.
-// Generally slower but may be useful for debugging.
 
-//------------------------------------------------------------------
-// Speed Hacks (can cause infinite loops, SPS, Black Screens, etc...)
-//------------------------------------------------------------------
-
-// Status Flag Speed Hack
 #define CHECK_VU_FLAGHACK (EmuConfig.Speedhacks.vuFlagHack)
-// This hack only updates the Status Flag on blocks that will read it.
-// Most blocks do not read status flags, so this is a big speedup.
 
 extern void mVUmergeRegs(const xmm& dest, const xmm& src, int xyzw, bool modXYZW = false);
 extern void mVUsaveReg(const xmm& reg, xAddressVoid ptr, int xyzw, bool modXYZW);

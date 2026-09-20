@@ -18,7 +18,6 @@ concept MemoryAccessType = std::is_same_v<Value, u8> || std::is_same_v<Value, s8
                            std::is_same_v<Value, u128> || std::is_same_v<Value, s128> ||
                            std::is_same_v<Value, float> || std::is_same_v<Value, double>;
 
-/// Interface for reading/writing guest memory.
 class MemoryInterface
 {
 public:

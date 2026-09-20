@@ -19,20 +19,6 @@ namespace
 	struct CacheTag
 	{
 		uptr rawValue;
-		// You are able to configure a TLB entry with non-existant physical address without causing a bus error.
-		// When this happens, the cache still fills with the data and when it gets evicted the data is lost.
-		// We don't emulate memory access on a logic level, so we need to ensure that we don't try to load/store to a non-existant physical address.
-		// This fixes the Find My Own Way demo.
-
-		// The lower parts of a cache tags structure is as follows:
-		// 31 - 12: The physical address cache tag.
-		// 11: Used by PCSX2 to indicate if the physical address is valid.
-		// 10 - 7: Unused.
-		// 6: Dirty flag.
-		// 5: Valid flag.
-		// 4: LRF flag - least recently filled flag.
-		// 3: Lock flag.
-		// 2-0: Unused.
 
 		enum Flags : decltype(rawValue)
 		{
@@ -130,7 +116,6 @@ namespace
 			tag.setAddr(ppf);
 			if (!tag.isValidPFN())
 			{
-				// Reading from invalid physical addresses seems to return 0 on hardware
 				std::memset(&data, 0, sizeof(data));
 			}
 			else
@@ -171,7 +156,7 @@ namespace
 	};
 
 	static Cache cache = {};
-} // namespace
+}
 
 void resetCache()
 {
@@ -223,14 +208,12 @@ static int getFreeCache(u32 mem, int* way, bool validPFN)
 		[[unlikely]]
 		if (set.tags[*way].isLocked())
 		{
-			// Check the other way
 			if (set.tags[*way ^ 1].isLocked())
 			{
 				Console.Error("CACHE: SECOND WAY IS LOCKED.", setIdx, *way);
 			}
 			else
 			{
-				// Force the unlocked way
 				*way ^= 1;
 			}
 		}
@@ -241,7 +224,6 @@ static int getFreeCache(u32 mem, int* way, bool validPFN)
 		[[unlikely]]
 		if (set.tags[newWay].isLocked())
 		{
-			// If the new way is locked, we force the unlocked way, ignoring the lrf bits.
 			newWay = newWay ^ 1;
 			[[unlikely]]
 			if (set.tags[newWay].isLocked())
@@ -385,30 +367,29 @@ namespace R5900
 			void CACHE()
 			{
 				u32 addr = cpuRegs.GPR.r[_Rs_].UL[0] + _Imm_;
-				// CACHE_LOG("cpuRegs.GPR.r[_Rs_].UL[0] = %x, IMM = %x RT = %x", cpuRegs.GPR.r[_Rs_].UL[0], _Imm_, _Rt_);
 
 				switch (_Rt_)
 				{
-					case 0x1a: //DHIN (Data Cache Hit Invalidate)
+					case 0x1a:
 						doCacheHitOp(addr, "DHIN", [](CacheLine line) {
 							line.clear();
 						});
 						break;
 
-					case 0x18: //DHWBIN (Data Cache Hit WriteBack with Invalidate)
+					case 0x18:
 						doCacheHitOp(addr, "DHWBIN", [](CacheLine line) {
 							line.writeBackIfNeeded();
 							line.clear();
 						});
 						break;
 
-					case 0x1c: //DHWOIN (Data Cache Hit WriteBack Without Invalidate)
+					case 0x1c:
 						doCacheHitOp(addr, "DHWOIN", [](CacheLine line) {
 							line.writeBackIfNeeded();
 						});
 						break;
 
-					case 0x16: //DXIN (Data Cache Index Invalidate)
+					case 0x16:
 					{
 						const int index = cache.setIdxFor(addr);
 						const int way = addr & 0x1;
@@ -420,7 +401,7 @@ namespace R5900
 						break;
 					}
 
-					case 0x11: //DXLDT (Data Cache Load Data into TagLo)
+					case 0x11:
 					{
 						const int index = cache.setIdxFor(addr);
 						const int way = addr & 0x1;
@@ -432,17 +413,14 @@ namespace R5900
 						break;
 					}
 
-					case 0x10: //DXLTG (Data Cache Load Tag into TagLo)
+					case 0x10:
 					{
 						const int index = (addr >> 6) & 0x3F;
 						const int way = addr & 0x1;
 						CacheLine line = cache.lineAt(index, way);
 
-						// DXLTG demands that SYNC.L is called before this command, which forces the cache to write back, so presumably games are checking the cache has updated the memory
-						// For speed, we will do it here.
 						line.writeBackIfNeeded();
 
-						// Our tags don't contain PS2 paddrs (instead they contain x86 addrs)
 						cpuRegs.CP0.n.TagLo = line.tag.flags();
 
 						CACHE_LOG("CACHE DXLTG addr %x, index %d, way %d, DATA %x OP %x ", addr, index, way, cpuRegs.CP0.n.TagLo, cpuRegs.code);
@@ -450,7 +428,7 @@ namespace R5900
 						break;
 					}
 
-					case 0x13: //DXSDT (Data Cache Store 32bits from TagLo)
+					case 0x13:
 					{
 						const int index = (addr >> 6) & 0x3F;
 						const int way = addr & 0x1;
@@ -462,7 +440,7 @@ namespace R5900
 						break;
 					}
 
-					case 0x12: //DXSTG (Data Cache Store Tag from TagLo)
+					case 0x12:
 					{
 						const int index = (addr >> 6) & 0x3F;
 						const int way = addr & 0x1;
@@ -476,7 +454,7 @@ namespace R5900
 						break;
 					}
 
-					case 0x14: //DXWBIN (Data Cache Index WriteBack Invalidate)
+					case 0x14:
 					{
 						const int index = (addr >> 6) & 0x3F;
 						const int way = addr & 0x1;
@@ -488,15 +466,13 @@ namespace R5900
 						break;
 					}
 
-					case 0x7: //IXIN (Instruction Cache Index Invalidate)
+					case 0x7:
 					{
-						//Not Implemented as we do not have instruction cache
 						break;
 					}
 
-					case 0xC: //BFH (BTAC Flush)
+					case 0xC:
 					{
-						//Not Implemented as we do not cache Branch Target Addresses.
 						break;
 					}
 
@@ -505,7 +481,7 @@ namespace R5900
 						break;
 				}
 			}
-		} // end namespace OpcodeImpl
+		}
 
-	} // namespace Interpreter
-} // namespace R5900
+	}
+}

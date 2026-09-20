@@ -45,8 +45,6 @@ static std::pair<QColor, QColor> pickNiceColours(const QPalette& palette, bool h
 	return {fill, outline};
 }
 
-// *****************************************************************************
-
 DockDropIndicatorProxy::DockDropIndicatorProxy(KDDockWidgets::Core::ClassicDropIndicatorOverlay* classic_indicators)
 	: m_classic_indicators(classic_indicators)
 {
@@ -76,7 +74,6 @@ QPoint DockDropIndicatorProxy::posForIndicator(KDDockWidgets::DropLocation loc) 
 
 void DockDropIndicatorProxy::updatePositions()
 {
-	// Check if a compositor is running whenever a drag starts.
 	recreateWindowIfNecessary();
 
 	window()->updatePositions();
@@ -180,8 +177,6 @@ void DockDropIndicatorProxy::recreateWindowIfNecessary()
 	}
 }
 
-// *****************************************************************************
-
 static const constexpr int IND_LEFT = 0;
 static const constexpr int IND_TOP = 1;
 static const constexpr int IND_RIGHT = 2;
@@ -222,15 +217,15 @@ DockDropIndicatorWindow::DockDropIndicatorWindow(
 	: QWidget(parentForIndicatorWindow(classic_indicators), flagsForIndicatorWindow())
 	, m_classic_indicators(classic_indicators)
 	, m_indicators({
-		  /* [IND_LEFT] = */ new DockDropIndicator(KDDockWidgets::DropLocation_Left, this),
-		  /* [IND_TOP] = */ new DockDropIndicator(KDDockWidgets::DropLocation_Top, this),
-		  /* [IND_RIGHT] = */ new DockDropIndicator(KDDockWidgets::DropLocation_Right, this),
-		  /* [IND_BOTTOM] = */ new DockDropIndicator(KDDockWidgets::DropLocation_Bottom, this),
-		  /* [IND_CENTER] = */ new DockDropIndicator(KDDockWidgets::DropLocation_Center, this),
-		  /* [IND_OUTER_LEFT] = */ new DockDropIndicator(KDDockWidgets::DropLocation_OutterLeft, this),
-		  /* [IND_OUTER_TOP] = */ new DockDropIndicator(KDDockWidgets::DropLocation_OutterTop, this),
-		  /* [IND_OUTER_RIGHT] = */ new DockDropIndicator(KDDockWidgets::DropLocation_OutterRight, this),
-		  /* [IND_OUTER_BOTTOM] = */ new DockDropIndicator(KDDockWidgets::DropLocation_OutterBottom, this),
+ new DockDropIndicator(KDDockWidgets::DropLocation_Left, this),
+ new DockDropIndicator(KDDockWidgets::DropLocation_Top, this),
+ new DockDropIndicator(KDDockWidgets::DropLocation_Right, this),
+ new DockDropIndicator(KDDockWidgets::DropLocation_Bottom, this),
+ new DockDropIndicator(KDDockWidgets::DropLocation_Center, this),
+ new DockDropIndicator(KDDockWidgets::DropLocation_OutterLeft, this),
+ new DockDropIndicator(KDDockWidgets::DropLocation_OutterTop, this),
+ new DockDropIndicator(KDDockWidgets::DropLocation_OutterRight, this),
+ new DockDropIndicator(KDDockWidgets::DropLocation_OutterBottom, this),
 	  })
 {
 	setWindowFlag(Qt::FramelessWindowHint, true);
@@ -347,8 +342,6 @@ void DockDropIndicatorWindow::resizeEvent(QResizeEvent* ev)
 	updatePositions();
 }
 
-// *****************************************************************************
-
 DockDropIndicator::DockDropIndicator(KDDockWidgets::DropLocation loc, QWidget* parent)
 	: QWidget(parent)
 	, location(loc)
@@ -447,8 +440,6 @@ void DockDropIndicator::paintEvent(QPaintEvent* event)
 	painter.drawPolygon(arrow);
 }
 
-// *****************************************************************************
-
 std::string DockSegmentedDropIndicatorOverlay::s_indicator_style;
 
 DockSegmentedDropIndicatorOverlay::DockSegmentedDropIndicatorOverlay(
@@ -501,7 +492,6 @@ void DockSegmentedDropIndicatorOverlay::drawSegmented()
 
 		int margin = KDDockWidgets::Core::SegmentedDropIndicatorOverlay::s_segmentGirth * 2;
 
-		// Make sure the rectangles don't intersect with each other.
 		QRect rect;
 		switch (location)
 		{

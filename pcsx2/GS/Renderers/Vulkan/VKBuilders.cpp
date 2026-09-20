@@ -265,20 +265,18 @@ void Vulkan::GraphicsPipelineBuilder::Clear()
 	m_line_rasterization_state = {};
 	m_line_rasterization_state.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_LINE_STATE_CREATE_INFO_EXT;
 
-	// set defaults
 	SetNoCullRasterizationState();
 	SetNoDepthTestState();
 	SetNoBlendingState();
 	SetPrimitiveTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 
-	// have to be specified even if dynamic
 	SetViewport(0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f);
 	SetScissorRect(0, 0, 1, 1);
 	SetMultisamples(VK_SAMPLE_COUNT_1_BIT);
 }
 
 VkPipeline Vulkan::GraphicsPipelineBuilder::Create(
-	VkDevice device, VkPipelineCache pipeline_cache, bool clear /* = true */)
+	VkDevice device, VkPipelineCache pipeline_cache, bool clear )
 {
 	const GSShaderCompileIndicator::CompileTimer compile_timer;
 
@@ -321,7 +319,7 @@ void Vulkan::GraphicsPipelineBuilder::SetShaderStage(
 }
 
 void Vulkan::GraphicsPipelineBuilder::AddVertexBuffer(
-	u32 binding, u32 stride, VkVertexInputRate input_rate /*= VK_VERTEX_INPUT_RATE_VERTEX*/)
+	u32 binding, u32 stride, VkVertexInputRate input_rate )
 {
 	pxAssert(m_vertex_input_state.vertexAttributeDescriptionCount < MAX_VERTEX_BUFFERS);
 
@@ -351,7 +349,7 @@ void Vulkan::GraphicsPipelineBuilder::AddVertexAttribute(u32 location, u32 bindi
 }
 
 void Vulkan::GraphicsPipelineBuilder::SetPrimitiveTopology(
-	VkPrimitiveTopology topology, bool enable_primitive_restart /*= false*/)
+	VkPrimitiveTopology topology, bool enable_primitive_restart )
 {
 	m_input_assembly.topology = topology;
 	m_input_assembly.primitiveRestartEnable = enable_primitive_restart;
@@ -435,7 +433,7 @@ void Vulkan::GraphicsPipelineBuilder::AddBlendAttachment(bool blend_enable, VkBl
 	VkBlendFactor dst_factor, VkBlendOp op, VkBlendFactor alpha_src_factor, VkBlendFactor alpha_dst_factor,
 	VkBlendOp alpha_op,
 	VkColorComponentFlags
-		write_mask /* = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT */)
+		write_mask )
 {
 	pxAssert(m_blend_state.attachmentCount < MAX_ATTACHMENTS);
 
@@ -458,7 +456,7 @@ void Vulkan::GraphicsPipelineBuilder::SetBlendAttachment(u32 attachment, bool bl
 	VkBlendFactor dst_factor, VkBlendOp op, VkBlendFactor alpha_src_factor, VkBlendFactor alpha_dst_factor,
 	VkBlendOp alpha_op,
 	VkColorComponentFlags
-		write_mask /*= VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT*/)
+		write_mask )
 {
 	pxAssert(attachment < MAX_ATTACHMENTS);
 
@@ -589,7 +587,7 @@ void Vulkan::ComputePipelineBuilder::Clear()
 }
 
 VkPipeline Vulkan::ComputePipelineBuilder::Create(
-	VkDevice device, VkPipelineCache pipeline_cache /*= VK_NULL_HANDLE*/, bool clear /*= true*/)
+	VkDevice device, VkPipelineCache pipeline_cache , bool clear )
 {
 	const GSShaderCompileIndicator::CompileTimer compile_timer;
 
@@ -650,7 +648,7 @@ void Vulkan::SamplerBuilder::Clear()
 	m_ci.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
 }
 
-VkSampler Vulkan::SamplerBuilder::Create(VkDevice device, bool clear /* = true */)
+VkSampler Vulkan::SamplerBuilder::Create(VkDevice device, bool clear )
 {
 	VkSampler sampler;
 	VkResult res = vkCreateSampler(device, &m_ci, nullptr, &sampler);
@@ -678,7 +676,7 @@ void Vulkan::SamplerBuilder::SetAddressMode(VkSamplerAddressMode u, VkSamplerAdd
 }
 
 void Vulkan::SamplerBuilder::SetPointSampler(
-	VkSamplerAddressMode address_mode /* = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER */)
+	VkSamplerAddressMode address_mode )
 {
 	Clear();
 	SetFilter(VK_FILTER_NEAREST, VK_FILTER_NEAREST, VK_SAMPLER_MIPMAP_MODE_NEAREST);
@@ -686,7 +684,7 @@ void Vulkan::SamplerBuilder::SetPointSampler(
 }
 
 void Vulkan::SamplerBuilder::SetLinearSampler(
-	bool mipmaps, VkSamplerAddressMode address_mode /* = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER */)
+	bool mipmaps, VkSamplerAddressMode address_mode )
 {
 	Clear();
 	SetFilter(
@@ -711,7 +709,7 @@ void Vulkan::DescriptorSetUpdateBuilder::Clear()
 	m_num_writes = 0;
 }
 
-void Vulkan::DescriptorSetUpdateBuilder::Update(VkDevice device, bool clear /*= true*/)
+void Vulkan::DescriptorSetUpdateBuilder::Update(VkDevice device, bool clear )
 {
 	pxAssert(m_num_writes > 0);
 
@@ -722,7 +720,7 @@ void Vulkan::DescriptorSetUpdateBuilder::Update(VkDevice device, bool clear /*= 
 }
 
 void Vulkan::DescriptorSetUpdateBuilder::PushUpdate(
-	VkCommandBuffer cmdbuf, VkPipelineBindPoint bind_point, VkPipelineLayout layout, u32 set, bool clear /*= true*/)
+	VkCommandBuffer cmdbuf, VkPipelineBindPoint bind_point, VkPipelineLayout layout, u32 set, bool clear )
 {
 	pxAssert(m_num_writes > 0);
 
@@ -733,7 +731,7 @@ void Vulkan::DescriptorSetUpdateBuilder::PushUpdate(
 }
 
 void Vulkan::DescriptorSetUpdateBuilder::AddImageDescriptorWrite(VkDescriptorSet set, u32 binding, VkImageView view,
-	VkImageLayout layout /*= VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL*/, bool storage_image /*= false*/)
+	VkImageLayout layout , bool storage_image )
 {
 	pxAssert(m_num_writes < MAX_WRITES && m_num_image_infos < MAX_IMAGE_INFOS);
 
@@ -792,7 +790,7 @@ void Vulkan::DescriptorSetUpdateBuilder::AddSamplerDescriptorWrites(
 }
 
 void Vulkan::DescriptorSetUpdateBuilder::AddCombinedImageSamplerDescriptorWrite(VkDescriptorSet set, u32 binding,
-	VkImageView view, VkSampler sampler, VkImageLayout layout /*= VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL*/)
+	VkImageView view, VkSampler sampler, VkImageLayout layout )
 {
 	pxAssert(m_num_writes < MAX_WRITES && m_num_image_infos < MAX_IMAGE_INFOS);
 
@@ -812,7 +810,7 @@ void Vulkan::DescriptorSetUpdateBuilder::AddCombinedImageSamplerDescriptorWrite(
 
 void Vulkan::DescriptorSetUpdateBuilder::AddCombinedImageSamplerDescriptorWrites(VkDescriptorSet set, u32 binding,
 	const VkImageView* views, const VkSampler* samplers, u32 num_views,
-	VkImageLayout layout /* = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL */)
+	VkImageLayout layout )
 {
 	pxAssert(m_num_writes < MAX_WRITES && (m_num_image_infos + num_views) < MAX_IMAGE_INFOS);
 
@@ -870,7 +868,7 @@ void Vulkan::DescriptorSetUpdateBuilder::AddBufferViewDescriptorWrite(
 }
 
 void Vulkan::DescriptorSetUpdateBuilder::AddInputAttachmentDescriptorWrite(
-	VkDescriptorSet set, u32 binding, VkImageView view, VkImageLayout layout /*= VK_IMAGE_LAYOUT_GENERAL*/)
+	VkDescriptorSet set, u32 binding, VkImageView view, VkImageLayout layout )
 {
 	pxAssert(m_num_writes < MAX_WRITES && m_num_image_infos < MAX_IMAGE_INFOS);
 
@@ -889,7 +887,7 @@ void Vulkan::DescriptorSetUpdateBuilder::AddInputAttachmentDescriptorWrite(
 }
 
 void Vulkan::DescriptorSetUpdateBuilder::AddStorageImageDescriptorWrite(
-	VkDescriptorSet set, u32 binding, VkImageView view, VkImageLayout layout /*= VK_IMAGE_LAYOUT_GENERAL*/)
+	VkDescriptorSet set, u32 binding, VkImageView view, VkImageLayout layout )
 {
 	pxAssert(m_num_writes < MAX_WRITES && m_num_image_infos < MAX_IMAGE_INFOS);
 
@@ -919,7 +917,7 @@ void Vulkan::FramebufferBuilder::Clear()
 	m_images = {};
 }
 
-VkFramebuffer Vulkan::FramebufferBuilder::Create(VkDevice device, bool clear /*= true*/)
+VkFramebuffer Vulkan::FramebufferBuilder::Create(VkDevice device, bool clear )
 {
 	VkFramebuffer fb;
 	VkResult res = vkCreateFramebuffer(device, &m_ci, nullptr, &fb);
@@ -974,7 +972,7 @@ void Vulkan::RenderPassBuilder::Clear()
 	m_view_mask = 0;
 }
 
-VkRenderPass Vulkan::RenderPassBuilder::Create(VkDevice device, bool clear /*= true*/)
+VkRenderPass Vulkan::RenderPassBuilder::Create(VkDevice device, bool clear )
 {
 	VkRenderPass rp;
 	VkResult res = vkCreateRenderPass(device, &m_ci, nullptr, &rp);
@@ -1051,8 +1049,6 @@ void Vulkan::RenderPassBuilder::AddSubpassDepthAttachment(u32 subpass, u32 attac
 
 void Vulkan::RenderPassBuilder::SetMultiview(u32 view_count)
 {
-	// One view mask shared as both the view mask and the correlation mask (all views are
-	// spatially coherent). Stored in members so the pointers survive until Create().
 	m_view_mask = (view_count >= 32) ? 0xFFFFFFFFu : ((1u << view_count) - 1u);
 
 	m_multiview = {};
@@ -1076,7 +1072,7 @@ void Vulkan::BufferViewBuilder::Clear()
 	m_ci.sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO;
 }
 
-VkBufferView Vulkan::BufferViewBuilder::Create(VkDevice device, bool clear /*= true*/)
+VkBufferView Vulkan::BufferViewBuilder::Create(VkDevice device, bool clear )
 {
 	VkBufferView bv;
 	VkResult res = vkCreateBufferView(device, &m_ci, nullptr, &bv);

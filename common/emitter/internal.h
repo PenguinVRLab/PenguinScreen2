@@ -60,16 +60,6 @@ namespace x86Emitter
 	}
 
 
-	//////////////////////////////////////////////////////////////////////////////////////////
-	// emitter helpers for xmm instruction with prefixes, most of which are using
-	// the basic opcode format (items inside braces denote optional or conditional
-	// emission):
-	//
-	//   [Prefix] / 0x0f / [OpcodePrefix] / Opcode / ModRM+[SibSB]
-	//
-	// Prefixes are typically 0x66, 0xf2, or 0xf3.  OpcodePrefixes are either 0x38 or
-	// 0x3a [and other value will result in assertion failue].
-	//
 	template <typename T1, typename T2>
 	__emitinline void xOpWrite0F(u8 prefix, u16 opcode, const T1& param1, const T2& param2)
 	{
@@ -107,7 +97,6 @@ namespace x86Emitter
 		xOpWrite0F(0, opcode, param1, param2, imm8);
 	}
 
-	// VEX 2 Bytes Prefix
 	template <typename T1, typename T2, typename T3>
 	__emitinline void xOpWriteC5(u8 prefix, u8 opcode, const T1& param1, const T2& param2, const T3& param3)
 	{
@@ -118,7 +107,6 @@ namespace x86Emitter
 		u8 nR = reg.IsExtended() ? 0x00 : 0x80;
 		u8 L;
 
-		// Needed for 256-bit movemask.
 		if constexpr (std::is_same_v<T3, xRegisterSSE>)
 			L = param3.IsWideSIMD() ? 4 : 0;
 		else
@@ -138,7 +126,6 @@ namespace x86Emitter
 		EmitSibMagic(param1, param3);
 	}
 
-	// VEX 3 Bytes Prefix
 	template <typename T1, typename T2, typename T3>
 	__emitinline void xOpWriteC4(u8 prefix, u8 mb_prefix, u8 opcode, const T1& param1, const T2& param2, const T3& param3, int w = -1)
 	{
@@ -149,10 +136,10 @@ namespace x86Emitter
 
 		u8 nR = reg.IsExtended() ? 0x00 : 0x80;
 		u8 nB = param3.IsExtended() ? 0x00 : 0x20;
-		u8 nX = 0x40; // likely unused so hardwired to disabled
+		u8 nX = 0x40;
 		u8 L = reg.IsWideSIMD() ? 4 : 0;
-		u8 W = (w == -1) ? (reg.GetOperandSize() == 8 ? 0x80 : 0) : // autodetect the size
-                           0x80 * w; // take directly the W value
+		u8 W = (w == -1) ? (reg.GetOperandSize() == 8 ? 0x80 : 0) :
+                           0x80 * w;
 
 		u8 nv = (~param2.GetId() & 0xF) << 3;
 
@@ -184,9 +171,6 @@ namespace x86Emitter
 		EmitVEX(info, dst, src1.GetId(), src2, extraRipOffset);
 	}
 
-	// Emitter helpers for SIMD operations
-	// These will dispatch to either SSE or AVX implementations
-
 	void EmitSIMDImpl(SIMDInstructionInfo info, const xRegisterBase& dst, const xRegisterBase& src1, int extraRipOffset);
 	void EmitSIMDImpl(SIMDInstructionInfo info, const xRegisterBase& dst, const xRegisterBase& src1, const xRegisterBase& src2, int extraRipOffset);
 	void EmitSIMDImpl(SIMDInstructionInfo info, const xRegisterBase& dst, const xRegisterBase& src1, const xIndirectVoid& src2, int extraRipOffset);
@@ -213,4 +197,4 @@ namespace x86Emitter
 		EmitSIMDImpl(info, dst, src1, src2, 1);
 		xWrite8(imm);
 	}
-} // namespace x86Emitter
+}

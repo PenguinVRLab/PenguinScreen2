@@ -15,14 +15,11 @@
 #define xmmRow vixl::aarch64::q6
 #define xmmTemp vixl::aarch64::q7
 
-// --------------------------------------------------------------------------------------
-//  VifUnpackSSE_Base
-// --------------------------------------------------------------------------------------
 class VifUnpackNEON_Base
 {
 public:
-	bool usn; // unsigned flag
-	bool doMask; // masking write enable flag
+	bool usn;
+	bool doMask;
 	int UnpkLoopIteration;
 	int UnpkNoOfIterations;
 	int IsAligned;
@@ -70,9 +67,6 @@ protected:
 	virtual void xUPK_V4_5() const;
 };
 
-// --------------------------------------------------------------------------------------
-//  VifUnpackSSE_Simple
-// --------------------------------------------------------------------------------------
 class VifUnpackNEON_Simple : public VifUnpackNEON_Base
 {
 	typedef VifUnpackNEON_Base _parent;
@@ -92,27 +86,24 @@ protected:
 	virtual void doMaskWrite(const vixl::aarch64::VRegister& regX) const;
 };
 
-// --------------------------------------------------------------------------------------
-//  VifUnpackSSE_Dynarec
-// --------------------------------------------------------------------------------------
 class VifUnpackNEON_Dynarec : public VifUnpackNEON_Base
 {
 	typedef VifUnpackNEON_Base _parent;
 
 public:
 	bool isFill;
-	int doMode; // two bit value representing difference mode
+	int doMode;
 	bool skipProcessing;
 	bool inputMasked;
 
 protected:
-	const nVifStruct& v; // vif0 or vif1
-	const nVifBlock& vB; // some pre-collected data from VifStruct
-	int vCL; // internal copy of vif->cl
+	const nVifStruct& v;
+	const nVifBlock& vB;
+	int vCL;
 
 public:
 	VifUnpackNEON_Dynarec(const nVifStruct& vif_, const nVifBlock& vifBlock_);
-	VifUnpackNEON_Dynarec(const VifUnpackNEON_Dynarec& src) // copy constructor
+	VifUnpackNEON_Dynarec(const VifUnpackNEON_Dynarec& src)
 		: _parent(src)
 		, v(src.v)
 		, vB(src.vB)

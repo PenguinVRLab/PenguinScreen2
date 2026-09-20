@@ -47,7 +47,6 @@
 #include <vector>
 
 #ifdef ENABLE_RAINTEGRATION
-// RA_Interface ends up including windows.h, with its silly macros.
 #include "common/RedtapeWindows.h"
 #include "RA_Interface.h"
 #endif
@@ -72,10 +71,8 @@ namespace Achievements
 
 	static constexpr size_t URL_BUFFER_SIZE = 256;
 
-	// Some API calls are really slow. Set a longer timeout.
 	static constexpr float SERVER_CALL_TIMEOUT = 60.0f;
 
-	// Chrome uses 10 server calls per domain, seems reasonable.
 	static constexpr u32 MAX_CONCURRENT_SERVER_CALLS = 10;
 
 	namespace
@@ -110,7 +107,7 @@ namespace Achievements
 			Common::Timer show_hide_time;
 			bool active;
 		};
-	} // namespace
+	}
 
 	static void ReportError(const std::string_view sv);
 	template <typename... T>
@@ -133,7 +130,6 @@ namespace Achievements
 	static void UpdateGameSummary();
 	static void DownloadImage(std::string url, std::string cache_filename);
 
-	// Size of the EE physical memory exposed to RetroAchievements.
 	static u32 GetExposedEEMemorySize();
 
 	static bool CreateClient(rc_client_t** client, std::unique_ptr<HTTPDownloader>* http);
@@ -245,7 +241,7 @@ namespace Achievements
 	static std::vector<LeaderboardTrackerIndicator> s_active_leaderboard_trackers;
 	static std::vector<AchievementChallengeIndicator> s_active_challenge_indicators;
 	static std::optional<AchievementProgressIndicator> s_active_progress_indicator;
-} // namespace Achievements
+}
 
 
 std::unique_lock<std::recursive_mutex> Achievements::GetLock()
@@ -294,7 +290,7 @@ std::string_view Achievements::GetELFNameForHash(const std::string& elf_path)
 	if (start == std::string::npos)
 		start = 0;
 	else
-		start++; // skip backslash
+		start++;
 
 	std::string::size_type end = elf_path.rfind(';');
 	if (end == std::string::npos)
@@ -308,7 +304,6 @@ std::string_view Achievements::GetELFNameForHash(const std::string& elf_path)
 
 std::string Achievements::GetGameHash(const std::string& elf_path)
 {
-	// this.. really shouldn't be invalid
 	const std::string_view name_for_hash = GetELFNameForHash(elf_path);
 	if (name_for_hash.empty())
 		return {};
@@ -321,7 +316,6 @@ std::string Achievements::GetGameHash(const std::string& elf_path)
 		return {};
 	}
 
-	// See rcheevos hash.c - rc_hash_ps2().
 	const u32 MAX_HASH_SIZE = 64 * 1024 * 1024;
 	const u32 hash_size = std::min<u32>(elfo.GetSize(), MAX_HASH_SIZE);
 	pxAssert(hash_size <= elfo.GetSize());
@@ -440,7 +434,6 @@ bool Achievements::Initialize()
 	if (!CreateClient(&s_client, &s_http_downloader))
 		return false;
 
-	// Hardcore starts off. We enable it on first boot.
 	s_hardcore_mode = false;
 
 	rc_client_set_event_handler(s_client, ClientEventHandler);
@@ -450,13 +443,11 @@ bool Achievements::Initialize()
 	rc_client_set_unofficial_enabled(s_client, EmuConfig.Achievements.UnofficialTestMode);
 	rc_client_set_spectator_mode_enabled(s_client, EmuConfig.Achievements.SpectatorMode);
 
-	// Begin disc identification early, before the login finishes.
 	if (VMManager::HasValidVM())
 		IdentifyGame(VMManager::GetDiscCRC(), VMManager::GetCurrentCRC());
 
 	const std::string username = Host::GetBaseStringSettingValue("Achievements", "Username");
 
-	// Check the base settings file to see if the token is defined inside. Move if found.
 	std::string oldToken = Host::GetBaseStringSettingValue("Achievements", "Token");
 	if (!oldToken.empty())
 	{
@@ -481,11 +472,9 @@ bool Achievements::Initialize()
 			rc_client_begin_login_with_token(s_client, username.c_str(), api_token.c_str(), ClientLoginWithTokenCallback, nullptr);
 	}
 
-	// Hardcore mode isn't enabled when achievements first starts, if a game is already running.
 	if (VMManager::HasValidVM() && IsLoggedInOrLoggingIn() && EmuConfig.Achievements.HardcoreMode)
 		DisplayHardcoreDeferredMessage();
 
-	// Set initial notification position
 	UpdateNotificationPosition();
 
 	return true;
@@ -547,55 +536,52 @@ void Achievements::DestroyClient(rc_client_t** client, std::unique_ptr<HTTPDownl
 
 void Achievements::UpdateNotificationPosition()
 {
-	// Set notification position based on achievement settings
 	float horizontal_position, vertical_position, direction;
 
-	// Determine horizontal alignment
 	switch (EmuConfig.Achievements.NotificationPosition)
 	{
 		case OsdOverlayPos::TopLeft:
 		case OsdOverlayPos::CenterLeft:
 		case OsdOverlayPos::BottomLeft:
-			horizontal_position = 0.0f; // Left
+			horizontal_position = 0.0f;
 			break;
 
 		case OsdOverlayPos::TopCenter:
 		case OsdOverlayPos::Center:
 		case OsdOverlayPos::BottomCenter:
-			horizontal_position = 0.5f; // Center
+			horizontal_position = 0.5f;
 			break;
 
 		case OsdOverlayPos::TopRight:
 		case OsdOverlayPos::CenterRight:
 		case OsdOverlayPos::BottomRight:
 		default:
-			horizontal_position = 1.0f; // Right
+			horizontal_position = 1.0f;
 			break;
 	}
 
-	// Determine vertical alignment and stacking direction
 	switch (EmuConfig.Achievements.NotificationPosition)
 	{
 		case OsdOverlayPos::TopLeft:
 		case OsdOverlayPos::TopCenter:
 		case OsdOverlayPos::TopRight:
-			vertical_position = 0.15f; // Top area
-			direction = 1.0f; // Stack downward
+			vertical_position = 0.15f;
+			direction = 1.0f;
 			break;
 
 		case OsdOverlayPos::CenterLeft:
 		case OsdOverlayPos::Center:
 		case OsdOverlayPos::CenterRight:
-			vertical_position = 0.5f; // Center
-			direction = 1.0f; // Stack downward
+			vertical_position = 0.5f;
+			direction = 1.0f;
 			break;
 
 		case OsdOverlayPos::BottomLeft:
 		case OsdOverlayPos::BottomCenter:
 		case OsdOverlayPos::BottomRight:
 		default:
-			vertical_position = 0.85f; // Bottom area
-			direction = -1.0f; // Stack upward
+			vertical_position = 0.85f;
+			direction = -1.0f;
 			break;
 	}
 
@@ -609,21 +595,18 @@ void Achievements::UpdateSettings(const Pcsx2Config::AchievementsOptions& old_co
 
 	if (!EmuConfig.Achievements.Enabled)
 	{
-		// we're done here
 		Shutdown(false);
 		return;
 	}
 
 	if (!IsActive())
 	{
-		// we just got enabled
 		Initialize();
 		return;
 	}
 
 	if (EmuConfig.Achievements.HardcoreMode != old_config.HardcoreMode)
 	{
-		// Hardcore mode can only be enabled through reset (ResetChallengeMode()).
 		if (s_hardcore_mode && !EmuConfig.Achievements.HardcoreMode)
 		{
 			ResetHardcoreMode(false);
@@ -635,7 +618,6 @@ void Achievements::UpdateSettings(const Pcsx2Config::AchievementsOptions& old_co
 		}
 	}
 
-	// These cannot be modified while a game is loaded, so just toss state and reload.
 	if (HasActiveGame())
 	{
 		if (EmuConfig.Achievements.EncoreMode != old_config.EncoreMode ||
@@ -657,11 +639,9 @@ void Achievements::UpdateSettings(const Pcsx2Config::AchievementsOptions& old_co
 			rc_client_set_unofficial_enabled(s_client, EmuConfig.Achievements.UnofficialTestMode);
 	}
 
-	// Update notification position if it changed
 	if (EmuConfig.Achievements.NotificationPosition != old_config.NotificationPosition)
 		UpdateNotificationPosition();
 
-	// in case cache directory changed
 	EnsureCacheDirectoriesExist();
 }
 
@@ -725,12 +705,8 @@ uint32_t Achievements::ClientReadMemory(uint32_t address, uint8_t* buffer, uint3
 		return 0u;
 	}
 
-	// RA uses a fake memory map with the scratchpad directly above physical memory.
-	// The scratchpad is not meant to be accessible via physical addressing, only virtual.
-	// This also means that the upper 96MB of memory will never be accessible to achievements.
 	const u8* ptr = (address < Ps2MemSize::ExposedRam) ? &eeMem->Main[address] : &eeMem->Scratch[address - Ps2MemSize::ExposedRam];
 
-	// Fast paths for known data sizes.
 	switch (num_bytes)
 	{
 			// clang-format off
@@ -770,11 +746,8 @@ void Achievements::ClientServerCall(
 
 	HTTPDownloader* http = static_cast<HTTPDownloader*>(rc_client_get_userdata(client));
 
-	// TODO: Content-type for post
 	if (request->post_data)
 	{
-		// const auto pd = std::string_view(request->post_data);
-		// Console.WriteLn(fmt::format("Server POST: {}", pd.substr(0, std::min<size_t>(pd.length(), 10))).c_str());
 		http->CreatePostRequest(request->url, request->post_data, std::move(hd_callback));
 	}
 	else
@@ -817,7 +790,6 @@ void Achievements::FrameUpdate()
 
 	s_http_downloader->PollRequests();
 
-	// Don't update the actual achievements until an ELF has loaded.
 	if (VMManager::Internal::HasBootedELF())
 		rc_client_do_frame(s_client);
 	else
@@ -919,7 +891,6 @@ void Achievements::UpdateGameSummary()
 
 void Achievements::UpdateRichPresence(std::unique_lock<std::recursive_mutex>& lock)
 {
-	// Limit rich presence updates to once per second, since it could change per frame.
 	if (!s_has_rich_presence || !s_rich_presence_poll_time.ResetIfSecondsPassed(1.0))
 		return;
 
@@ -962,12 +933,9 @@ void Achievements::GameChanged(u32 disc_crc, u32 crc)
 
 void Achievements::IdentifyGame(u32 disc_crc, u32 crc)
 {
-	// If we're currently loading the ELF, assume that we're going to load the default ELF.
-	// That way we can download achievement data while the PS2 logo runs. Pretty safe assumption.
 	const bool booted_elf = VMManager::Internal::HasBootedELF();
 	const u32 crc_to_use = booted_elf ? crc : disc_crc;
 
-	// Avoid reading+hashing the executable if the crc hasn't changed.
 	if (s_game_crc == crc_to_use)
 		return;
 
@@ -987,10 +955,8 @@ void Achievements::IdentifyGame(u32 disc_crc, u32 crc)
 	}
 #endif
 
-	// shouldn't have a load game request when we're not logged in.
 	pxAssertRel(IsLoggedInOrLoggingIn() || !s_load_game_request, "Logged in with load game request");
 
-	// bail out if we're not logged in, just save the hash
 	if (!IsLoggedInOrLoggingIn())
 	{
 		Console.WriteLn(Color_StrongYellow, "Achievements: Skipping load game because we're not logged in.");
@@ -1003,7 +969,6 @@ void Achievements::IdentifyGame(u32 disc_crc, u32 crc)
 
 void Achievements::BeginLoadGame()
 {
-	// cancel previous requests
 	if (s_load_game_request)
 	{
 		rc_client_abort_async(s_client, s_load_game_request);
@@ -1014,7 +979,6 @@ void Achievements::BeginLoadGame()
 
 	if (s_game_hash.empty())
 	{
-		// when we're booting the bios, or shutting down, this will fail
 		if (s_game_crc != 0)
 		{
 			Host::AddKeyedOSDMessage("retroachievements_disc_read_failed",
@@ -1035,15 +999,12 @@ void Achievements::ClientLoadGameCallback(int result, const char* error_message,
 
 	if (result == RC_NO_GAME_LOADED)
 	{
-		// Unknown game.
 		Console.WriteLn(Color_StrongYellow, "Achievements: Unknown game '%s', disabling achievements.", s_game_hash.c_str());
 		DisableHardcoreMode();
 		return;
 	}
 	else if (result == RC_LOGIN_REQUIRED)
 	{
-		// We would've asked to re-authenticate, so leave HC on for now.
-		// Once we've done so, we'll reload the game.
 		return;
 	}
 	else if (result != RC_OK)
@@ -1064,14 +1025,11 @@ void Achievements::ClientLoadGameCallback(int result, const char* error_message,
 	const bool has_achievements = rc_client_has_achievements(client);
 	const bool has_leaderboards = rc_client_has_leaderboards(client);
 
-	// If the game has a RetroAchievements entry but no achievements or leaderboards,
-	// enforcing hardcore mode is pointless.
 	if (!has_achievements && !has_leaderboards)
 	{
 		DisableHardcoreMode();
 	}
 
-	// We should have matched hardcore mode state.
 	pxAssertRel(s_hardcore_mode == (rc_client_get_hardcore_enabled(client) != 0), "Hardcore status mismatch");
 
 	s_game_id = info->id;
@@ -1082,7 +1040,6 @@ void Achievements::ClientLoadGameCallback(int result, const char* error_message,
 	s_game_icon = {};
 	s_game_icon_url = info->badge_url;
 
-	// ensure fullscreen UI is ready for notifications
 	MTGS::RunOnGSThread(&ImGuiManager::InitializeFullscreenUI);
 
 	if (const std::string_view badge_name = info->badge_name; !badge_name.empty())
@@ -1185,7 +1142,6 @@ void Achievements::DisplayHardcoreDeferredMessage()
 
 void Achievements::HandleResetEvent(const rc_client_event_t* event)
 {
-	// We handle system resets ourselves, but still need to reset the client's state.
 	Console.WriteLn("Resetting runtime due to reset event");
 	rc_client_reset(s_client);
 
@@ -1577,11 +1533,6 @@ bool Achievements::ResetHardcoreMode(bool is_booting)
 
 	const auto lock = GetLock();
 
-	// If we're not logged in, don't apply hardcore mode restrictions.
-	// If we later log in, we'll start with it off anyway.
-	// If we're running an unknown game, don't enable HC mode. We have to do this here,
-	// because the gameid can be cached, and identify immediately on GameChanged(),
-	// which gets called before ResetHardcoreMode().
 	const bool wanted_hardcore_mode = (IsLoggedInOrLoggingIn() || s_load_game_request) &&
 	                                  EmuConfig.Achievements.HardcoreMode;
 	if (s_hardcore_mode == wanted_hardcore_mode)
@@ -1599,7 +1550,6 @@ void Achievements::SetHardcoreMode(bool enabled, bool force_display_message)
 	if (enabled == s_hardcore_mode)
 		return;
 
-	// new mode
 	s_hardcore_mode = enabled;
 
 	if (VMManager::HasValidVM() && (HasActiveGame() || force_display_message))
@@ -1623,7 +1573,6 @@ void Achievements::SetHardcoreMode(bool enabled, bool force_display_message)
 		DisplayAchievementSummary();
 	}
 
-	// Toss away UI state, because it's invalid now
 	if (MTGS::IsOpen())
 		MTGS::RunOnGSThread(&Achievements::ClearUIState);
 
@@ -1637,7 +1586,6 @@ void Achievements::LoadState(std::span<const u8> data)
 	if (!IsActive())
 		return;
 
-	// this assumes that the CRC and ELF name has been loaded prior to the cheevos state (it should be).
 	GameChanged(VMManager::GetDiscCRC(), VMManager::GetCurrentCRC());
 
 #ifdef ENABLE_RAINTEGRATION
@@ -1657,8 +1605,6 @@ void Achievements::LoadState(std::span<const u8> data)
 	}
 #endif
 
-	// if we're active, make sure we've downloaded and activated all the achievements
-	// before deserializing, otherwise that state's going to get lost.
 	if (s_http_downloader->HasAnyRequests())
 	{
 		bool was_running_idle;
@@ -1669,14 +1615,11 @@ void Achievements::LoadState(std::span<const u8> data)
 
 	if (data.empty())
 	{
-		// reset runtime, no data (state might've been created without cheevos)
 		Console.Warning("State is missing cheevos data, resetting runtime");
 		rc_client_reset(s_client);
 		return;
 	}
 
-	// These routines scare me a bit.. the data isn't bounds checked.
-	// Really hope that nobody puts any thing malicious in a save state...
 	const int result = rc_client_deserialize_progress_sized(s_client, data.data(), data.size());
 	if (result != RC_OK)
 	{
@@ -1712,7 +1655,6 @@ void Achievements::SaveState(SaveStateBase& writer)
 
 	if (IsActive())
 	{
-		// internally this happens twice.. not great.
 		const size_t data_size = rc_client_progress_size(s_client);
 		if (data_size > 0)
 		{
@@ -1756,7 +1698,6 @@ std::string Achievements::GetAchievementBadgePath(const rc_client_achievement_t*
 
 std::string Achievements::GetUserBadgePath(const std::string_view username)
 {
-	// definitely want to sanitize usernames... :)
 	std::string path;
 	const std::string clean_username = Path::SanitizeFileName(username);
 	if (!clean_username.empty())
@@ -1766,7 +1707,6 @@ std::string Achievements::GetUserBadgePath(const std::string_view username)
 
 std::string Achievements::GetLeaderboardUserBadgePath(const rc_client_leaderboard_entry_t* entry)
 {
-	// TODO: maybe we should just cache these in memory...
 	std::string path = GetUserBadgePath(entry->user);
 
 	if (!FileSystem::FileExists(path.c_str()))
@@ -1796,7 +1736,6 @@ bool Achievements::Login(const char* username, const char* password, Error* erro
 {
 	auto lock = GetLock();
 
-	// We need to use a temporary client if achievements aren't currently active.
 	rc_client_t* client = s_client;
 	HTTPDownloader* http = s_http_downloader.get();
 	const bool is_temporary_client = (client == nullptr);
@@ -1824,15 +1763,12 @@ bool Achievements::Login(const char* username, const char* password, Error* erro
 		return false;
 	}
 
-	// Wait until the login request completes.
 	http->WaitForAllRequests();
 	pxAssert(!params.request);
 
-	// Success? Assume the callback set the error message.
 	if (!params.result)
 		return false;
 
-	// If we were't a temporary client, get the game loaded.
 	if (VMManager::HasValidVM() && !is_temporary_client)
 		BeginLoadGame();
 
@@ -1855,7 +1791,6 @@ void Achievements::ClientLoginWithPasswordCallback(int result, const char* error
 		return;
 	}
 
-	// Grab the token from the client, and save it to the config.
 	const rc_client_user_t* user = rc_client_get_user_info(client);
 	if (!user || !user->token)
 	{
@@ -1867,7 +1802,6 @@ void Achievements::ClientLoginWithPasswordCallback(int result, const char* error
 
 	params->result = true;
 
-	// Store configuration.
 	Host::SetBaseStringSettingValue("Achievements", "Username", params->username);
 	Host::SetBaseStringSettingValue("Achievements", "LoginTimestamp", fmt::format("{}", std::time(nullptr)).c_str());
 	Host::CommitBaseSettingChanges();
@@ -1904,7 +1838,6 @@ void Achievements::ShowLoginSuccess(const rc_client_t* client)
 
 	Host::OnAchievementsLoginSuccess(user->username, user->score, user->score_softcore, user->num_unread_messages);
 
-	// Were we logging in with a temporary client?
 	const auto lock = GetLock();
 	if (s_client != client)
 		return;
@@ -1913,7 +1846,6 @@ void Achievements::ShowLoginSuccess(const rc_client_t* client)
 	{
 		std::string badge_path = GetLoggedInUserBadgePath();
 
-		//: Summary for login notification.
 		std::string title = user->display_name;
 		std::string summary = fmt::format(TRANSLATE_FS("Achievements", "Score: {0} pts (Casual: {1} pts)\nUnread messages: {2}"), user->score,
 			user->score_softcore, user->num_unread_messages);
@@ -2074,19 +2006,16 @@ static ImVec2 AdjustPositionForAlignment(const ImVec2& base_position, const ImVe
 {
 	ImVec2 adjusted = base_position;
 
-	// Adjust for horizontal alignment
 	switch (alignment)
 	{
 		case AchievementOverlayPosition::TopLeft:
 		case AchievementOverlayPosition::CenterLeft:
 		case AchievementOverlayPosition::BottomLeft:
-			// Left aligned no adjustment needed for x
 			break;
 
 		case AchievementOverlayPosition::TopCenter:
 		case AchievementOverlayPosition::Center:
 		case AchievementOverlayPosition::BottomCenter:
-			// Center aligned offset by half element width
 			adjusted.x -= element_size.x * 0.5f;
 			break;
 
@@ -2094,24 +2023,20 @@ static ImVec2 AdjustPositionForAlignment(const ImVec2& base_position, const ImVe
 		case AchievementOverlayPosition::CenterRight:
 		case AchievementOverlayPosition::BottomRight:
 		default:
-			// Right aligned offset by full element width
 			adjusted.x -= element_size.x;
 			break;
 	}
 
-	// Adjust for vertical alignment
 	switch (alignment)
 	{
 		case AchievementOverlayPosition::TopLeft:
 		case AchievementOverlayPosition::TopCenter:
 		case AchievementOverlayPosition::TopRight:
-			// Top aligned no adjustment needed for y
 			break;
 
 		case AchievementOverlayPosition::CenterLeft:
 		case AchievementOverlayPosition::Center:
 		case AchievementOverlayPosition::CenterRight:
-			// Center aligned offset by half element height
 			adjusted.y -= element_size.y * 0.5f;
 			break;
 
@@ -2119,7 +2044,6 @@ static ImVec2 AdjustPositionForAlignment(const ImVec2& base_position, const ImVe
 		case AchievementOverlayPosition::BottomCenter:
 		case AchievementOverlayPosition::BottomRight:
 		default:
-			// Bottom aligned offset by full element height
 			adjusted.y -= element_size.y;
 			break;
 	}
@@ -2134,22 +2058,22 @@ static ImVec2 GetStackingDirection(AchievementOverlayPosition alignment)
 		case AchievementOverlayPosition::TopLeft:
 		case AchievementOverlayPosition::TopCenter:
 		case AchievementOverlayPosition::TopRight:
-			return ImVec2(0.0f, 1.0f); // Stack downward
+			return ImVec2(0.0f, 1.0f);
 
 		case AchievementOverlayPosition::BottomLeft:
 		case AchievementOverlayPosition::BottomCenter:
 		case AchievementOverlayPosition::BottomRight:
 		default:
-			return ImVec2(0.0f, -1.0f); // Stack upward
+			return ImVec2(0.0f, -1.0f);
 
 		case AchievementOverlayPosition::CenterLeft:
-			return ImVec2(1.0f, 0.0f); // Stack rightward
+			return ImVec2(1.0f, 0.0f);
 
 		case AchievementOverlayPosition::CenterRight:
-			return ImVec2(-1.0f, 0.0f); // Stack leftward
+			return ImVec2(-1.0f, 0.0f);
 
 		case AchievementOverlayPosition::Center:
-			return ImVec2(0.0f, -1.0f); // Stack upward for center
+			return ImVec2(0.0f, -1.0f);
 	}
 }
 
@@ -2189,14 +2113,12 @@ void Achievements::DrawGameOverlays()
 				dl->AddImage(reinterpret_cast<ImTextureID>(badge->GetNativeHandle()),
 					current_position, current_position + image_size, ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f), col);
 
-				// For horizontal layouts, go horizontally for vertical layouts, stay in the same row
 				if (std::abs(stack_direction.x) > 0.0f)
 				{
 					current_position.x += stack_direction.x * x_advance;
 				}
 				else
 				{
-					// For right-aligned vertical layouts, move left for next indicator
 					switch (EmuConfig.Achievements.OverlayPosition)
 					{
 						case AchievementOverlayPosition::TopRight:
@@ -2221,7 +2143,6 @@ void Achievements::DrawGameOverlays()
 			}
 		}
 
-		// Go to the next row/column for anymore overlays
 		position.x += stack_direction.x * (image_size.x + padding);
 		position.y += stack_direction.y * (image_size.y + padding);
 	}
@@ -2265,7 +2186,6 @@ void Achievements::DrawGameOverlays()
 			s_active_progress_indicator.reset();
 		}
 
-		// Go to the next row/column for anymore overlays
 		position.x += stack_direction.x * (progress_box_size.x + padding);
 		position.y += stack_direction.y * (progress_box_size.y + padding);
 	}
@@ -2318,13 +2238,10 @@ void Achievements::DrawGameOverlays()
 				++it;
 			}
 
-			// Go to the next position for anymore trackers
 			position.x += stack_direction.x * (tracker_box_size.x + padding);
 			position.y += stack_direction.y * (tracker_box_size.y + padding);
 		}
 
-		// Uncomment if there are any other overlays above this one.
-		//position.y -= image_size.y + padding * 3.0f;
 	}
 }
 
@@ -2427,7 +2344,7 @@ bool Achievements::PrepareAchievementsWindow()
 	if (s_achievement_list)
 		rc_client_destroy_achievement_list(s_achievement_list);
 	s_achievement_list = rc_client_create_achievement_list(s_client, RC_CLIENT_ACHIEVEMENT_CATEGORY_CORE_AND_UNOFFICIAL,
-		RC_CLIENT_ACHIEVEMENT_LIST_GROUPING_PROGRESS /*RC_CLIENT_ACHIEVEMENT_LIST_GROUPING_LOCK_STATE*/);
+		RC_CLIENT_ACHIEVEMENT_LIST_GROUPING_PROGRESS );
 	if (!s_achievement_list)
 	{
 		Console.Error("Achievements: rc_client_create_achievement_list() returned null");
@@ -2585,7 +2502,6 @@ void Achievements::DrawAchievementsWindow()
 
 	auto lock = Achievements::GetLock();
 
-	// ensure image downloads still happen while we're paused
 	Achievements::IdleUpdate();
 
 	const bool has_multiple_subsets = (s_subset_list && s_subset_list->num_subsets > 1);
@@ -2843,7 +2759,6 @@ void Achievements::DrawAchievement(const rc_client_achievement_t* cheevo)
 	const ImVec2 summary_text_size(g_medium_font.first->CalcTextSizeA(g_medium_font.second, FLT_MAX, summary_wrap_width, cheevo->description,
 		cheevo->description + summary_length));
 
-	// Messy, but need to undo LayoutScale in MenuButtonFrame()...
 	const float extra_summary_height = LayoutUnscale(std::max(summary_text_size.y - GetLineHeight(g_medium_font), 0.0f));
 
 	ImRect bb;
@@ -3085,7 +3000,6 @@ void Achievements::DrawLeaderboardsWindow()
 
 	auto lock = Achievements::GetLock();
 
-	// ensure image downloads still happen while we're paused
 	Achievements::IdleUpdate();
 
 	const bool is_leaderboard_open = (s_open_leaderboard != nullptr);
@@ -3110,10 +3024,8 @@ void Achievements::DrawLeaderboardsWindow()
 	float heading_height = LayoutScale(heading_height_unscaled);
 	if (is_leaderboard_open)
 	{
-		// tabs
 		heading_height += spacing_small + LayoutScale(tab_height_unscaled) + spacing;
 
-		// Add space for a legend - spacing + 1 line of text + spacing + line
 		heading_height += LayoutScale(ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY) + spacing;
 	}
 
@@ -3472,7 +3384,6 @@ void Achievements::DrawLeaderboardsWindow()
 					}
 				}
 
-				// Fetch next chunk if the loading indicator becomes visible (i.e. we scrolled enough).
 				bool visible, hovered;
 				ImGuiFullscreen::MenuButtonFrame(TRANSLATE("Achievements", "Loading..."), false,
 					ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY, &visible, &hovered, &bb.Min, &bb.Max);
@@ -3600,7 +3511,6 @@ void Achievements::DrawLeaderboardEntry(const rc_client_leaderboard_entry_t& ent
 
 	if (pressed)
 	{
-		// Anything?
 	}
 }
 void Achievements::DrawLeaderboardListEntry(const rc_client_leaderboard_t* lboard)
@@ -3787,7 +3697,7 @@ namespace Achievements::RAIntegration
 	static void RACallbackWriteMemory(unsigned int address, unsigned char value);
 
 	static bool s_raintegration_initialized = false;
-} // namespace Achievements::RAIntegration
+}
 
 bool Achievements::IsUsingRAIntegration()
 {
@@ -3808,16 +3718,13 @@ void Achievements::RAIntegration::InitializeRAIntegration(void* main_window_hand
 		RACallbackEstimateTitle, RACallbackResetEmulator, RACallbackLoadROM);
 	RA_SetConsoleID(PlayStation2);
 
-	// EE physical memory and scratchpad are currently exposed (matching direct rcheevos implementation).
 	RA_InstallMemoryBank(0, RACallbackReadMemory, RACallbackWriteMemory, GetExposedEEMemorySize());
 	RA_InstallMemoryBankBlockReader(0, RACallbackReadBlock);
 
-	// Fire off a login anyway. Saves going into the menu and doing it.
 	RA_AttemptLogin(0);
 
 	s_raintegration_initialized = true;
 
-	// this is pretty lame, but we may as well persist until we exit anyway
 	std::atexit(RA_Shutdown);
 }
 
@@ -3851,12 +3758,10 @@ std::vector<std::tuple<int, std::string, bool>> Achievements::RAIntegration::Get
 		const RA_MenuItem& it = items[i];
 		if (!it.sLabel)
 		{
-			// separator
 			ret.emplace_back(0, std::string(), false);
 		}
 		else
 		{
-			// option, maybe checkable
 			ret.emplace_back(static_cast<int>(it.nID), StringUtil::WideStringToUTF8String(it.sLabel), it.bChecked);
 		}
 	}
@@ -3893,7 +3798,6 @@ void Achievements::RAIntegration::RACallbackCausePause()
 
 void Achievements::RAIntegration::RACallbackRebuildMenu()
 {
-	// Sync hardcore state in case the user changed it via the RA menu.
 	const bool ra_hardcore = (RA_HardcoreModeIsActive() != 0);
 	if (ra_hardcore != s_hardcore_mode)
 	{
@@ -3916,7 +3820,6 @@ void Achievements::RAIntegration::RACallbackResetEmulator()
 
 void Achievements::RAIntegration::RACallbackLoadROM(const char* unused)
 {
-	// unused
 	UNREFERENCED_PARAMETER(unused);
 }
 
@@ -3944,7 +3847,6 @@ unsigned int Achievements::RAIntegration::RACallbackReadBlock(unsigned int addre
 
 	if (address < Ps2MemSize::ExposedRam && (address + bytes) > Ps2MemSize::ExposedRam) [[unlikely]]
 	{
-		// Split across RAM+Scratch.
 		const unsigned int bytes_from_ram = Ps2MemSize::ExposedRam - address;
 		const unsigned int bytes_from_scratch = bytes - bytes_from_ram;
 		return (RACallbackReadBlock(address, buffer, bytes_from_ram) +
@@ -3976,4 +3878,4 @@ bool Achievements::IsUsingRAIntegration()
 	return false;
 }
 
-#endif // ENABLE_RAINTEGRATION
+#endif

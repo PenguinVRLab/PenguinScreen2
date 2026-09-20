@@ -5,11 +5,6 @@
 #include "Vif_Dma.h"
 #include "Vif_Dynarec.h"
 
-//------------------------------------------------------------------
-// VifCode Transfer Interpreter (Vif0/Vif1)
-//------------------------------------------------------------------
-
-// Interprets packet
 _vifT void vifTransferLoop(u32* &data) {
 	vifStruct& vifX = GetVifX;
 
@@ -19,10 +14,9 @@ _vifT void vifTransferLoop(u32* &data) {
 
 	vifXRegs.stat.VPS |= VPS_TRANSFERRING;
 	vifXRegs.stat.ER1  = false;
-	//VIF_LOG("Starting VIF%d loop, pSize = %x, stalled = %x", idx, pSize, vifX.vifstalled.enabled );
 	while (pSize > 0 && !vifX.vifstalled.enabled) {
 
-		if(!vifX.cmd) { // Get new VifCode
+		if(!vifX.cmd) {
 
 			if(!vifXRegs.err.MII)
 			{
@@ -38,7 +32,6 @@ _vifT void vifTransferLoop(u32* &data) {
 
 			VIF_LOG("New VifCMD %x tagsize %x irq %d", vifX.cmd, vifX.tag.size, vifX.irq);
 			if (IsDevBuild && TraceLogging.EE.VIFcode.IsActive()) {
-				// Pass 2 means "log it"
 				vifCmdHandler[idx][vifX.cmd & 0x7f](2, data);
 			}
 		}
@@ -58,7 +51,6 @@ _vifT void vifTransferLoop(u32* &data) {
 _vifT static __fi bool vifTransfer(u32 *data, int size, bool TTE) {
 	vifStruct& vifX = GetVifX;
 
-	// irqoffset necessary to add up the right qws, or else will spin (spiderman)
 	int transferred = vifX.irqoffset.enabled ? vifX.irqoffset.value : 0;
 
 	vifX.vifpacketsize = size;
@@ -66,21 +58,18 @@ _vifT static __fi bool vifTransfer(u32 *data, int size, bool TTE) {
 
 	transferred += size - vifX.vifpacketsize;
 
-	//Make this a minimum of 1 cycle so if it's the end of the packet it doesnt just fall through.
-	//Metal Saga can do this, just to be safe :)
 	if (!idx) g_vif0Cycles += std::max(1, (int)((transferred * BIAS) >> 2));
 	else	  g_vif1Cycles += std::max(1, (int)((transferred * BIAS) >> 2));
 
-	vifX.irqoffset.value = transferred % 4; // cannot lose the offset
+	vifX.irqoffset.value = transferred % 4;
 
 	if (vifX.irq && vifX.cmd == 0) {
 		VIF_LOG("Vif%d IRQ Triggering", idx);
-		//Always needs to be set to return to the correct offset if there is data left.
 		vifX.vifstalled.enabled = VifStallEnable(vifXch);
 		vifX.vifstalled.value = VIF_IRQ_STALL;
 	}
 
-	if (!TTE) // *WARNING* - Tags CAN have interrupts! so lets just ignore the dma modifying stuffs (GT4)
+	if (!TTE)
 	{
 		transferred  = transferred >> 2;
 		transferred = std::min((int)vifXch.qwc, transferred);
@@ -109,7 +98,6 @@ _vifT static __fi bool vifTransfer(u32 *data, int size, bool TTE) {
 	return !vifX.vifstalled.enabled;
 }
 
-// When TTE is set to 1, MADR and QWC are not updated as part of the transfer.
 bool VIF0transfer(u32 *data, int size, bool TTE) {
 	return vifTransfer<0>(data, size, TTE);
 }

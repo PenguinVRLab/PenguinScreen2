@@ -62,7 +62,6 @@ void DockUtils::insertDockWidgetAtPreferredLocation(
 			break;
 	}
 
-	// Find the dock group which is closest to the preferred location.
 	KDDockWidgets::Core::Group* best_group = nullptr;
 	int best_distance_squared = 0;
 

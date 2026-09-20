@@ -16,12 +16,8 @@
 #include "fmt/format.h"
 
 #define GZIP_ID "PCSX2.index.gzip.v1|"
-#define GZIP_ID_LEN (sizeof(GZIP_ID) - 1) /* sizeof includes the \0 terminator */
+#define GZIP_ID_LEN (sizeof(GZIP_ID) - 1)
 
-// File format is:
-// - [GZIP_ID_LEN] GZIP_ID (no \0)
-// - [sizeof(Access)] index (should be allocated, contains various sizes)
-// - [rest] the indexed data points (should be allocated, index->list should then point to it)
 static Access* ReadIndexFromFile(const char* filename)
 {
 	auto fp = FileSystem::OpenManagedCFile(filename, "rb");
@@ -61,7 +57,7 @@ static Access* ReadIndexFromFile(const char* filename)
 		return 0;
 	}
 
-	index->list = reinterpret_cast<Point*>(buffer); // adjust list pointer
+	index->list = reinterpret_cast<Point*>(buffer);
 	return index;
 }
 
@@ -74,13 +70,12 @@ static void WriteIndexToFile(Access* index, const char* filename)
 	bool success = (std::fwrite(GZIP_ID, GZIP_ID_LEN, 1, fp.get()) == 1);
 
 	Point* tmp = index->list;
-	index->list = 0; // current pointer is useless on disk, normalize it as 0.
+	index->list = 0;
 	std::fwrite((char*)index, sizeof(Access), 1, fp.get());
 	index->list = tmp;
 
 	success = success && (std::fwrite((char*)index->list, sizeof(Point) * index->have, 1, fp.get()) == 1);
 
-	// Verify
 	if (!success)
 		ERROR_LOG("Warning: Can't write index file to disk: '{}'", filename);
 	else
@@ -89,25 +84,15 @@ static void WriteIndexToFile(Access* index, const char* filename)
 
 static const char* INDEX_TEMPLATE_KEY = "$(f)";
 
-// template:
-// must contain one and only one instance of '$(f)' (without the quotes)
-// if if !canEndWithKey -> must not end with $(f)
-// if starts with $(f) then it expands to the full path + file name.
-// if doesn't start with $(f) then it's expanded to file name only (with extension)
-// if doesn't start with $(f) and ends up relative,
-//   then it's relative to base (not to cwd)
-// No checks are performed if the result file name can be created.
-// If this proves useful, we can move it into Path:: . Right now there's no need.
 static std::string ApplyTemplate(const std::string& name, const std::string& base,
 	const std::string& fileTemplate, const std::string& filename,
 	bool canEndWithKey, Error* error)
 {
-	// both sides
 	std::string trimmedTemplate(StringUtil::StripWhitespace(fileTemplate));
 
 	std::string::size_type first = trimmedTemplate.find(INDEX_TEMPLATE_KEY);
-	if (first == std::string::npos // not found
-		|| first != trimmedTemplate.rfind(INDEX_TEMPLATE_KEY) // more than one instance
+	if (first == std::string::npos
+		|| first != trimmedTemplate.rfind(INDEX_TEMPLATE_KEY)
 		|| (!canEndWithKey && first == trimmedTemplate.length() - std::strlen(INDEX_TEMPLATE_KEY)))
 	{
 		Error::SetStringFmt(error, "Invalid {} template '{}'.\n"
@@ -118,11 +103,11 @@ static std::string ApplyTemplate(const std::string& name, const std::string& bas
 
 	std::string fname(filename);
 	if (first > 0)
-		fname = Path::GetFileName(fname); // without path
+		fname = Path::GetFileName(fname);
 
 	StringUtil::ReplaceAll(&trimmedTemplate, INDEX_TEMPLATE_KEY, fname);
 	if (!Path::IsAbsolute(trimmedTemplate))
-		trimmedTemplate = Path::Combine(base, trimmedTemplate); // ignores appRoot if tem is absolute
+		trimmedTemplate = Path::Combine(base, trimmedTemplate);
 
 	return trimmedTemplate;
 }
@@ -140,11 +125,9 @@ GzippedFileReader::~GzippedFileReader() = default;
 
 bool GzippedFileReader::LoadOrCreateIndex(Error* error)
 {
-	// Try to read index from disk
 	const std::string indexfile(iso2indexname(m_filename, error));
 	if (indexfile.empty())
 	{
-		// iso2indexname(...) will set errors if it can't apply the template
 		return false;
 	}
 
@@ -154,13 +137,12 @@ bool GzippedFileReader::LoadOrCreateIndex(Error* error)
 		return true;
 	}
 
-	// No valid index file. Generate an index
 	Console.Warning("This may take a while (but only once). Scanning compressed file to generate a quick access index...");
 
 	const s64 prevoffset = FileSystem::FTell64(m_src);
 	Access* index = nullptr;
 	int len = build_index(m_src, GZFILE_SPAN_DEFAULT, &index);
-	printf("\n"); // build_index prints progress without \n's
+	printf("\n");
 	FileSystem::FSeek64(m_src, prevoffset, SEEK_SET);
 
 	if (len >= 0)

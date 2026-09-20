@@ -24,7 +24,7 @@ GSTextureCacheSW::Texture* GSTextureCacheSW::Lookup(const GIFRegTEX0& TEX0, cons
 	{
 		Texture* t = *i;
 
-		if (((TEX0.U32[0] ^ t->m_TEX0.U32[0]) | ((TEX0.U32[1] ^ t->m_TEX0.U32[1]) & 3)) != 0) // TBP0 TBW PSM TW TH
+		if (((TEX0.U32[0] ^ t->m_TEX0.U32[0]) | ((TEX0.U32[1] ^ t->m_TEX0.U32[1]) & 3)) != 0)
 		{
 			continue;
 		}
@@ -39,13 +39,11 @@ GSTextureCacheSW::Texture* GSTextureCacheSW::Lookup(const GIFRegTEX0& TEX0, cons
 			continue;
 		}
 
-		// Lookup hit
 		m.MoveFront(i.Index());
 		t->m_age = 0;
 		return t;
 	}
 
-	// Lookup miss
 	Texture* t = new Texture(tw0, TEX0, TEXA);
 
 	m_textures.insert(t);
@@ -123,8 +121,6 @@ void GSTextureCacheSW::IncAge()
 	}
 }
 
-//
-
 GSTextureCacheSW::Texture::Texture(u32 tw0, const GIFRegTEX0& TEX0, const GIFRegTEXA& TEXA)
 	: m_TEX0(TEX0)
 	, m_TEXA(TEXA)
@@ -136,7 +132,7 @@ GSTextureCacheSW::Texture::Texture(u32 tw0, const GIFRegTEX0& TEX0, const GIFReg
 {
 	if (m_tw == 0)
 	{
-		m_tw = std::max<int>(m_TEX0.TW, GSLocalMemory::m_psm[m_TEX0.PSM].pal == 0 ? 3 : 5); // makes one row 32 bytes at least, matches the smallest block size that is allocated for m_buff
+		m_tw = std::max<int>(m_TEX0.TW, GSLocalMemory::m_psm[m_TEX0.PSM].pal == 0 ? 3 : 5);
 	}
 
 	memset(m_valid, 0, sizeof(m_valid));
@@ -146,7 +142,7 @@ GSTextureCacheSW::Texture::Texture(u32 tw0, const GIFRegTEX0& TEX0, const GIFReg
 	m_offset = g_gs_renderer->m_mem.GetOffset(TEX0.TBP0, TEX0.TBW, TEX0.PSM);
 	m_pages = m_offset.pageLooperForRect(GSVector4i(0, 0, 1 << TEX0.TW, 1 << TEX0.TH));
 
-	m_repeating = m_TEX0.IsRepeating(); // repeating mode always works, it is just slightly slower
+	m_repeating = m_TEX0.IsRepeating();
 
 	if (m_repeating)
 	{
@@ -179,7 +175,7 @@ void GSTextureCacheSW::Texture::Reset(u32 tw0, const GIFRegTEX0& TEX0, const GIF
 
 	if (m_tw == 0)
 	{
-		m_tw = std::max<int>(m_TEX0.TW, GSLocalMemory::m_psm[m_TEX0.PSM].pal == 0 ? 3 : 5); // makes one row 32 bytes at least, matches the smallest block size that is allocated for m_buff
+		m_tw = std::max<int>(m_TEX0.TW, GSLocalMemory::m_psm[m_TEX0.PSM].pal == 0 ? 3 : 5);
 	}
 
 	memset(m_valid, 0, sizeof(m_valid));
@@ -189,7 +185,7 @@ void GSTextureCacheSW::Texture::Reset(u32 tw0, const GIFRegTEX0& TEX0, const GIF
 	m_offset = g_gs_renderer->m_mem.GetOffset(TEX0.TBP0, TEX0.TBW, TEX0.PSM);
 	m_pages = m_offset.pageLooperForRect(GSVector4i(0, 0, 1 << TEX0.TW, 1 << TEX0.TH));
 
-	m_repeating = m_TEX0.IsRepeating(); // repeating mode always works, it is just slightly slower
+	m_repeating = m_TEX0.IsRepeating();
 
 	if (m_repeating)
 	{
@@ -219,7 +215,7 @@ bool GSTextureCacheSW::Texture::Update(const GSVector4i& rect)
 
 	if (r.eq(GSVector4i(0, 0, tw, th)))
 	{
-		m_complete = true; // lame, but better than nothing
+		m_complete = true;
 	}
 
 	if (!m_buff)
@@ -231,8 +227,6 @@ bool GSTextureCacheSW::Texture::Update(const GSVector4i& rect)
 		if (!m_buff)
 			return false;
 
-		// This _shouldn't_ be necessary, but apparently our texture min/max is wrong somewhere,
-		// and we end up sampling from "random" malloc memory, which breaks GS dump runs.
 		std::memset(m_buff, 0, size);
 	}
 
@@ -323,7 +317,6 @@ bool GSTextureCacheSW::Texture::Save(const std::string& fn) const
 	const u32 src_pitch = 1u << (m_tw + (psm.pal == 0 ? 2 : 0));
 	if (psm.pal == 0)
 	{
-		// no clut => dump directly
 		return GSPng::Save(format, fn, src, w, h, src_pitch, GSConfig.PNGCompressionLevel);
 	}
 	else

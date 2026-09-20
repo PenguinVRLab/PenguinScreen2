@@ -40,4 +40,4 @@ namespace GSPng
 	void Process(std::shared_ptr<Transaction>& item);
 
 	using Worker = GSJobQueue<std::shared_ptr<Transaction>, 16>;
-} // namespace GSPng
+}

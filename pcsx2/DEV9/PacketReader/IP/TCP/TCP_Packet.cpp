@@ -9,7 +9,6 @@
 
 namespace PacketReader::IP::TCP
 {
-	//Need flags
 	bool TCP_Packet::GetNS() const
 	{
 		return (dataOffsetAndNS_Flag & 1);
@@ -99,28 +98,22 @@ namespace PacketReader::IP::TCP
 	TCP_Packet::TCP_Packet(const u8* buffer, int bufferSize)
 	{
 		int offset = 0;
-		//Bits 0-31
 		NetLib::ReadUInt16(buffer, &offset, &sourcePort);
 		NetLib::ReadUInt16(buffer, &offset, &destinationPort);
 
-		//Bits 32-63
 		NetLib::ReadUInt32(buffer, &offset, &sequenceNumber);
 
-		//Bits 64-95
 		NetLib::ReadUInt32(buffer, &offset, &acknowledgementNumber);
 
-		//Bits 96-127
 		NetLib::ReadByte08(buffer, &offset, &dataOffsetAndNS_Flag);
 		headerLength = (dataOffsetAndNS_Flag >> 4) << 2;
 		NetLib::ReadByte08(buffer, &offset, &flags);
 		NetLib::ReadUInt16(buffer, &offset, &windowSize);
 
-		//Bits 127-159
 		NetLib::ReadUInt16(buffer, &offset, &checksum);
 		NetLib::ReadUInt16(buffer, &offset, &urgentPointer);
 
-		//Bits 160+
-		if (headerLength > 20) //TCP options
+		if (headerLength > 20)
 		{
 			bool opReadFin = false;
 			do
@@ -158,7 +151,6 @@ namespace PacketReader::IP::TCP
 		offset = headerLength;
 
 		payload = std::make_unique<PayloadPtr>(&buffer[offset], bufferSize - offset);
-		//AllDone
 	}
 
 	TCP_Packet::TCP_Packet(const TCP_Packet& original)
@@ -174,7 +166,6 @@ namespace PacketReader::IP::TCP
 		, urgentPointer{original.urgentPointer}
 		, payload{original.payload->Clone()}
 	{
-		//Clone options
 		options.reserve(original.options.size());
 		for (size_t i = 0; i < options.size(); i++)
 			options.push_back(original.options[i]->Clone());
@@ -204,11 +195,9 @@ namespace PacketReader::IP::TCP
 		NetLib::WriteUInt16(buffer, offset, checksum);
 		NetLib::WriteUInt16(buffer, offset, urgentPointer);
 
-		//options
 		for (size_t i = 0; i < options.size(); i++)
 			options[i]->WriteBytes(buffer, offset);
 
-		//Zero alignment bytes
 		if (*offset != startOff + headerLength)
 			memset(&buffer[*offset], 0, startOff + headerLength - *offset);
 
@@ -233,10 +222,8 @@ namespace PacketReader::IP::TCP
 		for (size_t i = 0; i < options.size(); i++)
 			opOffset += options[i]->GetLength();
 
-		//needs to be a whole number of 32bits
 		headerLength = Common::AlignUpPow2(opOffset, 4);
 
-		//Also write into dataOffsetAndNS_Flag
 		const u8 ns = dataOffsetAndNS_Flag & 1;
 		dataOffsetAndNS_Flag = (headerLength >> 2) << 4;
 		dataOffsetAndNS_Flag |= ns;
@@ -258,12 +245,9 @@ namespace PacketReader::IP::TCP
 		NetLib::WriteByte08(headerSegment, &counter, (u8)protocol);
 		NetLib::WriteUInt16(headerSegment, &counter, GetLength());
 
-		//Pseudo Header added
-		//Rest of data is normal Header+data (with zerored checksum feild)
 		checksum = 0;
 		WriteBytes(headerSegment, &counter);
 
-		//Zero alignment byte
 		if (counter != pHeaderLen)
 			NetLib::WriteByte08(headerSegment, &counter, 0);
 
@@ -286,11 +270,8 @@ namespace PacketReader::IP::TCP
 		NetLib::WriteByte08(headerSegment, &counter, (u8)protocol);
 		NetLib::WriteUInt16(headerSegment, &counter, GetLength());
 
-		//Pseudo Header added
-		//Rest of data is normal Header+data
 		WriteBytes(headerSegment, &counter);
 
-		//Zero alignment byte
 		if (counter != pHeaderLen)
 			NetLib::WriteByte08(headerSegment, &counter, 0);
 
@@ -299,4 +280,4 @@ namespace PacketReader::IP::TCP
 
 		return (csumCal == 0);
 	}
-} // namespace PacketReader::IP::TCP
+}

@@ -74,8 +74,6 @@ namespace ImGuiFullscreen
 	static __fi float LayoutScale(float v) { return ImCeil(g_layout_scale * v); }
 	static __fi ImVec2 LayoutScale(const ImVec2& v) { return ImVec2(ImCeil(v.x * g_layout_scale), ImCeil(v.y * g_layout_scale)); }
 	static __fi ImVec2 LayoutScale(float x, float y) { return ImVec2(ImCeil(x * g_layout_scale), ImCeil(y * g_layout_scale)); }
-	/// Get the height of a line of text including the space to the next line.
-	/// Matches the result returned by CalcTextSizeA for one line of text.
 	static __fi float GetLineHeight(std::pair<ImFont*, float> font) { return ImCeil(font.second * font.first->LineHeight); }
 
 	static __fi float LayoutUnscale(float v) { return ImCeil(g_rcp_layout_scale * v); }
@@ -91,11 +89,9 @@ namespace ImGuiFullscreen
 		return (pos != std::string_view::npos) ? s.substr(0, pos) : s;
 	}
 
-	/// Centers an image within the specified bounds, scaling up or down as needed.
 	ImRect CenterImage(const ImVec2& fit_size, const ImVec2& image_size, bool fill = false);
 	ImRect CenterImage(const ImRect& fit_rect, const ImVec2& image_size, bool fill = false);
 
-	/// Initializes, setting up any state.
 	bool Initialize(const char* placeholder_image_path);
 
 	void SetTheme(std::string_view theme);
@@ -103,10 +99,8 @@ namespace ImGuiFullscreen
 	bool UpdateLayoutScale();
 	void UpdateFontScale();
 
-	/// Shuts down, optionally clearing all state (including notifications).
 	void Shutdown(bool clear_state);
 
-	/// Texture cache.
 	const std::shared_ptr<GSTexture>& GetPlaceholderTexture();
 	std::shared_ptr<GSTexture> LoadTexture(std::string_view path);
 	GSTexture* GetCachedTexture(std::string_view name);
@@ -323,22 +317,18 @@ namespace ImGuiFullscreen
 	void ShowToast(std::string title, std::string message, float duration = 10.0f);
 	void ClearToast();
 
-	// Message callbacks.
 	void GetChoiceDialogHelpText(SmallStringBase& dest);
 	void GetFileSelectorHelpText(SmallStringBase& dest);
 	void GetInputDialogHelpText(SmallStringBase& dest);
-} // namespace ImGuiFullscreen
+}
 
-// Host UI triggers from Big Picture mode.
 namespace Host
 {
-	/// Returns true if native file dialogs should be preferred over Big Picture.
 	bool ShouldPreferHostFileSelector();
 
-	/// Opens a file selector dialog.
 	using FileSelectorCallback = std::function<void(const std::string& path)>;
 	using FileSelectorFilters = std::vector<std::string>;
 	void OpenHostFileSelectorAsync(std::string_view title, bool select_directory, FileSelectorCallback callback,
 		FileSelectorFilters filters = FileSelectorFilters(),
 		std::string_view initial_directory = std::string_view());
-} // namespace Host
+}

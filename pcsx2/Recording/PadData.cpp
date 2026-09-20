@@ -15,33 +15,11 @@ PadData::PadData(const int port, const int slot)
 	m_slot = slot;
 	m_ext_port = sioConvertPortAndSlotToPad(m_port, m_slot);
 	PadBase* pad = Pad::GetPad(m_ext_port);
-	// Get the state of the buttons
-	// TODO - for the new recording file format, allow informing max number of buttons per frame per controller as well (ie. the analog button)
 	const u32 buttons = pad->GetButtons();
-	// - pressed group one
-	//	 - left
-	//	 - down
-	//	 - right
-	//	 - up
-	//	 - start
-	//	 - r3
-	//	 - l3
-	//	 - select
 	m_compactPressFlagsGroupOne = (buttons & 0b1111111100000000) >> 8;
-	// - pressed group two
-	//	 - square
-	//	 - cross
-	//	 - circle
-	//	 - triangle
-	//	 - r1
-	//	 - l1
-	//	 - r2
-	//	 - l2
 	m_compactPressFlagsGroupTwo = (buttons & 0b11111111);
-	// Get the analog values
 	m_rightAnalog = pad->GetRawRightAnalog();
 	m_leftAnalog = pad->GetRawLeftAnalog();
-	// Get pressure bytes (12 of them)
 	m_left = {(0b10000000 & m_compactPressFlagsGroupOne) == 0, pad->GetRawInput(PadDualshock2::Inputs::PAD_LEFT)};
 	m_down = {(0b01000000 & m_compactPressFlagsGroupOne) == 0, pad->GetRawInput(PadDualshock2::Inputs::PAD_DOWN)};
 	m_right = {(0b00100000 & m_compactPressFlagsGroupOne) == 0, pad->GetRawInput(PadDualshock2::Inputs::PAD_RIGHT)};

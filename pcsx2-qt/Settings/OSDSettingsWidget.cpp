@@ -45,9 +45,6 @@ OSDSettingsWidget::OSDSettingsWidget(SettingsWindow* settings_dialog, QWidget* p
 	onMessagesPosChanged();
 	onPerformancePosChanged();
 
-	//////////////////////////////////////////////////////////////////////////
-	// OSD Settings
-	//////////////////////////////////////////////////////////////////////////
 	SettingWidgetBinder::BindWidgetToFloatSetting(sif, m_ui.scale, "EmuCore/GS", "OsdScale", 100.0f);
 	SettingWidgetBinder::BindWidgetToFloatSetting(sif, m_ui.scale, "EmuCore/GS", "OsdScale", 100.0f);
 	SettingWidgetBinder::BindWidgetToFloatSetting(sif, m_ui.margin, "EmuCore/GS", "OsdMargin", 10.0f);
@@ -77,15 +74,11 @@ OSDSettingsWidget::OSDSettingsWidget(SettingsWindow* settings_dialog, QWidget* p
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.warnAboutUnsafeSettings, "EmuCore", "OsdWarnAboutUnsafeSettings", true);
 
 #ifndef _WIN32
-	// Currently DX12 only
 	m_ui.showDebugGPU->setVisible(false);
 #endif
 
 	connect(m_ui.showSettings, &QCheckBox::checkStateChanged, this, &OSDSettingsWidget::onOsdShowSettingsToggled);
 
-	//////////////////////////////////////////////////////////////////////////
-	// OSD Help
-	//////////////////////////////////////////////////////////////////////////
 	dialog()->registerWidgetHelp(m_ui.scale, tr("OSD Scale"), tr("100%"), tr("Scales the size of the onscreen OSD from 50% to 500%."));
 
 	dialog()->registerWidgetHelp(m_ui.margin, tr("OSD Margin"), tr("10px"),
@@ -285,7 +278,6 @@ void OSDSettingsWidget::setAllCheckboxes(bool checked)
 	m_ui.showDebugGPU->setChecked(checked);
 #endif
 
-	// Keep these checked
 	m_ui.showStatusIndicators->setChecked(true);
 	m_ui.showVideoCapture->setChecked(true);
 	m_ui.showInputRec->setChecked(true);

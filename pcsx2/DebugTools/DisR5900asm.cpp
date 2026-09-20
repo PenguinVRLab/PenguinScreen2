@@ -8,14 +8,9 @@
 
 #include <cstdarg>
 
-// Allow to print register content when you print dissassembler info
-// Note only a subset of the opcodes are supported. It is intended as a cheap debugger
-//#define PRINT_REG_CONTENT
-
-// Note: Perf is not important
 static void vssappendf(std::string &dest, const char *format, va_list args)
 {
-    char first_try[128]; // this function is called 99% (100%?) of the times for small string
+    char first_try[128];
     va_list args_copy;
     va_copy(args_copy, args);
 
@@ -52,30 +47,6 @@ bool disSimplify;
 namespace R5900
 {
 
-/*
-//DECODE PROCUDURES
-
-//cop0
-#define DECODE_FS           (DECODE_RD)
-#define DECODE_FT           (DECODE_RT)
-#define DECODE_FD           (DECODE_SA)
-/// ********
-
-#define DECODE_FUNCTION     ((disasmOpcode) & 0x3F)
-#define DECODE_RD     ((disasmOpcode >> 11) & 0x1F) // The rd part of the instruction register
-#define DECODE_RT     ((disasmOpcode >> 16) & 0x1F) // The rt part of the instruction register
-#define DECODE_RS     ((disasmOpcode >> 21) & 0x1F) // The rs part of the instruction register
-#define DECODE_SA     ((disasmOpcode >>  6) & 0x1F) // The sa part of the instruction register
-#define DECODE_IMMED     ( disasmOpcode & 0xFFFF)      // The immediate part of the instruction register
-#define DECODE_OFFSET  ((((short)DECODE_IMMED * 4) + opcode_addr + 4))
-#define DECODE_JUMP     (opcode_addr & 0xf0000000)|((disasmOpcode&0x3ffffff)<<2)
-#define DECODE_SYSCALL      ((opcode_addr & 0x03FFFFFF) >> 6)
-#define DECODE_BREAK        (DECODE_SYSCALL)
-#define DECODE_C0BC         ((disasmOpcode >> 16) & 0x03)
-#define DECODE_C1BC         ((disasmOpcode >> 16) & 0x03)
-#define DECODE_C2BC         ((disasmOpcode >> 16) & 0x03)
-*/
-/*************************CPUS REGISTERS**************************/
 const char * const GPR_REG[32] = {
     "zero", "at", "v0", "v1", "a0", "a1", "a2", "a3",
     "t0", "t1", "t2", "t3", "t4", "t5", "t6", "t7",
@@ -91,7 +62,6 @@ const char * const COP0_REG[32] ={
 	"TagHi","ErrorPC","C0r31"
 };
 
-//floating point cop1 Floating point reg
 const char * const COP1_REG_FP[32] ={
  	"f00","f01","f02","f03","f04","f05","f06","f07",
 	"f08","f09","f10","f11","f12","f13","f14","f15",
@@ -99,7 +69,6 @@ const char * const COP1_REG_FP[32] ={
 	"f24","f25","f26","f27","f28","f29","f30","f31"
 };
 
-//floating point cop1 control registers
 const char * const COP1_REG_FCR[32] ={
  	"fcr00","fcr01","fcr02","fcr03","fcr04","fcr05","fcr06","fcr07",
 	"fcr08","fcr09","fcr10","fcr11","fcr12","fcr13","fcr14","fcr15",
@@ -107,7 +76,6 @@ const char * const COP1_REG_FCR[32] ={
 	"fcr24","fcr25","fcr26","fcr27","fcr28","fcr29","fcr30","fcr31"
 };
 
-//floating point cop2 reg
 const char * const COP2_REG_FP[32] ={
 	"vf00","vf01","vf02","vf03","vf04","vf05","vf06","vf07",
 	"vf08","vf09","vf10","vf11","vf12","vf13","vf14","vf15",
@@ -115,7 +83,6 @@ const char * const COP2_REG_FP[32] ={
 	"vf24","vf25","vf26","vf27","vf28","vf29","vf30","vf31"
 };
 
-//cop2 control registers
 const char * const COP2_REG_CTL[32] ={
 	"vi00","vi01","vi02","vi03","vi04","vi05","vi06","vi07",
 	"vi08","vi09","vi10","vi11","vi12","vi13","vi14","vi15",
@@ -125,14 +92,12 @@ const char * const COP2_REG_CTL[32] ={
 
 const char * const COP2_VFnames[4] = { "x", "y", "z", "w" };
 
-//gs privileged registers
 const char * const GS_REG_PRIV[19] = {
 	"PMODE","SMODE1","SMODE2","SRFSH","SYNCH1","SYNCH2","SYNCV",
 	"DISPFB1","DISPLAY1","DISPFB2","DISPLAY2","EXTBUF","EXTDATA",
 	"EXTWRITE","BGCOLOR","CSR","IMR","BUSDIR","SIGLBLID",
 };
 
-//gs privileged register addresses relative to 12000000h
 const u32 GS_REG_PRIV_ADDR[19] = {
 	0x00,0x10,0x20,0x30,0x40,0x50,0x60,0x70,0x80,0x90,
 	0xa0,0xb0,0xc0,0xd0,0xE0,0x1000,0x1010,0x1040,0x1080
@@ -143,9 +108,6 @@ void P_COP2_SPECIAL2( std::string& output );
 void P_COP2_SPECIAL( std::string& output );
 void P_COP2_BC2( std::string& output );
 
-//****************************************************************************
-//** COP2 - (VU0)                                                           **
-//****************************************************************************
 void P_QMFC2( std::string& output );
 void P_CFC2( std::string& output );
 void P_QMTC2( std::string& output );
@@ -154,7 +116,6 @@ void P_BC2F( std::string& output );
 void P_BC2T( std::string& output );
 void P_BC2FL( std::string& output );
 void P_BC2TL( std::string& output );
-//*****************SPECIAL 1 VUO TABLE*******************************
 void P_VADDx( std::string& output );
 void P_VADDy( std::string& output );
 void P_VADDz( std::string& output );
@@ -210,8 +171,6 @@ void P_VIAND( std::string& output );
 void P_VIOR( std::string& output );
 void P_VCALLMS( std::string& output );
 void P_CALLMSR( std::string& output );
-//***********************************END OF SPECIAL1 VU0 TABLE*****************************
-//******************************SPECIAL2 VUO TABLE*****************************************
 void P_VADDAx( std::string& output );
 void P_VADDAy( std::string& output );
 void P_VADDAz( std::string& output );
@@ -277,268 +236,8 @@ void P_VRNEXT( std::string& output );
 void P_VRGET( std::string& output );
 void P_VRINIT( std::string& output );
 void P_VRXOR( std::string& output );
-//************************************END OF SPECIAL2 VUO TABLE****************************
 
 
-/*
-    CPU: Instructions encoded by opcode field.
-    31---------26---------------------------------------------------0
-    |  opcode   |                                                   |
-    ------6----------------------------------------------------------
-    |--000--|--001--|--010--|--011--|--100--|--101--|--110--|--111--| lo
-000 | *1    | *2    | J     | JAL   | BEQ   | BNE   | BLEZ  | BGTZ  |
-001 | ADDI  | ADDIU | SLTI  | SLTIU | ANDI  | ORI   | XORI  | LUI   |
-010 | *3    | *4    |  *5   | ---   | BEQL  | BNEL  | BLEZL | BGTZL |
-011 | DADDI |DADDIU | LDL   | LDR   |  *6   |  ---  |  LQ   | SQ    |
-100 | LB    | LH    | LWL   | LW    | LBU   | LHU   | LWR   | LWU   |
-101 | SB    | SH    | SWL   | SW    | SDL   | SDR   | SWR   | CACHE |
-110 | ---   | LWC1  | ---   | PREF  | ---   | ---   | LQC2  | LD    |
-111 | ---   | SWC1  | ---   | ---   | ---   | ---   | SQC2  | SD    |
- hi |-------|-------|-------|-------|-------|-------|-------|-------|
-     *1 = SPECIAL, see SPECIAL list    *2 = REGIMM, see REGIMM list
-     *3 = COP0                         *4 = COP1
-     *5 = COP2                         *6 = MMI table
-*/
-
-/*
-     SPECIAL: Instr. encoded by function field when opcode field = SPECIAL
-    31---------26------------------------------------------5--------0
-    | = SPECIAL |                                         | function|
-    ------6----------------------------------------------------6-----
-    |--000--|--001--|--010--|--011--|--100--|--101--|--110--|--111--| lo
-000 | SLL   | ---   | SRL   | SRA   | SLLV  |  ---  | SRLV  | SRAV  |
-001 | JR    | JALR  | MOVZ  | MOVN  |SYSCALL| BREAK |  ---  | SYNC  |
-010 | MFHI  | MTHI  | MFLO  | MTLO  | DSLLV |  ---  | DSRLV | DSRAV |
-011 | MULT  | MULTU | DIV   | DIVU  | ----  |  ---  | ----  | ----- |
-100 | ADD   | ADDU  | SUB   | SUBU  | AND   | OR    | XOR   | NOR   |
-101 | MFSA  | MTSA  | SLT   | SLTU  | DADD  | DADDU | DSUB  | DSUBU |
-110 | TGE   | TGEU  | TLT   | TLTU  | TEQ   |  ---  | TNE   |  ---  |
-111 | DSLL  |  ---  | DSRL  | DSRA  |DSLL32 |  ---  |DSRL32 |DSRA32 |
- hi |-------|-------|-------|-------|-------|-------|-------|-------|
-*/
-
-/*
-    REGIMM: Instructions encoded by the rt field when opcode field = REGIMM.
-    31---------26----------20-------16------------------------------0
-    | = REGIMM  |          |   rt    |                              |
-    ------6---------------------5------------------------------------
-    |--000--|--001--|--010--|--011--|--100--|--101--|--110--|--111--| lo
- 00 | BLTZ  | BGEZ  | BLTZL | BGEZL |  ---  |  ---  |  ---  |  ---  |
- 01 | TGEI  | TGEIU | TLTI  | TLTIU | TEQI  |  ---  | TNEI  |  ---  |
- 10 | BLTZAL| BGEZAL|BLTZALL|BGEZALL|  ---  |  ---  |  ---  |  ---  |
- 11 | MTSAB | MTSAH |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
- hi |-------|-------|-------|-------|-------|-------|-------|-------|
-*/
-
-/*
-    MMI: Instr. encoded by function field when opcode field = MMI
-    31---------26------------------------------------------5--------0
-    | = MMI     |                                         | function|
-    ------6----------------------------------------------------6-----
-    |--000--|--001--|--010--|--011--|--100--|--101--|--110--|--111--| lo
-000 | MADD  | MADDU |  ---  |  ---  | PLZCW |  ---  |  ---  |  ---  |
-001 |  *1   |  *2   |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
-010 | MFHI1 | MTHI1 | MFLO1 | MTLO1 |  ---  |  ---  |  ---  |  ---  |
-011 | MULT1 | MULTU1| DIV1  | DIVU1 |  ---  |  ---  |  ---  |  ---  |
-100 | MADD1 | MADDU1|  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
-101 |  *3   |  *4   |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
-110 | PMFHL | PMTHL |  ---  |  ---  | PSLLH |  ---  | PSRLH | PSRAH |
-111 |  ---  |  ---  |  ---  |  ---  | PSLLW |  ---  | PSRLW | PSRAW |
- hi |-------|-------|-------|-------|-------|-------|-------|-------|
-
-     *1 = see MMI0 table    *2 = see MMI2 Table
-     *3 = see MMI1 table    *4 = see MMI3 Table
-*/
-
-/*
-  MMI0: Instr. encoded by function field when opcode field = MMI & MMI0
-
-    31---------26------------------------------10--------6-5--------0
-    |          |                              |function  | MMI0    |
-    ------6----------------------------------------------------6-----
-    |--000--|--001--|--010--|--011--| lo
-000 |PADDW  | PSUBW | PCGTW | PMAXW |
-001 |PADDH  | PSUBH | PCGTH | PMAXH |
-010 |PADDB  | PSUBB | PCGTB |  ---  |
-011 | ---   | ---   |  ---  |  ---  |
-100 |PADDSW |PSUBSW |PEXTLW | PPACW |
-101 |PADDSH |PSUBSH |PEXTLH | PPACH |
-110 |PADDSB |PSUBSB |PEXTLB | PPACB |
-111 | ---   |  ---  | PEXT5 | PPAC5 |
- hi |-------|-------|-------|-------|
-*/
-
-/*
-  MMI1: Instr. encoded by function field when opcode field = MMI & MMI1
-
-    31---------26------------------------------------------5--------0
-    |           |                               |function  | MMI1    |
-    ------6----------------------------------------------------6-----
-    |--000--|--001--|--010--|--011--| lo
-000 |  ---  | PABSW | PCEQW | PMINW |
-001 |PADSBH | PABSH | PCEQH | PMINH |
-010 |  ---  |  ---  | PCEQB |  ---  |
-011 |  ---  |  ---  |  ---  |  ---  |
-100 |PADDUW |PSUBUW |PEXTUW |  ---  |
-101 |PADDUH |PSUBUH |PEXTUH |  ---  |
-110 |PADDUB |PSUBUB |PEXTUB | QFSRV |
-111 |  ---  |  ---  |  ---  |  ---  |
- hi |-------|-------|-------|-------|
-*/
-
-/*
-  MMI2: Instr. encoded by function field when opcode field = MMI & MMI2
-
-    31---------26------------------------------------------5--------0
-    |           |                              |function   | MMI2    |
-    ------6----------------------------------------------------6-----
-    |--000--|--001--|--010--|--011--| lo
-000 |PMADDW |  ---  |PSLLVW |PSRLVW |
-001 |PMSUBW |  ---  |  ---  |  ---  |
-010 |PMFHI  |PMFLO  |PINTH  |  ---  |
-011 |PMULTW |PDIVW  |PCPYLD |  ---  |
-100 |PMADDH |PHMADH | PAND  |  PXOR |
-101 |PMSUBH |PHMSBH |  ---  |  ---  |
-110 | ---   |  ---  | PEXEH | PREVH |
-111 |PMULTH |PDIVBW | PEXEW |PROT3W |
- hi |-------|-------|-------|-------|
-*/
-
-/*
-  MMI3: Instr. encoded by function field when opcode field = MMI & MMI3
-    31---------26------------------------------------------5--------0
-    |           |                               |function  | MMI3   |
-    ------6----------------------------------------------------6-----
-    |--000--|--001--|--010--|--011--| lo
-000 |PMADDUW|  ---  |  ---  |PSRAVW |
-001 |  ---  |  ---  |  ---  |  ---  |
-010 |PMTHI  | PMTLO |PINTEH |  ---  |
-011 |PMULTUW| PDIVUW|PCPYUD |  ---  |
-100 |  ---  |  ---  |  POR  | PNOR  |
-101 |  ---  |  ---  |  ---  |  ---  |
-110 |  ---  |  ---  | PEXCH | PCPYH |
-111 |  ---  |  ---  | PEXCW |  ---  |
- hi |-------|-------|-------|-------|
- */
-
-/*
-    COP0: Instructions encoded by the rs field when opcode = COP0.
-    31--------26-25------21 ----------------------------------------0
-    |  = COP0   |   fmt   |                                         |
-    ------6----------5-----------------------------------------------
-    |--000--|--001--|--010--|--011--|--100--|--101--|--110--|--111--| lo
- 00 | MFC0  |  ---  |  ---  |  ---  | MTC0  |  ---  |  ---  |  ---  |
- 01 |  *1   |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
- 10 |  *2   |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
- 11 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
- hi |-------|-------|-------|-------|-------|-------|-------|-------|
-     *1=BC See BC0 list       *2 = TLB instr, see TLB list
-*/
-/*
-    BC0: Instructions encoded by the rt field when opcode = COP0 & rs field=BC0
-    31--------26-25------21 ----------------------------------------0
-    |  = COP0   |   fmt   |                                         |
-    ------6----------5-----------------------------------------------
-    |--000--|--001--|--010--|--011--|--100--|--101--|--110--|--111--| lo
- 00 | BC0F  | BC0T  | BC0FL | BC0TL |  ---  |  ---  |  ---  |  ---  |
- 01 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
- 10 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
- 11 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
- hi |-------|-------|-------|-------|-------|-------|-------|-------|
-*/
-/*
-    C0=Instructions encode by function field when Opcode field=COP0 & rs field=C0
-    31---------26------------------------------------------5--------0
-    |           |                                         |         |
-    ------6----------------------------------------------------6-----
-    |--000--|--001--|--010--|--011--|--100--|--101--|--110--|--111--| lo
-000 | ---   |  TLBR | TLBWI |  ---  |  ---  |  ---  | TLBWR |  ---  |
-001 | TLBP  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
-010 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
-011 | ERET  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
-100 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
-101 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
-110 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
-111 |  EI   |  DI   |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
- hi |-------|-------|-------|-------|-------|-------|-------|-------|
-*/
-/*
-    COP1: Instructions encoded by the fmt field when opcode = COP1.
-    31--------26-25------21 ----------------------------------------0
-    |  = COP1   |   fmt   |                                         |
-    ------6----------5-----------------------------------------------
-    |--000--|--001--|--010--|--011--|--100--|--101--|--110--|--111--| lo
- 00 | MFC1  |  ---  | CFC1  |  ---  | MTC1  |  ---  | CTC1  |  ---  |
- 01 | *1    |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
- 10 | *2    |  ---  |  ---  |  ---  | *3    |  ---  |  ---  |  ---  |
- 11 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
- hi |-------|-------|-------|-------|-------|-------|-------|-------|
-     *1 = BC instructions, see BC1 list   *2 = S instr, see FPU list
-     *3 = W instr, see FPU list
-*/
-/*
-    BC1: Instructions encoded by the rt field when opcode = COP1 & rs field=BC1
-    31--------26-25------21 ----------------------------------------0
-    |  = COP1   |   fmt   |                                         |
-    ------6----------5-----------------------------------------------
-    |--000--|--001--|--010--|--011--|--100--|--101--|--110--|--111--| lo
- 00 | BC1F  | BC1T  | BC1FL | BC1TL |  ---  |  ---  |  ---  |  ---  |
- 01 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
- 10 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
- 11 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
- hi |-------|-------|-------|-------|-------|-------|-------|-------|
-*/
-/*
-    FPU: Instructions encoded by the function field when opcode = COP1
-         and rs = S
-    31--------26-25------21 -------------------------------5--------0
-    |  = COP1   |  = S    |                               | function|
-    ------6----------5-----------------------------------------6-----
-    |--000--|--001--|--010--|--011--|--100--|--101--|--110--|--111--| lo
-000 | ADD.S | SUB.S | MUL.S | DIV.S | SQRT.S| ABS.S | MOV.S | NEG.S |
-001 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  | ---   |
-010 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |RSQRT.S|  ---  |
-011 | ADDA.S| SUBA.S| MULA.S|  ---  | MADD.S| MSUB.S|MADDA.S|MSUBA.S|
-100 |  ---  | ---   |  ---  |  ---  | CVT.W |  ---  |  ---  |  ---  |
-101 | MAX.S | MIN.S |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
-110 | C.F   | ---   | C.EQ  |  ---  | C.LT  |  ---  |  C.LE |  ---  |
-111 | ---   | ---   |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
- hi |-------|-------|-------|-------|-------|-------|-------|-------|
-*/
-/*
-    FPU: Instructions encoded by the function field when opcode = COP1
-         and rs = W
-    31--------26-25------21 -------------------------------5--------0
-    |  = COP1   |  = W    |                               | function|
-    ------6----------5-----------------------------------------6-----
-    |--000--|--001--|--010--|--011--|--100--|--101--|--110--|--111--| lo
-000 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
-001 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
-010 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
-011 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
-100 | CVT.S |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
-101 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
-110 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
-111 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
- hi |-------|-------|-------|-------|-------|-------|-------|-------|
-*/
-
-//*************************************************************
-// COP2 TABLES :)   [VU0 as a Co-Processor to the EE]
-//*************************************************************
-/*
-   COP2: Instructions encoded by the fmt field when opcode = COP2.
-    31--------26-25------21 ----------------------------------------0
-    |  = COP2   |   fmt   |                                         |
-    ------6----------5-----------------------------------------------
-    |--000--|--001--|--010--|--011--|--100--|--101--|--110--|--111--| lo
- 00 |  ---  | QMFC2 | CFC2  |  ---  |  ---  | QMTC2 | CTC2  |  ---  |
- 01 | *1    |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
- 10 | *2    | *2    | *2    | *2    | *2    | *2    | *2    | *2    |
- 11 | *2    | *2    | *2    | *2    | *2    | *2    | *2    | *2    |
- hi |-------|-------|-------|-------|-------|-------|-------|-------|
-     *1 = BC instructions, see BC2 list   *2 =see special1 table
-*/
 void (*COP2PrintTable[32])( std::string& output ) = {
     P_COP2_Unknown, P_QMFC2,        P_CFC2,         P_COP2_Unknown, P_COP2_Unknown, P_QMTC2,        P_CTC2,         P_COP2_Unknown,
     P_COP2_BC2,     P_COP2_Unknown, P_COP2_Unknown, P_COP2_Unknown, P_COP2_Unknown, P_COP2_Unknown, P_COP2_Unknown, P_COP2_Unknown,
@@ -547,41 +246,12 @@ void (*COP2PrintTable[32])( std::string& output ) = {
 
 
 };
-/*
-    BC2: Instructions encoded by the rt field when opcode = COP2 & rs field=BC1
-    31--------26-25------21 ----------------------------------------0
-    |  = COP2   |   rs=BC2|                                         |
-    ------6----------5-----------------------------------------------
-    |--000--|--001--|--010--|--011--|--100--|--101--|--110--|--111--| lo
- 00 | BC2F  | BC2T  | BC2FL | BC2TL |  ---  |  ---  |  ---  |  ---  |
- 01 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
- 10 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
- 11 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
- hi |-------|-------|-------|-------|-------|-------|-------|-------|
- */
 void (*COP2BC2PrintTable[32])( std::string& output ) = {
     P_BC2F,         P_BC2T,         P_BC2FL,        P_BC2TL,        P_COP2_Unknown, P_COP2_Unknown, P_COP2_Unknown, P_COP2_Unknown,
     P_COP2_Unknown, P_COP2_Unknown, P_COP2_Unknown, P_COP2_Unknown, P_COP2_Unknown, P_COP2_Unknown, P_COP2_Unknown, P_COP2_Unknown,
     P_COP2_Unknown, P_COP2_Unknown, P_COP2_Unknown, P_COP2_Unknown, P_COP2_Unknown, P_COP2_Unknown, P_COP2_Unknown, P_COP2_Unknown,
     P_COP2_Unknown, P_COP2_Unknown, P_COP2_Unknown, P_COP2_Unknown, P_COP2_Unknown, P_COP2_Unknown, P_COP2_Unknown, P_COP2_Unknown,
 };
-/*
-    Special1 table : instructions encode by function field when opcode=COP2 & rs field=Special1
-    31---------26---------------------------------------------------0
-    |  =COP2   | rs=Special                                         |
-    ------6----------------------------------------------------------
-    |--000--|--001--|--010--|--011--|--100--|--101--|--110--|--111--| lo
-000 |VADDx  |VADDy  |VADDz  |VADDw  |VSUBx  |VSUBy  |VSUBz  |VSUBw  |
-001 |VMADDx |VMADDy |VMADDz |VMADDw |VMSUBx |VMSUBy |VMSUBz |VMSUBw |
-010 |VMAXx  |VMAXy  |VMAXz  |VMAXw  |VMINIx |VMINIy |VMINIz |VMINIw |
-011 |VMULx  |VMULy  |VMULz  |VMULw  |VMULq  |VMAXi  |VMULi  |VMINIi |
-100 |VADDq  |VMADDq |VADDi  |VMADDi |VSUBq  |VMSUBq |VSUbi  |VMSUBi |
-101 |VADD   |VMADD  |VMUL   |VMAX   |VSUB   |VMSUB  |VOPMSUB|VMINI  |
-110 |VIADD  |VISUB  |VIADDI |  ---  |VIAND  |VIOR   |  ---  |  ---  |
-111 |VCALLMS|CALLMSR|  ---  |  ---  |  *1   |  *1   |  *1   |  *1   |
- hi |-------|-------|-------|-------|-------|-------|-------|-------|
-    *1=see special2 table
-*/
 void (*COP2SPECIAL1PrintTable[64])( std::string& output ) =
 {
  P_VADDx,       P_VADDy,       P_VADDz,       P_VADDw,       P_VSUBx,        P_VSUBy,        P_VSUBz,        P_VSUBw,
@@ -594,31 +264,6 @@ void (*COP2SPECIAL1PrintTable[64])( std::string& output ) =
  P_VCALLMS,     P_CALLMSR,     P_COP2_Unknown,P_COP2_Unknown,P_COP2_SPECIAL2,P_COP2_SPECIAL2,P_COP2_SPECIAL2,P_COP2_SPECIAL2,
 
 };
-/*
-  Special2 table : instructions encode by function field when opcode=COp2 & rs field=Special2
-
-     31---------26---------------------------------------------------0
-     |  =COP2   | rs=Special2                                        |
-     ------6----------------------------------------------------------
-     |--000--|--001--|--010--|--011--|--100--|--101--|--110--|--111--| lo
-0000 |VADDAx |VADDAy |VADDAz |VADDAw |VSUBAx |VSUBAy |VSUBAz |VSUBAw |
-0001 |VMADDAx|VMADDAy|VMADDAz|VMADDAw|VMSUBAx|VMSUBAy|VMSUBAz|VMSUBAw|
-0010 |VITOF0 |VITOF4 |VITOF12|VITOF15|VFTOI0 |VFTOI4 |VFTOI12|VFTOI15|
-0011 |VMULAx |VMULAy |VMULAz |VMULAw |VMULAq |VABS   |VMULAi |VCLIPw |
-0100 |VADDAq |VMADDAq|VADDAi |VMADDAi|VSUBAq |VMSUBAq|VSUBAi |VMSUBAi|
-0101 |VADDA  |VMADDA |VMULA  |  ---  |VSUBA  |VMSUBA |VOPMULA|VNOP   |
-0110 |VMONE  |VMR32  |  ---  |  ---  |VLQI   |VSQI   |VLQD   |VSQD   |
-0111 |VDIV   |VSQRT  |VRSQRT |VWAITQ |VMTIR  |VMFIR  |VILWR  |VISWR  |
-1000 |VRNEXT |VRGET  |VRINIT |VRXOR  |  ---  |  ---  |  ---  |  ---  |
-1001 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
-1010 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
-1011 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
-1100 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
-1101 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
-1110 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
-1111 |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |  ---  |
- hi  |-------|-------|-------|-------|-------|-------|-------|-------|
-*/
 void (*COP2SPECIAL2PrintTable[128])( std::string& output ) =
 {
  P_VADDAx      ,P_VADDAy      ,P_VADDAz      ,P_VADDAw      ,P_VSUBAx      ,P_VSUBAy      ,P_VSUBAz      ,P_VSUBAw,
@@ -639,9 +284,6 @@ void (*COP2SPECIAL2PrintTable[128])( std::string& output ) =
  P_COP2_Unknown,P_COP2_Unknown,P_COP2_Unknown,P_COP2_Unknown,P_COP2_Unknown,P_COP2_Unknown,P_COP2_Unknown,P_COP2_Unknown,
 };
 
-//**************************TABLES CALLS***********************
-
-
 void disR5900Fasm( std::string& output, u32 code, u32 pc, bool simplify )
 {
 	opcode_addr = pc;
@@ -651,8 +293,6 @@ void disR5900Fasm( std::string& output, u32 code, u32 pc, bool simplify )
 	GetInstruction(code).disasm( output );
 }
 
-//*************************************************************
-//************************COP2**********************************
 void P_COP2_BC2( std::string& output )
 {
 	COP2BC2PrintTable[DECODE_C2BC]( output );
@@ -666,16 +306,11 @@ void P_COP2_SPECIAL2( std::string& output )
 	COP2SPECIAL2PrintTable[(disasmOpcode & 0x3) | ((disasmOpcode >> 4) & 0x7c)]( output );
 }
 
-//**************************UNKNOWN****************************
 void P_COP2_Unknown( std::string& output )
 {
 	output += "COP2 ??";
 }
 
-
-//*************************************************************
-
-//*****************SOME DECODE STUFF***************************
 
 void label_decode( std::string& output, u32 addr )
 {
@@ -694,8 +329,6 @@ void offset_decode( std::string& output )
 	label_decode( output, DECODE_OFFSET );
 }
 
-//*********************END OF DECODE ROUTINES******************
-
 namespace OpcodeDisasm
 {
 
@@ -704,7 +337,6 @@ void COP2( std::string& output )
 	COP2PrintTable[DECODE_RS]( output );
 }
 
-// Unkown Opcode!
 void Unknown( std::string& output )
 {
 	output += "?????";
@@ -725,8 +357,6 @@ void COP1_Unknown( std::string& output )
 	output += "FPU ??";
 }
 
-// sap!  it stands for string append.  It's not a friendly name but for now it makes
-// the copy-paste marathon of code below more readable!
 #define _sap( str ) ssappendf( output, str,
 
 const char* signedImmediate(s32 imm, int len = 0)
@@ -783,7 +413,6 @@ void disBranch(std::string& output, const char* op, int rs, int rt)
 	offset_decode(output);
 }
 
-//********************* Standard Opcodes***********************
 void J( std::string& output )      { output += "j\t";        jump_decode(output);}
 void JAL( std::string& output )    { output += "jal\t";      jump_decode(output);}
 
@@ -935,10 +564,9 @@ void LQ( std::string& output )     { disMemAccess(output,"lq"); }
 void SQ( std::string& output )     { disMemAccess(output,"sq"); }
 void SWC1( std::string& output )   { disMemAccess(output,"swc1",1); }
 void SQC2( std::string& output )   { disMemAccess(output,"sqc2",2); }
-void PREF( std::string& output )   { output += "pref ---"; /*_sap("PREF\t%s, 0x%04X(%s)")   GPR_REG[DECODE_RT], DECODE_IMMED, GPR_REG[RS]); */}
+void PREF( std::string& output )   { output += "pref ---"; }
 void LWC1( std::string& output )   { disMemAccess(output,"lwc1",1); }
 void LQC2( std::string& output )   { disMemAccess(output,"lqc2",2); }
-//********************END OF STANDARD OPCODES*************************
 
 void SLL( std::string& output )
 {
@@ -1047,11 +675,9 @@ void MOVZ( std::string& output )    { _sap("movz\t%s, %s, %s") GPR_REG[DECODE_RD
 void MOVN( std::string& output )    { _sap("movn\t%s, %s, %s") GPR_REG[DECODE_RD], GPR_REG[DECODE_RS], GPR_REG[DECODE_RT]); }
 void MFSA( std::string& output )    { _sap("mfsa\t%s")          GPR_REG[DECODE_RD]);}
 void MTSA( std::string& output )    { _sap("mtsa\t%s")          GPR_REG[DECODE_RS]);}
-//*** unsupport (yet) cpu opcodes
-void SYSCALL( std::string& output ) { output +="syscall ---";/*_sap("syscall\t0x%05X")   DECODE_SYSCALL);*/}
-void BREAK( std::string& output )   { output += "break   ---";/*_sap("break\t0x%05X")     DECODE_BREAK); */}
-void CACHE( std::string& output )   { output += "cache   ---";/*_sap("cache\t%s, 0x%04X(%s)")  GPR_REG[DECODE_RT], DECODE_IMMED, GPR_REG[DECODE_RS]); */}
-//************************REGIMM OPCODES***************************
+void SYSCALL( std::string& output ) { output +="syscall ---"; }
+void BREAK( std::string& output )   { output += "break   ---"; }
+void CACHE( std::string& output )   { output += "cache   ---"; }
 void BLTZ( std::string& output )    { disBranch(output, "bltz", DECODE_RS); }
 void BGEZ( std::string& output )    { disBranch(output, "bgez", DECODE_RS); }
 void BLTZL( std::string& output )   { disBranch(output, "bltzl", DECODE_RS); }
@@ -1070,7 +696,6 @@ void MTSAB( std::string& output )   { _sap("mtsab\t%s, 0x%04X") GPR_REG[DECODE_R
 void MTSAH( std::string& output )   { _sap("mtsah\t%s, 0x%04X") GPR_REG[DECODE_RS], DECODE_IMMED);}
 
 
-//***************************SPECIAL 2 CPU OPCODES*******************
 const char* pmfhl_sub[] = {"lw", "uw", "slw", "lh", "sh", "??", "??", "??"};
 
 void MADD( std::string& output )    { _sap("madd\t%s, %s, %s")        GPR_REG[DECODE_RD],GPR_REG[DECODE_RS], GPR_REG[DECODE_RT]); }
@@ -1086,7 +711,6 @@ void MULT1( std::string& output )   { _sap("mult1\t%s, %s, %s")        GPR_REG[D
 void MULTU1( std::string& output )  { _sap("multu1\t%s, %s, %s")        GPR_REG[DECODE_RD], GPR_REG[DECODE_RS], GPR_REG[DECODE_RT]);}
 void DIV1( std::string& output )    { _sap("div1\t%s, %s")       GPR_REG[DECODE_RS], GPR_REG[DECODE_RT]); }
 void DIVU1( std::string& output )   { _sap("divu1\t%s, %s")       GPR_REG[DECODE_RS], GPR_REG[DECODE_RT]); }
-//that have parametres that i haven't figure out how to display...
 void PMFHL( std::string& output )   { _sap("pmfhl.%s \t%s")          pmfhl_sub[DECODE_SA & 0x7], GPR_REG[DECODE_RD]); }
 void PMTHL( std::string& output )   { _sap("pmthl.%s \t%s")          pmfhl_sub[DECODE_SA & 0x7], GPR_REG[DECODE_RS]); }
 void PSLLH( std::string& output )   { _sap("psllh   \t%s, %s, 0x%02X")   GPR_REG[DECODE_RD], GPR_REG[DECODE_RT], DECODE_SA); }
@@ -1095,8 +719,6 @@ void PSRAH( std::string& output )   { _sap("psrah   \t%s, %s, 0x%02X")   GPR_REG
 void PSLLW( std::string& output )   { _sap( "psllw   \t%s, %s, 0x%02X")   GPR_REG[DECODE_RD], GPR_REG[DECODE_RT], DECODE_SA);}
 void PSRLW( std::string& output )   { _sap( "psrlw   \t%s, %s, 0x%02X")   GPR_REG[DECODE_RD], GPR_REG[DECODE_RT], DECODE_SA);}
 void PSRAW( std::string& output )   { _sap( "psraw   \t%s, %s, 0x%02X")   GPR_REG[DECODE_RD], GPR_REG[DECODE_RT], DECODE_SA);}
-//***************************END OF SPECIAL OPCODES******************
-//*************************MMI0 OPCODES************************
 
 void PADDW( std::string& output ){  _sap( "paddw\t%s, %s, %s")   GPR_REG[DECODE_RD], GPR_REG[DECODE_RS], GPR_REG[DECODE_RT]); }
 void PSUBW( std::string& output ){  _sap( "psubw\t%s, %s, %s")   GPR_REG[DECODE_RD], GPR_REG[DECODE_RS], GPR_REG[DECODE_RT]); }
@@ -1123,8 +745,6 @@ void PEXTLB( std::string& output ){ _sap( "pextlb\t%s, %s, %s")   GPR_REG[DECODE
 void PPACB( std::string& output ) { _sap( "ppacb\t%s, %s, %s")   GPR_REG[DECODE_RD], GPR_REG[DECODE_RS], GPR_REG[DECODE_RT]); }
 void PEXT5( std::string& output ) { _sap( "pext5\t%s, %s")      GPR_REG[DECODE_RD], GPR_REG[DECODE_RT]); }
 void PPAC5( std::string& output ) { _sap( "ppac5\t%s, %s")      GPR_REG[DECODE_RD], GPR_REG[DECODE_RT]); }
-//**********END OF MMI0 OPCODES*********************************
-//**********MMI1 OPCODES**************************************
 void PABSW( std::string& output ){  _sap( "pabsw\t%s, %s")      GPR_REG[DECODE_RD], GPR_REG[DECODE_RT]); }
 void PCEQW( std::string& output ){  _sap( "pceqw\t%s, %s, %s")   GPR_REG[DECODE_RD], GPR_REG[DECODE_RS], GPR_REG[DECODE_RT]); }
 void PMINW( std::string& output ){  _sap( "pminw\t%s, %s, %s")   GPR_REG[DECODE_RD], GPR_REG[DECODE_RS], GPR_REG[DECODE_RT]); }
@@ -1143,8 +763,6 @@ void PADDUB( std::string& output ){ _sap( "paddub\t%s, %s, %s")   GPR_REG[DECODE
 void PSUBUB( std::string& output ){ _sap( "psubub\t%s, %s, %s")   GPR_REG[DECODE_RD], GPR_REG[DECODE_RS], GPR_REG[DECODE_RT]); }
 void PEXTUB( std::string& output ){ _sap( "pextub\t%s, %s, %s")   GPR_REG[DECODE_RD], GPR_REG[DECODE_RS], GPR_REG[DECODE_RT]); }
 void QFSRV( std::string& output ) { _sap( "qfsrv\t%s, %s, %s")   GPR_REG[DECODE_RD], GPR_REG[DECODE_RS], GPR_REG[DECODE_RT]); }
-//********END OF MMI1 OPCODES***********************************
-//*********MMI2 OPCODES***************************************
 void PMADDW( std::string& output ){ _sap( "pmaddw\t%s, %s, %s")   GPR_REG[DECODE_RD], GPR_REG[DECODE_RS], GPR_REG[DECODE_RT]); }
 void PSLLVW( std::string& output ){ _sap( "psllvw\t%s, %s, %s")   GPR_REG[DECODE_RD], GPR_REG[DECODE_RS], GPR_REG[DECODE_RT]); }
 void PSRLVW( std::string& output ){ _sap( "psrlvw\t%s, %s, %s")   GPR_REG[DECODE_RD], GPR_REG[DECODE_RS], GPR_REG[DECODE_RT]); }
@@ -1167,8 +785,6 @@ void PMULTH( std::string& output ){ _sap( "pmulth\t%s, %s, %s")   GPR_REG[DECODE
 void PDIVBW( std::string& output ){ _sap( "pdivbw\t%s, %s")      GPR_REG[DECODE_RS], GPR_REG[DECODE_RT]); }
 void PEXEW( std::string& output ){  _sap( "pexew\t%s, %s")      GPR_REG[DECODE_RD], GPR_REG[DECODE_RT]); }
 void PROT3W( std::string& output ){ _sap( "prot3w\t%s, %s")      GPR_REG[DECODE_RD], GPR_REG[DECODE_RT]); }
-//*****END OF MMI2 OPCODES***********************************
-//*************************MMI3 OPCODES************************
 void PMADDUW( std::string& output ){ _sap("pmadduw\t%s, %s, %s")   GPR_REG[DECODE_RD], GPR_REG[DECODE_RT], GPR_REG[DECODE_RS]); }
 void PSRAVW( std::string& output ){  _sap("psravw\t%s, %s, %s")   GPR_REG[DECODE_RD], GPR_REG[DECODE_RT], GPR_REG[DECODE_RS]); }
 void PMTHI( std::string& output ){   _sap("pmthi\t%s")          GPR_REG[DECODE_RS]); }
@@ -1182,11 +798,7 @@ void PNOR( std::string& output ){    _sap("pnor\t%s, %s, %s")   GPR_REG[DECODE_R
 void PEXCH( std::string& output ){   _sap("pexch\t%s, %s")       GPR_REG[DECODE_RD], GPR_REG[DECODE_RT]);}
 void PCPYH( std::string& output ){   _sap("pcpyh\t%s, %s")       GPR_REG[DECODE_RD], GPR_REG[DECODE_RT]);}
 void PEXCW( std::string& output ){   _sap("pexcw\t%s, %s")       GPR_REG[DECODE_RD], GPR_REG[DECODE_RT]);}
-//**********************END OF MMI3 OPCODES********************
 
-//****************************************************************************
-//** COP0                                                                   **
-//****************************************************************************
 void MFC0( std::string& output ){  _sap("mfc0\t%s, %s")  GPR_REG[DECODE_RT], COP0_REG[DECODE_FS]); }
 void MTC0( std::string& output ){  _sap("mtc0\t%s, %s")  GPR_REG[DECODE_RT], COP0_REG[DECODE_FS]); }
 void BC0F( std::string& output ){  output += "bc0f\t";       offset_decode(output); }
@@ -1200,12 +812,6 @@ void TLBP( std::string& output ){  output += "tlbp";}
 void ERET( std::string& output ){  output += "eret";}
 void DI( std::string& output ){    output += "di";}
 void EI( std::string& output ){    output += "ei";}
-//****************************************************************************
-//** END OF COP0                                                            **
-//****************************************************************************
-//****************************************************************************
-//** COP1 - Floating Point Unit (FPU)                                       **
-//****************************************************************************
 void MFC1( std::string& output ){   _sap("mfc1\t%s, %s")      GPR_REG[DECODE_RT], COP1_REG_FP[DECODE_FS]);  }
 void CFC1( std::string& output ){   _sap("cfc1\t%s, %s")      GPR_REG[DECODE_RT], COP1_REG_FCR[DECODE_FS]); }
 void MTC1( std::string& output ){   _sap("mtc1\t%s, %s")      GPR_REG[DECODE_RT], COP1_REG_FP[DECODE_FS]);  }
@@ -1238,15 +844,9 @@ void C_EQ( std::string& output ){   _sap("c.eq.s\t%s, %s")    COP1_REG_FP[DECODE
 void C_LT( std::string& output ){   _sap("c.lt.s\t%s, %s")    COP1_REG_FP[DECODE_FS], COP1_REG_FP[DECODE_FT]); }
 void C_LE( std::string& output ){   _sap("c.le.s\t%s, %s")    COP1_REG_FP[DECODE_FS], COP1_REG_FP[DECODE_FT]); }
 void CVT_S( std::string& output ){  _sap("cvt.s.w\t%s, %s")   COP1_REG_FP[DECODE_FD], COP1_REG_FP[DECODE_FS]); }
-//****************************************************************************
-//** END OF COP1                                                            **
-//****************************************************************************
 
-}	// End namespace R5900::OpcodeDisasm
+}
 
-//****************************************************************************
-//** COP2 - (VU0)                                                           **
-//****************************************************************************
 void P_QMFC2( std::string& output ){   _sap("qmfc2%s\t%s, %s")  DECODE_ILOCK ? ".i" : "", GPR_REG[DECODE_RT], COP2_REG_FP[DECODE_FS]); }
 void P_CFC2( std::string& output ){    _sap("cfc2%s\t%s, %s")     DECODE_ILOCK ? ".i" : "", GPR_REG[DECODE_RT], COP2_REG_CTL[DECODE_FS]); }
 void P_QMTC2( std::string& output ){   _sap("qmtc2%s\t%s, %s")    DECODE_ILOCK ? ".i" : "", GPR_REG[DECODE_RT], COP2_REG_FP[DECODE_FS]); }
@@ -1255,7 +855,6 @@ void P_BC2F( std::string& output ){    output += "bc2f\t";      offset_decode(ou
 void P_BC2T( std::string& output ){    output += "bc2t\t";      offset_decode(output); }
 void P_BC2FL( std::string& output ){   output += "bc2fl\t";     offset_decode(output); }
 void P_BC2TL( std::string& output ){   output += "bc2tl\t";     offset_decode(output); }
-//******************************SPECIAL 1 VUO TABLE****************************************
 #define _X ((disasmOpcode>>24) & 1)
 #define _Y ((disasmOpcode>>23) & 1)
 #define _Z ((disasmOpcode>>22) & 1)
@@ -1342,8 +941,6 @@ void P_VIAND( std::string& output ){_sap("viand %s, %s, %s") COP2_REG_CTL[DECODE
 void P_VIOR( std::string& output ){_sap("vior %s, %s, %s") COP2_REG_CTL[DECODE_SA], COP2_REG_CTL[DECODE_FS], COP2_REG_CTL[DECODE_FT]);}
 void P_VCALLMS( std::string& output ){output += "vcallms";}
 void P_CALLMSR( std::string& output ){output += "callmsr";}
-//***********************************END OF SPECIAL1 VU0 TABLE*****************************
-//******************************SPECIAL2 VUO TABLE*****************************************
 void P_VADDAx( std::string& output ){_sap("vaddax.%s ACC,%s,%sx") dest_string(),COP2_REG_FP[DECODE_FS],COP2_REG_FP[DECODE_FT]);}
 void P_VADDAy( std::string& output ){_sap("vadday.%s ACC,%s,%sy") dest_string(),COP2_REG_FP[DECODE_FS],COP2_REG_FP[DECODE_FT]);}
 void P_VADDAz( std::string& output ){_sap("vaddaz.%s ACC,%s,%sz") dest_string(),COP2_REG_FP[DECODE_FS],COP2_REG_FP[DECODE_FT]);}
@@ -1409,6 +1006,5 @@ void P_VRNEXT( std::string& output ){_sap("vrnext %s%s, R") COP2_REG_CTL[DECODE_
 void P_VRGET( std::string& output ){_sap("vrget %s%s, R") COP2_REG_CTL[DECODE_FT], dest_string());}
 void P_VRINIT( std::string& output ){_sap("vrinit R, %s%s") COP2_REG_CTL[DECODE_FS], dest_string());}
 void P_VRXOR( std::string& output ){_sap("vrxor R, %s%s") COP2_REG_CTL[DECODE_FS], dest_string());}
-//************************************END OF SPECIAL2 VUO TABLE****************************
 
 }

@@ -37,4 +37,4 @@ namespace DockUtils
 		KDDockWidgets::Core::DockWidget* dock_widget,
 		PreferredLocation location,
 		KDDockWidgets::QtWidgets::MainWindow* window);
-} // namespace DockUtils
+}

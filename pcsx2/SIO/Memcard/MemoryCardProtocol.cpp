@@ -19,8 +19,6 @@
 
 MemoryCardProtocol g_MemoryCardProtocol;
 
-// Check if the memcard is for PS1, and if we are working on a command sent over SIO2.
-// If so, return dead air.
 bool MemoryCardProtocol::PS1Fail()
 {
 	if (mcd->IsPSX() && g_Sio2.commandLength > 0)
@@ -36,8 +34,6 @@ bool MemoryCardProtocol::PS1Fail()
 	return false;
 }
 
-// A repeated pattern in memcard commands is to pad with zero bytes,
-// then end with 0x2b and terminator bytes. This function is a shortcut for that.
 void MemoryCardProtocol::The2bTerminator(size_t length)
 {
 	while (g_Sio2FifoOut.size() < length - 2)
@@ -49,10 +45,6 @@ void MemoryCardProtocol::The2bTerminator(size_t length)
 	g_Sio2FifoOut.push_back(mcd->term);
 }
 
-// After one read or write, the memcard is almost certainly going to be issued a new read or write
-// for the next segment of the same sector. Bump the transferAddr to where that segment begins.
-// If it is the end and a new sector is being accessed, the SetSector function will deal with
-// both sectorAddr and transferAddr.
 void MemoryCardProtocol::ReadWriteIncrement(size_t length)
 {
 	mcd->transferAddr += length;
@@ -137,41 +129,32 @@ void MemoryCardProtocol::GetSpecs()
 {
 	MC_LOG.WriteLn("%s", __FUNCTION__);
 	PS1_FAIL();
-	//u8 checksum = 0x00;
 	McdSizeInfo info;
 	mcd->GetSizeInfo(info);
 	g_Sio2FifoOut.push_back(0x2b);
 	
 	const u8 sectorSizeLSB = (info.SectorSize & 0xff);
-	//checksum ^= sectorSizeLSB;
 	g_Sio2FifoOut.push_back(sectorSizeLSB);
 
 	const u8 sectorSizeMSB = (info.SectorSize >> 8);
-	//checksum ^= sectorSizeMSB;
 	g_Sio2FifoOut.push_back(sectorSizeMSB);
 
 	const u8 eraseBlockSizeLSB = (info.EraseBlockSizeInSectors & 0xff);
-	//checksum ^= eraseBlockSizeLSB;
 	g_Sio2FifoOut.push_back(eraseBlockSizeLSB);
 
 	const u8 eraseBlockSizeMSB = (info.EraseBlockSizeInSectors >> 8);
-	//checksum ^= eraseBlockSizeMSB;
 	g_Sio2FifoOut.push_back(eraseBlockSizeMSB);
 
 	const u8 sectorCountLSB = (info.McdSizeInSectors & 0xff);
-	//checksum ^= sectorCountLSB;
 	g_Sio2FifoOut.push_back(sectorCountLSB);
 
 	const u8 sectorCount2nd = (info.McdSizeInSectors >> 8);
-	//checksum ^= sectorCount2nd;
 	g_Sio2FifoOut.push_back(sectorCount2nd);
 
 	const u8 sectorCount3rd = (info.McdSizeInSectors >> 16);
-	//checksum ^= sectorCount3rd;
 	g_Sio2FifoOut.push_back(sectorCount3rd);
 
 	const u8 sectorCountMSB = (info.McdSizeInSectors >> 24);
-	//checksum ^= sectorCountMSB;
 	g_Sio2FifoOut.push_back(sectorCountMSB);
 	
 	g_Sio2FifoOut.push_back(info.Xor);
@@ -189,13 +172,6 @@ void MemoryCardProtocol::SetTerminator()
 	g_Sio2FifoOut.push_back(mcd->term);
 }
 
-// This one is a bit unusual. Old and new versions of MCMAN seem to handle this differently.
-// Some commands may check [4] for the terminator. Others may check [3]. Typically, older
-// MCMAN revisions will exclusively check [4], and newer revisions will check both [3] and [4]
-// for different values. In all cases, they expect to see a valid terminator value.
-//
-// Also worth noting old revisions of MCMAN will not set anything other than 0x55 for the terminator,
-// while newer revisions will set the terminator to another value (most commonly 0x5a).
 void MemoryCardProtocol::GetTerminator()
 {
 	MC_LOG.WriteLn("%s", __FUNCTION__);
@@ -376,8 +352,6 @@ u8 MemoryCardProtocol::PS1Write(u8 data)
 			{
 				mcd->Write(ps1McState.buf.data(), ps1McState.buf.size());
 				ret = 0x47;
-				// Clear the "directory unread" bit of the flag byte. Per no$psx, this is cleared
-				// on writes, not reads.
 				mcd->FLAG &= 0x07;
 			}
 
@@ -440,8 +414,6 @@ void MemoryCardProtocol::AuthXor()
 
 	switch (modeByte)
 	{
-		// When encountered, the command length in RECV3 is guaranteed to be 14,
-		// and the PS2 is expecting us to XOR the data it is about to send.
 		case 0x01:
 		case 0x02:
 		case 0x04:
@@ -449,7 +421,6 @@ void MemoryCardProtocol::AuthXor()
 		case 0x11:
 		case 0x13:
 		{
-			// Long + XOR
 			g_Sio2FifoOut.push_back(0x00);
 			g_Sio2FifoOut.push_back(0x2b);
 			u8 xorResult = 0x00;
@@ -466,8 +437,6 @@ void MemoryCardProtocol::AuthXor()
 			g_Sio2FifoOut.push_back(mcd->term);
 			break;
 		}
-		// When encountered, the command length in RECV3 is guaranteed to be 5,
-		// and there is no attempt to XOR anything.
 		case 0x00:
 		case 0x03:
 		case 0x05:
@@ -481,19 +450,13 @@ void MemoryCardProtocol::AuthXor()
 		case 0x12:
 		case 0x14:
 		{
-			// Short + No XOR
 			The2bTerminator(5);
 			break;
 		}
-		// When encountered, the command length in RECV3 is guaranteed to be 14,
-		// and the PS2 is about to send us data, BUT the PS2 does NOT want us
-		// to send the XOR, it wants us to send the 0x2b and terminator as the
-		// last two bytes.
 		case 0x06:
 		case 0x07:
 		case 0x0b:
 		{
-			// Long + No XOR
 			The2bTerminator(14);
 			break;
 		}

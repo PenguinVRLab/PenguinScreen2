@@ -132,11 +132,6 @@ public:
 	}
 };
 
-// --------------------------------------------------------------------------------------
-//  GSCodeReserve
-// --------------------------------------------------------------------------------------
-// Stores code buffers for the GS software JIT.
-//
 namespace GSCodeReserve
 {
 	void ResetMemory();

@@ -19,35 +19,6 @@
 #include "common/emitter/internal.h"
 #include <functional>
 
-// ------------------------------------------------------------------------
-// Notes on Thread Local Storage:
-//  * TLS is pretty simple, and "just works" from a programmer perspective, with only
-//    some minor additional computational overhead (see performance notes below).
-//
-//  * MSVC and GCC handle TLS differently internally, but behavior to the programmer is
-//    generally identical.
-//
-// Performance Considerations:
-//  * GCC's implementation involves an extra dereference from normal storage (possibly
-//    applies to x86-32 only -- x86-64 is untested).
-//
-//  * MSVC's implementation involves *two* extra dereferences from normal storage because
-//    it has to look up the TLS heap pointer from the Windows Thread Storage Area.  (in
-//    generated ASM code, this dereference is denoted by access to the fs:[2ch] address),
-//
-//  * However, in either case, the optimizer usually optimizes it to a register so the
-//    extra overhead is minimal over a series of instructions.
-//
-// MSVC Notes:
-//  * Important!! the Full Optimization [/Ox] option effectively disables TLS optimizations
-//    in MSVC 2008 and earlier, causing generally significant code bloat.  Not tested in
-//    VC2010 yet.
-//
-//  * VC2010 generally does a superior job of optimizing TLS across inlined functions and
-//    class methods, compared to predecessors.
-//
-
-
 thread_local u8* x86Ptr;
 thread_local u8* xTextPtr;
 thread_local XMMSSEType g_xmmtypes[iREGCNT_XMM] = {XMMT_INT};
@@ -83,9 +54,6 @@ namespace x86Emitter
 		xWrite(val);
 	}
 
-	// Empty initializers are due to frivolously pointless GCC errors (it demands the
-	// objects be initialized even though they have no actual variable members).
-
 	const xAddressIndexer<xIndirectVoid> ptr = {};
 	const xAddressIndexer<xIndirectNative> ptrNative = {};
 	const xAddressIndexer<xIndirect128> ptr128 = {};
@@ -93,8 +61,6 @@ namespace x86Emitter
 	const xAddressIndexer<xIndirect32> ptr32 = {};
 	const xAddressIndexer<xIndirect16> ptr16 = {};
 	const xAddressIndexer<xIndirect8> ptr8 = {};
-
-	// ------------------------------------------------------------------------
 
 	const xRegisterEmpty xEmptyReg = {};
 
@@ -239,8 +205,6 @@ const xRegister32
 		if (Id == xRegId_Empty)
 			return "empty";
 
-		// bad error?  Return a "big" error string.  Might break formatting of register tables
-		// but that's the least of your worries if you see this baby.
 		if (Id >= (int)iREGCNT_GPR || Id < 0)
 			return "!Register index out of range!";
 
@@ -261,30 +225,6 @@ const xRegister32
 		return "oops?";
 	}
 
-	//////////////////////////////////////////////////////////////////////////////////////////
-	// Performance note: VC++ wants to use byte/word register form for the following
-	// ModRM/SibSB constructors when we use xWrite<u8>, and furthermore unrolls the
-	// the shift using a series of ADDs for the following results:
-	//   add cl,cl
-	//   add cl,cl
-	//   add cl,cl
-	//   or  cl,bl
-	//   add cl,cl
-	//  ... etc.
-	//
-	// This is unquestionably bad optimization by Core2 standard, an generates tons of
-	// register aliases and false dependencies. (although may have been ideal for early-
-	// brand P4s with a broken barrel shifter?).  The workaround is to do our own manual
-	// x86Ptr access and update using a u32 instead of u8.  Thanks to little endianness,
-	// the same end result is achieved and no false dependencies are generated.  The draw-
-	// back is that it clobbers 3 bytes past the end of the write, which could cause a
-	// headache for someone who himself is doing some kind of headache-inducing amount of
-	// recompiler SMC.  So we don't do a work-around, and just hope for the compiler to
-	// stop sucking someday instead. :)
-	//
-	// (btw, I know this isn't a critical performance item by any means, but it's
-	//  annoying simply because it *should* be an easy thing to optimize)
-
 	static __fi void ModRM(uint mod, uint reg, uint rm)
 	{
 		xWrite8((mod << 6) | (reg << 3) | rm);
@@ -300,20 +240,17 @@ const xRegister32
 		sptr displacement = (sptr)address;
 		sptr textRelative = (sptr)address - (sptr)xTextPtr;
 		sptr ripRelative = (sptr)address - ((sptr)x86Ptr + sizeof(s8) + sizeof(s32) + extraRIPOffset);
-		// Can we use an 8-bit offset from the text pointer?
 		if (textRelative == (s8)textRelative && xTextPtr)
 		{
 			ModRM(1, regfield, RTEXTPTR.GetId());
 			xWrite<s8>((s8)textRelative);
 			return;
 		}
-		// Can we use a rip-relative address?  (Prefer this over eiz because it's a byte shorter)
 		else if (ripRelative == (s32)ripRelative)
 		{
 			ModRM(0, regfield, ModRm_UseDisp32);
 			displacement = ripRelative;
 		}
-		// How about from the text pointer?
 		else if (textRelative == (s32)textRelative && xTextPtr)
 		{
 			ModRM(2, regfield, RTEXTPTR.GetId());
@@ -329,52 +266,31 @@ const xRegister32
 		xWrite<s32>((s32)displacement);
 	}
 
-	//////////////////////////////////////////////////////////////////////////////////////////
-	// returns TRUE if this instruction requires SIB to be encoded, or FALSE if the
-	// instruction ca be encoded as ModRm alone.
 	static __fi bool NeedsSibMagic(const xIndirectVoid& info)
 	{
-		// no registers? no sibs!
-		// (xIndirectVoid::Reduce always places a register in Index, and optionally leaves
-		// Base empty if only register is specified)
 		if (info.Index.IsEmpty())
 			return false;
 
-		// A scaled register needs a SIB
 		if (info.Scale != 0)
 			return true;
 
-		// two registers needs a SIB
 		if (!info.Base.IsEmpty())
 			return true;
 
 		return false;
 	}
 
-	//////////////////////////////////////////////////////////////////////////////////////////
-	// Conditionally generates Sib encoding information!
-	//
-	// regfield - register field to be written to the ModRm.  This is either a register specifier
-	//   or an opcode extension.  In either case, the instruction determines the value for us.
-	//
 	void EmitSibMagic(uint regfield, const xIndirectVoid& info, int extraRIPOffset)
 	{
-		// 3 bits also on x86_64 (so max is 8)
-		// We might need to mask it on x86_64
 		pxAssertMsg(regfield < 8, "Invalid x86 register identifier.");
 		int displacement_size = (info.Displacement == 0) ? 0 :
                                                            ((info.IsByteSizeDisp()) ? 1 : 2);
 
 		pxAssert(!info.Base.IsEmpty() || !info.Index.IsEmpty() || displacement_size == 2);
-		// Displacement is only 64 bits for rip-relative addressing
 		pxAssert(info.Displacement == (s32)info.Displacement || (info.Base.IsEmpty() && info.Index.IsEmpty()));
 
 		if (!NeedsSibMagic(info))
 		{
-			// Use ModRm-only encoding, with the rm field holding an index/base register, if
-			// one has been specified.  If neither register is specified then use Disp32 form,
-			// which is encoded as "EBP w/o displacement" (which is why EBP must always be
-			// encoded *with* a displacement of 0, if it would otherwise not have one).
 
 			if (info.Index.IsEmpty())
 			{
@@ -384,18 +300,13 @@ const xRegister32
 			else
 			{
 				if (info.Index == rbp && displacement_size == 0)
-					displacement_size = 1; // forces [ebp] to be encoded as [ebp+0]!
+					displacement_size = 1;
 
 				ModRM(displacement_size, regfield, info.Index.Id & 7);
 			}
 		}
 		else
 		{
-			// In order to encode "just" index*scale (and no base), we have to encode
-			// it as a special [index*scale + displacement] form, which is done by
-			// specifying EBP as the base register and setting the displacement field
-			// to zero. (same as ModRm w/o SIB form above, basically, except the
-			// ModRm_UseDisp flag is specified in the SIB instead of the ModRM field).
 
 			if (info.Base.IsEmpty())
 			{
@@ -407,7 +318,7 @@ const xRegister32
 			else
 			{
 				if (info.Base == rbp && displacement_size == 0)
-					displacement_size = 1; // forces [ebp] to be encoded as [ebp+0]!
+					displacement_size = 1;
 
 				ModRM(displacement_size, regfield, ModRm_UseSib);
 				SibSB(info.Scale, info.Index.Id & 7, info.Base.Id & 7);
@@ -423,8 +334,6 @@ const xRegister32
 		}
 	}
 
-	// Writes a ModRM byte for "Direct" register access forms, which is used for all
-	// instructions taking a form of [reg,reg].
 	void EmitSibMagic(uint reg1, const xRegisterBase& reg2, int)
 	{
 		xWrite8((Mod_Direct << 6) | (reg1 << 3) | (reg2.Id & 7));
@@ -445,7 +354,6 @@ const xRegister32
 		EmitSibMagic(reg1.Id & 7, sib, extraRIPOffset);
 	}
 
-	//////////////////////////////////////////////////////////////////////////////////////////
 	__emitinline static void EmitRex(bool w, bool r, bool x, bool b, bool ext8bit = false)
 	{
 		const u8 rex = 0x40 | (w << 3) | (r << 2) | (x << 1) | (u8)b;
@@ -497,11 +405,11 @@ const xRegister32
 
 	void EmitRex(const xRegisterBase& reg1, const void* src)
 	{
-		pxAssert(0); //see fixme
+		pxAssert(0);
 		bool w = reg1.IsWide();
 		bool r = reg1.IsExtended();
 		bool x = false;
-		bool b = false; // FIXME src.IsExtended();
+		bool b = false;
 		EmitRex(w, r, x, b, reg1.IsExtended8Bit());
 	}
 
@@ -559,7 +467,6 @@ const xRegister32
 		EmitRex(w, r, x, b, reg2.IsExtended8Bit());
 	}
 
-	// For use by instructions that are implicitly wide
 	void EmitRexImplicitlyWide(const xRegisterBase& reg)
 	{
 		bool w = false;
@@ -628,12 +535,11 @@ const xRegister32
 		} else {
 			w = info.w_bit << 7;
 		}
-		u8 l = GetL(dst) | GetL(src2); // Needed for 256-bit movemask.
+		u8 l = GetL(dst) | GetL(src2);
 		u8 rxb = GetVEXRXB(dst, src2);
 		u8 b2 = p | l | (src1 << 3);
 		if (!w && info.map == SIMDInstructionInfo::Map::M0F && !(rxb & 0x7F))
 		{
-			// Can use a C5 VEX
 			u8 b1 = rxb | b2;
 			xWrite8(0xC5);
 			xWrite8(b1 ^ 0xF8);
@@ -667,33 +573,21 @@ const xRegister32
 	}
 
 
-	// --------------------------------------------------------------------------------------
-	//  xSetPtr / xAlignPtr / xGetPtr / xAdvancePtr
-	// --------------------------------------------------------------------------------------
-
-	// Assigns the current emitter buffer target address.
-	// This is provided instead of using x86Ptr directly, since we may in the future find
-	// a need to change the storage class system for the x86Ptr 'under the hood.'
 	__emitinline void xSetPtr(void* ptr)
 	{
 		x86Ptr = (u8*)ptr;
 	}
 
-	// Assigns the current emitter text base address.
 	__emitinline void xSetTextPtr(void* ptr)
 	{
 		xTextPtr = (u8*)ptr;
 	}
 
-	// Retrieves the current emitter buffer target address.
-	// This is provided instead of using x86Ptr directly, since we may in the future find
-	// a need to change the storage class system for the x86Ptr 'under the hood.'
 	__emitinline u8* xGetPtr()
 	{
 		return x86Ptr;
 	}
 
-	// Retrieves the current emitter text base address.
 	__emitinline u8* xGetTextPtr()
 	{
 		return xTextPtr;
@@ -701,25 +595,14 @@ const xRegister32
 
 	__emitinline void xAlignPtr(uint bytes)
 	{
-		// forward align
 		x86Ptr = (u8*)(((uptr)x86Ptr + bytes - 1) & ~(uptr)(bytes - 1));
 	}
 
-	// Performs best-case alignment for the target CPU, for use prior to starting a new
-	// function.  This is not meant to be used prior to jump targets, since it doesn't
-	// add padding (additionally, speed benefit from jump alignment is minimal, and often
-	// a loss).
 	__emitinline void xAlignCallTarget()
 	{
-		// Core2/i7 CPUs prefer unaligned addresses.  Checking for SSSE3 is a decent filter.
-		// (also align in debug modes for disasm convenience)
 
 		if constexpr (IsDebugBuild)
 		{
-			// - P4's and earlier prefer 16 byte alignment.
-			// - AMD Athlons and Phenoms prefer 8 byte alignment, but I don't have an easy
-			//   heuristic for it yet.
-			// - AMD Phenom IIs are unknown (either prefer 8 byte, or unaligned).
 
 			xAlignPtr(16);
 		}
@@ -735,7 +618,6 @@ const xRegister32
 	{
 		if (IsDevBuild)
 		{
-			// common debugger courtesy: advance with INT3 as filler.
 			for (uint i = 0; i < bytes; i++)
 				xWrite8(0xcc);
 		}
@@ -743,17 +625,11 @@ const xRegister32
 			x86Ptr += bytes;
 	}
 
-	// --------------------------------------------------------------------------------------
-	//  xRegisterInt  (method implementations)
-	// --------------------------------------------------------------------------------------
 	xRegisterInt xRegisterInt::MatchSizeTo(xRegisterInt other) const
 	{
 		return other.GetOperandSize() == 1 ? xRegisterInt(xRegister8(*this)) : xRegisterInt(other.GetOperandSize(), Id);
 	}
 
-	// --------------------------------------------------------------------------------------
-	//  xAddressReg  (operator overloads)
-	// --------------------------------------------------------------------------------------
 	xAddressVoid xAddressReg::operator+(const xAddressReg& right) const
 	{
 		pxAssertMsg(right.Id != -1 || Id != -1, "Uninitialized x86 register.");
@@ -796,10 +672,6 @@ const xRegister32
 		return xAddressVoid(xEmptyReg, *this, 1 << shift);
 	}
 
-
-	// --------------------------------------------------------------------------------------
-	//  xAddressVoid  (method implementations)
-	// --------------------------------------------------------------------------------------
 
 	xAddressVoid::xAddressVoid(const xAddressReg& base, const xAddressReg& index, int factor, sptr displacement)
 	{
@@ -846,7 +718,6 @@ const xRegister32
 		}
 		else if (src == Base)
 		{
-			// Compound the existing register reference into the Index/Scale pair.
 			Base = xEmptyReg;
 
 			if (src == Index)
@@ -863,7 +734,7 @@ const xRegister32
 		else if (Index.IsEmpty())
 			Index = src;
 		else
-			pxAssumeMsg(false, "x86Emitter: address modifiers cannot have more than two index registers."); // oops, only 2 regs allowed per ModRm!
+			pxAssumeMsg(false, "x86Emitter: address modifiers cannot have more than two index registers.");
 
 		return *this;
 	}
@@ -873,7 +744,6 @@ const xRegister32
 		Add(src.Base);
 		Add(src.Displacement);
 
-		// If the factor is 1, we can just treat index like a base register also.
 		if (src.Factor == 1)
 		{
 			Add(src.Index);
@@ -888,7 +758,7 @@ const xRegister32
 			Factor += src.Factor;
 		}
 		else
-			pxAssumeMsg(false, "x86Emitter: address modifiers cannot have more than two index registers."); // oops, only 2 regs allowed per ModRm!
+			pxAssumeMsg(false, "x86Emitter: address modifiers cannot have more than two index registers.");
 
 		return *this;
 	}
@@ -910,7 +780,6 @@ const xRegister32
 		Scale = 0;
 		Displacement = disp;
 
-		// no reduction necessary :D
 	}
 
 	xIndirectVoid::xIndirectVoid(xAddressReg base, xAddressReg index, int scale, sptr displacement)
@@ -923,45 +792,26 @@ const xRegister32
 		Reduce();
 	}
 
-	// Generates a 'reduced' ModSib form, which has valid Base, Index, and Scale values.
-	// Necessary because by default ModSib compounds registers into Index when possible.
-	//
-	// If the ModSib is in illegal form ([Base + Index*5] for example) then an assertion
-	// followed by an InvalidParameter Exception will be tossed around in haphazard
-	// fashion.
-	//
-	// Optimization Note: Currently VC does a piss poor job of inlining this, even though
-	// constant propagation *should* resove it to little or no code (VC's constprop fails
-	// on C++ class initializers).  There is a work around [using array initializers instead]
-	// but it's too much trouble for code that isn't performance critical anyway.
-	// And, with luck, maybe VC10 will optimize it better and make it a non-issue. :D
-	//
 	void xIndirectVoid::Reduce()
 	{
 		if (Index.IsStackPointer())
 		{
-			// esp cannot be encoded as the index, so move it to the Base, if possible.
-			// note: intentionally leave index assigned to esp also (generates correct
-			// encoding later, since ESP cannot be encoded 'alone')
 
-			pxAssert(Scale == 0); // esp can't have an index modifier!
-			pxAssert(Base.IsEmpty()); // base must be empty or else!
+			pxAssert(Scale == 0);
+			pxAssert(Base.IsEmpty());
 
 			Base = Index;
 			return;
 		}
 
-		// If no index reg, then load the base register into the index slot.
 		if (Index.IsEmpty())
 		{
 			Index = Base;
 			Scale = 0;
-			if (!Base.IsStackPointer()) // prevent ESP from being encoded 'alone'
+			if (!Base.IsStackPointer())
 				Base = xEmptyReg;
 			return;
 		}
-
-		// The Scale has a series of valid forms, all shown here:
 
 		switch (Scale)
 		{
@@ -974,7 +824,7 @@ const xRegister32
 				Scale = 1;
 				break;
 
-			case 3: // becomes [reg*2+reg]
+			case 3:
 				pxAssertMsg(Base.IsEmpty(), "Cannot scale an Index register by 3 when Base is not empty!");
 				Base = Index;
 				Scale = 1;
@@ -984,24 +834,24 @@ const xRegister32
 				Scale = 2;
 				break;
 
-			case 5: // becomes [reg*4+reg]
+			case 5:
 				pxAssertMsg(Base.IsEmpty(), "Cannot scale an Index register by 5 when Base is not empty!");
 				Base = Index;
 				Scale = 2;
 				break;
 
-			case 6: // invalid!
+			case 6:
 				pxAssumeMsg(false, "x86 asm cannot scale a register by 6.");
 				break;
 
-			case 7: // so invalid!
+			case 7:
 				pxAssumeMsg(false, "x86 asm cannot scale a register by 7.");
 				break;
 
 			case 8:
 				Scale = 3;
 				break;
-			case 9: // becomes [reg*8+reg]
+			case 9:
 				pxAssertMsg(Base.IsEmpty(), "Cannot scale an Index register by 9 when Base is not empty!");
 				Base = Index;
 				Scale = 3;
@@ -1017,26 +867,13 @@ const xRegister32
 		return *this;
 	}
 
-	// ------------------------------------------------------------------------
-	// Internal implementation of EmitSibMagic which has been custom tailored
-	// to optimize special forms of the Lea instructions accordingly, such
-	// as when a LEA can be replaced with a "MOV reg,imm" or "MOV reg,reg".
-	//
-	// preserve_flags - set to ture to disable use of SHL on [Index*Base] forms
-	// of LEA, which alters flags states.
-	//
 	static void EmitLeaMagic(const xRegisterInt& to, const xIndirectVoid& src, bool preserve_flags)
 	{
 		int displacement_size = (src.Displacement == 0) ? 0 :
                                                           ((src.IsByteSizeDisp()) ? 1 : 2);
 
-		// See EmitSibMagic for commenting on SIB encoding.
-
 		if (!NeedsSibMagic(src) && src.Displacement == (s32)src.Displacement)
 		{
-			// LEA Land: means we have either 1-register encoding or just an offset.
-			// offset is encodable as an immediate MOV, and a register is encodable
-			// as a register MOV.
 
 			if (src.Index.IsEmpty())
 			{
@@ -1050,8 +887,6 @@ const xRegister32
 			}
 			else if (!preserve_flags)
 			{
-				// encode as MOV and ADD combo.  Make sure to use the immediate on the
-				// ADD since it can encode as an 8-bit sign-extended value.
 
 				xMOV(to, src.Index.MatchSizeTo(to));
 				xADD(to, src.Displacement);
@@ -1064,12 +899,6 @@ const xRegister32
 			{
 				if (!preserve_flags && (displacement_size == 0))
 				{
-					// Encode [Index*Scale] as a combination of Mov and Shl.
-					// This is more efficient because of the bloated LEA format which requires
-					// a 32 bit displacement, and the compact nature of the alternative.
-					//
-					// (this does not apply to older model P4s with the broken barrel shifter,
-					//  but we currently aren't optimizing for that target anyway).
 
 					xMOV(to, src.Index);
 					xSHL(to, src.Scale);
@@ -1084,8 +913,7 @@ const xRegister32
 					{
 						if (src.Index == rsp)
 						{
-							// ESP is not encodable as an index (ix86 ignores it), thus:
-							xMOV(to, src.Base.MatchSizeTo(to)); // will do the trick!
+							xMOV(to, src.Base.MatchSizeTo(to));
 							if (src.Displacement)
 								xADD(to, src.Displacement);
 							return;
@@ -1099,8 +927,6 @@ const xRegister32
 					}
 					else if ((src.Index == rsp) && (src.Displacement == 0))
 					{
-						// special case handling of ESP as Index, which is replaceable with
-						// a single MOV even when preserve_flags is set! :D
 
 						xMOV(to, src.Base.MatchSizeTo(to));
 						return;
@@ -1135,9 +961,6 @@ const xRegister32
 		return (u32*)xGetPtr() - 1;
 	}
 
-	// =====================================================================================================
-	//  TEST / INC / DEC
-	// =====================================================================================================
 	void xImpl_Test::operator()(const xRegisterInt& to, const xRegisterInt& from) const
 	{
 		pxAssert(to.GetOperandSize() == from.GetOperandSize());
@@ -1193,7 +1016,7 @@ const xRegister32
 		EmitSibMagic(isDec ? 1 : 0, to);
 	}
 
-	void xImpl_DwordShift::operator()(const xRegister16or32or64& to, const xRegister16or32or64& from, const xRegisterCL& /* clreg */) const
+	void xImpl_DwordShift::operator()(const xRegister16or32or64& to, const xRegister16or32or64& from, const xRegisterCL& ) const
 	{
 		pxAssert(to->GetOperandSize() == from->GetOperandSize());
 		xOpWrite0F(from->GetPrefix16(), OpcodeBase + 1, to, from);
@@ -1206,7 +1029,7 @@ const xRegister32
 			xOpWrite0F(from->GetPrefix16(), OpcodeBase, to, from, shiftcnt);
 	}
 
-	void xImpl_DwordShift::operator()(const xIndirectVoid& dest, const xRegister16or32or64& from, const xRegisterCL& /* clreg */) const
+	void xImpl_DwordShift::operator()(const xIndirectVoid& dest, const xRegister16or32or64& from, const xRegisterCL& ) const
 	{
 		xOpWrite0F(from->GetPrefix16(), OpcodeBase + 1, from, dest);
 	}
@@ -1227,12 +1050,6 @@ const xRegister32
 
 	const xImpl_DwordShift xSHLD = {0xa4};
 	const xImpl_DwordShift xSHRD = {0xac};
-
-	//////////////////////////////////////////////////////////////////////////////////////////
-	// Push / Pop Emitters
-	//
-	// Note: pushad/popad implementations are intentionally left out.  The instructions are
-	// invalid in x64, and are super slow on x32.  Use multiple Push/Pop instructions instead.
 
 	__emitinline void xPOP(const xIndirectVoid& from)
 	{
@@ -1273,14 +1090,9 @@ const xRegister32
 		xWrite8(0x50 | (from->Id & 7));
 	}
 
-	// pushes the EFLAGS register onto the stack
 	__fi void xPUSHFD() { xWrite8(0x9C); }
-	// pops the EFLAGS register from the stack
 	__fi void xPOPFD() { xWrite8(0x9D); }
 
-
-	//////////////////////////////////////////////////////////////////////////////////////////
-	//
 
 	__fi void xLEAVE() { xWrite8(0xC9); }
 	__fi void xRET() { xWrite8(0xC3); }
@@ -1296,7 +1108,6 @@ const xRegister32
 	__fi void xSTC() { xWrite8(0xF9); }
 	__fi void xCLC() { xWrite8(0xF8); }
 
-	// NOP 1-byte
 	__fi void xNOP() { xWrite8(0x90); }
 
 	__fi void xINT(u8 imm)
@@ -1330,10 +1141,6 @@ const xRegister32
 		xMOVDQA(dest, ptr[&xmm_data[dest.Id * 2]]);
 	}
 
-//////////////////////////////////////////////////////////////////////////////////////////
-// Helper object to handle ABI frame
-// All x86-64 calling conventions ensure/require stack to be 16 bytes aligned
-// I couldn't find documentation on when, but compilers would indicate it's before the call: https://gcc.godbolt.org/z/KzTfsz
 #define ALIGN_STACK(v) xADD(rsp, v)
 
 	static void stackAlign(int offset, bool moveDown)
@@ -1352,9 +1159,8 @@ const xRegister32
 		m_save_base_pointer = save_base_pointer;
 		m_offset = offset;
 
-		m_offset += sizeof(void*); // Call stores the return address (4 bytes)
+		m_offset += sizeof(void*);
 
-		// Note rbp can surely be optimized in 64 bits
 		if (m_base_frame)
 		{
 			xPUSH(rbp);
@@ -1378,15 +1184,13 @@ const xRegister32
 		xPUSH(rsi);
 		m_offset += 16;
 
-		// Align for movaps, in addition to any following instructions
 		stackAlign(m_offset, true);
 
 		xSUB(rsp, 16 * 10);
 		for (u32 i = 6; i < 16; i++)
 			xMOVAPS(ptr128[rsp + (i - 6) * 16], xRegisterSSE(i));
-		xSUB(rsp, 32); // Windows calling convention specifies additional space for the callee to spill registers
+		xSUB(rsp, 32);
 #else
-		// Align for any following instructions
 		stackAlign(m_offset, true);
 #endif
 		if (u8* ptr = xGetTextPtr())
@@ -1395,7 +1199,6 @@ const xRegister32
 
 	xScopedStackFrame::~xScopedStackFrame()
 	{
-		// Restore the register context
 #ifdef _WIN32
 		xADD(rsp, 32);
 		for (u32 i = 6; i < 16; i++)
@@ -1414,7 +1217,6 @@ const xRegister32
 		xPOP(r12);
 		xPOP(rbx);
 
-		// Destroy the frame
 		if (m_base_frame)
 		{
 			xLEAVE();
@@ -1465,7 +1267,7 @@ const xRegister32
 	void xLoadFarAddr(const xAddressReg& dst, void* addr)
 	{
 		sptr iaddr = (sptr)addr;
-		sptr rip = (sptr)xGetPtr() + 7; // LEA will be 7 bytes
+		sptr rip = (sptr)xGetPtr() + 7;
 		sptr disp = iaddr - rip;
 		u8* textPtr = xGetTextPtr();
 		sptr textdisp = iaddr - (sptr)textPtr;
@@ -1475,7 +1277,6 @@ const xRegister32
 		{
 			if (isRTextPtr && textPtr)
 			{
-				// Prevent LEA from trying to use RTEXTPTR to load RTEXTPTR
 				xSetTextPtr(nullptr);
 				xLEA(dst, ptr[addr]);
 				xSetTextPtr(textPtr);
@@ -1496,4 +1297,4 @@ const xRegister32
 		xImm64Op(xMOV, ptr64[addr], tmp, imm);
 	}
 
-} // End namespace x86Emitter
+}

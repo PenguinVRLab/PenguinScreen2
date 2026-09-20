@@ -10,7 +10,6 @@
 
 #include <optional>
 
-// Helper class which loads or saves depending on the derived class.
 class SettingsWrapper
 {
 public:
@@ -26,7 +25,6 @@ public:
 	virtual void Entry(const char* section, const char* var, std::string& value, const std::string& default_value = std::string()) = 0;
 	virtual void Entry(const char* section, const char* var, SmallStringBase& value, std::string_view default_value = std::string_view()) = 0;
 
-	// This special form of Entry is provided for bitfields, which cannot be passed by reference.
 	virtual bool EntryBitBool(const char* section, const char* var, bool value, const bool defvalue = false) = 0;
 	virtual int EntryBitfield(const char* section, const char* var, int value, const int defvalue = 0) = 0;
 

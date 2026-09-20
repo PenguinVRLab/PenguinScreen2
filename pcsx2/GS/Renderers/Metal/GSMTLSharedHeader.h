@@ -38,9 +38,9 @@ struct GSMTLPresentPSUniform
 	vector_float2 source_size;
 	vector_float2 target_size;
 	vector_float2 target_resolution;
-	vector_float2 rcp_target_resolution; ///< 1 / target_resolution
+	vector_float2 rcp_target_resolution;
 	vector_float2 source_resolution;
-	vector_float2 rcp_source_resolution; ///< 1 / source_resolution
+	vector_float2 rcp_source_resolution;
 	float time;
 };
 
@@ -99,12 +99,7 @@ struct GSMTLMainVSUniform
 	vector_float2 point_size;
 	uint max_depth;
 	float line_aa1_width;
-	// PCSX2-VR (M4.1): carried for CB-layout coherence; math lives only in the Vulkan backend.
 	vector_float2 vr_stereo;
-	// PCSX2-VR (multiband): also layout-only here. The two uints occupy 56/60 (where the
-	// old vr_pad was), vr_splits takes 64 by vector_float4's 16 B alignment, and the band
-	// array runs 80/96/112/128 — sizeof 144, matching alignas(16) VSConstantBuffer.
-	// GSDeviceMTL.mm static_asserts every one of these offsets.
 	uint vr_map_mode;
 	uint vr_band_count;
 	vector_float4 vr_splits;
@@ -123,7 +118,7 @@ struct GSMTLMainPSUniform
 			float aref;
 		};
 	};
-	vector_float4 wh; ///< xy => PS2, zw => actual (upscaled)
+	vector_float4 wh;
 	vector_float2 ta;
 	float max_depth;
 	float alpha_fix;

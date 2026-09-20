@@ -2,8 +2,8 @@
 
 This documents the ENTIRE stack used to develop and validate this release.
 The flatpak bundles these versions wherever bundleable; host-side pieces are
-listed as requirements. Items marked *(validate at cut)* are finalized by the
-release runbook's Verify step 5 from the actual release build.
+listed as requirements. Items marked *(validate at cut)* are finalized from the
+actual release build.
 
 ## Building from source: the required libraries
 
@@ -41,7 +41,7 @@ commit-pinned module; from-source is the enthusiast path.
   `org.freedesktop.Platform.ffmpeg-full` add-extension only adds extra
   patent-encumbered codecs; if Flathub offers a branch matching your
   freedesktop runtime it will be picked up automatically — never install a
-  pinned branch by hand (field finding 2026-07-20: a stale pinned branch
+  pinned branch by hand (a stale pinned branch
   simply doesn't exist on Flathub and the install errors out).
 - Dependency modules: commit-pinned in the manifest in this tree —
   the manifest IS the exact list

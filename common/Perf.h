@@ -28,4 +28,4 @@ namespace Perf
 	extern Group vu0;
 	extern Group vu1;
 	extern Group vif;
-} // namespace Perf
+}

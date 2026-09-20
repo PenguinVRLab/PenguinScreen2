@@ -38,40 +38,6 @@ using namespace PacketReader::IP::ICMP;
 
 using namespace std::chrono_literals;
 
-/*
- * Ping is kindof annoying to do crossplatform
- * All platforms restrict raw sockets
- * 
- * Windows provides an api for ICMP
- * ICMP_ECHO_REPLY should always be used, ignore ICMP_ECHO_REPLY32
- * IP_OPTION_INFORMATION should always be used, ignore IP_OPTION_INFORMATION32
- * 
- * Linux
- * We have access to raw sockets via CAP_NET_RAW (for pcap)
- *     However we may be missing that cap on some builds
- * Also hava socket(PF_INET, SOCK_DGRAM, IPPROTO_ICMP), used similarly to raw sockets, but for ICMP only
- *     Auto filters responses
- *     Requires net.ipv4.ping_group_range sysctl, default off on a lot of distros
- * Timeouts reported via sock_extended_err control messages (with IP_RECVERR socket option set)
- * 
- * Mac
- * Raw sockets restricted
- * Mac has socket(PF_INET, SOCK_DGRAM, IPPROTO_ICMP)
- *     No restriction to using it with ICMP_ECHO
- *     Implementation differs, is more versatile than linux
- *     Does not auto filter responses
- * Timeouts reported as a normal packet
- * 
- * FreeBSD
- * Raw sockets restricted
- * No unprivilaged ICMP sockets
- * Timeouts reported as a normal packet??
- * 
- * Ping cli
- * Present for all platforms, but command args differ
- * Not used here
- */
-
 namespace Sessions
 {
 	const std::chrono::duration<std::chrono::steady_clock::rep, std::chrono::steady_clock::period>
@@ -100,35 +66,20 @@ namespace Sessions
 			return;
 		}
 
-		/* 
-		 * Allocate response buffer
-		 * Documentation says + 8 to allow for an ICMP error message
-		 * In testing, ICMP_ECHO_REPLY structure itself was returned with data set to null
-		 */
 		icmpResponseBufferLen = sizeof(ICMP_ECHO_REPLY) + requestSize + 8;
 		icmpResponseBuffer = std::make_unique<std::byte[]>(icmpResponseBufferLen);
 #elif defined(__POSIX__)
 	{
-		/* 
-		 * Allocate response buffer
-		 * Size needed depends on which socket protocol (ICMP or raw) we use aswell as os
-		 */
 		switch (icmpConnectionKind)
 		{
-			// Two different methods for raw/icmp sockets between the Unix OSes
-			// Play it safe and only enable when we know which of the two methods we use
 #if defined(ICMP_SOCKETS_LINUX) || defined(ICMP_SOCKETS_BSD)
 			case (PingType::ICMP):
 				icmpSocket = socket(AF_INET, SOCK_DGRAM, IPPROTO_ICMP);
 				if (icmpSocket != -1)
 				{
 #if defined(ICMP_SOCKETS_LINUX)
-					// Only need space for ICMP header, as MSG_ERRQUEUE returns data we sent
-					// Testing found an extra + 8 was required sometimes, for some reason?
 					icmpResponseBufferLen = 8 + requestSize + 8;
 #elif defined(ICMP_SOCKETS_BSD)
-					// Returned IP Header, ICMP Header & either data or failed ICMP packet
-					// Sometimes get full packet in ICMP error response
 					icmpResponseBufferLen = 20 + 8 + (20 + 8 + requestSize);
 #endif
 					break;
@@ -144,10 +95,8 @@ namespace Sessions
 				if (icmpSocket != -1)
 				{
 #if defined(ICMP_SOCKETS_LINUX)
-					// We get IP packet + ICMP header
 					icmpResponseBufferLen = 20 + 8 + requestSize;
 #elif defined(ICMP_SOCKETS_BSD)
-					// As above, but we will also directly receive error ICMP messages
 					icmpResponseBufferLen = 20 + 8 + std::max(20 + 8, requestSize);
 #endif
 					break;
@@ -182,7 +131,6 @@ namespace Sessions
 #endif
 	}
 
-	// Returned PingResult.data is only valid when PingResult.type is 0
 	ICMP_Session::PingResult* ICMP_Session::Ping::Recv()
 	{
 #ifdef _WIN32
@@ -193,7 +141,6 @@ namespace Sessions
 			const int count = IcmpParseReplies(icmpResponseBuffer.get(), icmpResponseBufferLen);
 			pxAssert(count <= 1);
 
-			// Timeout
 			if (count == 0)
 			{
 				result.type = -2;
@@ -201,10 +148,8 @@ namespace Sessions
 				return &result;
 			}
 
-			// Rely on implicit object creation
 			const ICMP_ECHO_REPLY* pingRet = reinterpret_cast<ICMP_ECHO_REPLY*>(icmpResponseBuffer.get());
 
-			// Map status to ICMP type/code
 			switch (pingRet->Status)
 			{
 				case (IP_SUCCESS):
@@ -231,23 +176,15 @@ namespace Sessions
 					result.type = 3;
 					result.code = 4;
 					break;
-				case (IP_BAD_ROUTE): // Bad source route
+				case (IP_BAD_ROUTE):
 					result.type = 3;
 					result.code = 5;
 					break;
 				case (IP_BAD_DESTINATION):
-					/*
-					 * I think this could be mapped to either
-					 * Destination network unknown
-					 * or
-					 * Destination host unknown
-					 * Lets map to host unknown
-					 */
 					result.type = 3;
 					result.code = 7;
 					break;
 				case (IP_REQ_TIMED_OUT):
-					// Return nothing
 					result.type = -2;
 					result.code = 0;
 					break;
@@ -264,7 +201,6 @@ namespace Sessions
 					result.code = 0;
 					break;
 
-					// Unexpected errors
 				case (IP_BUF_TOO_SMALL):
 				case (IP_NO_RESOURCES):
 				case (IP_BAD_OPTION):
@@ -300,9 +236,6 @@ namespace Sessions
 				iov.iov_len = icmpResponseBufferLen;
 
 #if defined(ICMP_SOCKETS_LINUX)
-				// Needs to hold cmsghdr + sock_extended_err + sockaddr_in
-				// for ICMP error responses, this is a total of 44 bytes
-				// Unknown size needed for other error types
 				std::byte cbuff[64]{};
 #endif
 
@@ -353,12 +286,9 @@ namespace Sessions
 				if (msg.msg_flags & MSG_CTRUNC)
 					Console.Error("DEV9: ICMP: RecvMsg Control Truncated");
 
-				// On Linux, ICMP errors are stored in control messages retrieved using MSG_ERRQUEUE
 				sock_extended_err* exErrorPtr = nullptr;
 				cmsghdr* cmsg;
 
-				// Search though control messages, taking the latest mesage
-				// We should only have at most 1 message
 				for (cmsg = CMSG_FIRSTHDR(&msg); cmsg != NULL; cmsg = CMSG_NXTHDR(&msg, cmsg))
 				{
 					if (cmsg->cmsg_level == SOL_IP && cmsg->cmsg_type == IP_RECVERR)
@@ -372,25 +302,14 @@ namespace Sessions
 
 				if (exErrorPtr != nullptr)
 				{
-					/* 
-					 * The pointer returned cannot be assumed to be suitably aligned for accessing arbitrary payload data types
-					 * So we would need to memcpy sock_extended_err
-					 */
 					sock_extended_err exError;
 					std::memcpy(&exError, exErrorPtr, sizeof(exError));
 
-					// Process the error
 					if (exError.ee_origin == SO_EE_ORIGIN_ICMP)
 					{
 						result.type = exError.ee_type;
 						result.code = exError.ee_code;
 
-						/* 
-						 * SO_EE_OFFENDER reads data relative to, but not necessarily included in struct sock_extended_err
-						 * So we need to pass the original pointer provided to us from CMSG_DATA()
-						 * However, the input pointer needs to be of type sock_extended_err*, hence the reinterpret_cast
-						 * The pointer returned may not be suitably aligned (see CMSG_DATA), so we need to memcpy
-						 */
 						sockaddr_in errorEndpoint;
 						std::memcpy(&errorEndpoint, SO_EE_OFFENDER(exErrorPtr), sizeof(errorEndpoint));
 						result.address = std::bit_cast<IP_Address>(errorEndpoint.sin_addr);
@@ -418,23 +337,18 @@ namespace Sessions
 					else
 #endif
 					{
-						// Rely on implicit object creation
 						const ip* ipHeader = reinterpret_cast<ip*>(icmpResponseBuffer.get());
 						const int headerLength = ipHeader->ip_hl << 2;
 						pxAssert(headerLength == 20);
 
 						offset = headerLength;
 #ifdef __APPLE__
-						// Apple (old BSD)'s raw IP sockets implementation converts the ip_len field to host byte order
-						// and additionally subtracts the header length.
-						// https://www.unix.com/man-page/mojave/4/ip/
 						length = ipHeader->ip_len;
 #else
 						length = ntohs(ipHeader->ip_len) - headerLength;
 #endif
 					}
 
-					// Rely on implicit object creation for u8
 					ICMP_Packet icmp(reinterpret_cast<u8*>(&icmpResponseBuffer[offset]), length);
 					PayloadPtr* icmpPayload = static_cast<PayloadPtr*>(icmp.GetPayload());
 
@@ -445,7 +359,6 @@ namespace Sessions
 
 					if (icmp.type == 0)
 					{
-						// Check if response is for us
 						if (icmpConnectionKind == PingType::RAW)
 						{
 							const ICMP_HeaderDataIdentifier headerData(icmp.headerData);
@@ -453,17 +366,13 @@ namespace Sessions
 								return nullptr;
 						}
 
-						// While icmp (and its PayloadPtr) will be destroyed when leaving this function
-						// the data it points to persists in icmpResponseBuffer
 						result.dataLength = icmpPayload->GetLength();
 						result.data = icmpPayload->data;
 						return &result;
 					}
 #if defined(ICMP_SOCKETS_BSD)
-					// On BSD/Mac, ICMP errors are returned as normal packets
 					else if (icmp.type == 3 || icmp.type == 4 || icmp.type == 5 || icmp.type == 11)
 					{
-						// Extract the packet the ICMP message is responding to
 						IP_Packet ipPacket(icmpPayload->data, icmpPayload->GetLength(), true);
 
 						if (ipPacket.protocol != static_cast<u8>(IP_Type::ICMP))
@@ -472,12 +381,10 @@ namespace Sessions
 						IP_PayloadPtr* ipPayload = static_cast<IP_PayloadPtr*>(ipPacket.GetPayload());
 						ICMP_Packet icmpInner(ipPayload->data, ipPayload->GetLength());
 
-						// Check if response is for us
 						const ICMP_HeaderDataIdentifier headerData(icmpInner.headerData);
 						if (headerData.identifier != icmpId)
 							return nullptr;
 
-						// This response is for us
 						return &result;
 					}
 #endif
@@ -487,7 +394,6 @@ namespace Sessions
 						Console.Error("DEV9: ICMP: Unexpected packet");
 						pxAssert(false);
 #endif
-						// Assume not for us
 						return nullptr;
 					}
 				}
@@ -503,7 +409,6 @@ namespace Sessions
 	bool ICMP_Session::Ping::Send(IP_Address parAdapterIP, IP_Address parDestIP, int parTimeToLive, PayloadPtr* parPayload)
 	{
 #ifdef _WIN32
-		// Documentation is incorrect, IP_OPTION_INFORMATION is to be used regardless of platform
 		IP_OPTION_INFORMATION ipInfo{};
 		ipInfo.Ttl = parTimeToLive;
 		DWORD ret;
@@ -514,8 +419,6 @@ namespace Sessions
 			ret = IcmpSendEcho2(icmpFile, icmpEvent, nullptr, nullptr, parDestIP.integer, const_cast<u8*>(parPayload->data), parPayload->GetLength(), &ipInfo, icmpResponseBuffer.get(), icmpResponseBufferLen,
 				static_cast<DWORD>(std::chrono::duration_cast<std::chrono::milliseconds>(ICMP_TIMEOUT).count()));
 
-		// Documentation states that IcmpSendEcho2 returns ERROR_IO_PENDING
-		// However, it actually returns zero, with the error set to ERROR_IO_PENDING
 		if (ret == 0)
 			ret = GetLastError();
 
@@ -533,9 +436,6 @@ namespace Sessions
 			case (PingType::RAW):
 			{
 				icmpDeathClockStart = std::chrono::steady_clock::now();
-
-				// Broadcast and multicast might need extra setsockopts calls
-				// I don't think any game will do a broadcast/multicast ping
 
 				if (parAdapterIP.integer != 0)
 				{
@@ -563,7 +463,6 @@ namespace Sessions
 				}
 #endif
 
-				// TTL (Note multicast & regular ttl are separate)
 				if (setsockopt(icmpSocket, IPPROTO_IP, IP_TTL, reinterpret_cast<const char*>(&parTimeToLive), sizeof(parTimeToLive)) == -1)
 				{
 					Console.Error("DEV9: ICMP: Failed to set TTL. Error: %d", errno);
@@ -572,7 +471,6 @@ namespace Sessions
 					return false;
 				}
 
-				// Non-blocking
 				int blocking = 1;
 				if (ioctl(icmpSocket, FIONBIO, &blocking) == -1)
 				{
@@ -585,7 +483,6 @@ namespace Sessions
 #if defined(ICMP_SOCKETS_LINUX)
 				if (icmpConnectionKind == PingType::ICMP)
 				{
-					// We get assigned a port/Id
 					sockaddr_in endpoint{};
 					socklen_t endpointsize = sizeof(endpoint);
 					if (getsockname(icmpSocket, reinterpret_cast<sockaddr*>(&endpoint), &endpointsize) == -1)
@@ -601,7 +498,6 @@ namespace Sessions
 				else
 #endif
 				{
-					// Use time, in ms, as id
 					icmpId = static_cast<u16>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
 				}
 
@@ -609,7 +505,6 @@ namespace Sessions
 				icmp.type = 8;
 				icmp.code = 0;
 
-				// We only send one icmp packet per identifier
 				ICMP_HeaderDataIdentifier headerData(icmpId, 1);
 				headerData.WriteHeaderData(icmp.headerData);
 
@@ -689,11 +584,9 @@ namespace Sessions
 			if (pingRet != nullptr)
 			{
 				std::unique_ptr<Ping> ping = std::move(pings[i]);
-				// Remove ping from list and unlock mutex
 				pings.erase(pings.begin() + i);
 				lock.unlock();
 
-				// Create return ICMP packet
 				std::optional<ReceivedPayload> ret;
 				if (pingRet->type >= 0)
 				{
@@ -705,18 +598,13 @@ namespace Sessions
 					}
 					else
 					{
-						// Copy the original packet into the returned ICMP packet
-						// Allocate fullsize buffer
 						std::vector<u8> temp = std::vector<u8>(ping->originalPacket->GetLength());
-						// Allocate returned ICMP payload
 						const int responseSize = ping->originalPacket->GetHeaderLength() + 8;
 						data = new PayloadData(responseSize);
 
-						// Write packet into buffer
 						int offset = 0;
 						ping->originalPacket->WriteBytes(temp.data(), &offset);
 
-						// Copy only needed bytes
 						memcpy(data->data.get(), temp.data(), responseSize);
 					}
 
@@ -738,7 +626,6 @@ namespace Sessions
 				if (--open == 0)
 					RaiseEventConnectionClosed();
 
-				// Return packet
 				return ret;
 			}
 		}
@@ -754,7 +641,6 @@ namespace Sessions
 		return false;
 	}
 
-	// Expects caller to set ipTimeToLive before calling
 	bool ICMP_Session::Send(PacketReader::IP::IP_Payload* payload, IP_Packet* packet)
 	{
 		IP_PayloadPtr* ipPayload = static_cast<IP_PayloadPtr*>(payload);
@@ -764,19 +650,13 @@ namespace Sessions
 
 		switch (icmp.type)
 		{
-			case 3: // Port Closed
+			case 3:
 				switch (icmp.code)
 				{
 					case 3:
 					{
 						Console.Error("DEV9: ICMP: Received Packet Rejected, Port Closed");
 
-						/*
-						 * RE:Outbreak Hackfix
-						 * ICMP port closed messages has an extra 4 bytes of padding before the packet copy
-						 * this can be tested by trying to connect without using the resurrection server DNS
-						 * turbo mode may be needed to trigger the bug, depending on the DNS server's latency
-						 */
 						std::unique_ptr<IP_Packet> retPkt;
 						if ((icmpPayload->data[0] & 0xF0) == (4 << 4))
 							retPkt = std::make_unique<IP_Packet>(icmpPayload->data, icmpPayload->GetLength(), true);
@@ -788,8 +668,6 @@ namespace Sessions
 							{
 								off += 1;
 
-								// Require space for the IP Header and source/dest port of a UDP/TCP packet
-								// We don't generate packets with IP options, so IP header is always 20 bytes
 								if (icmpPayload->GetLength() - off - 24 < 0)
 								{
 									off = -1;
@@ -817,12 +695,10 @@ namespace Sessions
 						{
 							case static_cast<u8>(IP_Type::TCP):
 							case static_cast<u8>(IP_Type::UDP):
-								// Read ports directly from the payload
-								// both UDP and TCP have the same locations for ports
 								IP_PayloadPtr* payload = static_cast<IP_PayloadPtr*>(retPkt->GetPayload());
 								int offset = 0;
-								NetLib::ReadUInt16(payload->data, &offset, &srvPort); // src
-								NetLib::ReadUInt16(payload->data, &offset, &ps2Port); // dst
+								NetLib::ReadUInt16(payload->data, &offset, &srvPort);
+								NetLib::ReadUInt16(payload->data, &offset, &ps2Port);
 						}
 
 						ConnectionKey Key{};
@@ -831,7 +707,6 @@ namespace Sessions
 						Key.ps2Port = ps2Port;
 						Key.srvPort = srvPort;
 
-						// Is from Normal Port?
 						BaseSession* s = nullptr;
 						connections->TryGetValue(Key, &s);
 
@@ -842,7 +717,6 @@ namespace Sessions
 							break;
 						}
 
-						// Is from Fixed Port?
 						Key.ip = {};
 						Key.srvPort = 0;
 						connections->TryGetValue(Key, &s);
@@ -860,7 +734,7 @@ namespace Sessions
 						Console.Error("DEV9: ICMP: Unsupported ICMP Code For Destination Unreachable %d", icmp.code);
 				}
 				break;
-			case 8: // Echo
+			case 8:
 			{
 				DevCon.WriteLn("DEV9: ICMP: Send Ping");
 				open++;
@@ -883,7 +757,6 @@ namespace Sessions
 
 				memcpy(ping->headerData, icmp.headerData, 4);
 
-				// Need to copy IP_Packet, original is stack allocated
 				ping->originalPacket = std::make_unique<IP_Packet>(*packet);
 
 				{
@@ -907,8 +780,7 @@ namespace Sessions
 
 	ICMP_Session::~ICMP_Session()
 	{
-		// Cleanup
 		std::scoped_lock lock(ping_mutex);
 		pings.clear();
 	}
-} // namespace Sessions
+}

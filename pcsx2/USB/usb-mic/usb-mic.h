@@ -28,4 +28,4 @@ namespace usb_mic
 		std::span<const char*> SubTypes() const override;
 		std::span<const SettingInfo> Settings(u32 subtype) const override;
 	};
-} // namespace usb_mic
+}

@@ -114,8 +114,7 @@ start_server() {
 STARTED_BY_US=0
 if server_up; then
 	# A GPU override can only apply when THIS script starts the server — an
-	# explicit PSCREEN2_GPU that silently no-ops is worse than an error
-	# (strict-review #7).
+	# explicit PSCREEN2_GPU that silently no-ops is worse than an error.
 	if [ "$GPU_MODE" != "auto" ] && [ "$GPU_MODE" != "off" ]; then
 		echo "!! PSCREEN2_GPU=$GPU_MODE cannot apply: a WiVRn server is ALREADY running"
 		echo "!! and GPU selection happens at server start. To apply the override:"
@@ -172,7 +171,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 2b. USB-C tether (the Steam Deck path — field finding 2026-08-02)
+# 2b. USB-C tether (the Steam Deck path)
 # ---------------------------------------------------------------------------
 # On Deck-class hardware, Wi-Fi streaming cannot keep up (the same box is
 # emulating, encoding, AND radioing). A USB-C cable to the headset removes the
@@ -213,7 +212,7 @@ fi
 # ---------------------------------------------------------------------------
 # LAN IP: `hostname` does not exist on SteamOS — read the routing table, then
 # fall back to the interface table (works with no default route), then to
-# hostname -I where it exists (strict-review G8).
+# hostname -I where it exists.
 LAN_IP=$(ip route get 1.1.1.1 2>/dev/null | grep -oE 'src [0-9.]+' | awk '{print $2}')
 [ -z "$LAN_IP" ] && LAN_IP=$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1)
 [ -z "$LAN_IP" ] && LAN_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
@@ -232,7 +231,7 @@ fi
 
 # Pairing: a fresh WiVRn accepts no headset until it has been paired once via
 # its window (PIN). Paired headsets live in known_keys.json — check both the
-# flatpak data dir and the native config dir (strict-review #45). One list,
+# flatpak data dir and the native config dir. One list,
 # shared with the wait-loop heartbeat so they can never poll different files.
 KNOWN_KEYS_CANDIDATES=(
 	"$HOME/.var/app/io.github.wivrn.wivrn/config/wivrn/known_keys.json"
@@ -289,8 +288,8 @@ if [ "$PAIRED" = "0" ]; then
 	echo ">> Waiting for pairing to complete (this continues automatically)..."
 	# Gate on the pairing STATE, not on a keypress: with no tty (double-click
 	# launch) a `read` would hit EOF and fall straight through, launching the
-	# emulator unpaired — the exact failure this gate exists to stop
-	# (strict-review #3). On a tty, Enter skips the wait (advanced users).
+	# emulator unpaired — the exact failure this gate exists to stop.
+	# On a tty, Enter skips the wait (advanced users).
 	[ -t 0 ] && echo ">>    (or press Enter to skip waiting — advanced)"
 	# Bounded (10 min): with no tty there is no way out of an unbounded loop, so
 	# a pairing that never completes would hang the launcher forever with no
@@ -306,7 +305,7 @@ if [ "$PAIRED" = "0" ]; then
 			sleep 2
 		fi
 		WAITED=$((WAITED + 2))
-		# Heartbeat (field finding 2026-08-02: the silent wait read as a hang
+		# Heartbeat (a silent wait reads as a hang
 		# and got skipped). Every 20 s: prove we're alive, name the exact file
 		# we poll, and report its state — a stuck pairing then diagnoses
 		# itself from the console instead of becoming a field mystery.
@@ -348,7 +347,7 @@ echo "========================================================"
 # ---------------------------------------------------------------------------
 # Canonical deploy paths first — an unscoped find over whole flatpak trees
 # walks the OSTree object store (multi-second stall, and it can pin a stale
-# scope; strict-review #12). Respect a pre-set XR_RUNTIME_JSON.
+# scope). Respect a pre-set XR_RUNTIME_JSON.
 if [ -z "${XR_RUNTIME_JSON:-}" ]; then
 	WIVRN_JSON=""
 	for d in "$HOME/.local/share/flatpak" /var/lib/flatpak; do

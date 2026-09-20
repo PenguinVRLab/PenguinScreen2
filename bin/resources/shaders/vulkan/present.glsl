@@ -25,9 +25,9 @@ layout(push_constant) uniform cb10
 	vec2 u_source_size;
 	vec2 u_target_size;
 	vec2 u_target_resolution;
-	vec2 u_rcp_target_resolution; // 1 / u_target_resolution
+	vec2 u_rcp_target_resolution;
 	vec2 u_source_resolution;
-	vec2 u_rcp_source_resolution; // 1 / u_source_resolution
+	vec2 u_rcp_source_resolution;
 	float u_time;
 };
 
@@ -70,7 +70,7 @@ void ps_copy()
 #endif
 
 #ifdef ps_filter_scanlines
-void ps_filter_scanlines() // scanlines
+void ps_filter_scanlines()
 {
 	uvec4 p = uvec4(gl_FragCoord);
 
@@ -79,7 +79,7 @@ void ps_filter_scanlines() // scanlines
 #endif
 
 #ifdef ps_filter_diagonal
-void ps_filter_diagonal() // diagonal
+void ps_filter_diagonal()
 {
 	uvec4 p = uvec4(gl_FragCoord);
 	o_col0 = ps_crt((p.x + (p.y % 3)) % 3);
@@ -87,17 +87,16 @@ void ps_filter_diagonal() // diagonal
 #endif
 
 #ifdef ps_filter_triangular
-void ps_filter_triangular() // triangular
+void ps_filter_triangular()
 {
 	uvec4 p = uvec4(gl_FragCoord);
 
-	// output.c = ps_crt(input, ((p.x + (p.y & 1) * 3) >> 1) % 3);
 	o_col0 = ps_crt(((p.x + ((p.y >> 1) & 1) * 3) >> 1) % 3);
 }
 #endif
 
 #ifdef ps_filter_complex
-void ps_filter_complex() // triangular
+void ps_filter_complex()
 {
 	const float PI = 3.14159265359f;
 	vec2 texdim = vec2(textureSize(samp0, 0));
@@ -108,18 +107,18 @@ void ps_filter_complex() // triangular
 
 #ifdef ps_filter_lottes
 
-#define MaskingType 4                      //[1|2|3|4] The type of CRT shadow masking used. 1: compressed TV style, 2: Aperture-grille, 3: Stretched VGA style, 4: VGA style.
-#define ScanBrightness -8.00               //[-16.0 to 1.0] The overall brightness of the scanline effect. Lower for darker, higher for brighter.
-#define FilterCRTAmount -3.00              //[-4.0 to 1.0] The amount of filtering used, to replicate the TV CRT look. Lower for less, higher for more.
-#define HorizontalWarp 0.00                //[0.0 to 0.1] The distortion warping effect for the horizontal (x) axis of the screen. Use small increments.
-#define VerticalWarp 0.00                  //[0.0 to 0.1] The distortion warping effect for the verticle (y) axis of the screen. Use small increments.
-#define MaskAmountDark 0.50                //[0.0 to 1.0] The value of the dark masking line effect used. Lower for darker lower end masking, higher for brighter.
-#define MaskAmountLight 1.50               //[0.0 to 2.0] The value of the light masking line effect used. Lower for darker higher end masking, higher for brighter.
-#define BloomPixel -1.50                   //[-2.0 -0.5] Pixel bloom radius. Higher for increased softness of bloom.
-#define BloomScanLine -2.0                 //[-4.0 -1.0] Scanline bloom radius. Higher for increased softness of bloom.
-#define BloomAmount 0.15                   //[0.0 1.0] Bloom intensity. Higher for brighter.
-#define Shape 2.0                          //[0.0 10.0] Kernal filter shape. Lower values will darken image and introduce moire patterns if used with curvature.
-#define UseShadowMask 1                    //[0 or 1] Enables, or disables the use of the CRT shadow mask. 0 is disabled, 1 is enabled.
+#define MaskingType 4
+#define ScanBrightness -8.00
+#define FilterCRTAmount -3.00
+#define HorizontalWarp 0.00
+#define VerticalWarp 0.00
+#define MaskAmountDark 0.50
+#define MaskAmountLight 1.50
+#define BloomPixel -1.50
+#define BloomScanLine -2.0
+#define BloomAmount 0.15
+#define Shape 2.0
+#define UseShadowMask 1
 
 float ToLinear1(float c)
 {
@@ -173,7 +172,6 @@ vec3 Horz3(vec2 pos, float off)
 	vec3 d = Fetch(pos, vec2(1.0, off));
 	float dst = Dist(pos).x;
 
-	// Convert distance to weight.
 	float scale = FilterCRTAmount;
 	float wb = Gaus(dst - 1.0, scale);
 	float wc = Gaus(dst + 0.0, scale);
@@ -191,7 +189,6 @@ vec3 Horz5(vec2 pos, float off)
 	vec3 e = Fetch(pos, vec2(2.0, off));
 	float dst = Dist(pos).x;
 
-	// Convert distance to weight.
 	float scale = FilterCRTAmount;
 
 	float wa = Gaus(dst - 2.0, scale);
@@ -214,7 +211,6 @@ vec3 Horz7(vec2 pos, float off)
 	vec3 g = Fetch(pos, vec2( 3.0, off));
 
 	float dst = Dist(pos).x;
-	// Convert distance to weight.
 	float scale = BloomPixel;
 	float wa = Gaus(dst - 3.0, scale);
 	float wb = Gaus(dst - 2.0, scale);
@@ -224,11 +220,9 @@ vec3 Horz7(vec2 pos, float off)
 	float wf = Gaus(dst + 2.0, scale);
 	float wg = Gaus(dst + 3.0, scale);
 
-	// Return filtered sample.
 	return (a * wa + b * wb + c * wc + d * wd + e * we + f * wf + g * wg) / (wa + wb + wc + wd + we + wf + wg);
 }
 
-// Return scanline weight.
 float Scan(vec2 pos, float off)
 {
 	float dst = Dist(pos).y;
@@ -282,7 +276,6 @@ vec2 Warp(vec2 pos)
 vec3 Mask(vec2 pos)
 {
 #if MaskingType == 1
-	// Very compressed TV style shadow mask.
 	float lines = MaskAmountLight;
 	float odd = 0.0;
 
@@ -315,7 +308,6 @@ vec3 Mask(vec2 pos)
 	return mask;
 
 #elif MaskingType == 2
-	// Aperture-grille.
 	pos.x = fract(pos.x / 3.0);
 	vec3 mask = vec3(MaskAmountDark, MaskAmountDark, MaskAmountDark);
 
@@ -335,7 +327,6 @@ vec3 Mask(vec2 pos)
 	return mask;
 
 #elif MaskingType == 3
-	// Stretched VGA style shadow mask (same as prior shaders).
 	pos.x += pos.y * 3.0;
 	vec3 mask = vec3(MaskAmountDark, MaskAmountDark, MaskAmountDark);
 	pos.x = fract(pos.x / 6.0);
@@ -356,7 +347,6 @@ vec3 Mask(vec2 pos)
 	return mask;
 
 #else
-	// VGA style shadow mask.
 	pos.xy = floor(pos.xy * vec2(1.0, 0.5));
 	pos.x += pos.y * 3.0;
 

@@ -3,25 +3,22 @@
 
 #include "MultiISA.h"
 
-// These get pulled in by xxhash.h in non-PCH mode, so we need to include them in global namespace scope.
 #include <cmath>
 #include <cstdlib>
 
 #define XXH_STATIC_LINKING_ONLY 1
 #define XXH_INLINE_ALL 1
-namespace CURRENT_ISA // XXH doesn't seem to use symbols that allow the compiler to deduplicate, but just in case...
+namespace CURRENT_ISA
 {
 #include <xxhash.h>
 }
 
 MULTI_ISA_UNSHARED_IMPL;
 
-// Include this after xxhash so we can add namespaces (GSXXH is set up to not include xxhash header if it's already been included)
 #include "GSXXH.h"
 
 u64 __noinline CURRENT_ISA::GSXXH3_64_Long(const void* data, size_t len)
 {
-	// XXH marks its function that calls this noinline, and it would be silly to stack noinline functions, so call the internal function directly
 	return XXH3_hashLong_64b_internal(data, len, XXH3_kSecret, sizeof(XXH3_kSecret), XXH3_accumulate, XXH3_scrambleAcc);
 }
 

@@ -88,7 +88,6 @@ GSDeviceMTL::GSDeviceMTL()
 	m_backref->second = this;
 	m_resource_options_shared_wc = MTLResourceStorageModeShared | MTLResourceCPUCacheModeWriteCombined;
 #ifdef _M_X86
-	// WC memory doesn't work properly on AMD hackintoshes, and ends up being horribly slow even when only writing
 	if (cpuinfo_get_core(0)->vendor == cpuinfo_vendor_amd)
 		m_resource_options_shared_wc = MTLResourceStorageModeShared;
 #endif
@@ -96,7 +95,6 @@ GSDeviceMTL::GSDeviceMTL()
 
 GSDeviceMTL::~GSDeviceMTL()
 {
-	// m_ds_as_rt_texture is owned if the device has memoryless textures
 	if (m_dev.features.memoryless_textures)
 		[m_ds_as_rt_texture release];
 	else if (m_ds_as_rt_gstexture)
@@ -110,7 +108,6 @@ GSDeviceMTL::Map GSDeviceMTL::Allocate(UploadBuffer& buffer, size_t amt)
 	bool needs_new = buffer.usage.PrepareForAllocation(last_draw, amt);
 	if (needs_new) [[unlikely]]
 	{
-		// Orphan buffer
 		size_t newsize = std::max<size_t>(buffer.usage.Size() * 2, 4096);
 		while (newsize < amt)
 			newsize *= 2;
@@ -128,7 +125,6 @@ GSDeviceMTL::Map GSDeviceMTL::Allocate(UploadBuffer& buffer, size_t amt)
 	return ret;
 }
 
-/// Allocate space in the given buffer for use with the given render command encoder
 GSDeviceMTL::Map GSDeviceMTL::Allocate(BufferPair& buffer, size_t amt)
 {
 	amt = (amt + 31) & ~31ull;
@@ -151,7 +147,6 @@ GSDeviceMTL::Map GSDeviceMTL::Allocate(BufferPair& buffer, size_t amt)
 	}
 	if (needs_new) [[unlikely]]
 	{
-		// Orphan buffer
 		size_t newsize = std::max<size_t>(buffer.usage.Size() * 2, 4096);
 		while (newsize < amt)
 			newsize *= 2;
@@ -228,7 +223,6 @@ id<MTLBlitCommandEncoder> GSDeviceMTL::GetVertexUploadEncoder()
 	return m_vertex_upload_encoder;
 }
 
-/// Get the draw command buffer, creating a new one if it doesn't exist
 id<MTLCommandBuffer> GSDeviceMTL::GetRenderCmdBuf()
 {
 	if (!m_current_render_cmdbuf)
@@ -261,7 +255,6 @@ id<MTLTexture> GSDeviceMTL::GetRT1DepthTexture(GSTextureMTL* depth)
 
 void GSDeviceMTL::DrawCommandBufferFinished(u64 draw, id<MTLCommandBuffer> buffer)
 {
-	// We can do the update non-atomically because we only ever update under the lock
 	u64 newval = std::max(draw, m_last_finished_draw.load(std::memory_order_relaxed));
 	m_last_finished_draw.store(newval, std::memory_order_release);
 	AccumulateCommandBufferTime(buffer);
@@ -308,9 +301,9 @@ void GSDeviceMTL::FlushEncoders()
 		{
 			std::lock_guard<std::mutex> guard(m_backref->first);
 			auto draw = m_spin_manager.DrawSubmitted(m_encoders_in_current_cmdbuf);
-			u32 constant_offset = 200000 * m_spin_manager.SpinsPerUnitTime(); // 200µs
-			u32 minimum_spin = 2 * constant_offset; // 400µs (200µs after subtracting constant_offset)
-			u32 maximum_spin = std::max<u32>(1024, 16000000 * m_spin_manager.SpinsPerUnitTime()); // 16ms
+			u32 constant_offset = 200000 * m_spin_manager.SpinsPerUnitTime();
+			u32 minimum_spin = 2 * constant_offset;
+			u32 maximum_spin = std::max<u32>(1024, 16000000 * m_spin_manager.SpinsPerUnitTime());
 			if (draw.recommended_spin > minimum_spin)
 				spin_cycles = std::min(draw.recommended_spin - constant_offset, maximum_spin);
 			spin_id = draw.id;
@@ -319,11 +312,6 @@ void GSDeviceMTL::FlushEncoders()
 		{
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunguarded-availability"
-			// Starting from kernelStartTime includes time the command buffer spent waiting to execute
-			// This is useful for avoiding issues on GPUs without async compute (Intel) where spinning
-			// delays the next command buffer start, which then makes the spin manager think it should spin more
-			// (If a command buffer contains multiple encoders, the GPU will start before the kernel finishes,
-			//  so we choose kernelStartTime over kernelEndTime)
 			u64 begin = [buf kernelStartTime] * s_to_ns;
 			u64 end = [buf GPUEndTime] * s_to_ns;
 #pragma clang diagnostic pop
@@ -443,17 +431,14 @@ void GSDeviceMTL::BeginRenderPass(NSString* name, GSTexture* color, MTLLoadActio
 	              || stencil != m_current_render.stencil_target
 	              || rt1     != m_current_render.has.rt1_depth;
 
-	// Depth and stencil might be the same, so do all invalidation checks before resetting invalidation
 	GSVector4 color_clear = GetRTLoadInfo(mc, &color_load);
 	GSVector4 depth_clear = GetRTLoadInfo(md, &depth_load);
 
-	// Stencil and depth are one texture, stencil clears aren't supported
 	if (ms && ms->GetState() == GSTexture::State::Invalidated)
 		stencil_load = MTLLoadActionDontCare;
 	needs_new |= mc && color_load == MTLLoadActionClear;
 	needs_new |= md && depth_load == MTLLoadActionClear;
 
-	// Reset texture state
 	if (mc) mc->SetState(GSTexture::State::Dirty);
 	if (md) md->SetState(GSTexture::State::Dirty);
 	if (ms) ms->SetState(GSTexture::State::Dirty);
@@ -539,7 +524,6 @@ void GSDeviceMTL::BeginFullROV(NSString* name, uint32_t width, uint32_t height)
 
 	if (m_current_render.is_full_rov())
 	{
-		// Render was too small.  Don't let it shrink in one dimension while growing in the other.
 		width  = std::max(width,  m_current_render.full_rov_size.w);
 		height = std::max(height, m_current_render.full_rov_size.h);
 	}
@@ -607,7 +591,7 @@ static constexpr MTLPixelFormat ConvertPixelFormat(GSTexture::Format format)
 
 GSTexture* GSDeviceMTL::CreateSurface(GSTexture::Usage usage, int width, int height, int levels, GSTexture::Format format, u32 layers)
 {
-	pxAssert(layers == 1); // stereo array targets are Vulkan-only (SupportsStereoTargets gates this) @autoreleasepool {
+	pxAssert(layers == 1);
 	pxAssert(GSTexture::ValidateUsageAndFormat(usage, format));
 
 	MTLPixelFormat fmt = ConvertPixelFormat(format);
@@ -633,12 +617,11 @@ GSTexture* GSDeviceMTL::CreateSurface(GSTexture::Usage usage, int width, int hei
 	if ((usage & GSTexture::FeedbackTarget) == GSTexture::FeedbackTarget)
 	{
 		if (m_dev.features.slow_color_compression)
-			mtl_usage |= MTLTextureUsagePixelFormatView; // Force color compression off by including PixelFormatView
+			mtl_usage |= MTLTextureUsagePixelFormatView;
 	}
 
 	if (usage == GSTexture::ShaderWriteTarget && format == GSTexture::Format::Color && m_dev.features.rov_requires_r32)
 	{
-		// Need to make an R32 view of the texture for ROV
 		mtl_usage |= MTLTextureUsagePixelFormatView;
 		needs_rov_tex = true;
 	}
@@ -689,13 +672,10 @@ void GSDeviceMTL::DoMerge(GSTexture* sTex[3], GSVector4* sRect, GSTexture* dTex,
 
 	if (sTex[1] && (PMODE.SLBG == 0 || feedback_write_2_but_blend_bg))
 	{
-		// 2nd output is enabled and selected. Copy it to destination so we can blend it with 1st output
-		// Note: value outside of dRect must contains the background color (c)
 		StretchRect(sTex[1], sRect[1], dTex, dRect[1], ShaderConvert::COPY, filter);
 	}
 
-	// Save 2nd output
-	if (feedback_write_2) // FIXME I'm not sure dRect[1] is always correct
+	if (feedback_write_2)
 		DoStretchRect(dTex, full_r, sTex[2], dRect[1], GetConvertPipeline(ShaderConvert::YUV), filter, LoadAction::DontCareIfFull, &cb_yuv, sizeof(cb_yuv));
 
 	if (feedback_write_2_but_blend_bg)
@@ -706,20 +686,17 @@ void GSDeviceMTL::DoMerge(GSTexture* sTex[3], GSVector4* sRect, GSTexture* dTex,
 		int idx = (PMODE.AMOD << 1) | PMODE.MMOD;
 		id<MTLRenderPipelineState> pipeline = m_merge_pipeline[idx];
 
-		// 1st output is enabled. It must be blended
 		if (PMODE.MMOD == 1)
 		{
-			// Blend with a constant alpha
 			DoStretchRect(sTex[0], sRect[0], dTex, dRect[0], pipeline, filter, LoadAction::Load, &cb_c, sizeof(cb_c));
 		}
 		else
 		{
-			// Blend with 2 * input alpha
 			DoStretchRect(sTex[0], sRect[0], dTex, dRect[0], pipeline, filter, LoadAction::Load, nullptr, 0);
 		}
 	}
 
-	if (feedback_write_1) // FIXME I'm not sure dRect[0] is always correct
+	if (feedback_write_1)
 		StretchRect(dTex, full_r, sTex[2], dRect[0], ShaderConvert::YUV, filter);
 }}
 
@@ -881,7 +858,6 @@ void GSDeviceMTL::DetachSurfaceOnMainThread()
 	m_layer = nullptr;
 }
 
-// Metal is fun and won't let you use newBufferWithBytes for private buffers
 static MRCOwned<id<MTLBuffer>> CreatePrivateBufferWithContent(
 	id<MTLDevice> dev, id<MTLCommandBuffer> cb,
 	MTLResourceOptions options, NSUInteger length,
@@ -955,14 +931,12 @@ static bool getDepthFeedback(const GSMTLDevice& dev, bool fbfetch)
 		case GSDepthFeedbackMode::Auto:
 			return dev.features.depth_feedback;
 		case GSDepthFeedbackMode::Depth:
-			// Depth feedback + FBFetch not supported
 			return !fbfetch;
 		default:
 			return false;
 	}
 }
 
-// Some shaders are only used by methods on MTLDevice, which currently use separately-compiled shaders
 static bool ConvertShaderNotNeeded(ShaderConvert shader)
 {
 	switch (shader)
@@ -1016,7 +990,7 @@ bool GSDeviceMTL::Create(GSVSyncMode vsync_mode, bool allow_present_throttle)
 		m_use_present_drawable = static_cast<UsePresentDrawable>(atoi(env));
 	else if (@available(macOS 13.0, *))
 		m_use_present_drawable = UsePresentDrawable::Always;
-	else // Before Ventura, presentDrawable acts like vsync is on when windowed
+	else
 		m_use_present_drawable = UsePresentDrawable::IfVsync;
 
 	m_capture_start_frame = 0;
@@ -1031,8 +1005,6 @@ bool GSDeviceMTL::Create(GSVSyncMode vsync_mode, bool allow_present_throttle)
 
 	if (m_dev.IsOk() && m_queue)
 	{
-		// This is a little less than ideal, pinging back and forward between threads, but we don't really
-		// have any other option, because Qt uses a blocking queued connection for window acquire.
 		if (!AcquireWindow(true))
 			return false;
 
@@ -1041,7 +1013,6 @@ bool GSDeviceMTL::Create(GSVSyncMode vsync_mode, bool allow_present_throttle)
 			AttachSurfaceOnMainThread();
 		});
 
-		// Metal does not support mailbox.
 		m_vsync_mode = (m_vsync_mode == GSVSyncMode::Mailbox) ? GSVSyncMode::FIFO : m_vsync_mode;
 		[m_layer setDisplaySyncEnabled:m_vsync_mode == GSVSyncMode::FIFO];
 	}
@@ -1072,7 +1043,6 @@ bool GSDeviceMTL::Create(GSVSyncMode vsync_mode, bool allow_present_throttle)
 	m_features.rov = m_dev.features.rov && !m_features.framebuffer_fetch;
 	m_max_texture_size = m_dev.features.max_texsize;
 
-	// Init metal stuff
 	m_fn_constants = MRCTransfer([MTLFunctionConstantValues new]);
 	setFnConstantB(m_fn_constants, m_features.framebuffer_fetch,    GSMTLConstantIndex_FRAMEBUFFER_FETCH);
 	setFnConstantB(m_fn_constants, m_features.depth_feedback,       GSMTLConstantIndex_DEPTH_FEEDBACK);
@@ -1146,11 +1116,9 @@ bool GSDeviceMTL::Create(GSVSyncMode vsync_mode, bool allow_present_throttle)
 		}
 	}
 
-	// Init samplers
 	m_sampler_hw[SamplerSelector::Linear().key] = CreateSampler(m_dev.dev, SamplerSelector::Linear());
 	m_sampler_hw[SamplerSelector::Point().key] = CreateSampler(m_dev.dev, SamplerSelector::Point());
 
-	// Init depth stencil states
 	MTLDepthStencilDescriptor* dssdesc = [[MTLDepthStencilDescriptor new] autorelease];
 	MTLStencilDescriptor* stencildesc = [[MTLStencilDescriptor new] autorelease];
 	stencildesc.stencilCompareFunction = MTLCompareFunctionAlways;
@@ -1208,7 +1176,6 @@ bool GSDeviceMTL::Create(GSVSyncMode vsync_mode, bool allow_present_throttle)
 		m_dss_hw[i] = MRCTransfer([m_dev.dev newDepthStencilStateWithDescriptor:dssdesc]);
 	}
 
-	// Init HW Vertex Shaders
 	for (size_t i = 0; i < std::size(m_hw_vs); i++)
 	{
 		VSSelector sel;
@@ -1222,13 +1189,11 @@ bool GSDeviceMTL::Create(GSVSyncMode vsync_mode, bool allow_present_throttle)
 		m_hw_vs[i] = LoadShader(sel.expand == GSShader::VSExpand::None ? @"vs_main" : @"vs_main_expand");
 	}
 
-	// Init pipelines
 	auto vs_convert = LoadShader(@"vs_convert");
 	auto fs_triangle = LoadShader(@"fs_triangle");
 	auto ps_copy = LoadShader(@"ps_copy");
 	auto ps_copy_rta_correct = LoadShader(@"ps_rta_correction");
 	auto pdesc = [[MTLRenderPipelineDescriptor new] autorelease];
-	// FS Triangle Pipelines
 	pdesc.colorAttachments[0].pixelFormat = ConvertPixelFormat(GSTexture::Format::Color);
 	m_colclip_resolve_pipeline = MakePipeline(pdesc, fs_triangle, LoadShader(@"ps_colclip_resolve"), @"ColorClip Resolve");
 	m_fxaa_pipeline = MakePipeline(pdesc, fs_triangle, LoadShader(@"ps_fxaa"), @"fxaa");
@@ -1582,11 +1547,8 @@ void GSDeviceMTL::AccumulateCommandBufferTime(id<MTLCommandBuffer> buffer)
 	std::lock_guard<std::mutex> l(m_mtx);
 	if (!m_gpu_timing_enabled)
 		return;
-	// We do the check before enabling m_gpu_timing_enabled
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunguarded-availability"
-	// It's unlikely, but command buffers can overlap or run out of order
-	// This doesn't handle every case (fully out of order), but it should at least handle overlapping
 	double begin = std::max(m_last_gpu_time_end, [buffer GPUStartTime]);
 	double end = [buffer GPUEndTime];
 	if (end > begin)
@@ -1611,7 +1573,6 @@ void GSDeviceMTL::ClearSamplerCache()
 
 void GSDeviceMTL::CopyRect(GSTexture* sTex, GSTexture* dTex, const GSVector4i& r, u32 destX, u32 destY)
 { @autoreleasepool {
-	// Empty rect, abort copy.
 	if (r.rempty())
 	{
 		GL_INS("Metal: CopyRect rect empty.");
@@ -1623,19 +1584,16 @@ void GSDeviceMTL::CopyRect(GSTexture* sTex, GSTexture* dTex, const GSVector4i& r
 	const GSVector4i dst_rect(0, 0, dT->GetWidth(), dT->GetHeight());
 	const bool full_draw_copy = dst_rect.eq(r);
 
-	// Source is cleared, if destination is a render target, we can carry the clear forward.
 	if (sT->GetState() == GSTexture::State::Cleared)
 	{
 		if (dT->IsRenderTargetOrDepthStencil() && ProcessClearsBeforeCopy(sTex, dTex, full_draw_copy))
 			return;
 
-		// Commit clear for the source texture.
 		sT->FlushClears();
 	}
 
 	g_perfmon.Put(GSPerfMon::TextureCopies, 1);
 
-	// Commit clear for the destination texture.
 	GSVector2i dsize = dTex->GetSize();
 	if (r.width() < dsize.x || r.height() < dsize.y)
 		dT->FlushClears();
@@ -1733,7 +1691,6 @@ void GSDeviceMTL::DrawStretchRect(const GSVector4& sRect, const GSVector4& dRect
 
 void GSDeviceMTL::RenderCopy(GSTexture* sTex, id<MTLRenderPipelineState> pipeline, const GSVector4i& rect)
 {
-	// FS Triangle encoder uses vertex ID alone to make a FS triangle, which we then scissor to the desired rectangle
 	MRESetScissor(rect);
 	MRESetPipeline(pipeline);
 	MRESetTexture(sTex, GSMTLTextureIndexNonHW);
@@ -1779,7 +1736,6 @@ void GSDeviceMTL::PresentRect(GSTexture* sTex, const GSVector4& sRect, GSTexture
 	}
 	else
 	{
-		// !dTex → Use current draw encoder
 		[m_current_render.encoder setRenderPipelineState:pipe];
 		[m_current_render.encoder setFragmentSamplerState:m_sampler_hw[filter == Biln ? SamplerSelector::Linear().key : SamplerSelector::Point().key] atIndex:0];
 		[m_current_render.encoder setFragmentTexture:static_cast<GSTextureMTL*>(sTex)->GetTexture() atIndex:0];
@@ -1809,7 +1765,7 @@ void GSDeviceMTL::DrawMultiStretchRects(const MultiStretchRect* rects, u32 num_r
 	auto flush = [&](u32 i) {
 		const u32 end = i * 4;
 		const u32 vertex_count = end - start;
-		const u32 index_count = vertex_count + (vertex_count >> 1); // 6 indices per 4 vertices
+		const u32 index_count = vertex_count + (vertex_count >> 1);
 		id<MTLRenderPipelineState> new_pipeline = GetConvertPipeline(shader.SetMask(wmask));
 		if (new_pipeline != pipeline)
 		{
@@ -1933,8 +1889,6 @@ void GSDeviceMTL::FlushClears(GSTexture* tex)
 	if (tex)
 		static_cast<GSTextureMTL*>(tex)->FlushClears();
 }
-
-// MARK: - MainRenderEncoder Operations
 
 static MTLBlendFactor ConvertBlendFactor(GSDevice::BlendFactor generic)
 {
@@ -2105,7 +2059,6 @@ void GSDeviceMTL::MRESetHWPipelineState(GSHWDrawConfig::VSSelector vssel, GSHWDr
 	}
 	if (m_dev.features.rov_requires_rt && extras.rt == GSTexture::Format::Invalid && !extras.has_depth && !extras.has_stencil)
 	{
-		// Dummy texture
 		[color setPixelFormat:MTLPixelFormatR8Unorm];
 		[color setWriteMask:MTLColorWriteMaskNone];
 	}
@@ -2160,7 +2113,7 @@ void GSDeviceMTL::MRESetTexture(GSTexture* tex, int pos)
 
 void GSDeviceMTL::MRESetTexture(id<MTLTexture> tex, int pos)
 {
-	GSTexture* gstex = reinterpret_cast<GSTexture*>(tex); // No one actually dereferences this
+	GSTexture* gstex = reinterpret_cast<GSTexture*>(tex);
 	if (!tex || gstex == m_current_render.tex[pos])
 		return;
 	m_current_render.tex[pos] = gstex;
@@ -2259,9 +2212,6 @@ void GSDeviceMTL::MRESetPipeline(id<MTLRenderPipelineState> pipe)
 	m_current_render.has.pipeline_sel = false;
 }
 
-// MARK: - HW Render
-
-// Metal can't import GSDevice.h, but we should make sure the structs are at least compatible
 static_assert(sizeof(GSVertex) == sizeof(GSMTLMainVertex));
 static_assert(offsetof(GSVertex, ST)      == offsetof(GSMTLMainVertex, st));
 static_assert(offsetof(GSVertex, RGBAQ.R) == offsetof(GSMTLMainVertex, rgba));
@@ -2354,7 +2304,7 @@ __fi void GSDeviceMTL::PrepareROVTexture(GSTexture** ptex)
 void GSDeviceMTL::RenderHW(GSHWDrawConfig& config)
 { @autoreleasepool {
 	if (config.tex && (config.ds == config.tex || config.rt == config.tex))
-		EndRenderPass(); // Barrier
+		EndRenderPass();
 
 	size_t vertsize = config.nverts * sizeof(*config.verts);
 	size_t idxsize = config.vs.UseFixedExpandIndexBuffer() ? 0 : (config.nindices * sizeof(*config.indices));
@@ -2368,7 +2318,6 @@ void GSDeviceMTL::RenderHW(GSHWDrawConfig& config)
 		memcpy(static_cast<u8*>(allocation.cpu_buffer) + vertsize, config.indices, idxsize);
 		if (config.vs.UseVSExpandIndexBuffer())
 		{
-			// VS expand index buffer is bound to the VS instead of the input assembler
 			u32 expand = GetExpansionFactor(config.vs.expand);
 			config.nindices *= expand;
 			config.indices_per_prim *= expand;
@@ -2450,7 +2399,7 @@ void GSDeviceMTL::RenderHW(GSHWDrawConfig& config)
 	{
 		case GSHWDrawConfig::DestinationAlphaMode::Off:
 		case GSHWDrawConfig::DestinationAlphaMode::Full:
-			break; // No setup
+			break;
 		case GSHWDrawConfig::DestinationAlphaMode::PrimIDTracking:
 		{
 			FlushClears(rt);
@@ -2465,7 +2414,7 @@ void GSDeviceMTL::RenderHW(GSHWDrawConfig& config)
 			pxAssert(config.ps.date == 1 || config.ps.date == 2);
 			if (config.ps.tex_is_fb)
 				MRESetTexture(rt, GSMTLTextureIndexRenderTarget);
-			config.require_one_barrier = false; // Ending render pass is our barrier
+			config.require_one_barrier = false;
 			pxAssert(config.require_full_barrier == false && config.drawlist == nullptr);
 			MRESetHWPipelineState(config.vs, config.ps, {}, {});
 			MREInitHWDraw(config, allocation);
@@ -2486,14 +2435,12 @@ void GSDeviceMTL::RenderHW(GSHWDrawConfig& config)
 			break;
 	}
 
-	// Try to reduce render pass restarts
 	if (!config.ps.HasColorROV() && !config.ds && m_current_render.color_target == rt && stencil == m_current_render.stencil_target && m_current_render.depth_target != config.tex)
 		config.ds = m_current_render.depth_target;
 	if (!rt && config.ds == m_current_render.depth_target && m_current_render.color_target != config.tex)
 		rt = m_current_render.color_target;
 	if (!rt && !config.ds)
 	{
-		// If we were rendering depth-only and depth gets cleared by the above check, that turns into rendering nothing, which should be a no-op
 		pxAssertMsg(0, "RenderHW was given a completely useless draw call!");
 		[m_current_render.encoder insertDebugSignpost:@"Skipped no-color no-depth draw"];
 		if (primid_tex)
@@ -2612,7 +2559,6 @@ void GSDeviceMTL::SendHWDraw(GSHWDrawConfig& config, id<MTLRenderCommandEncoder>
 
 		[enc pushDebugGroup:[NSString stringWithFormat:@"Full barrier split draw (%d primitives in %zu groups)", config.nindices / config.indices_per_prim, config.drawlist->size()]];
 #if defined(_DEBUG)
-		// Check how draw call is split.
 		std::map<size_t, size_t> frequency;
 		for (const auto& it : *config.drawlist)
 			++frequency[it];
@@ -2645,7 +2591,6 @@ void GSDeviceMTL::SendHWDraw(GSHWDrawConfig& config, id<MTLRenderCommandEncoder>
 	}
 	else if (one_barrier)
 	{
-		// One barrier needed
 		textureBarrier(enc);
 		g_perfmon.Put(GSPerfMon::Barriers, 1);
 	}
@@ -2654,9 +2599,6 @@ void GSDeviceMTL::SendHWDraw(GSHWDrawConfig& config, id<MTLRenderCommandEncoder>
 	g_perfmon.Put(GSPerfMon::DrawCalls, 1);
 }
 
-// tbh I'm not a fan of the current debug groups
-// not much useful information and makes things harder to find
-// good to turn on if you're debugging tc stuff though
 #ifndef MTL_ENABLE_DEBUG
 	#define MTL_ENABLE_DEBUG 0
 #endif
@@ -2772,8 +2714,8 @@ void GSDeviceMTL::RenderImGui(ImDrawData* data)
 
 	simd::uint4 last_scissor = simd::make_uint4(0, 0, GetWindowWidth(), GetWindowHeight());
 	simd::float2 fb_size = simd_float(last_scissor.zw);
-	simd::float2 clip_off   = ToSimd(data->DisplayPos);       // (0,0) unless using multi-viewports
-	simd::float2 clip_scale = ToSimd(data->FramebufferScale); // (1,1) unless using retina display which are often (2,2)
+	simd::float2 clip_off   = ToSimd(data->DisplayPos);
+	simd::float2 clip_scale = ToSimd(data->FramebufferScale);
 	ImTextureID last_tex = reinterpret_cast<ImTextureID>(nullptr);
 
 	for (int i = 0; i < data->CmdListsCount; i++)
@@ -2826,4 +2768,4 @@ void GSDeviceMTL::RenderImGui(ImDrawData* data)
 	[enc popDebugGroup];
 }
 
-#endif // __APPLE__
+#endif

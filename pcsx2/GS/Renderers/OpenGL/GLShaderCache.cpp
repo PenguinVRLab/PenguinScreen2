@@ -64,7 +64,6 @@ bool GLShaderCache::Open()
 	m_program_binary_supported = GLAD_GL_ARB_get_program_binary;
 	if (m_program_binary_supported)
 	{
-		// check that there's at least one format and the extension isn't being "faked"
 		GLint num_formats = 0;
 		glGetIntegerv(GL_NUM_PROGRAM_BINARY_FORMATS, &num_formats);
 		Console.WriteLn("%u program binary formats supported by driver", num_formats);
@@ -139,8 +138,6 @@ bool GLShaderCache::ReadExisting(const std::string& index_filename, const std::s
 	m_index_file = FileSystem::OpenCFile(index_filename.c_str(), "r+b");
 	if (!m_index_file)
 	{
-		// special case here: when there's a sharing violation (i.e. two instances running),
-		// we don't want to blow away the cache. so just continue without a cache.
 		if (errno == EACCES)
 		{
 			Console.WriteLn("Failed to open shader cache index with EACCES, are you running two instances?");
@@ -321,7 +318,7 @@ std::optional<GLProgram> GLShaderCache::GetProgram(
 }
 
 bool GLShaderCache::GetProgram(GLProgram* out_program, const std::string_view vertex_shader,
-	const std::string_view fragment_shader, const PreLinkCallback& callback /* = */)
+	const std::string_view fragment_shader, const PreLinkCallback& callback )
 {
 	auto prog = GetProgram(vertex_shader, fragment_shader, callback);
 	if (!prog)

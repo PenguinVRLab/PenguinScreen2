@@ -47,12 +47,9 @@ public:
 		bool vk_khr_shader_non_semantic_info : 1;
 		bool vk_ext_attachment_feedback_loop_layout : 1;
 		bool vk_ext_fragment_shader_interlock : 1;
-		// PCSX2-VR (M4.3-pre): multiview is core in Vulkan 1.1; this records whether the
-		// physical device actually reports the multiview feature (queried in CreateDevice).
 		bool vk_khr_multiview : 1;
 	};
 
-	// Global state accessors
 	__fi VkInstance GetVulkanInstance() const { return m_instance; }
 	__fi VkPhysicalDevice GetPhysicalDevice() const { return m_physical_device; }
 	__fi VkDevice GetDevice() const { return m_device; }
@@ -63,17 +60,14 @@ public:
 	__fi const VkPhysicalDeviceProperties& GetDeviceProperties() const { return m_device_properties; }
 	__fi const OptionalExtensions& GetOptionalExtensions() const { return m_optional_extensions; }
 
-	// PCSX2-VR (M4.3-pre): whether multiview (2-view stereo render passes) is available.
 	__fi bool SupportsMultiview() const { return m_optional_extensions.vk_khr_multiview; }
 
-	// The interaction between raster order attachment access and fbfetch is unclear.
 	__fi bool UseFeedbackLoopLayout() const
 	{
 		return m_optional_extensions.vk_ext_attachment_feedback_loop_layout &&
 		       !m_optional_extensions.vk_ext_rasterization_order_attachment_access;
 	}
 
-	// Helpers for getting constants
 	__fi u32 GetBufferCopyOffsetAlignment() const
 	{
 		return static_cast<u32>(m_device_properties.limits.optimalBufferCopyOffsetAlignment);
@@ -83,13 +77,10 @@ public:
 		return static_cast<u32>(m_device_properties.limits.optimalBufferCopyRowPitchAlignment);
 	}
 
-	/// Returns true if running on an NVIDIA GPU.
 	__fi bool IsDeviceNVIDIA() const { return (m_device_properties.vendorID == 0x10DE); }
 
-	/// Returns true if running on an AMD GPU.
 	__fi bool IsDeviceAMD() const { return (m_device_properties.vendorID == 0x1002); }
 
-	// Creates a simple render pass.
 	VkRenderPass GetRenderPass(VkFormat color_format, VkFormat depth_format,
 		VkAttachmentLoadOp color_load_op = VK_ATTACHMENT_LOAD_OP_LOAD,
 		VkAttachmentStoreOp color_store_op = VK_ATTACHMENT_STORE_OP_STORE,
@@ -99,54 +90,35 @@ public:
 		VkAttachmentStoreOp stencil_store_op = VK_ATTACHMENT_STORE_OP_DONT_CARE, bool color_feedback_loop = false,
 		bool depth_sampling = false, bool multiview = false);
 
-	// Gets a non-clearing version of the specified render pass. Slow, don't call in hot path.
 	VkRenderPass GetRenderPassForRestarting(VkRenderPass pass);
 
-	// These command buffers are allocated per-frame. They are valid until the command buffer
-	// is submitted, after that you should call these functions again.
 	__fi VkCommandBuffer GetCurrentCommandBuffer() const { return m_current_command_buffer; }
 	__fi VKStreamBuffer& GetTextureUploadBuffer() { return m_texture_stream_buffer; }
 	VkCommandBuffer GetCurrentInitCommandBuffer();
 
-	/// Allocates a descriptor set from the pool reserved for the current frame.
 	VkDescriptorSet AllocatePersistentDescriptorSet(VkDescriptorSetLayout set_layout);
 
-	/// Frees a descriptor set allocated from the global pool.
 	void FreePersistentDescriptorSet(VkDescriptorSet set);
 
-	// Gets the fence that will be signaled when the currently executing command buffer is
-	// queued and executed. Do not wait for this fence before the buffer is executed.
 	__fi VkFence GetCurrentCommandBufferFence() const { return m_frame_resources[m_current_frame].fence; }
 
-	// Fence "counters" are used to track which commands have been completed by the GPU.
-	// If the last completed fence counter is greater or equal to N, it means that the work
-	// associated counter N has been completed by the GPU. The value of N to associate with
-	// commands can be retreived by calling GetCurrentFenceCounter().
 	u64 GetCompletedFenceCounter() const { return m_completed_fence_counter; }
 
-	// Gets the fence that will be signaled when the currently executing command buffer is
-	// queued and executed. Do not wait for this fence before the buffer is executed.
 	u64 GetCurrentFenceCounter() const { return m_frame_resources[m_current_frame].fence_counter; }
 
-	// Schedule a vulkan resource for destruction later on. This will occur when the command buffer
-	// is next re-used, and the GPU has finished working with the specified resource.
 	void DeferBufferDestruction(VkBuffer object, VmaAllocation allocation);
 	void DeferFramebufferDestruction(VkFramebuffer object);
 	void DeferImageDestruction(VkImage object, VmaAllocation allocation);
 	void DeferImageViewDestruction(VkImageView object);
 
-	// Wait for a fence to be completed.
-	// Also invokes callbacks for completion.
 	void WaitForFenceCounter(u64 fence_counter);
 
 	void WaitForGPUIdle();
 
 private:
-	// Helper method to create a Vulkan instance.
 	static VkInstance CreateVulkanInstance(const WindowInfo& wi, OptionalExtensions* oe, bool enable_debug_utils,
 		bool enable_validation_layer);
 
-	// Enable/disable debug message runtime.
 	bool EnableDebugUtils();
 	void DisableDebugUtils();
 
@@ -163,11 +135,9 @@ private:
 	static WaitType GetWaitType(bool wait, bool spin);
 	void ExecuteCommandBuffer(WaitType wait_for_completion);
 
-	// Allocates a temporary CPU staging buffer, fires the callback with it to populate, then copies to a GPU buffer.
 	bool AllocatePreinitializedGPUBuffer(u32 size, VkBuffer* gpu_buffer, VmaAllocation* gpu_allocation,
 		VkBufferUsageFlags gpu_usage, const std::function<void(void*)>& fill_callback);
 	
-	// Helper function for uploading indices.
 	void UploadIndices(VKStreamBuffer& buffer, const void* index, size_t count);
 
 	union RenderPassCacheKey
@@ -184,9 +154,6 @@ private:
 			u32 stencil_store_op : 1;
 			u32 color_feedback_loop : 1;
 			u32 depth_sampling : 1;
-			// PCSX2-VR (M4.3-pre): stereo/multiview render pass. Keeps mono and multiview
-			// passes distinct in the in-memory cache. 27 bits were used before this; ample
-			// spare capacity in the u32. Never serialized (see m_render_pass_cache).
 			u32 multiview : 1;
 		};
 
@@ -207,8 +174,6 @@ private:
 
 	VkRenderPass CreateCachedRenderPass(RenderPassCacheKey key);
 
-	// PCSX2-VR (M4.3-pre): optional multiview infrastructure self-test, gated at runtime on
-	// the PCSX2_VR_MV_SELFTEST env var. Never called (fully inert) when the var is unset.
 	void RunMultiviewSelfTest();
 
 	void CommandBufferCompleted(u32 index);
@@ -224,7 +189,6 @@ private:
 	void CalibrateSpinTimestamp();
 	u64 GetCPUTimestamp();
 
-	// For pipeline statistics
 	enum class QueryState
 	{
 		None,
@@ -234,7 +198,6 @@ private:
 
 	struct FrameResources
 	{
-		// [0] - Init (upload) command buffer, [1] - draw command buffer
 		VkCommandPool command_pool = VK_NULL_HANDLE;
 		std::array<VkCommandBuffer, 2> command_buffers{VK_NULL_HANDLE, VK_NULL_HANDLE};
 		VkFence fence = VK_NULL_HANDLE;
@@ -335,8 +298,8 @@ public:
 
 	enum class ResourceType
 	{
-		SRV, // Shader resource view (read only)
-		UAV, // Unordered access (read/write)
+		SRV,
+		UAV,
 	};
 
 	static constexpr GSTextureVK::Layout GetResourceLayout(ResourceType type)
@@ -455,10 +418,10 @@ private:
 	std::array<VkPipeline, static_cast<int>(PresentShader::Count)> m_present{};
 	std::array<VkPipeline, 2> m_merge{};
 	std::array<VkPipeline, NUM_INTERLACE_SHADERS> m_interlace{};
-	VkPipeline m_colclip_setup_pipelines[2][2] = {}; // [depth][feedback_loop]
-	VkPipeline m_colclip_finish_pipelines[2][2] = {}; // [depth][feedback_loop]
-	VkRenderPass m_primid_image_setup_render_passes[2][2] = {}; // [depth][clear]
-	VkPipeline m_primid_image_setup_pipelines[2][4] = {}; // [depth][datm]
+	VkPipeline m_colclip_setup_pipelines[2][2] = {};
+	VkPipeline m_colclip_finish_pipelines[2][2] = {};
+	VkRenderPass m_primid_image_setup_render_passes[2][2] = {};
+	VkPipeline m_primid_image_setup_pipelines[2][4] = {};
 	VkPipeline m_fxaa_pipeline = {};
 	VkPipeline m_shadeboost_pipeline = {};
 
@@ -486,7 +449,7 @@ private:
 	VkRenderPass m_date_setup_render_pass = VK_NULL_HANDLE;
 	VkRenderPass m_swap_chain_render_pass = VK_NULL_HANDLE;
 
-	VkRenderPass m_tfx_render_pass[2][2][2][3][2][2][3][3] = {}; // [rt][ds][colclip][date][fbl][dsp][rt_op][ds_op]
+	VkRenderPass m_tfx_render_pass[2][2][2][3][2][2][3][3] = {};
 
 	VkDescriptorSetLayout m_cas_ds_layout = VK_NULL_HANDLE;
 	VkPipelineLayout m_cas_pipeline_layout = VK_NULL_HANDLE;
@@ -500,7 +463,6 @@ private:
 	std::string m_tfx_source;
 
 	GSTexture* CreateSurface(GSTexture::Usage usage, int width, int height, int levels, GSTexture::Format format, u32 layers = 1) override;
-	// PCSX2-VR (M4.3): stereo targets need array textures + multiview render passes.
 	bool SupportsStereoTargets() const override { return SupportsMultiview(); }
 
 	void DoMerge(GSTexture* sTex[3], GSVector4* sRect, GSTexture* dTex, GSVector4* dRect, const GSRegPMODE& PMODE,
@@ -545,7 +507,7 @@ private:
 	void DestroyResources();
 
 protected:
-	using GSDevice::DoStretchRect; // Suppress overloaded virtual function warning
+	using GSDevice::DoStretchRect;
 	virtual void DoStretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect,
 		ShaderConvertSelector shader, Filter filter) override;
 	virtual void DoStretchRect(GSTexture* sTex, const GSVector4& sRect, const GSVector4& dRect,
@@ -556,18 +518,13 @@ public:
 
 	__fi static GSDeviceVK* GetInstance() { return static_cast<GSDeviceVK*>(g_gs_device.get()); }
 
-	// Returns a list of Vulkan-compatible GPUs.
 	using GPUList = std::vector<std::pair<VkPhysicalDevice, GSAdapterInfo>>;
 	static GPUList EnumerateGPUs();
 	static GPUList EnumerateGPUs(VkInstance instance);
 	static std::vector<GSAdapterInfo> GetAdapterInfo();
 
-	/// Returns true if Vulkan is suitable as a default for the devices in the system.
 	static bool IsSuitableDefaultRenderer();
 
-	// PCSX2-VR (M4.3): multiview=true routes to the lazily-created stereo render pass with
-	// otherwise-identical formats/ops (keyed cache; the mono array stays untouched so the
-	// stereo-off path is byte-identical and pays no startup cost for 864 extra passes).
 	__fi VkRenderPass GetTFXRenderPass(bool rt, bool ds, bool colclip, bool stencil, bool fbl, bool dsp,
 		VkAttachmentLoadOp rt_op, VkAttachmentLoadOp ds_op, bool multiview = false)
 	{
@@ -608,13 +565,11 @@ public:
 	void PopDebugGroup() override;
 	void InsertDebugMessage(DebugMessageCategory category, const char* fmt, ...) override;
 
-	// Helpers and utility draws.
 	void DrawPrimitive();
 	void DrawIndexedPrimitive();
 	void DrawIndexedPrimitive(int offset, int count);
 	void DrawIndexedPrimitiveVSExpand(int offset, int count, bool vs_indexing, int vs_indexing_expansion);
 
-	// Main GS primitive draws.
 	void Draw(const GSHWDrawConfig& config);
 	void Draw(const GSHWDrawConfig& config, int offset, int count);
 
@@ -673,26 +628,19 @@ public:
 	void SendHWDraw(const GSHWDrawConfig& config, GSTextureVK* draw_rt, GSTextureVK* draw_ds,
 		bool one_barrier, bool full_barrier);
 
-	//////////////////////////////////////////////////////////////////////////
-	// Vulkan State
-	//////////////////////////////////////////////////////////////////////////
-
 public:
 	VkFormat LookupNativeFormat(GSTexture::Format format) const;
 
 	__fi VkFramebuffer GetCurrentFramebuffer() const { return m_current_framebuffer; }
 
-	/// Ends any render pass, executes the command buffer, and invalidates cached state.
 	void ExecuteCommandBuffer(bool wait_for_completion);
 	void ExecuteCommandBuffer(bool wait_for_completion, const char* reason, ...);
 	void ExecuteCommandBufferAndRestartRenderPass(bool wait_for_completion, const char* reason);
 	void ExecuteCommandBufferAndRestartPresent(bool wait_for_completion, const char* reason, ...);
 	void ExecuteCommandBufferForReadback();
 
-	/// Set dirty flags on everything to force re-bind at next draw time.
 	void InvalidateCachedState();
 
-	/// Binds all dirty state to the command buffer.
 	bool ApplyUtilityState(bool already_execed = false);
 	bool ApplyTFXState(bool already_execed = false);
 
@@ -704,9 +652,6 @@ public:
 	void SetUtilityPushConstants(const void* data, u32 size);
 	void UnbindTexture(GSTextureVK* tex);
 
-	// Ends a render pass if we're currently in one.
-	// When Bind() is next called, the pass will be restarted.
-	// Calling this function is allowed even if a pass has not begun.
 	bool InRenderPass();
 	void BeginRenderPass(VkRenderPass rp, const GSVector4i& rect);
 	void BeginClearRenderPass(VkRenderPass rp, const GSVector4i& rect, const VkClearValue* cv, u32 cv_count);
@@ -721,7 +666,7 @@ public:
 private:
 	enum DIRTY_FLAG : u32
 	{
-		DIRTY_FLAG_TFX_TEXTURE_0 = (1 << 0), // 0, 1, 2, 3, 4, 5, 6
+		DIRTY_FLAG_TFX_TEXTURE_0 = (1 << 0),
 		DIRTY_FLAG_TFX_UBO = (1 << 7),
 		DIRTY_FLAG_UTILITY_TEXTURE = (1 << 8),
 		DIRTY_FLAG_BLEND_CONSTANTS = (1 << 9),
@@ -768,7 +713,6 @@ private:
 	void SetInitialState(VkCommandBuffer cmdbuf);
 	void ApplyBaseState(u32 flags, VkCommandBuffer cmdbuf);
 
-	// Which bindings/state has to be updated before the next draw.
 	u32 m_dirty_flags = 0;
 	FeedbackLoopFlag m_current_framebuffer_feedback_loop = FeedbackLoopFlag_None;
 	bool m_warned_slow_spin = false;
@@ -797,18 +741,8 @@ private:
 	const GSTextureVK* m_utility_texture = nullptr;
 	VkSampler m_utility_sampler = VK_NULL_HANDLE;
 
-	// PCSX2-VR (M4.3): the current TFX draw samples a stereo array texture per-view
-	// (feed blits between display-chain targets) — the TFX_TEXTURE_TEXTURE descriptor
-	// binds the ARRAY view instead of the layer-0 sampling view. Set per draw in
-	// RenderHW alongside pipe.ps.tex_in_array.
 	bool m_tfx_tex_in_array = false;
 
-	// PCSX2-VR (Stage 1 / D4): the current TFX draw reads its RT / depth feedback texture
-	// on the SAMPLED path (feedback-loop-layout or no-texture-barrier) and that texture is a
-	// 2-layer stereo array — bind the ARRAY view (GetView) at TFX_TEXTURE_RT / TFX_TEXTURE_DEPTH
-	// instead of the layer-0 GetViewForSampling view, matching PS_RT_IN_ARRAY / PS_DEPTH_IN_ARRAY
-	// in the FS. Gated independently (a stereo RT can pair with a mono temporary-Z depth). Set
-	// per draw in UpdateHWPipelineSelector alongside pipe.ps.rt_in_array / pipe.ps.depth_in_array.
 	bool m_tfx_rt_in_array = false;
 	bool m_tfx_depth_in_array = false;
 	VkDescriptorSet m_utility_descriptor_set = VK_NULL_HANDLE;
@@ -819,6 +753,5 @@ private:
 	std::unique_ptr<GSTextureVK> m_null_texture;
 	VkFramebuffer m_null_framebuffer;
 
-	// current pipeline selector - we save this in the struct to avoid re-zeroing it every draw
 	PipelineSelector m_pipeline_selector = {};
 };

@@ -7,7 +7,6 @@
 
 namespace VR::PadLook
 {
-
 	void Publish(float deflection);
 
 	u8 ApplyRx(u8 real);

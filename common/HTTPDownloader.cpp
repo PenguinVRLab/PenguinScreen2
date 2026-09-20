@@ -99,7 +99,6 @@ void HTTPDownloader::LockedPollRequests(std::unique_lock<std::mutex>& lock)
 		if ((req->state == Request::State::Started || req->state == Request::State::Receiving) &&
 			current_time >= req->start_time && Common::Timer::ConvertValueToSeconds(current_time - req->start_time) >= m_timeout)
 		{
-			// request timed out
 			Console.Error("Request for '%s' timed out", req->url.c_str());
 
 			req->state.store(Request::State::Cancelled);
@@ -116,7 +115,6 @@ void HTTPDownloader::LockedPollRequests(std::unique_lock<std::mutex>& lock)
 		else if ((req->state == Request::State::Started || req->state == Request::State::Receiving) && req->progress &&
 			req->progress->IsCancelled())
 		{
-			// request timed out
 			Console.Error("Request for '%s' cancelled", req->url.c_str());
 
 			req->state.store(Request::State::Cancelled);
@@ -149,19 +147,16 @@ void HTTPDownloader::LockedPollRequests(std::unique_lock<std::mutex>& lock)
 			continue;
 		}
 
-		// request complete
 		DevCon.WriteLn("Request for '%s' complete, returned status code %u and %zu bytes", req->url.c_str(),
 			req->status_code, req->data.size());
 		m_pending_http_requests.erase(m_pending_http_requests.begin() + index);
 
-		// run callback with lock unheld
 		lock.unlock();
 		req->callback(req->status_code, req->content_type, std::move(req->data));
 		CloseRequest(req);
 		lock.lock();
 	}
 
-	// start new requests when we finished some
 	if (unstarted_requests > 0 && active_requests < m_max_active_requests)
 	{
 		for (size_t index = 0; index < m_pending_http_requests.size();)
@@ -199,7 +194,6 @@ void HTTPDownloader::WaitForAllRequests()
 	std::unique_lock<std::mutex> lock(m_pending_http_request_lock);
 	while (!m_pending_http_requests.empty())
 	{
-		// Don't burn too much CPU.
 		Threading::Sleep(1);
 		LockedPollRequests(lock);
 	}
@@ -229,7 +223,6 @@ bool HTTPDownloader::HasAnyRequests()
 
 std::string HTTPDownloader::GetExtensionForContentType(const std::string& content_type)
 {
-	// Based on https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types/Common_types
 	static constexpr const char* table[][2] = {
 		{"audio/aac", "aac"},
 		{"application/x-abiword", "abw"},

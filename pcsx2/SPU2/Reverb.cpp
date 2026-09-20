@@ -71,8 +71,6 @@ StereoOut32 V_Core::DoReverb(StereoOut32 Input)
 
 	bool R = Cycles & 1;
 
-	// Calculate the read/write addresses we'll be needing for this session of reverb.
-
 	const u32 same_src = RevbGetIndexer(R ? Revb.SAME_R_SRC : Revb.SAME_L_SRC);
 	const u32 same_dst = RevbGetIndexer(R ? Revb.SAME_R_DST : Revb.SAME_L_DST);
 	const u32 same_prv = RevbGetIndexer(R ? Revb.SAME_R_DST - 1 : Revb.SAME_L_DST - 1);
@@ -91,15 +89,6 @@ StereoOut32 V_Core::DoReverb(StereoOut32 Input)
 	const u32 apf2_src = RevbGetIndexer(R ? (Revb.APF2_R_DST - Revb.APF2_SIZE) : (Revb.APF2_L_DST - Revb.APF2_SIZE));
 	const u32 apf2_dst = RevbGetIndexer(R ? Revb.APF2_R_DST : Revb.APF2_L_DST);
 
-	// -----------------------------------------
-	//          Optimized IRQ Testing !
-	// -----------------------------------------
-
-	// This test is enhanced by using the reverb effects area begin/end test as a
-	// shortcut, since all buffer addresses are within that area.  If the IRQA isn't
-	// within that zone then the "bulk" of the test is skipped, so this should only
-	// be a slowdown on a few evil games.
-
 	for (int i = 0; i < 2; i++)
 	{
 		if (FxEnable && Cores[i].IRQEnable && ((Cores[i].IRQA >= EffectsStartA) && (Cores[i].IRQA <= EffectsEndA)))
@@ -114,7 +103,6 @@ StereoOut32 V_Core::DoReverb(StereoOut32 Input)
 				(Cores[i].IRQA == apf1_dst) || (Cores[i].IRQA == apf1_src) ||
 				(Cores[i].IRQA == apf2_dst) || (Cores[i].IRQA == apf2_src))
 			{
-				//printf("Core %d IRQ Called (Reverb). IRQA = %x\n",i,addr);
 				SetIrqCall(i);
 			}
 		}
@@ -138,7 +126,6 @@ StereoOut32 V_Core::DoReverb(StereoOut32 Input)
 	apf2 = out - MUL(Revb.APF2_VOL, _spu2mem[apf2_src]);
 	out = _spu2mem[apf2_src] + MUL(Revb.APF2_VOL, apf2);
 
-	// According to no$psx the effects always run but don't always write back, see check in V_Core::Mix
 	if (FxEnable)
 	{
 		_spu2mem[same_dst] = clamp_mix(same);

@@ -27,7 +27,7 @@ public:
 		int m_fpsm;
 		int m_zpsm;
 		bool m_using_pages;
-		TextureLevel m_tex[7 + 1]; // NULL terminated
+		TextureLevel m_tex[7 + 1];
 		enum
 		{
 			SyncNone,
@@ -55,7 +55,7 @@ protected:
 	GSPixelOffset4* m_fzb;
 	GSVector4i m_fzb_bbox;
 	u32 m_fzb_cur_pages[16];
-	std::atomic<u32> m_fzb_pages[512]; // u16 frame/zbuf pages interleaved
+	std::atomic<u32> m_fzb_pages[512];
 	std::atomic<u16> m_tex_pages[512];
 	GIFRegDIMX m_last_dimx = {};
 	GSVector4i m_dimx[8] = {};

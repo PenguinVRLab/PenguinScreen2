@@ -7,10 +7,6 @@ namespace R5900 {
 namespace Dynarec {
 namespace OpcodeImpl {
 
-	// These are instructions contained the MMI "opcode space" but are not
-	// actually MMI instructions.  They are just specialized versions of standard
-	// instructions that "fit" into the second pipeline of the EE.
-
 	void recMADD1();
 	void recMADDU1();
 	void recMADD();
@@ -120,7 +116,7 @@ namespace MMI {
 	void recPOR();
 	void recPCPYH();
 
-} // namespace MMI
-} // namespace OpcodeImpl
-} // namespace Dynarec
-} // namespace R5900
+}
+}
+}
+}

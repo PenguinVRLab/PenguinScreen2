@@ -29,7 +29,6 @@
 #include <optional>
 #include <thread>
 
-// Returns 0 on failure (not supported by the operating system).
 u64 GetPhysicalMemory()
 {
 	u64 pages = 0;
@@ -43,7 +42,6 @@ u64 GetPhysicalMemory()
 
 u64 GetAvailablePhysicalMemory()
 {
-	// Try to read MemAvailable from /proc/meminfo.
 	FILE* file = fopen("/proc/meminfo", "r");
 	if (file)
 	{
@@ -53,14 +51,12 @@ u64 GetAvailablePhysicalMemory()
 
 		while (fgets(line, sizeof(line), file))
 		{
-			// Modern kernels provide MemAvailable directly - preferred and most accurate.
 			if (sscanf(line, "MemAvailable: %lu kB", &mem_available) == 1)
 			{
 				fclose(file);
 				return mem_available * _1kb;
 			}
 
-			// Fallback values for manual approximation.
 			sscanf(line, "MemFree: %lu kB", &mem_free);
 			sscanf(line, "Buffers: %lu kB", &buffers);
 			sscanf(line, "Cached: %lu kB", &cached);
@@ -69,24 +65,20 @@ u64 GetAvailablePhysicalMemory()
 		}
 		fclose(file);
 
-		// Fallback approximation: Linux-like heuristic.
-		// available = MemFree + Buffers + Cached + SReclaimable - Shmem.
 		const u64 available_kb = mem_free + buffers + cached + sreclaimable - shmem;
 		return available_kb * _1kb;
 	}
 
-	// Fallback to sysinfo if /proc/meminfo couldn't be read.
 	struct sysinfo info = {};
 	if (sysinfo(&info) != 0)
 		return 0;
 
-	// Note: This does NOT include cached memory - only free + buffer.
 	return (static_cast<u64>(info.freeram) + static_cast<u64>(info.bufferram)) * static_cast<u64>(info.mem_unit);
 }
 
 u64 GetTickFrequency()
 {
-	return 1000000000; // unix measures in nanoseconds
+	return 1000000000;
 }
 
 u64 GetCPUTicks()
@@ -123,7 +115,6 @@ std::string GetOSVersionString()
 		}
 		fclose(file);
 
-		// Some distros put quotes around the name and or version.
 		if (distro.starts_with("\"") && distro.ends_with("\""))
 			distro = distro.substr(1, distro.size() - 2);
 
@@ -135,7 +126,7 @@ std::string GetOSVersionString()
 	}
 
 	return "Linux";
-#else // freebsd
+#else
 	return "Other Unix";
 #endif
 }
@@ -162,7 +153,6 @@ static bool SetScreensaverInhibitDBus(const bool inhibit_requested, const char* 
 	};
 
 	dbus_error_init(&error_dbus);
-	// Calling dbus_bus_get() after the first time returns a pointer to the existing connection.
 	connection = dbus_bus_get(DBUS_BUS_SESSION, &error_dbus);
 	if (!connection || (dbus_error_is_set(&error_dbus)))
 		return false;
@@ -185,34 +175,27 @@ static bool SetScreensaverInhibitDBus(const bool inhibit_requested, const char* 
 
 	if (!message)
 		return false;
-	// Initialize an append iterator for the message, gets freed with the message.
 	dbus_message_iter_init_append(message, &message_itr);
 	if (inhibit_requested)
 	{
-		// Guard against repeat inhibitions which would add extra inhibitors each generating a different cookie.
 		if (s_cookie)
 			return false;
-		// Append process/window name.
 		if (!dbus_message_iter_append_basic(&message_itr, DBUS_TYPE_STRING, &program_name))
 			return false;
-		// Append reason for inhibiting the screensaver.
 		if (!dbus_message_iter_append_basic(&message_itr, DBUS_TYPE_STRING, &reason))
 			return false;
 	}
 	else
 	{
-		// Only Append the cookie.
 		if (!dbus_message_iter_append_basic(&message_itr, DBUS_TYPE_UINT32, &s_cookie))
 			return false;
 	}
-	// Send message and get response.
 	response = dbus_connection_send_with_reply_and_block(connection, message, DBUS_TIMEOUT_USE_DEFAULT, &error_dbus);
 	if (!response || dbus_error_is_set(&error_dbus))
 		return false;
 	s_cookie = 0;
 	if (inhibit_requested)
 	{
-		// Get the cookie from the response message.
 		if (!dbus_message_get_args(response, &error_dbus, DBUS_TYPE_UINT32, &s_cookie, DBUS_TYPE_INVALID) || dbus_error_is_set(&error_dbus))
 			return false;
 	}
@@ -272,10 +255,6 @@ void mouseEventLoop()
 	XEvent event;
 	while (trackingMouse)
 	{
-		// XNextEvent is blocking, this is a zombie process risk if no events arrive
-		// while we are trying to shutdown.
-		// https://nrk.neocities.org/articles/x11-timeout-with-xsyncalarm might be
-		// a better solution than using XPending.
 		if (!XPending(display))
 		{
 			Threading::Sleep(1);
@@ -332,24 +311,20 @@ void Common::DetachMousePositionCb()
 bool Common::PlaySoundAsync(const char* path)
 {
 #ifdef __linux__
-	// This is... pretty awful. But I can't think of a better way without linking to e.g. gstreamer.
 	const char* cmdname = "aplay";
 	const char* argv[] = {cmdname, path, nullptr};
 	pid_t pid;
 
-	// Since we set SA_NOCLDWAIT in Qt, we don't need to wait here.
 	int res = posix_spawnp(&pid, cmdname, nullptr, nullptr, const_cast<char**>(argv), environ);
 	if (res == 0)
 		return true;
 
-	// Try gst-play-1.0.
 	const char* gst_play_cmdname = "gst-play-1.0";
 	const char* gst_play_argv[] = {cmdname, path, nullptr};
 	res = posix_spawnp(&pid, gst_play_cmdname, nullptr, nullptr, const_cast<char**>(gst_play_argv), environ);
 	if (res == 0)
 		return true;
 
-	// gst-launch? Bit messier for sure.
 	TinyString location_str = TinyString::from_format("location={}", path);
 	TinyString parse_str = TinyString::from_format("{}parse", Path::GetExtension(path));
 	const char* gst_launch_cmdname = "gst-launch-1.0";

@@ -13,14 +13,12 @@
 #include <timeapi.h>
 #include <VersionHelpers.h>
 
-// If anything tries to read this as an initializer, we're in trouble.
 static const LARGE_INTEGER lfreq = []() {
 	LARGE_INTEGER ret = {};
 	QueryPerformanceFrequency(&ret);
 	return ret;
 }();
 
-// This gets leaked... oh well.
 static thread_local HANDLE s_sleep_timer;
 static thread_local bool s_sleep_timer_created = false;
 
@@ -65,8 +63,6 @@ u64 GetAvailablePhysicalMemory()
 	return status.ullAvailPhys;
 }
 
-// Calculates the Windows OS Version and processor architecture, and returns it as a
-// human-readable string. :)
 std::string GetOSVersionString()
 {
 	std::string retval;
@@ -102,9 +98,6 @@ void Common::SetMousePosition(int x, int y)
 
 bool Common::AttachMousePositionCb(std::function<void(int, int)> cb)
 {
-	// We use raw input messages which are handled by the windows message loop.
-	// The alternative is to use a low-level mouse hook, but this passes Windows all mouse messages to PCSX2.
-	// If PCSX2 hangs, or you attach a debugger, the mouse will stop working system-wide.
 	return true;
 }
 
@@ -125,7 +118,6 @@ void Threading::Sleep(int ms)
 
 void Threading::SleepUntil(u64 ticks)
 {
-	// This is definitely sub-optimal, but there's no way to sleep until a QPC timestamp on Win32.
 	const s64 diff = static_cast<s64>(ticks - GetCPUTicks());
 	if (diff <= 0)
 		return;

@@ -60,7 +60,6 @@ public:
 	std::vector<std::pair<std::string, std::string>> GetKeyValueList(const char* section) const override;
 	void SetKeyValueList(const char* section, const std::vector<std::pair<std::string, std::string>>& items) override;
 
-	// default parameter overloads
 	using SettingsInterface::GetBoolValue;
 	using SettingsInterface::GetDoubleValue;
 	using SettingsInterface::GetFloatValue;

@@ -95,7 +95,6 @@ namespace VR
 				census.stereo_off++;
 				return;
 			case DrawClass::AccurateStqFlagged:
-
 				census.accurate_stq_flagged++;
 				return;
 			default:
@@ -145,14 +144,12 @@ namespace VR
 		const double bq_hi = std::min(q_max, q_near_edge);
 		if (bq_hi > bq_lo)
 		{
-
 			int i_near = BinIndexForW(1.0 / bq_hi);
 			int i_deep = BinIndexForW(1.0 / bq_lo);
 			i_near = std::max(i_near, 0);
 			i_deep = std::min(i_deep, kBinCount - 1);
 			for (int i = i_near; i <= i_deep; i++)
 			{
-
 				const double qa = std::max(bq_lo, 1.0 / BinEdgeW(i + 1));
 				const double qb = std::min(bq_hi, 1.0 / BinEdgeW(i));
 				slice_add(bins[static_cast<size_t>(i)], qa, qb);
@@ -181,7 +178,6 @@ namespace VR
 
 	namespace
 	{
-
 		double PercentileW(const DepthHistogram& h, double p)
 		{
 			double total = h.near_overflow.coverage + h.far_overflow.coverage;
@@ -200,7 +196,6 @@ namespace VR
 				const double c = h.bins[static_cast<size_t>(i)].coverage;
 				if (c > 0.0 && target <= cum + c)
 				{
-
 					const double frac = (target - cum) / c;
 					const double log2w = std::log2(DepthHistogram::BinEdgeW(i)) +
 										 frac / static_cast<double>(DepthHistogram::kBinsPerOctave);
@@ -314,7 +309,6 @@ namespace VR
 
 	namespace
 	{
-
 		void AppendNum(std::string& out, double v)
 		{
 			char buf[40];

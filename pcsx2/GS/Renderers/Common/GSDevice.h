@@ -266,10 +266,10 @@ class ShaderConvertSelector
 	{
 		struct
 		{
-			u32 shader : 8; // Main shader
-			u32 mask : 8; // Variable color mask
-			u32 depth_out : 1; // Depth texture output
-			u32 filter : 1; // Shader filter (HW filter is specified separately)
+			u32 shader : 8;
+			u32 mask : 8;
+			u32 depth_out : 1;
+			u32 filter : 1;
 		};
 
 		u32 key;
@@ -418,7 +418,6 @@ public:
 	}
 
 private:
-	// Helper variables for packing valid shaders into a contiguous range.
 	static const std::span<const ShaderConvertSelector> SHADERS;
 	static const std::array<u8, static_cast<u32>(ShaderConvert::Count) * 4> INDEX_REMAP;
 	static const u32 NUM_REMAPPED_SHADERS;
@@ -438,7 +437,6 @@ public:
 		return remapped;
 	}
 
-	// Inverse of Index()
 	static ShaderConvertSelector Get(u32 index)
 	{
 		return SHADERS[index];
@@ -456,7 +454,7 @@ static inline ShaderConvertSelector GetConvertShader(GSTexture::Format src, GSTe
 			{
 				case GSTexture::Format::Color:
 					pxAssert(src_bpp == 32 && dst_bpp == 32);
-					shader = ShaderConvert::COPY; // bpp is handled by mask
+					shader = ShaderConvert::COPY;
 					break;
 				case GSTexture::Format::DepthColor:
 				case GSTexture::Format::DepthStencil:
@@ -565,32 +563,30 @@ enum ChannelFetch
 
 enum class HWBlendType
 {
-	SRC_ONE_DST_FACTOR      = 1, // Use the dest color as blend factor, Cs is set to 1.
-	SRC_ALPHA_DST_FACTOR    = 2, // Use the dest color as blend factor, Cs is set to (Alpha - 1).
-	SRC_DOUBLE              = 3, // Double source color.
-	SRC_HALF_ONE_DST_FACTOR = 4, // Use the dest color as blend factor, Cs is set to 0.5, additionally divide As or Af by 2.
-	SRC_INV_DST_BLEND_HALF  = 5, // Halve the alpha then double the final result.
-	INV_SRC_DST_BLEND_HALF  = 6, // Halve the alpha then double the final result.
+	SRC_ONE_DST_FACTOR      = 1,
+	SRC_ALPHA_DST_FACTOR    = 2,
+	SRC_DOUBLE              = 3,
+	SRC_HALF_ONE_DST_FACTOR = 4,
+	SRC_INV_DST_BLEND_HALF  = 5,
+	INV_SRC_DST_BLEND_HALF  = 6,
 
-	BMIX1_ALPHA_HIGH_ONE    = 1, // Blend formula is replaced when alpha is higher than 1.
-	BMIX1_SRC_HALF          = 2, // Impossible blend will always be wrong on hw, divide Cs by 2.
-	BMIX2_OVERFLOW          = 3, // Blending Cs might overflow, try to compensate.
+	BMIX1_ALPHA_HIGH_ONE    = 1,
+	BMIX1_SRC_HALF          = 2,
+	BMIX2_OVERFLOW          = 3,
 };
 
 struct alignas(16) DisplayConstantBuffer
 {
-	GSVector4 SourceRect; // +0,xyzw
-	GSVector4 TargetRect; // +16,xyzw
-	GSVector2 SourceSize; // +32,xy
-	GSVector2 TargetSize; // +40,zw
-	GSVector2 TargetResolution; // +48,xy
-	GSVector2 RcpTargetResolution; // +56,zw
-	GSVector2 SourceResolution; // +64,xy
-	GSVector2 RcpSourceResolution; // +72,zw
-	GSVector4 TimeAndPad; // seconds since GS init +76,xyzw
-	// +96
+	GSVector4 SourceRect;
+	GSVector4 TargetRect;
+	GSVector2 SourceSize;
+	GSVector2 TargetSize;
+	GSVector2 TargetResolution;
+	GSVector2 RcpTargetResolution;
+	GSVector2 SourceResolution;
+	GSVector2 RcpSourceResolution;
+	GSVector4 TimeAndPad;
 
-	// assumes that sRect is normalized
 	void SetSource(const GSVector4& sRect, const GSVector2i& sSize)
 	{
 		SourceRect = sRect;
@@ -624,36 +620,34 @@ static_assert(sizeof(MergeConstantBuffer) == 32, "MergeConstantBuffer is correct
 
 struct alignas(16) InterlaceConstantBuffer
 {
-	GSVector4 ZrH; // data passed to the shader
+	GSVector4 ZrH;
 };
 static_assert(sizeof(InterlaceConstantBuffer) == 16, "InterlaceConstantBuffer is correct size");
 
 enum HWBlendFlags
 {
-	// Flags to determine blending behavior
-	BLEND_CD     = 0x1,    // Output is Cd, hw blend can handle it
-	BLEND_HW1    = 0x2,    // Clear color blending (use directly the destination color as blending factor)
-	BLEND_HW2    = 0x4,    // Clear color blending (use directly the destination color as blending factor)
-	BLEND_HW3    = 0x8,    // Multiply Cs by (255/128) to compensate for wrong Ad/255 value, should be Ad/128
-	BLEND_HW4    = 0x10,   // HW rendering is split in 2 passes
-	BLEND_HW5    = 0x20,   // HW rendering is split in 2 passes
-	BLEND_HW6    = 0x40,   // HW rendering is split in 2 passes
-	BLEND_HW7    = 0x80,   // HW rendering is split in 2 passes
-	BLEND_HW8    = 0x100,  // HW rendering is split in 2 passes
-	BLEND_HW9    = 0x200,  // HW rendering is split in 2 passes
-	BLEND_MIX1   = 0x400,  // Mix of hw and sw, do Cs*F or Cs*As in shader
-	BLEND_MIX2   = 0x800,  // Mix of hw and sw, do Cs*(As + 1) or Cs*(F + 1) in shader
-	BLEND_MIX3   = 0x1000, // Mix of hw and sw, do Cs*(1 - As) or Cs*(1 - F) in shader
-	BLEND_ACCU   = 0x2000, // Allow to use a mix of SW and HW blending to keep the best of the 2 worlds
-	BLEND_NO_REC = 0x4000, // Doesn't require sampling of the RT as a texture
-	BLEND_A_MAX  = 0x8000, // Impossible blending uses coeff bigger than 1
+	BLEND_CD     = 0x1,
+	BLEND_HW1    = 0x2,
+	BLEND_HW2    = 0x4,
+	BLEND_HW3    = 0x8,
+	BLEND_HW4    = 0x10,
+	BLEND_HW5    = 0x20,
+	BLEND_HW6    = 0x40,
+	BLEND_HW7    = 0x80,
+	BLEND_HW8    = 0x100,
+	BLEND_HW9    = 0x200,
+	BLEND_MIX1   = 0x400,
+	BLEND_MIX2   = 0x800,
+	BLEND_MIX3   = 0x1000,
+	BLEND_ACCU   = 0x2000,
+	BLEND_NO_REC = 0x4000,
+	BLEND_A_MAX  = 0x8000,
 };
 
-// Determines the HW blend function for the video backend
 struct HWBlend
 {
-	typedef u8 BlendOp; /*GSDevice::BlendOp*/
-	typedef u8 BlendFactor; /*GSDevice::BlendFactor*/
+	typedef u8 BlendOp;
+	typedef u8 BlendFactor;
 
 	u16 flags;
 	BlendOp op;
@@ -683,11 +677,8 @@ struct alignas(16) GSHWDrawConfig
 				u8 fst : 1;
 				u8 tme : 1;
 				u8 iip : 1;
-				u8 point_size : 1;		///< Set when points need to be expanded without VS expanding.
+				u8 point_size : 1;
 				VSExpand expand : 3;
-				/// PCSX2-VR (M4.3): draw targets a 2-layer stereo texture through a multiview
-				/// render pass; the VS displaces per-eye via gl_ViewIndex. Set by the Vulkan
-				/// backend only (from the bound target's array-layer count).
 				u8 multiview : 1;
 			};
 			u8 key;
@@ -695,42 +686,31 @@ struct alignas(16) GSHWDrawConfig
 		VSSelector(): key(0) {}
 		VSSelector(u8 k): key(k) {}
 
-		/// Returns true if the fixed index buffer should be used.
 		__fi bool UseFixedExpandIndexBuffer() const { return (expand == VSExpand::Point || expand == VSExpand::Sprite); }
 		
-		/// Return true if the index buffer should be bound as a vertex shader resource.
 		__fi bool UseVSExpandIndexBuffer() const { return (expand == VSExpand::TriangleAA1); }
 	};
 	static_assert(sizeof(VSSelector) == 1, "VSSelector is a single byte");
 
 	struct PSSelector
 	{
-		// Performance note: there are too many shader combinations
-		// It might hurt the performance due to frequent toggling worse it could consume
-		// a lots of memory.
 		union
 		{
 			struct
 			{
-				// Format
 				u32 aem_fmt   : 2;
 				u32 pal_fmt   : 2;
-				u32 dst_fmt   : 2; // 0 → 32-bit, 1 → 24-bit, 2 → 16-bit
-				u32 depth_fmt : 2; // 0 → None, 1 → 32-bit, 2 → 16-bit, 3 → RGBA
-				// Alpha extension/Correction
+				u32 dst_fmt   : 2;
+				u32 depth_fmt : 2;
 				u32 aem : 1;
 				u32 fba : 1;
-				// Fog
 				u32 fog : 1;
-				// Flat/goround shading
 				u32 iip : 1;
-				// Pixel test
 				u32 date : 3;
 				PS_ATST atst : 3;
 				PS_AFAIL afail : 3;
 				u32 ztst : 2;
-				// Color sampling
-				u32 fst : 1; // Investigate to do it on the VS
+				u32 fst : 1;
 				u32 tfx : 3;
 				u32 tcc : 1;
 				u32 wms : 2;
@@ -738,7 +718,6 @@ struct alignas(16) GSHWDrawConfig
 				u32 adjs : 1;
 				u32 adjt : 1;
 				u32 ltf : 1;
-				// Shuffle and fbmask effect
 				u32 shuffle  : 1;
 				u32 shuffle_same : 1;
 				u32 real16src: 1;
@@ -748,73 +727,52 @@ struct alignas(16) GSHWDrawConfig
 				u32 write_rg : 1;
 				u32 fbmask   : 1;
 
-				// Blend and Colclip
 				u32 blend_a        : 2;
 				u32 blend_b        : 2;
 				u32 blend_c        : 2;
 				u32 blend_d        : 2;
 				u32 fixed_one_a    : 1;
-				u32 blend_hw       : 3; /*HWBlendType*/
+				u32 blend_hw       : 3;
 				u32 a_masked       : 1;
-				u32 colclip_hw     : 1; // colclip (COLCLAMP off) emulation through HQ textures
+				u32 colclip_hw     : 1;
 				u32 rta_correction : 1;
 				u32 rta_source_correction : 1;
-				u32 colclip        : 1; // COLCLAMP off (color blend outputs wrap around 0-255)
+				u32 colclip        : 1;
 				u32 blend_mix      : 2;
-				u32 round_inv      : 1; // Blending will invert the value, so rounding needs to go the other way
+				u32 round_inv      : 1;
 				u32 pabe           : 1;
-				u32 no_color       : 1; // disables color output entirely (depth only)
-				u32 no_color1      : 1; // disables second color output (when unnecessary)
+				u32 no_color       : 1;
+				u32 no_color1      : 1;
 
-				// Others ways to fetch the texture
 				u32 channel : 3;
 
-				// Dithering
 				u32 dither : 2;
 				u32 dither_adjust : 1;
 
-				// Depth writing
 				u32 zclamp : 1;
 				u32 zfloor : 1;
 
-				// Hack
 				u32 tcoffsethack : 1;
 				u32 urban_chaos_hle : 1;
 				u32 tales_of_abyss_hle : 1;
-				u32 tex_is_fb : 1; // Jak Shadows
+				u32 tex_is_fb : 1;
 				u32 automatic_lod : 1;
 				u32 manual_lod : 1;
 				u32 point_sampler : 1;
 				u32 region_rect : 1;
 
-				// Scan mask
 				u32 scanmsk : 2;
 
-				// AA1
-				PS_AA1 aa1 : 2; // Pixel shader AA1 primitive. Must be used in conjunction with VS AA1 expand.
-				u32 abe : 1; // Alpha blend enabled. Currently only used for emulating AA1/ABE interaction.
+				PS_AA1 aa1 : 2;
+				u32 abe : 1;
 
-				// Anisotropic filtering
 				u32 sw_aniso : 5;
 				
-				// ROVs
 				u32 rov_color : 1;
 				PS_ROV_DEPTH rov_depth : 2;
 
-				/// PCSX2-VR (M4.3): Texture is a 2-layer stereo array and this draw runs
-				/// in a multiview pass — the FS samples the gl_ViewIndex layer, so a
-				/// stereo upstream target carries each eye through feed blits into the
-				/// display target. Set by the Vulkan backend only.
 				u32 tex_in_array : 1;
 
-				/// PCSX2-VR (Stage 1 / D4): the RT / depth feedback texture read on the
-				/// SAMPLED feedback path (feedback-loop-layout — the modern-NVIDIA path —
-				/// or no-texture-barrier) is a 2-layer stereo array; declare Rt/DepthSampler
-				/// as texture2DArray and texelFetch the gl_ViewIndex layer so each eye reads
-				/// its OWN destination (Full DATE / StencilOne FS / SW blend / FBMASK), not
-				/// the left eye's. Separate bits because a stereo RT can legitimately pair
-				/// with a MONO depth (the temporary-Z path, GSRendererHW), so the two
-				/// samplers must be gated independently. Set by the Vulkan backend only.
 				u32 rt_in_array : 1;
 				u32 depth_in_array : 1;
 			};
@@ -867,23 +825,17 @@ struct alignas(16) GSHWDrawConfig
 			return (IsAlphaTesting() && afail == PS_AFAIL::KEEP) || scanmsk || date || IsZTesting();
 		}
 
-		/// Disables color output from the pixel shader, this is done when all channels are masked.
 		__fi void DisableColorOutput()
 		{
-			// remove software blending, since this will cause the color to be declared inout with fbfetch.
 			blend_a = blend_b = blend_c = blend_d = 0;
 
-			// TEX_IS_FB relies on us having a color output to begin with.
 			tex_is_fb = 0;
 
-			// no point having fbmask, since we're not writing. DATE has to stay.
 			fbmask = 0;
 
-			// disable both outputs.
 			no_color = no_color1 = 1;
 		}
 
-		/// Disables depth output from the pixel shader.
 		__fi void DisableDepthOutput()
 		{
 			if (afail == PS_AFAIL::RGB_ONLY_SW_Z)
@@ -963,36 +915,29 @@ struct alignas(16) GSHWDrawConfig
 			return out;
 		}
 
-		/// Returns true if the effective minification filter is linear.
 		__fi bool IsMinFilterLinear() const
 		{
 			if (triln < static_cast<u8>(GS_MIN_FILTER::Nearest_Mipmap_Nearest))
 			{
-				// use the same filter as mag when mipmapping is off
 				return biln;
 			}
 			else
 			{
-				// Linear_Mipmap_Nearest or Linear_Mipmap_Linear
 				return (triln >= static_cast<u8>(GS_MIN_FILTER::Linear_Mipmap_Nearest));
 			}
 		}
 
-		/// Returns true if the effective magnification filter is linear.
 		__fi bool IsMagFilterLinear() const
 		{
-			// magnification uses biln regardless of mip mode (they're only used for minification)
 			return biln;
 		}
 
-		/// Returns true if the effective mipmap filter is linear.
 		__fi bool IsMipFilterLinear() const
 		{
 			return (triln == static_cast<u8>(GS_MIN_FILTER::Nearest_Mipmap_Linear) ||
 					triln == static_cast<u8>(GS_MIN_FILTER::Linear_Mipmap_Linear));
 		}
 
-		/// Returns true if mipmaps should be used when filtering (i.e. LOD not clamped to zero).
 		__fi bool UseMipmapFiltering() const
 		{
 			return (triln >= static_cast<u8>(GS_MIN_FILTER::Nearest_Mipmap_Nearest));
@@ -1055,44 +1000,10 @@ struct alignas(16) GSHWDrawConfig
 		GSVector2 point_size;
 		u32 max_depth;
 		float line_aa1_width;
-		// PCSX2-VR (M4.1): x = per-eye horizontal NDC displacement (sign encodes the eye),
-		// y = convergence in Q units. Filled from VR::StereoState; {0,0} when stereo is
-		// disabled makes the tfx VS displacement path provably inert (byte-identical off-state).
-		// With a multiband map (below) these still carry band 0 / the linear pair, so every
-		// non-band consumer (OSD, dumps, the linear shader branch) is unchanged.
 		GSVector2 vr_stereo;
-		// PCSX2-VR (multiband): the resolved depth map. 0 = linear (today's single
-		// sep/conv pair, bit-exact), 1 = bands, 2 = log. band_count is 1..4. These two
-		// consumed the old `vr_pad` GSVector2, so offsets 0..63 are byte-identical to the
-		// pre-multiband CB and only the tail is new.
 		u32 vr_map_mode;
 		u32 vr_band_count;
-		// x,y,z = band split points in DESCENDING q (band 0 = nearest = largest q); unused
-		// entries are -FLT_MAX so the shader's compare chain lands on the last valid band
-		// with no count check. w = the eye sign for the BAND path only: bands go to the GPU
-		// as unsigned magnitudes because the deep-window clamp max(0,d) has to run before
-		// the sign is applied (clamping a pre-signed value is wrong for the right eye), so
-		// the sign rides here instead. Linear keeps the pre-signed vr_stereo.x convention.
 		GSVector4 vr_splits;
-		// Per band: x = convergence, y = separation (UNSIGNED), z = solver-derived
-		// continuity bias, w = see below. In log mode band[0] is reinterpreted as
-		// {w0, w1, dfar, -} and the rest are ignored.
-		//
-		// vr_band[0].w — HUD COLLIMATION, and the one field here that is NOT part of
-		// the depth map. It is the constant per-eye NDC displacement applied to
-		// UV/FST draws that a profile has classified as aim symbology (reticles,
-		// target designator brackets). Those draws carry no q, so they are excluded
-		// from the map above and render at exactly ZERO disparity — pinned on the
-		// screen plane while the target they enclose sits ~80 arcmin behind it.
-		// Collimation gives them one authored depth instead, the way a real combat
-		// HUD is collimated to infinity. It lives in band 0's spare w because
-		// VSSelector is a full byte (:676-704) and a new shader permutation is not
-		// available; the CB is the only channel, and this component is spare in
-		// every map mode. Signed exactly like vr_stereo.x (CPU bakes the eye sign;
-		// multiview leaves it unsigned and signs from gl_ViewIndex). 0 = no
-		// collimation, which is what every non-opted-in profile, every disabled
-		// draw, and every non-VR build writes — so the shader's guard is provably
-		// unreachable in the off-state.
 		GSVector4 vr_band[4];
 		__fi VSConstantBuffer()
 		{
@@ -1218,11 +1129,10 @@ struct alignas(16) GSHWDrawConfig
 			return true;
 		}
 	};
-	// For hardware rendering backends
 	struct BlendState
 	{
-		typedef u8 BlendOp; /*GSDevice::BlendOp*/
-		typedef u8 BlendFactor; /*GSDevice::BlendFactor*/
+		typedef u8 BlendOp;
+		typedef u8 BlendFactor;
 
 		union
 		{
@@ -1254,7 +1164,6 @@ struct alignas(16) GSHWDrawConfig
 			constant = constant_;
 		}
 
-		// Blending has no effect if RGB is masked.
 		bool IsEffective(ColorMaskSelector colormask) const;
 	};
 
@@ -1280,11 +1189,11 @@ struct alignas(16) GSHWDrawConfig
 
 	enum class DestinationAlphaMode : u8
 	{
-		Off,            ///< No destination alpha test
-		Stencil,        ///< Emulate using read-only stencil
-		StencilOne,     ///< Emulate using read-write stencil (first write wins)
-		PrimIDTracking, ///< Emulate by tracking the primitive ID of the last pixel allowed through
-		Full,           ///< Full emulation (using barriers / ROV)
+		Off,
+		Stencil,
+		StencilOne,
+		PrimIDTracking,
+		Full,
 	};
 
 	enum class ColClipMode : u8
@@ -1296,21 +1205,21 @@ struct alignas(16) GSHWDrawConfig
 		EarlyResolve = 4
 	};
 
-	GSTexture* rt;         ///< Render target
-	GSTexture* ds;         ///< Depth stencil
-	GSTexture* tex;        ///< Source texture
-	GSTexture* pal;        ///< Palette texture
-	const GSVertex* verts; ///< Vertices to draw
-	const u16* indices;    ///< Indices to draw
-	u32 nverts;            ///< Number of vertices
-	u32 nindices;          ///< Number of indices
-	u32 indices_per_prim;  ///< Number of indices that make up one primitive
-	const std::vector<size_t>* drawlist;          ///< For reducing barriers on sprites
-	const std::vector<GSVector4i>* drawlist_bbox; ///< For RT copy when barriers not available.
-	GSVector4i scissor; ///< Scissor rect
-	GSVector4i drawarea; ///< Area in the framebuffer which will be modified.
-	GSVector4i samplearea; ///< Area in the texture which will be sampled.
-	Topology topology;  ///< Draw topology
+	GSTexture* rt;
+	GSTexture* ds;
+	GSTexture* tex;
+	GSTexture* pal;
+	const GSVertex* verts;
+	const u16* indices;
+	u32 nverts;
+	u32 nindices;
+	u32 indices_per_prim;
+	const std::vector<size_t>* drawlist;
+	const std::vector<GSVector4i>* drawlist_bbox;
+	GSVector4i scissor;
+	GSVector4i drawarea;
+	GSVector4i samplearea;
+	Topology topology;
 
 	alignas(8) PSSelector ps;
 	VSSelector vs;
@@ -1320,8 +1229,8 @@ struct alignas(16) GSHWDrawConfig
 	ColorMaskSelector colormask;
 	DepthStencilSelector depth;
 
-	bool require_one_barrier;  ///< Require texture barrier before draw (also used to requst an rt copy if texture barrier isn't supported)
-	bool require_full_barrier; ///< Require texture barrier between all prims
+	bool require_one_barrier;
+	bool require_full_barrier;
 
 	enum : u32
 	{
@@ -1355,7 +1264,7 @@ struct alignas(16) GSHWDrawConfig
 		BlendState blend;
 		bool enable : 1;
 		u8 no_color1 : 1;
-		u8 blend_hw : 3; // HWBlendType
+		u8 blend_hw : 3;
 		u8 dither : 2;
 	};
 	static_assert(sizeof(BlendMultiPass) == 8, "blend multi pass is 8 bytes");
@@ -1365,10 +1274,9 @@ struct alignas(16) GSHWDrawConfig
 	VSConstantBuffer cb_vs;
 	PSConstantBuffer cb_ps;
 	
-	// These are here as they need to be preserved between draws, and the state clear only does up to the constant buffers.
 	ColClipMode colclip_mode;
 	GIFRegFRAME colclip_frame;
-	GSVector4i colclip_update_area; ///< Area in the framebuffer which colclip will modify;
+	GSVector4i colclip_update_area;
 
 	__fi bool IsFeedbackLoopRT(const PSSelector& ps) const
 	{
@@ -1385,7 +1293,6 @@ struct alignas(16) GSHWDrawConfig
 		return blend.enable || blend_multi_pass.enable || ps.IsSWBlending();
 	}
 
-	// Dumping
 	static void DumpConfig(const std::string& path, const GSHWDrawConfig& conf,
 		bool ps = true, bool vs = true, bool bs = true, bool dss = true, bool ss = true, bool asp = true, bool bmp = true,
 		bool cbvs = true, bool cbps = true);
@@ -1413,7 +1320,6 @@ static inline u32 GetVertexAlignment(GSHWDrawConfig::VSExpand expand)
 	switch (expand)
 	{
 		case GSHWDrawConfig::VSExpand::Sprite:
-			// Sprite expand does a 2-4 expansion, and relies on the low bit of the vertex ID to figure out if it's the first or second coordinate.
 			return 2;
 		default:
 			return 1;
@@ -1442,29 +1348,28 @@ public:
 	// clang-format off
 	struct FeatureSupport
 	{
-		bool broken_point_sampler : 1; ///< Issue with AMD cards, see tfx shader for details
-		bool vs_expand            : 1; ///< Supports expanding points/lines/sprites in the vertex shader
-		bool primitive_id         : 1; ///< Supports primitive ID for use with prim tracking destination alpha algorithm
-		bool texture_barrier      : 1; ///< Supports sampling rt and hopefully texture barrier
-		bool multidraw_fb_copy    : 1; ///< Replacement for texture barrier.
-		bool provoking_vertex_last: 1; ///< Supports using the last vertex in a primitive as the value for flat shading.
-		bool point_expand         : 1; ///< Supports point expansion in hardware.
-		bool line_expand          : 1; ///< Supports line expansion in hardware.
-		bool prefer_new_textures  : 1; ///< Allocate textures up to the pool size before reusing them, to avoid render pass restarts.
-		bool dxt_textures         : 1; ///< Supports DXTn texture compression, i.e. S3TC and BC1-3.
-		bool bptc_textures        : 1; ///< Supports BC6/7 texture compression.
-		bool framebuffer_fetch    : 1; ///< Can sample from the framebuffer without texture barriers.
-		bool stencil_buffer       : 1; ///< Supports stencil buffer, and can use for DATE.
-		bool cas_sharpening       : 1; ///< Supports sufficient functionality for contrast adaptive sharpening.
-		bool test_and_sample_depth: 1; ///< Supports concurrently binding the depth-stencil buffer for sampling and depth testing.
-		bool depth_feedback       : 1; ///< Depth feedback loops can be done with DS directly (otherwise need to copy to separate RT).  Implies `feedback_loops`.
-		bool aa1                  : 1; ///< Supports the GS AA1 feature.
-		bool rov                  : 1; ///< Supports rasterizer ordered views for both depth and color.
+		bool broken_point_sampler : 1;
+		bool vs_expand            : 1;
+		bool primitive_id         : 1;
+		bool texture_barrier      : 1;
+		bool multidraw_fb_copy    : 1;
+		bool provoking_vertex_last: 1;
+		bool point_expand         : 1;
+		bool line_expand          : 1;
+		bool prefer_new_textures  : 1;
+		bool dxt_textures         : 1;
+		bool bptc_textures        : 1;
+		bool framebuffer_fetch    : 1;
+		bool stencil_buffer       : 1;
+		bool cas_sharpening       : 1;
+		bool test_and_sample_depth: 1;
+		bool depth_feedback       : 1;
+		bool aa1                  : 1;
+		bool rov                  : 1;
 		FeatureSupport()
 		{
 			memset(this, 0, sizeof(*this));
 		}
-		/// Supports feedback loops through either texture barriers or rt copies.
 		bool feedback_loops() const { return texture_barrier || multidraw_fb_copy; }
 	};
 
@@ -1474,7 +1379,7 @@ public:
 		GSVector4 dst_rect;
 		GSTexture* src;
 		Filter filter;
-		GSHWDrawConfig::ColorMaskSelector wmask; // 0xf for all channels by default
+		GSHWDrawConfig::ColorMaskSelector wmask;
 	};
 
 	struct TextureRecycleDeleter
@@ -1485,7 +1390,6 @@ public:
 
 	enum BlendFactor : u8
 	{
-		// HW blend factors
 		SRC_COLOR,   INV_SRC_COLOR,   DST_COLOR,  INV_DST_COLOR,
 		SRC1_COLOR,  INV_SRC1_COLOR,  SRC_ALPHA,  INV_SRC_ALPHA,
 		DST_ALPHA,   INV_DST_ALPHA,   SRC1_ALPHA, INV_SRC1_ALPHA,
@@ -1493,7 +1397,6 @@ public:
 	};
 	enum BlendOp : u8
 	{
-		// HW blend operations
 		OP_ADD, OP_SUBTRACT, OP_REV_SUBTRACT
 	};
 	// clang-format on
@@ -1512,10 +1415,10 @@ protected:
 		u32 start, count;
 	} m_index = {};
 
-	u32 m_frame = 0; // for ageing the pool
+	u32 m_frame = 0;
 
 private:
-	std::array<FastList<GSTexture*>, 2> m_pool; // [texture, target]
+	std::array<FastList<GSTexture*>, 2> m_pool;
 	u64 m_pool_memory_usage = 0;
 
 	static const std::array<HWBlend, 3*3*3*3> m_blendMap;
@@ -1527,7 +1430,7 @@ protected:
 	static constexpr u32 MAX_TARGET_AGE = 20;
 	static constexpr u32 MAX_POOLED_TEXTURES = 300;
 	static constexpr u32 MAX_TEXTURE_AGE = 10;
-	static constexpr u32 NUM_CAS_CONSTANTS = 12; // 8 plus src offset x/y, 16 byte alignment
+	static constexpr u32 NUM_CAS_CONSTANTS = 12;
 	static constexpr u32 EXPAND_BUFFER_SIZE = sizeof(u16) * 16383 * 6;
 
 	WindowInfo m_window_info;
@@ -1542,13 +1445,11 @@ protected:
 	GSTexture* m_target_tmp = nullptr;
 	GSTexture* m_current = nullptr;
 	GSTexture* m_cas = nullptr;
-	GSTexture* m_colclip_rt = nullptr; ///< Temp hw colclip texture
-	GSTexture* m_ds_as_rt = nullptr; ///< Depth as color
+	GSTexture* m_colclip_rt = nullptr;
+	GSTexture* m_ds_as_rt = nullptr;
 
 	bool AcquireWindow(bool recreate_window);
 
-	// PCSX2-VR (M4.3): layers > 1 requests a stereo array target; only the Vulkan backend
-	// supports it (gated by GSDevice::SupportsStereoTargets, so other backends never see >1).
 	virtual GSTexture* CreateSurface(GSTexture::Usage usage, int width, int height, int levels, GSTexture::Format format, u32 layers = 1) = 0;
 
 	virtual void DoMerge(GSTexture* sTex[3], GSVector4* sRect, GSTexture* dTex, GSVector4* dRect, const GSRegPMODE& PMODE, const GSRegEXTBUF& EXTBUF, u32 c, const Filter filter) = 0;
@@ -1556,17 +1457,13 @@ protected:
 	virtual void DoFXAA(GSTexture* sTex, GSTexture* dTex) = 0;
 	virtual void DoShadeBoost(GSTexture* sTex, GSTexture* dTex, const float params[4]) = 0;
 
-	/// Resolves CAS shader includes for the specified source.
 	static bool GetCASShaderSource(std::string* source);
 
-	/// Applies CAS and writes to the destination texture, which should be a shader writeable texture.
 	virtual bool DoCAS(GSTexture* sTex, GSTexture* dTex, bool sharpen_only, const std::array<u32, NUM_CAS_CONSTANTS>& constants) = 0;
 
-	/// Perform texture operations for ImGui
 	void UpdateImGuiTextures();
 
 protected:
-	// Entry point to the renderer-specific StretchRect code.
 	virtual void DoStretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect,
 		ShaderConvertSelector shader, Filter filter) = 0;
 	virtual void DoStretchRect(GSTexture* sTex, const GSVector4& sRect, const GSVector4& dRect,
@@ -1580,7 +1477,6 @@ public:
 	GSDevice();
 	virtual ~GSDevice();
 
-	/// Returns a string containing current adapter in use.
 	const std::string& GetName() const { return m_name; }
 
 	GSTexture* GetColorClipTexture() const { return m_colclip_rt; }
@@ -1588,29 +1484,21 @@ public:
 	void SetColorClipTexture(GSTexture* tex) { m_colclip_rt = tex; }
 
 	bool IsDSInRTActive() const { return m_ds_as_rt; }
-	/// Create a temporary color clone of depth for depth feedback
 	virtual void BeginDSAsRT(GSTexture* ds, const GSVector4i& drawarea);
 	void EndDSAsRT();
 
-	/// Returns a string representing the specified API.
 	static const char* RenderAPIToString(RenderAPI api);
 
-	/// Parses the configured fullscreen mode into its components (width * height @ refresh Hz)
 	static bool GetRequestedExclusiveFullscreenMode(u32* width, u32* height, float* refresh_rate);
 
-	/// Converts a fullscreen mode to a string.
 	static std::string GetFullscreenModeString(u32 width, u32 height, float refresh_rate);
 
-	/// Generates a fixed index buffer for expanding points and sprites. Buffer is assumed to be at least EXPAND_BUFFER_SIZE in size.
 	static void GenerateExpansionIndexBuffer(void* buffer);
 
-	// Process copy area for sw blend copies.
 	GSVector4i ProcessCopyArea(const GSVector4i& rtsize, const GSVector4i& drawarea);
 
-	/// Reads the specified shader source file.
 	static std::optional<std::string> ReadShaderSource(const char* filename);
 
-	/// Returns the maximum number of mipmap levels for a given texture size.
 	static int GetMipmapLevelsForSize(int width, int height);
 
 	__fi u64 GetPoolMemoryUsage() const { return m_pool_memory_usage; }
@@ -1631,62 +1519,43 @@ public:
 	
 	void Recycle(GSTexture* t);
 
-	/// Returns true if it's an OpenGL-based renderer.
 	bool UsesLowerLeftOrigin() const;
 
-	/// Free ImGui textures before shutdown
 	void DestroyImGuiTextures();
 
 	virtual bool Create(GSVSyncMode vsync_mode, bool allow_present_throttle);
 	virtual void Destroy();
 
-	/// Returns the graphics API used by this device.
 	virtual RenderAPI GetRenderAPI() const = 0;
 
-	/// Returns true if we have a window we're rendering into.
 	virtual bool HasSurface() const = 0;
 
-	/// Destroys the surface we're currently drawing to.
 	virtual void DestroySurface() = 0;
 
-	/// Switches to a new window/surface.
 	virtual bool UpdateWindow() = 0;
 
-	/// Call when the window size changes externally to recreate any resources.
 	virtual void ResizeWindow(u32 new_window_width, u32 new_window_height, float new_window_scale) = 0;
 
-	/// Returns true if exclusive fullscreen is supported.
 	virtual bool SupportsExclusiveFullscreen() const = 0;
 
-	/// Returns false if the window was completely occluded. If frame_skip is set, the frame won't be
-	/// displayed, but the GPU command queue will still be flushed.
 	virtual PresentResult BeginPresent(bool frame_skip) = 0;
 
-	/// Presents the frame to the display.
 	virtual void EndPresent() = 0;
 
-	/// Changes vsync mode for this display.
 	virtual void SetVSyncMode(GSVSyncMode mode, bool allow_present_throttle) = 0;
 
-	/// Returns a string of information about the graphics driver being used.
 	virtual std::string GetDriverInfo() const = 0;
 
-	/// Enables/disables GPU frame timing.
 	virtual bool SetGPUTimingEnabled(bool enabled) = 0;
 
-	/// Returns the amount of GPU time utilized since the last time this method was called.
 	virtual float GetAndResetAccumulatedGPUTime() = 0;
 
-	/// Enables/disables GPU pipeline statistics.
 	virtual bool SetGPUPipelineStatisticsEnabled(bool enabled) = 0;
 
-	/// Get the pipeline statistics for the last frame.
 	virtual GPUPipelineStatistics GetAndResetAccumulatedGPUPipelineStatistics() = 0;
 
-	/// Returns true if not enough time has passed for present to not block.
 	bool ShouldSkipPresentingFrame();
 
-	/// Sleeps to the time the next frame can be displayed.
 	void ThrottlePresentation();
 
 	void ClearRenderTarget(GSTexture* t, u32 c);
@@ -1703,9 +1572,6 @@ public:
 	GSTexture* CreateRenderTarget(int w, int h, GSTexture::Format format, bool clear = true, bool prefer_reuse = true, u32 layers = 1);
 	GSTexture* CreateRenderTarget(const GSVector2i& size, GSTexture::Format format, bool clear = true, bool prefer_reuse = true, u32 layers = 1);
 
-	/// PCSX2-VR (M4.3): whether this backend can create/render 2-layer stereo targets
-	/// (Vulkan with the multiview feature). Gates texture-cache promotion, so no other
-	/// backend ever receives layers > 1.
 	virtual bool SupportsStereoTargets() const { return false; }
 	GSTexture* CreateFeedbackTarget(int w, int h, GSTexture::Format format, bool clear = true, bool prefer_reuse = true, u32 layers = 1);
 	GSTexture* CreateFeedbackTarget(const GSVector2i& size, GSTexture::Format format, bool clear = true, bool prefer_reuse = true);
@@ -1723,58 +1589,34 @@ public:
 
 	virtual void CopyRect(GSTexture* sTex, GSTexture* dTex, const GSVector4i& r, u32 destX, u32 destY) = 0;
 
-	/// PCSX2-VR (ISS-001): mirror `dRect` (dest pixel coords; may be inverted) of layer 0
-	/// into layer 1 on a promoted 2-layer stereo target. The convert/stretch pipelines are
-	/// not multiview, so a stretch whose destination is the FULL layered handle writes
-	/// layer 0 only. Every layer-AWARE writer goes through 1-layer proxy views
-	/// (GetLayerProxyTexture) or CopyRect, so a >=2-layer stretch destination is always
-	/// layer-oblivious mono content (uploads, moves, page copies, target merges) that both
-	/// eyes must see identically. Called from the common stretch funnel and the batched
-	/// multi-stretch override; no-op on backends without stereo targets and on
-	/// single-layer textures.
 	virtual void BroadcastLayer0(GSTexture* tex, const GSVector4& dRect) {}
 
-	/// PCSX2-VR (KF4 hazard-snapshot hunt, 2026-08-13): DEBUG-ONLY per-layer content probe.
-	/// Reads back every array layer of `tex` and logs each layer's mean and non-zero fraction,
-	/// so "is layer 1 actually populated?" becomes a measured fact instead of an inference.
-	/// Stalls the GPU (submit + wait) — only ever called behind an env gate. No-op by default
-	/// and on backends without a readback path.
 	virtual void VRProbeLayers(GSTexture* tex, const char* tag) {}
 
-	// StretchRect - all options
 	void StretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, ShaderConvertSelector shader, Filter filter);
 	void StretchRect(GSTexture* sTex, GSTexture* dTex, const GSVector4& dRect, ShaderConvertSelector shader, Filter filter);
 	void StretchRect(GSTexture* sTex, GSTexture* dTex, ShaderConvertSelector shader, Filter filter);
 	
-	// StretchRect - infer shader based on formats
 	void StretchRectAuto(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, Filter filter,
 		u32 src_bpp = 32, u32 dst_bpp = 32);
 	void StretchRectAuto(GSTexture* sTex, GSTexture* dTex, const GSVector4& dRect, Filter filter,
 		u32 src_bpp = 32, u32 dst_bpp = 32);
 	void StretchRectAuto(GSTexture* sTex, GSTexture* dTex, Filter filter, u32 src_bpp = 32, u32 dst_bpp = 32);
 
-	// StretchRect - nearest filter, infer shader based on formats, specify channel mask
 	void StretchRectAutoMask(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, bool red, bool green, bool blue, bool alpha, u32 src_bpp = 32, u32 dst_bpp = 32);
 	void StretchRectAutoMask(GSTexture* sTex, GSTexture* dTex, const GSVector4& dRect, bool red, bool green, bool blue, bool alpha, u32 src_bpp = 32, u32 dst_bpp = 32);
 	void StretchRectAutoMask(GSTexture* sTex, GSTexture* dTex, bool red, bool green, bool blue, bool alpha, u32 src_bpp = 32, u32 dst_bpp = 32);
 
-	/// Performs a screen blit for display. If dTex is null, it assumes you are writing to the system framebuffer/swap chain.
 	virtual void PresentRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, PresentShader shader, float shaderTime, Filter filter) = 0;
 
-	/// Same as doing StretchRect for each item, except tries to batch together rectangles in as few draws as possible.
-	/// The provided list should be sorted by texture, the implementations only check if it's the same as the last.
 	virtual void DrawMultiStretchRects(const MultiStretchRect* rects, u32 num_rects, GSTexture* dTex, ShaderConvertSelector shader = ShaderConvert::COPY);
 
-	/// Sorts a MultiStretchRect list for optimal batching.
 	static void SortMultiStretchRects(MultiStretchRect* rects, u32 num_rects);
 
-	/// Updates a GPU CLUT texture from a source texture.
 	virtual void UpdateCLUTTexture(GSTexture* sTex, float sScale, u32 offsetX, u32 offsetY, GSTexture* dTex, u32 dOffset, u32 dSize) = 0;
 
-	/// Converts a colour format to an indexed format texture.
 	virtual void ConvertToIndexedTexture(GSTexture* sTex, float sScale, u32 offsetX, u32 offsetY, u32 SBW, u32 SPSM, GSTexture* dTex, u32 DBW, u32 DPSM) = 0;
 
-	/// Uses box downsampling to resize a texture.
 	virtual void FilteredDownsampleTexture(GSTexture* sTex, GSTexture* dTex, u32 downsample_factor, const GSVector2i& clamp_min, const GSVector4& dRect) = 0;
 
 	virtual void RenderHW(GSHWDrawConfig& config) = 0;
@@ -1804,8 +1646,6 @@ public:
 		return (factor == CONST_COLOR || factor == INV_CONST_COLOR);
 	}
 
-	// Convert the GS blend equations to HW blend factors/ops
-	// Index is computed as ((((A * 3 + B) * 3) + C) * 3) + D. A, B, C, D taken from ALPHA register.
 	__ri static HWBlend GetBlend(u32 index) { return m_blendMap[index]; }
 	__ri static u16 GetBlendFlags(u32 index) { return m_blendMap[index].flags; }
 };

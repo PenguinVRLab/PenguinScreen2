@@ -107,7 +107,7 @@ if(USE_VULKAN)
 endif()
 
 if(ENABLE_VR)
-	# Vendored OpenXR SDK, built as a static loader. See 3rdparty/openxr/README.pcsx2.md.
+	# Vendored OpenXR SDK, built as a static loader.
 	set(DYNAMIC_LOADER OFF CACHE BOOL "Build the OpenXR loader as a shared library" FORCE)
 	set(BUILD_LOADER ON CACHE BOOL "Build the OpenXR loader" FORCE)
 	set(BUILD_API_LAYERS OFF CACHE BOOL "Build OpenXR API layers" FORCE)

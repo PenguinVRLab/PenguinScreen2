@@ -11,30 +11,15 @@
 namespace IopMemory {
 namespace Internal {
 
-//////////////////////////////////////////////////////////////////////////////////////////
-// Masking helper so that I can use the fully qualified address for case statements.
-// Switches are based on the bottom 12 bits only, since MSVC tends to optimize switches
-// better when it has a limited width operand to work with. :)
-//
 #define pgmsk( src ) ( (src) & 0x0fff )
 #define mcase( src ) case pgmsk(src)
 
-
-//////////////////////////////////////////////////////////////////////////////////////////
-// Helper for debug logging of IOP Registers.  Takes an input address and returns a
-// register name.
-//
-// This list is not yet exhaustive.  If you spot something that's missing, feel free to
-// fill it in any time. :)
-//
 
 template< typename T>
 static __ri const char* _ioplog_GetHwName( u32 addr, T val )
 {
 	switch( addr )
 	{
-		// ------------------------------------------------------------------------
-		// SSBUS -- Two Ess'es?
 
 		case HW_SSBUS_SPD_ADDR:		return "SSBUS spd_addr";
 		case HW_SSBUS_PIO_ADDR:		return "SSBUS pio_addr";
@@ -55,7 +40,6 @@ static __ri const char* _ioplog_GetHwName( u32 addr, T val )
 		case HW_SSBUS_DEV9_DELAY3:	return "SSBUS dev9_delay3";
 		case HW_SSBUS_DEV9_DELAY1:	return "SSBUS dev9_delay1";
 
-		// ------------------------------------------------------------------------
 		case 0x1f801060:return "RAM_SIZE";
 
 		case HW_ISTAT:	return "ISTAT";
@@ -75,9 +59,6 @@ static __ri const char* _ioplog_GetHwName( u32 addr, T val )
 		case 0x1f8014c0: return "RTC_HOLDMODE";
 		case HW_DEV9_DATA: return "DEV9_R_REV/DATA";
 
-		// ------------------------------------------------------------------------
-		// BCR_LABEL -- Selects label for BCR depending on operand size (BCR has hi
-		// and low values of count and size, respectively)
 		#define BCR_LABEL( dma ) (sizeof(T)==4) ? dma" BCR" : dma" BCR_size";
 
 		case 0x1f8010a0: return "DMA2 MADR";
@@ -134,8 +115,6 @@ static __ri const char* _ioplog_GetHwName( u32 addr, T val )
 
 		case 0x1f80380c:	return "STDOUT";
 
-		// ------------------------------------------------------------------------
-
 		case HW_SIO2_RX:	    return "SIO2 RX";
 		case HW_SIO2_CTRL:	    return "SIO2 CTRL";
 		case HW_SIO2_CMD_STAT:	return "SIO2 CMD_STAT";
@@ -144,10 +123,6 @@ static __ri const char* _ioplog_GetHwName( u32 addr, T val )
 		case HW_SIO2_INTR:	    return "SIO2 INTR";
 		case HW_SIO2_FIFO_TX:   return "SIO2 FIFO_TX";
 		case HW_SIO2_FIFO_RX:   return "SIO2 FIFO_RX";
-
-		// ------------------------------------------------------------------------
-		// Check for "zoned" registers in the default case.
-		// And if all that fails, return "unknown"! :)
 
 		default:
 			if( addr >= 0x1f801100 && addr < 0x1f801130 )
@@ -189,7 +164,7 @@ static __ri const char* _ioplog_GetHwName( u32 addr, T val )
 			else if ( addr >= 0x1f808200 && addr < 0x1f808240 ) { return "SIO2 param"; }
 			else if ( addr >= 0x1f808240 && addr < 0x1f808260 ) { return "SIO2 send"; }
 
-		return NULL; //"Unknown";
+		return NULL;
 	}
 }
 

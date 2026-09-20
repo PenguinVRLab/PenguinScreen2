@@ -89,7 +89,7 @@
 #include <tchar.h>
 #include <windows.h>
 #include <dbghelp.h>
-#pragma comment(lib, "version.lib") // for "VerQueryValue"
+#pragma comment(lib, "version.lib")
 
 
 static void MyStrCpy(char* szDest, size_t nMaxDestSize, const char* szSrc)
@@ -97,7 +97,6 @@ static void MyStrCpy(char* szDest, size_t nMaxDestSize, const char* szSrc)
   strncpy_s(szDest, nMaxDestSize, szSrc, _TRUNCATE);
 }
 
-// Normally it should be enough to use 'CONTEXT_FULL' (better would be 'CONTEXT_ALL')
 #define USED_CONTEXT_FLAGS CONTEXT_FULL
 
 HMODULE StackWalker::LoadDbgHelpLibrary()
@@ -115,7 +114,7 @@ public:
   ~StackWalkerInternal()
   {
     if (pSC != nullptr)
-      pSC(m_hProcess); // SymCleanup
+      pSC(m_hProcess);
     if (m_hDbhHelp != nullptr)
       FreeLibrary(m_hDbhHelp);
     m_hDbhHelp = nullptr;
@@ -160,17 +159,14 @@ public:
       return FALSE;
     }
 
-    // SymInitialize
     if (szSymPath != nullptr)
       m_szSymPath = _strdup(szSymPath);
     if (this->pSI(m_hProcess, m_szSymPath, FALSE) == FALSE)
       this->m_parent->OnDbgHelpErr("SymInitialize", GetLastError(), 0);
 
-    DWORD symOptions = this->pSGO(); // SymGetOptions
+    DWORD symOptions = this->pSGO();
     symOptions |= SYMOPT_LOAD_LINES;
     symOptions |= SYMOPT_FAIL_CRITICAL_ERRORS;
-    //symOptions |= SYMOPT_NO_PROMPTS;
-    // SymSetOptions
     symOptions = this->pSSO(symOptions);
 
     char buf[StackWalker::STACKWALK_MAX_NAMELEN] = {0};
@@ -196,89 +192,78 @@ public:
 #pragma pack(push, 8)
   struct IMAGEHLP_MODULE64_V3
   {
-    DWORD    SizeOfStruct;         // set to sizeof(IMAGEHLP_MODULE64)
-    DWORD64  BaseOfImage;          // base load address of module
-    DWORD    ImageSize;            // virtual size of the loaded module
-    DWORD    TimeDateStamp;        // date/time stamp from pe header
-    DWORD    CheckSum;             // checksum from the pe header
-    DWORD    NumSyms;              // number of symbols in the symbol table
-    SYM_TYPE SymType;              // type of symbols loaded
-    CHAR     ModuleName[32];       // module name
-    CHAR     ImageName[256];       // image name
-    CHAR     LoadedImageName[256]; // symbol file name
-    // new elements: 07-Jun-2002
-    CHAR  LoadedPdbName[256];   // pdb file name
-    DWORD CVSig;                // Signature of the CV record in the debug directories
-    CHAR  CVData[MAX_PATH * 3]; // Contents of the CV record
-    DWORD PdbSig;               // Signature of PDB
-    GUID  PdbSig70;             // Signature of PDB (VC 7 and up)
-    DWORD PdbAge;               // DBI age of pdb
-    BOOL  PdbUnmatched;         // loaded an unmatched pdb
-    BOOL  DbgUnmatched;         // loaded an unmatched dbg
-    BOOL  LineNumbers;          // we have line number information
-    BOOL  GlobalSymbols;        // we have internal symbol information
-    BOOL  TypeInfo;             // we have type information
-    // new elements: 17-Dec-2003
-    BOOL SourceIndexed; // pdb supports source server
-    BOOL Publics;       // contains public symbols
+    DWORD    SizeOfStruct;
+    DWORD64  BaseOfImage;
+    DWORD    ImageSize;
+    DWORD    TimeDateStamp;
+    DWORD    CheckSum;
+    DWORD    NumSyms;
+    SYM_TYPE SymType;
+    CHAR     ModuleName[32];
+    CHAR     ImageName[256];
+    CHAR     LoadedImageName[256];
+    CHAR  LoadedPdbName[256];
+    DWORD CVSig;
+    CHAR  CVData[MAX_PATH * 3];
+    DWORD PdbSig;
+    GUID  PdbSig70;
+    DWORD PdbAge;
+    BOOL  PdbUnmatched;
+    BOOL  DbgUnmatched;
+    BOOL  LineNumbers;
+    BOOL  GlobalSymbols;
+    BOOL  TypeInfo;
+    BOOL SourceIndexed;
+    BOOL Publics;
   };
 
   struct IMAGEHLP_MODULE64_V2
   {
-    DWORD    SizeOfStruct;         // set to sizeof(IMAGEHLP_MODULE64)
-    DWORD64  BaseOfImage;          // base load address of module
-    DWORD    ImageSize;            // virtual size of the loaded module
-    DWORD    TimeDateStamp;        // date/time stamp from pe header
-    DWORD    CheckSum;             // checksum from the pe header
-    DWORD    NumSyms;              // number of symbols in the symbol table
-    SYM_TYPE SymType;              // type of symbols loaded
-    CHAR     ModuleName[32];       // module name
-    CHAR     ImageName[256];       // image name
-    CHAR     LoadedImageName[256]; // symbol file name
+    DWORD    SizeOfStruct;
+    DWORD64  BaseOfImage;
+    DWORD    ImageSize;
+    DWORD    TimeDateStamp;
+    DWORD    CheckSum;
+    DWORD    NumSyms;
+    SYM_TYPE SymType;
+    CHAR     ModuleName[32];
+    CHAR     ImageName[256];
+    CHAR     LoadedImageName[256];
   };
 #pragma pack(pop)
 
-  // SymCleanup()
   typedef BOOL(__stdcall* tSC)(IN HANDLE hProcess);
   tSC pSC = nullptr;
 
-  // SymFunctionTableAccess64()
   typedef PVOID(__stdcall* tSFTA)(HANDLE hProcess, DWORD64 AddrBase);
   tSFTA pSFTA = nullptr;
 
-  // SymGetLineFromAddr64()
   typedef BOOL(__stdcall* tSGLFA)(IN HANDLE hProcess,
                                   IN DWORD64 dwAddr,
                                   OUT PDWORD pdwDisplacement,
                                   OUT PIMAGEHLP_LINE64 Line);
   tSGLFA pSGLFA = nullptr;
 
-  // SymGetModuleBase64()
   typedef DWORD64(__stdcall* tSGMB)(IN HANDLE hProcess, IN DWORD64 dwAddr);
   tSGMB pSGMB = nullptr;
 
-  // SymGetModuleInfo64()
   typedef BOOL(__stdcall* tSGMI)(IN HANDLE hProcess,
                                  IN DWORD64 dwAddr,
                                  OUT IMAGEHLP_MODULE64_V3* ModuleInfo);
   tSGMI pSGMI = nullptr;
 
-  // SymGetOptions()
   typedef DWORD(__stdcall* tSGO)(VOID);
   tSGO pSGO = nullptr;
 
-  // SymGetSymFromAddr64()
   typedef BOOL(__stdcall* tSGSFA)(IN HANDLE hProcess,
                                   IN DWORD64 dwAddr,
                                   OUT PDWORD64 pdwDisplacement,
                                   OUT PIMAGEHLP_SYMBOL64 Symbol);
   tSGSFA pSGSFA = nullptr;
 
-  // SymInitialize()
   typedef BOOL(__stdcall* tSI)(IN HANDLE hProcess, IN PSTR UserSearchPath, IN BOOL fInvadeProcess);
   tSI pSI = nullptr;
 
-  // SymLoadModule64()
   typedef DWORD64(__stdcall* tSLM)(IN HANDLE hProcess,
                                    IN HANDLE hFile,
                                    IN PSTR ImageName,
@@ -287,11 +272,9 @@ public:
                                    IN DWORD SizeOfDll);
   tSLM pSLM = nullptr;
 
-  // SymSetOptions()
   typedef DWORD(__stdcall* tSSO)(IN DWORD SymOptions);
   tSSO pSSO = nullptr;
 
-  // StackWalk64()
   typedef BOOL(__stdcall* tSW)(DWORD                            MachineType,
                                HANDLE                           hProcess,
                                HANDLE                           hThread,
@@ -303,7 +286,6 @@ public:
                                PTRANSLATE_ADDRESS_ROUTINE64     TranslateAddress);
   tSW pSW = nullptr;
 
-  // UnDecorateSymbolName()
   typedef DWORD(__stdcall WINAPI* tUDSN)(PCSTR DecoratedName,
                                          PSTR  UnDecoratedName,
                                          DWORD UndecoratedLength,
@@ -314,20 +296,19 @@ public:
   tSGSP pSGSP = nullptr;
 
 private:
-// **************************************** ToolHelp32 ************************
 #define MAX_MODULE_NAME32 255
 #define TH32CS_SNAPMODULE 0x00000008
 #pragma pack(push, 8)
   typedef struct tagMODULEENTRY32
   {
     DWORD   dwSize;
-    DWORD   th32ModuleID;  // This module
-    DWORD   th32ProcessID; // owning process
-    DWORD   GlblcntUsage;  // Global usage count on the module
-    DWORD   ProccntUsage;  // Module usage count in th32ProcessID's context
-    BYTE*   modBaseAddr;   // Base address of module in th32ProcessID's context
-    DWORD   modBaseSize;   // Size in bytes of module starting at modBaseAddr
-    HMODULE hModule;       // The hModule of this module in th32ProcessID's context
+    DWORD   th32ModuleID;
+    DWORD   th32ProcessID;
+    DWORD   GlblcntUsage;
+    DWORD   ProccntUsage;
+    BYTE*   modBaseAddr;
+    DWORD   modBaseSize;
+    HMODULE hModule;
     char    szModule[MAX_MODULE_NAME32 + 1];
     char    szExePath[MAX_PATH];
   } MODULEENTRY32;
@@ -337,11 +318,8 @@ private:
 
   BOOL GetModuleListTH32(HANDLE hProcess, DWORD pid)
   {
-    // CreateToolhelp32Snapshot()
     typedef HANDLE(__stdcall * tCT32S)(DWORD dwFlags, DWORD th32ProcessID);
-    // Module32First()
     typedef BOOL(__stdcall * tM32F)(HANDLE hSnapshot, LPMODULEENTRY32 lpme);
-    // Module32Next()
     typedef BOOL(__stdcall * tM32N)(HANDLE hSnapshot, LPMODULEENTRY32 lpme);
 
     tCT32S       pCT32S = nullptr;
@@ -386,9 +364,8 @@ private:
     if (cnt <= 0)
       return FALSE;
     return TRUE;
-  } // GetModuleListTH32
+  }
 
-  // **************************************** PSAPI ************************
   typedef struct _MODULEINFO
   {
     LPVOID lpBaseOfDll;
@@ -398,16 +375,12 @@ private:
 
   BOOL GetModuleListPSAPI(HANDLE hProcess)
   {
-    // EnumProcessModules()
     typedef BOOL(__stdcall * tEPM)(HANDLE hProcess, HMODULE * lphModule, DWORD cb,
                                    LPDWORD lpcbNeeded);
-    // GetModuleFileNameEx()
     typedef DWORD(__stdcall * tGMFNE)(HANDLE hProcess, HMODULE hModule, LPSTR lpFilename,
                                       DWORD nSize);
-    // GetModuleBaseName()
     typedef DWORD(__stdcall * tGMBN)(HANDLE hProcess, HMODULE hModule, LPSTR lpFilename,
                                      DWORD nSize);
-    // GetModuleInformation()
     typedef BOOL(__stdcall * tGMI)(HANDLE hProcess, HMODULE hModule, LPMODULEINFO pmi, DWORD nSize);
 
     HINSTANCE hPsapi;
@@ -417,7 +390,6 @@ private:
     tGMI      pGMI;
 
     DWORD i;
-    //ModuleEntry e;
     DWORD        cbNeeded;
     MODULEINFO   mi;
     HMODULE*     hMods = nullptr;
@@ -436,7 +408,6 @@ private:
     pGMI = (tGMI)GetProcAddress(hPsapi, "GetModuleInformation");
     if ((pEPM == nullptr) || (pGMFNE == nullptr) || (pGMBN == nullptr) || (pGMI == nullptr))
     {
-      // we couldn't find all functions
       FreeLibrary(hPsapi);
       return FALSE;
     }
@@ -449,24 +420,19 @@ private:
 
     if (!pEPM(hProcess, hMods, TTBUFLEN, &cbNeeded))
     {
-      //_ftprintf(fLogFile, _T("%lu: EPM failed, GetLastError = %lu\n"), g_dwShowCount, gle );
       goto cleanup;
     }
 
     if (cbNeeded > TTBUFLEN)
     {
-      //_ftprintf(fLogFile, _T("%lu: More than %lu module handles. Huh?\n"), g_dwShowCount, lenof( hMods ) );
       goto cleanup;
     }
 
     for (i = 0; i < cbNeeded / sizeof(hMods[0]); i++)
     {
-      // base address, size
       pGMI(hProcess, hMods[i], &mi, sizeof(mi));
-      // image file name
       tt[0] = 0;
       pGMFNE(hProcess, hMods[i], tt, TTBUFLEN);
-      // module name
       tt2[0] = 0;
       pGMBN(hProcess, hMods[i], tt2, TTBUFLEN);
 
@@ -487,7 +453,7 @@ private:
       free(hMods);
 
     return cnt != 0;
-  } // GetModuleListPSAPI
+  }
 
   DWORD LoadModule(HANDLE hProcess, LPCSTR img, LPCSTR mod, DWORD64 baseAddr, DWORD size)
   {
@@ -504,7 +470,6 @@ private:
     ULONGLONG fileVersion = 0;
     if ((m_parent != nullptr) && (szImg != nullptr))
     {
-      // try to retrieve the file-version:
       if ((this->m_parent->m_options & StackWalker::RetrieveFileVersion) != 0)
       {
         VS_FIXEDFILEINFO* fInfo = nullptr;
@@ -532,7 +497,6 @@ private:
         }
       }
 
-      // Retrieve some additional-infos about the module
       IMAGEHLP_MODULE64_V3 Module;
       const char*          szSymType = "-unknown-";
       if (this->GetModuleInfo(hProcess, baseAddr, &Module) != FALSE)
@@ -542,28 +506,28 @@ private:
           case SymNone:
             szSymType = "-nosymbols-";
             break;
-          case SymCoff: // 1
+          case SymCoff:
             szSymType = "COFF";
             break;
-          case SymCv: // 2
+          case SymCv:
             szSymType = "CV";
             break;
-          case SymPdb: // 3
+          case SymPdb:
             szSymType = "PDB";
             break;
-          case SymExport: // 4
+          case SymExport:
             szSymType = "-exported-";
             break;
-          case SymDeferred: // 5
+          case SymDeferred:
             szSymType = "-deferred-";
             break;
-          case SymSym: // 6
+          case SymSym:
             szSymType = "SYM";
             break;
-          case 7: // SymDia:
+          case 7:
             szSymType = "DIA";
             break;
-          case 8: //SymVirtual:
+          case 8:
             szSymType = "Virtual";
             break;
           default:
@@ -586,10 +550,8 @@ private:
 public:
   BOOL LoadModules(HANDLE hProcess, DWORD dwProcessId)
   {
-    // first try toolhelp32
     if (GetModuleListTH32(hProcess, dwProcessId))
       return true;
-    // then try psapi
     return GetModuleListPSAPI(hProcess);
   }
 
@@ -601,10 +563,9 @@ public:
       SetLastError(ERROR_DLL_INIT_FAILED);
       return FALSE;
     }
-    // First try to use the larger ModuleInfo-Structure
     pModuleInfo->SizeOfStruct = sizeof(IMAGEHLP_MODULE64_V3);
     void* pData = malloc(
-        4096); // reserve enough memory, so the bug in v6.3.5.1 does not lead to memory-overwrites...
+        4096);
     if (pData == nullptr)
     {
       SetLastError(ERROR_NOT_ENOUGH_MEMORY);
@@ -616,21 +577,18 @@ public:
     {
       if (this->pSGMI(hProcess, baseAddr, static_cast<IMAGEHLP_MODULE64_V3*>(pData)) != FALSE)
       {
-        // only copy as much memory as is reserved...
         memcpy(pModuleInfo, pData, sizeof(IMAGEHLP_MODULE64_V3));
         pModuleInfo->SizeOfStruct = sizeof(IMAGEHLP_MODULE64_V3);
         free(pData);
         return TRUE;
       }
-      s_useV3Version = false; // to prevent unnecessary calls with the larger struct...
+      s_useV3Version = false;
     }
 
-    // could not retrieve the bigger structure, try with the smaller one (as defined in VC7.1)...
     pModuleInfo->SizeOfStruct = sizeof(IMAGEHLP_MODULE64_V2);
     memcpy(pData, pModuleInfo, sizeof(IMAGEHLP_MODULE64_V2));
     if (this->pSGMI(hProcess, baseAddr, static_cast<IMAGEHLP_MODULE64_V3*>(pData)) != FALSE)
     {
-      // only copy as much memory as is reserved...
       memcpy(pModuleInfo, pData, sizeof(IMAGEHLP_MODULE64_V2));
       pModuleInfo->SizeOfStruct = sizeof(IMAGEHLP_MODULE64_V2);
       free(pData);
@@ -642,7 +600,6 @@ public:
   }
 };
 
-// #############################################################
 StackWalker::StackWalker(DWORD dwProcessId, HANDLE hProcess)
 {
   this->m_options = OptionsAll;
@@ -690,7 +647,6 @@ BOOL StackWalker::LoadModules()
   if (m_modulesLoaded != FALSE)
     return TRUE;
 
-  // Build the sym-path:
   char* szSymPath = nullptr;
   if ((this->m_options & SymBuildPath) != 0)
   {
@@ -702,7 +658,6 @@ BOOL StackWalker::LoadModules()
       return FALSE;
     }
     szSymPath[0] = 0;
-    // Now first add the (optional) provided sympath:
     if (this->m_szSymPath != nullptr)
     {
       strcat_s(szSymPath, nSymPathLen, this->m_szSymPath);
@@ -713,7 +668,6 @@ BOOL StackWalker::LoadModules()
 
     const size_t nTempLen = 1024;
     char         szTemp[nTempLen];
-    // Now add the current directory:
     if (GetCurrentDirectoryA(nTempLen, szTemp) > 0)
     {
       szTemp[nTempLen - 1] = 0;
@@ -721,19 +675,17 @@ BOOL StackWalker::LoadModules()
       strcat_s(szSymPath, nSymPathLen, ";");
     }
 
-    // Now add the path for the main-module:
     if (GetModuleFileNameA(nullptr, szTemp, nTempLen) > 0)
     {
       szTemp[nTempLen - 1] = 0;
       for (char* p = (szTemp + strlen(szTemp) - 1); p >= szTemp; --p)
       {
-        // locate the rightmost path separator
         if ((*p == '\\') || (*p == '/') || (*p == ':'))
         {
           *p = 0;
           break;
         }
-      } // for (search for path separator...)
+      }
       if (strlen(szTemp) > 0)
       {
         strcat_s(szSymPath, nSymPathLen, szTemp);
@@ -757,7 +709,6 @@ BOOL StackWalker::LoadModules()
       szTemp[nTempLen - 1] = 0;
       strcat_s(szSymPath, nSymPathLen, szTemp);
       strcat_s(szSymPath, nSymPathLen, ";");
-      // also add the "system32"-directory:
       strcat_s(szTemp, nTempLen, "\\system32");
       strcat_s(szSymPath, nSymPathLen, szTemp);
       strcat_s(szSymPath, nSymPathLen, ";");
@@ -777,9 +728,8 @@ BOOL StackWalker::LoadModules()
         strcat_s(szSymPath, nSymPathLen,
                  "SRV*c:\\websymbols*https://msdl.microsoft.com/download/symbols;");
     }
-  } // if SymBuildPath
+  }
 
-  // First Init the whole stuff...
   BOOL bRet = this->m_sw->Init(szSymPath);
   if (szSymPath != nullptr)
     free(szSymPath);
@@ -797,10 +747,6 @@ BOOL StackWalker::LoadModules()
   return bRet;
 }
 
-// The following is used to pass the "userData"-Pointer to the user-provided readMemoryFunction
-// This has to be done due to a problem with the "hProcess"-parameter in x64...
-// Because this class is in no case multi-threading-enabled (because of the limitations
-// of dbghelp.dll) it is "safe" to use a static-variable
 static StackWalker::PReadProcessMemoryRoutine s_readMemoryFunction = nullptr;
 static LPVOID                                 s_readMemoryFunction_UserData = nullptr;
 
@@ -819,7 +765,7 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
   int                                       curRecursionCount = 0;
 
   if (m_modulesLoaded == FALSE)
-    this->LoadModules(); // ignore the result...
+    this->LoadModules();
 
   if (this->m_sw->m_hDbhHelp == nullptr)
   {
@@ -832,10 +778,7 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
 
   if (context == nullptr)
   {
-    // If no context is provided, capture the context
-    // See: https://stackwalker.codeplex.com/discussions/446958
 #if _WIN32_WINNT <= 0x0501
-    // If we need to support XP, we need to use the "old way", because "GetThreadId" is not available!
     if (hThread == GetCurrentThread())
 #else
     if (GetThreadId(hThread) == GetCurrentThreadId())
@@ -849,10 +792,6 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
       memset(&c, 0, sizeof(CONTEXT));
       c.ContextFlags = USED_CONTEXT_FLAGS;
 
-      // TODO: Detect if you want to get a thread context of a different process, which is running a different processor architecture...
-      // This does only work if we are x64 and the target process is x64 or x86;
-      // It cannot work, if this process is x64 and the target process is x64... this is not supported...
-      // See also: http://www.howzatt.demon.co.uk/articles/DebuggingInWin64.html
       if (GetThreadContext(hThread, &c) == FALSE)
       {
         ResumeThread(hThread);
@@ -863,12 +802,10 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
   else
     c = *context;
 
-  // init STACKFRAME for first call
-  STACKFRAME64 s; // in/out stackframe
+  STACKFRAME64 s;
   memset(&s, 0, sizeof(s));
   DWORD imageType;
 #ifdef _M_IX86
-  // normally, call ImageNtHeader() and use machine info from PE header
   imageType = IMAGE_FILE_MACHINE_I386;
   s.AddrPC.Offset = c.Eip;
   s.AddrPC.Mode = AddrModeFlat;
@@ -908,7 +845,7 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
 
   pSym = (IMAGEHLP_SYMBOL64*)malloc(sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN);
   if (!pSym)
-    goto cleanup; // not enough memory...
+    goto cleanup;
   memset(pSym, 0, sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN);
   pSym->SizeOfStruct = sizeof(IMAGEHLP_SYMBOL64);
   pSym->MaxNameLength = STACKWALK_MAX_NAMELEN;
@@ -921,15 +858,9 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
 
   for (frameNum = 0;; ++frameNum)
   {
-    // get next stack frame (StackWalk64(), SymFunctionTableAccess64(), SymGetModuleBase64())
-    // if this returns ERROR_INVALID_ADDRESS (487) or ERROR_NOACCESS (998), you can
-    // assume that either you are done, or that the stack is so hosed that the next
-    // deeper frame could not be found.
-    // CONTEXT need not to be supplied if imageTyp is IMAGE_FILE_MACHINE_I386!
     if (!this->m_sw->pSW(imageType, this->m_hProcess, hThread, &s, &c, myReadProcMem,
                          this->m_sw->pSFTA, this->m_sw->pSGMB, nullptr))
     {
-      // INFO: "StackWalk64" does not set "GetLastError"...
       this->OnDbgHelpErr("StackWalk64", 0, s.AddrPC.Offset);
       break;
     }
@@ -957,13 +888,10 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
       curRecursionCount = 0;
     if (s.AddrPC.Offset != 0)
     {
-      // we seem to have a valid PC
-      // show procedure info (SymGetSymFromAddr64())
       if (this->m_sw->pSGSFA(this->m_hProcess, s.AddrPC.Offset, &(csEntry.offsetFromSmybol),
                              pSym) != FALSE)
       {
         MyStrCpy(csEntry.name, STACKWALK_MAX_NAMELEN, pSym->Name);
-        // UnDecorateSymbolName()
         this->m_sw->pUDSN(pSym->Name, csEntry.undName, STACKWALK_MAX_NAMELEN, UNDNAME_NAME_ONLY);
         this->m_sw->pUDSN(pSym->Name, csEntry.undFullName, STACKWALK_MAX_NAMELEN, UNDNAME_COMPLETE);
       }
@@ -972,9 +900,8 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
         this->OnDbgHelpErr("SymGetSymFromAddr64", GetLastError(), s.AddrPC.Offset);
       }
 
-      // show line number info, NT5.0-method (SymGetLineFromAddr64())
       if (this->m_sw->pSGLFA != nullptr)
-      { // yes, we have SymGetLineFromAddr64()
+      {
         if (this->m_sw->pSGLFA(this->m_hProcess, s.AddrPC.Offset, &(csEntry.offsetFromLine),
                                &Line) != FALSE)
         {
@@ -985,11 +912,10 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
         {
           this->OnDbgHelpErr("SymGetLineFromAddr64", GetLastError(), s.AddrPC.Offset);
         }
-      } // yes, we have SymGetLineFromAddr64()
+      }
 
-      // show module info (SymGetModuleInfo64())
       if (this->m_sw->GetModuleInfo(this->m_hProcess, s.AddrPC.Offset, &Module) != FALSE)
-      { // got module info OK
+      {
         switch (Module.SymType)
         {
           case SymNone:
@@ -1018,11 +944,10 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
             csEntry.symTypeString = "DIA";
             break;
 #endif
-          case 8: //SymVirtual:
+          case 8:
             csEntry.symTypeString = "Virtual";
             break;
           default:
-            //_snprintf( ty, sizeof(ty), "symtype=%ld", (long) Module.SymType );
             csEntry.symTypeString = nullptr;
             break;
         }
@@ -1030,12 +955,12 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
         MyStrCpy(csEntry.moduleName, STACKWALK_MAX_NAMELEN, Module.ModuleName);
         csEntry.baseOfImage = Module.BaseOfImage;
         MyStrCpy(csEntry.loadedImageName, STACKWALK_MAX_NAMELEN, Module.LoadedImageName);
-      } // got module info OK
+      }
       else
       {
         this->OnDbgHelpErr("SymGetModuleInfo64", GetLastError(), s.AddrPC.Offset);
       }
-    } // we seem to have a valid PC
+    }
 
     CallstackEntryType et = nextEntry;
     if (frameNum == 0)
@@ -1050,7 +975,7 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
       SetLastError(ERROR_SUCCESS);
       break;
     }
-  } // for ( frameNum )
+  }
 
 cleanup:
   if (pSym)
@@ -1067,22 +992,18 @@ cleanup:
 
 BOOL StackWalker::ShowObject(LPVOID pObject)
 {
-  // Load modules if not done yet
   if (m_modulesLoaded == FALSE)
-    this->LoadModules(); // ignore the result...
+    this->LoadModules();
 
-  // Verify that the DebugHelp.dll was actually found
   if (this->m_sw->m_hDbhHelp == nullptr)
   {
     SetLastError(ERROR_DLL_INIT_FAILED);
     return FALSE;
   }
 
-  // SymGetSymFromAddr64() is required
   if (this->m_sw->pSGSFA == nullptr)
     return FALSE;
 
-  // Show object info (SymGetSymFromAddr64())
   DWORD64            dwAddress = DWORD64(pObject);
   DWORD64            dwDisplacement = 0;
   const SIZE_T       symSize = sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN;
@@ -1098,7 +1019,6 @@ BOOL StackWalker::ShowObject(LPVOID pObject)
     free(pSym);
     return FALSE;
   }
-  // Object name output
   this->OnOutput(pSym->Name);
 
   free(pSym);
@@ -1116,7 +1036,6 @@ BOOL __stdcall StackWalker::myReadProcMem(HANDLE  hProcess,
     SIZE_T st;
     BOOL   bRet = ReadProcessMemory(hProcess, (LPVOID)qwBaseAddress, lpBuffer, nSize, &st);
     *lpNumberOfBytesRead = (DWORD)st;
-    //printf("ReadMemory: hProcess: %p, baseAddr: %p, buffer: %p, size: %d, read: %d, result: %d\n", hProcess, (LPVOID) qwBaseAddress, lpBuffer, nSize, (DWORD) st, (DWORD) bRet);
     return bRet;
   }
   else
@@ -1150,7 +1069,7 @@ void StackWalker::OnLoadModule(LPCSTR    img,
         "%s:%s (%p), size: %d (result: %d), SymType: '%s', PDB: '%s', fileVersion: %d.%d.%d.%d\n",
         img, mod, (LPVOID)baseAddr, size, result, symType, pdbName, v1, v2, v3, v4);
   }
-  buffer[STACKWALK_MAX_NAMELEN - 1] = 0; // be sure it is nullptr terminated
+  buffer[STACKWALK_MAX_NAMELEN - 1] = 0;
   OnOutput(buffer);
 }
 

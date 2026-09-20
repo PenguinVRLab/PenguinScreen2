@@ -102,13 +102,11 @@ bool GSDumpReplayer::Initialize(const char* filename, Error* error)
 
 	Console.WriteLn("(GSDumpReplayer) Read file in %.2f ms.", timer.GetTimeMilliseconds());
 
-	// We replace all CPUs.
 	Cpu = &GSDumpReplayerCpu;
 	psxCpu = &psxInt;
 	CpuVU0 = &gsDumpVU0;
 	CpuVU1 = &gsDumpVU1;
 
-	// loop infinitely by default
 	s_dump_loop_count = -1;
 
 	return true;
@@ -136,7 +134,6 @@ bool GSDumpReplayer::ChangeDump(const char* filename)
 	s_dump_file = std::move(new_dump);
 	s_current_packet = 0;
 
-	// Don't forget to reset the GS!
 	GSDumpReplayerCpuReset();
 	return true;
 }
@@ -162,8 +159,6 @@ std::string GSDumpReplayer::GetDumpSerial()
 	}
 	else if (s_dump_file->GetCRC() != 0)
 	{
-		// old dump files don't have serials, but we have the crc...
-		// so, let's try searching the game list for a crc match.
 		auto lock = GameList::GetLock();
 		const GameList::Entry* entry = GameList::GetEntryByCRC(s_dump_file->GetCRC());
 		if (entry)
@@ -200,11 +195,9 @@ void GSDumpReplayerCpuReset()
 
 static void GSDumpReplayerLoadInitialState()
 {
-	// reset GS registers to initial dump values
 	std::memcpy(PS2MEM_GS, s_dump_file->GetRegsData().data(),
 		std::min(Ps2MemSize::GSregs, static_cast<u32>(s_dump_file->GetRegsData().size())));
 
-	// load GS state
 	freezeData fd = {static_cast<int>(s_dump_file->GetStateData().size()),
 		const_cast<u8*>(s_dump_file->GetStateData().data())};
 	MTGS::FreezeData mfd = {&fd, 0};
@@ -245,7 +238,6 @@ static void GSDumpReplayerFrameLimit()
 	if (s_frame_ticks == 0)
 		return;
 
-	// Frame limiter
 	u64 now = GetCPUTicks();
 	const s64 ms = GetTickFrequency() / 1000;
 	const s64 sleep = s_next_frame_time - now - ms;
@@ -331,7 +323,6 @@ void GSDumpReplayerCpuStep()
 			u32 size;
 			std::memcpy(&size, packet.data, sizeof(size));
 
-			// Allocate an extra quadword, some transfers write too much (e.g. Lego Racers 2 with Z24 downloads).
 			std::unique_ptr<u8[]> arr(new u8[(size + 1) * 16]);
 			MTGS::InitAndReadFIFO(arr.get(), size);
 		}

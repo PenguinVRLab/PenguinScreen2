@@ -17,7 +17,6 @@
 #include <sys/types.h>
 #include <sched.h>
 
-// glibc < v2.30 doesn't define gettid...
 #if __GLIBC__ == 2 && __GLIBC_MINOR__ < 30
 #include <sys/syscall.h>
 #define gettid() syscall(SYS_gettid)
@@ -26,21 +25,13 @@
 #include <pthread_np.h>
 #endif
 
-// Note: assuming multicore is safer because it forces the interlocked routines to use
-// the LOCK prefix.  The prefix works on single core CPUs fine (but is slow), but not
-// having the LOCK prefix is very bad indeed.
-
 __forceinline void Threading::Timeslice()
 {
 	sched_yield();
 }
 
-// For use in spin/wait loops,  Acts as a hint to Intel CPUs and should, in theory
-// improve performance and reduce cpu power consumption.
 __forceinline void Threading::SpinWait()
 {
-	// If this doesn't compile you can just comment it out (it only serves as a
-	// performance hint and isn't required).
 #if defined(ARCH_X86)
 	__asm__("pause");
 #elif defined(ARCH_ARM64)
@@ -50,21 +41,17 @@ __forceinline void Threading::SpinWait()
 
 __forceinline void Threading::EnableHiresScheduler()
 {
-	// Don't know if linux has a customizable scheduler resolution like Windows (doubtful)
 }
 
 __forceinline void Threading::DisableHiresScheduler()
 {
 }
 
-// Unit of time of GetThreadCpuTime/GetCpuTime
 u64 Threading::GetThreadTicksPerSecond()
 {
 	return 1000000;
 }
 
-// Helper function to get either either the current cpu usage
-// in called thread or in id thread
 static u64 get_thread_time(uptr id = 0)
 {
 	clockid_t cid;
@@ -87,7 +74,6 @@ static u64 get_thread_time(uptr id = 0)
 	return (u64)ts.tv_sec * (u64)1e6 + (u64)ts.tv_nsec / (u64)1e3;
 }
 
-// Returns the current timestamp (not relative to a real world clock)
 u64 Threading::GetThreadCpuTime()
 {
 	return get_thread_time();
@@ -211,9 +197,6 @@ void Threading::Thread::SetStackSize(u32 size)
 }
 
 #ifdef __linux__
-// For Linux, we have to do a bit of trickery here to get the thread's ID back from
-// the thread itself, because it's not part of pthreads. We use a semaphore to signal
-// when the thread has started, and filled in thread_id_ptr.
 struct ThreadProcParameters
 {
 	Threading::Thread::EntryPoint func;
@@ -256,10 +239,8 @@ bool Threading::Thread::Start(EntryPoint func)
 	if (res != 0)
 		return false;
 
-	// wait until it sets our native id
 	start_semaphore.Wait();
 
-	// thread started, it'll release the memory
 	m_native_handle = (void*)handle;
 	params.release();
 	return true;
@@ -296,7 +277,6 @@ bool Threading::Thread::Start(EntryPoint func)
 	if (res != 0)
 		return false;
 
-	// thread started, it'll release the memory
 	m_native_handle = (void*)handle;
 	func_clone.release();
 	return true;
@@ -339,8 +319,6 @@ Threading::ThreadHandle& Threading::Thread::operator=(Thread&& thread)
 void Threading::SetNameOfCurrentThread(const char* name)
 {
 #if defined(__linux__)
-	// Extract of manpage: "The name can be up to 16 bytes long, and should be
-	//						null-terminated if it contains fewer bytes."
 	prctl(PR_SET_NAME, name, 0, 0, 0);
 #elif defined(__unix__)
 	pthread_set_name_np(pthread_self(), name);

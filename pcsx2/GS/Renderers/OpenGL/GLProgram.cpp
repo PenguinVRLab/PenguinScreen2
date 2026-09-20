@@ -50,7 +50,6 @@ GLuint GLProgram::CompileShader(GLenum type, const std::string_view source)
 	GLint info_log_length = 0;
 	glGetShaderiv(id, GL_INFO_LOG_LENGTH, &info_log_length);
 
-	// Log will create a new line when there are no warnings so let's set a minimum log length of 1.
 	constexpr int info_log_min_length = 1;
 
 	if (status == GL_FALSE || info_log_length > info_log_min_length)
@@ -190,12 +189,12 @@ void GLProgram::BindDefaultAttributes()
 	BindAttribute(2, "a_color");
 }
 
-void GLProgram::BindFragData(GLuint index /*= 0*/, const char* name /*= "o_col0"*/)
+void GLProgram::BindFragData(GLuint index , const char* name )
 {
 	glBindFragDataLocation(m_program_id, index, name);
 }
 
-void GLProgram::BindFragDataIndexed(GLuint color_number /*= 0*/, const char* name /*= "o_col0"*/)
+void GLProgram::BindFragDataIndexed(GLuint color_number , const char* name )
 {
 	if (GLAD_GL_VERSION_3_3 || GLAD_GL_ARB_blend_func_extended)
 	{
@@ -228,7 +227,6 @@ bool GLProgram::Link()
 
 	GLint info_log_length = 0;
 
-	// Log will create a new line when there are no warnings so let's set a minimum log length of 1.
 	constexpr int info_log_min_length = 1;
 
 	glGetProgramiv(m_program_id, GL_INFO_LOG_LENGTH, &info_log_length);

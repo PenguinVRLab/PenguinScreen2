@@ -205,7 +205,6 @@ bool Win32ProgressCallback::Create()
 
 	ShowWindow(m_window_hwnd, SW_SHOW);
 
-	// Pump messages manually just this one time to give the chance for the taskbar icon to be created etc.
 	PumpMessages();
 	return true;
 }
@@ -315,8 +314,6 @@ LRESULT CALLBACK Win32ProgressCallback::WndProc(HWND hwnd, UINT msg, WPARAM wpar
 			SendMessageW(m_list_box_hwnd, WM_SETFONT, WPARAM(default_font), TRUE);
 			y += 170;
 
-			// In case the application is run elevated, allow the
-			// TaskbarButtonCreated message through.
 			ChangeWindowMessageFilterEx(hwnd, s_uTBBC, MSGFLT_ALLOW, nullptr);
 
 			SetWindowLongPtr(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
@@ -489,7 +486,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
 	updater.CleanupStagingDirectory();
 	updater.RemoveUpdateZip();
 
-	// Rename the new executable to match the existing one
 	if (std::string actual_exe = updater.FindPCSX2Exe(); !actual_exe.empty())
 	{
 		const std::string full_path = destination_directory + FS_OSPATH_SEPARATOR_STR + actual_exe;

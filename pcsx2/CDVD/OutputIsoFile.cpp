@@ -54,7 +54,6 @@ bool OutputIsoFile::Create(std::string filename, int version)
 	return true;
 }
 
-// Generates format header information for blockdumps.
 void OutputIsoFile::WriteHeader(int _blockofs, uint _blocksize, uint _blocks)
 {
 	m_blocksize = _blocksize;
@@ -78,7 +77,6 @@ void OutputIsoFile::WriteSector(const u8* src, uint lsn)
 {
 	if (m_version == 2)
 	{
-		// Find and ignore blocks that have already been dumped:
 		if (std::any_of(std::begin(m_dtable), std::end(m_dtable), [=](const u32 entry) { return entry == lsn; }))
 			return;
 

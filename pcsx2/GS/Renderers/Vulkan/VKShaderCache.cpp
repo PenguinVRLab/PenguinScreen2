@@ -24,8 +24,6 @@
 #include <cstring>
 #include <memory>
 
-// TODO: store the driver version and stuff in the shader header
-
 std::unique_ptr<VKShaderCache> g_vulkan_shader_cache;
 
 static u32 s_next_bad_shader_id = 0;
@@ -52,7 +50,7 @@ namespace
 		u32 blob_size;
 	};
 #pragma pack(pop)
-} // namespace
+}
 
 static bool ValidatePipelineCacheHeader(const VK_PIPELINE_CACHE_HEADER& header)
 {
@@ -117,7 +115,6 @@ static void FillPipelineCacheHeader(VK_PIPELINE_CACHE_HEADER* header)
 	X(shaderc_result_get_error_message) \
 	X(shaderc_result_get_compilation_status)
 
-// TODO: NOT thread safe, yet.
 namespace dyn_shaderc
 {
 	static bool Open();
@@ -130,7 +127,7 @@ namespace dyn_shaderc
 	SHADERC_FUNCTIONS(ADD_FUNC)
 #undef ADD_FUNC
 
-} // namespace dyn_shaderc
+}
 
 bool dyn_shaderc::Open()
 {
@@ -142,7 +139,6 @@ bool dyn_shaderc::Open()
 #ifdef _WIN32
 	const std::string libname = DynamicLibrary::GetVersionedFilename("shaderc_shared");
 #else
-	// Use versioned, bundle post-processing adds it..
 	const std::string libname = DynamicLibrary::GetVersionedFilename("shaderc_shared", 1);
 #endif
 	if (!s_library.Open(libname.c_str(), &error))
@@ -333,7 +329,7 @@ void VKShaderCache::Open()
 	}
 }
 
-VkPipelineCache VKShaderCache::GetPipelineCache(bool set_dirty /*= true*/)
+VkPipelineCache VKShaderCache::GetPipelineCache(bool set_dirty )
 {
 	if (m_pipeline_cache == VK_NULL_HANDLE)
 		return VK_NULL_HANDLE;
@@ -394,8 +390,6 @@ bool VKShaderCache::ReadExistingShaderCache(const std::string& index_filename, c
 	m_index_file = FileSystem::OpenCFile(index_filename.c_str(), "r+b");
 	if (!m_index_file)
 	{
-		// special case here: when there's a sharing violation (i.e. two instances running),
-		// we don't want to blow away the cache. so just continue without a cache.
 		if (errno == EACCES)
 		{
 			Console.WriteLn("Failed to open shader cache index with EACCES, are you running two instances?");
@@ -458,7 +452,6 @@ bool VKShaderCache::ReadExistingShaderCache(const std::string& index_filename, c
 		m_index.emplace(key, data);
 	}
 
-	// ensure we don't write before seeking
 	std::fseek(m_index_file, 0, SEEK_END);
 
 	Console.WriteLn("Read %zu entries from '%s'", m_index.size(), index_filename.c_str());
@@ -552,7 +545,6 @@ bool VKShaderCache::FlushPipelineCache()
 
 	data.resize(data_size);
 
-	// Save disk writes if it hasn't changed, think of the poor SSDs.
 	FILESYSTEM_STAT_DATA sd;
 	if (!FileSystem::StatFile(m_pipeline_cache_filename.c_str(), &sd) || sd.Size != static_cast<s64>(data_size))
 	{

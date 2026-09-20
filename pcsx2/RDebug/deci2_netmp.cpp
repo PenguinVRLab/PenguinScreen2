@@ -5,16 +5,16 @@
 #include "deci2.h"
 
 struct DECI2_NETMP_HEADER{
-	DECI2_HEADER	h;		//+00
-	u8				code,	//+08
-					result;	//+09
-};		//=0A
+	DECI2_HEADER	h;
+	u8				code,
+					result;
+};
 
 struct DECI2_NETMP_CONNECT{
-	u8				priority,	//+00
-					_pad;		//+01
-	u16				protocol;	//+02
-};			//=04
+	u8				priority,
+					_pad;
+	u16				protocol;
+};
 
 char				d2_message[100];
 int					d2_count=1;
@@ -24,16 +24,16 @@ void D2_NETMP(const u8 *inbuffer, u8 *outbuffer, char *message){
 	DECI2_NETMP_HEADER	*in=(DECI2_NETMP_HEADER*)inbuffer,
 						*out=(DECI2_NETMP_HEADER*)outbuffer;
 	u8	*data=(u8*)in+sizeof(DECI2_NETMP_HEADER);
-	DECI2_NETMP_CONNECT	*connect=(DECI2_NETMP_CONNECT*)data;	//connect
+	DECI2_NETMP_CONNECT	*connect=(DECI2_NETMP_CONNECT*)data;
 	int					i, n;
 	static char			p[100], line[1024];
-	u64	EEboot, IOPboot;										//reset
+	u64	EEboot, IOPboot;
 	u16	node;
 
-	memcpy(outbuffer, inbuffer, 128*1024);//BUFFERSIZE
+	memcpy(outbuffer, inbuffer, 128*1024);
 	out->h.length=sizeof(DECI2_NETMP_HEADER);
 	out->code++;
-	out->result=0;	//ok
+	out->result=0;
 	switch(in->code){
 		case 0:
 			n=(in->h.length-sizeof(DECI2_NETMP_HEADER)) / sizeof(DECI2_NETMP_CONNECT);
@@ -51,10 +51,6 @@ void D2_NETMP(const u8 *inbuffer, u8 *outbuffer, char *message){
 			EEboot =*(u64*)data;	data+=8;
 			IOPboot=*(u64*)data;
 			sprintf(line, "code=RESET EE=0x%I64X IOP=0x%I64X", EEboot, IOPboot);
-			////////////////////////////hack
-			//data=(u8*)out+sizeof(DECI2_NETMP_HEADER);
-			//*data++=6;
-			//out->h.length=data-(u8*)out;
 			writeData(outbuffer);
 
 			node=(u16)'I';
@@ -79,23 +75,14 @@ void D2_NETMP(const u8 *inbuffer, u8 *outbuffer, char *message){
 			node=PROTO_ITTYP+0xF;
 			sendDCMP(PROTO_DCMP, 'E', 'H', 2, 1, (char*)&node, sizeof(node));
 			break;
-		case 4://[OK]
-			sprintf(line, "code=MESSAGE %s", data);//null terminated by the memset with 0 call
+		case 4:
+			sprintf(line, "code=MESSAGE %s", data);
 			strcpy(d2_message, (char*)data);
 			writeData(outbuffer);
 			break;
-		case 6://[ok]
+		case 6:
 			sprintf(line, "code=STATUS");
 			data=(u8*)out+sizeof(DECI2_NETMP_HEADER)+2;
-			/*
-			memcpy(data, d2_connect, 1*sizeof(DECI2_NETMP_CONNECT));
-			data+=1*sizeof(DECI2_NETMP_CONNECT);
-			*(u32*)data=1;//quite fast;)
-			data+=4;
-			memcpy(data, d2_message, strlen(d2_message));
-			data+=strlen(d2_message);
-			*(u32*)data=0;//null end the string on a word boundary
-			data+=3;data=(u8*)((int)data & 0xFFFFFFFC);*/
 
 			out->h.length=data-(u8*)out;
 			writeData(outbuffer);
@@ -107,7 +94,7 @@ void D2_NETMP(const u8 *inbuffer, u8 *outbuffer, char *message){
 		case 10:
 			sprintf(line, "code=VERSION %s", data);
 			data=(u8*)out+sizeof(DECI2_NETMP_HEADER);
-			strcpy((char*)data, "0.2.0");data+=strlen("0.2.0");//emu version;)
+			strcpy((char*)data, "0.2.0");data+=strlen("0.2.0");
 			out->h.length=data-(u8*)out;
 			writeData(outbuffer);
 			break;

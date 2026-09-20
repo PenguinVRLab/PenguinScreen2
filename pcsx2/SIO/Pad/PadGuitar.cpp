@@ -11,8 +11,6 @@
 
 #include "common/Console.h"
 
-// The generic input bindings on this might seem bizarre, but they are intended to match what DS2 buttons
-// would do what actions, if you played Guitar Hero on a PS2 with a DS2 instead of a controller.
 static const InputBindingInfo s_bindings[] = {
 	// clang-format off
 	{"Up", TRANSLATE_NOOP("Pad", "Strum Up"), nullptr, InputBindingInfo::Type::Button, PadGuitar::Inputs::STRUM_UP, GenericInputBinding::DPadUp},
@@ -45,8 +43,6 @@ void PadGuitar::ConfigLog()
 {
 	const auto [port, slot] = sioConvertPadToPortAndSlot(unifiedSlot);
 
-	// AL: Analog Light (is it turned on right now)
-	// AB: Analog Button (is it useable or is it locked in its current state)
 	Console.WriteLn(fmt::format("Pad: Guitar Config Finished - P{0}/S{1} - AL: {2} - AB: {3}",
 		port + 1,
 		slot + 1,
@@ -139,7 +135,6 @@ u8 PadGuitar::Config(u8 commandByte)
 	return 0x00;
 }
 
-// Changes the mode of the controller between digital and analog, and adjusts the analog LED accordingly.
 u8 PadGuitar::ModeSwitch(u8 commandByte)
 {
 	switch (this->commandBytesReceived)
@@ -263,18 +258,12 @@ void PadGuitar::Set(u32 index, float value)
 		return;
 	}
 
-	// The whammy bar is a special kind of weird in that rather than resting at 0 and going to 255,
-	// they chose to rest it at 127 like a normal analog, but then also make its full press 0, as if
-	// it were the negative Y component of a normal analog. Fun!
 	if (index == Inputs::WHAMMY)
 	{
 		this->whammy = static_cast<u8>(std::clamp(127 - (value * this->whammyAxisScale) * 255.0f, 0.0f, 127.0f));
 
 		if (this->whammyDeadzone > 0.0f)
 		{
-			// Whammy has a range of 0x7f to 0x00, since it is only half of an axis with no ability to go the
-			// other direction. So whatever we get in, we basically need to cut half of that off in order to
-			// figure out where our deadzone truly lives. I think.
 			const float whammyF = (static_cast<float>(this->whammy - 127.0f) / 127.0f);
 
 			if (whammyF != 0.0f && whammyF <= this->whammyDeadzone)
@@ -285,22 +274,20 @@ void PadGuitar::Set(u32 index, float value)
 	}
 	else
 	{
-		// Don't affect L2/R2, since they are analog on most pads.
 		const float dzValue = (value < this->buttonDeadzone) ? 0.0f : value;
 		this->rawInputs[index] = static_cast<u8>(std::clamp(dzValue * 255.0f, 0.0f, 255.0f));
 
-		// Since we reordered the buttons for better UI, we need to remap them here.
 		static constexpr std::array<u8, Inputs::LENGTH> bitmaskMapping = {{
-			12, // STRUM_UP
-			14, // STRUM_DOWN
-			8, // SELECT
-			11, // START
-			1, // GREEN
-			5, // RED
-			4, // YELLOW
-			6, // BLUE
-			7, // ORANGE
-			0 // TILT
+			12,
+			14,
+			8,
+			11,
+			1,
+			5,
+			4,
+			6,
+			7,
+			0
 		}};
 
 		if (dzValue > 0.0f)
@@ -417,7 +404,6 @@ bool PadGuitar::Freeze(StateWrapper& sw)
 	if (!PadBase::Freeze(sw) || !sw.DoMarker("PadGuitar"))
 		return false;
 
-	// Private PadGuitar members
 	sw.Do(&whammy);
 	sw.Do(&analogLight);
 	sw.Do(&analogLocked);

@@ -23,7 +23,7 @@ namespace PacketReader::IP
 	{
 	public:
 		bool IsCopyOnFragment() const;
-		u8 GetClass() const; //0 = control, 2 = debugging and measurement
+		u8 GetClass() const;
 		u8 GetNumber() const;
 		virtual IPOption* Clone() const = 0;
 	};
@@ -68,7 +68,6 @@ namespace PacketReader::IP
 
 	class IPopRouterAlert : public IPOption
 	{
-		//Should the router intercept packet?
 	public:
 		u16 value;
 
@@ -85,4 +84,4 @@ namespace PacketReader::IP
 			return new IPopRouterAlert(*this);
 		}
 	};
-} // namespace PacketReader::IP
+}

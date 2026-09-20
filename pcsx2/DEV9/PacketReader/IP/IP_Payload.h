@@ -9,7 +9,7 @@ namespace PacketReader::IP
 {
 	class IP_Payload
 	{
-	public: //Nedd GetProtocol
+	public:
 		virtual int GetLength() = 0;
 		virtual void WriteBytes(u8* buffer, int* offset) = 0;
 		virtual u8 GetProtocol() const = 0;
@@ -68,7 +68,6 @@ namespace PacketReader::IP
 		}
 	};
 
-	//Pointer to bytes not owned by class
 	class IP_PayloadPtr : public IP_Payload
 	{
 	public:
@@ -92,8 +91,6 @@ namespace PacketReader::IP
 		}
 		virtual void WriteBytes(u8* buffer, int* offset)
 		{
-			//If buffer & data point to the same location
-			//Then no copy is needed
 			if (data == &buffer[*offset])
 				return;
 
@@ -111,4 +108,4 @@ namespace PacketReader::IP
 			return protocol;
 		}
 	};
-} // namespace PacketReader::IP
+}

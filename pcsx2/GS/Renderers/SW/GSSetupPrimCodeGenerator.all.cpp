@@ -13,8 +13,6 @@ using namespace Xbyak;
 #define _rip_local(field) (ptr[_m_local + offsetof(GSScanlineLocalData, field)])
 #define _rip_local_di(i, field) (ptr[_m_local + offsetof(GSScanlineLocalData, d[0].field) + (sizeof(GSScanlineLocalData::skip) * (i))])
 
-/// On AVX, does a v-prefixed separate destination operation
-/// On SSE, moves src1 into dst using movdqa, then does the operation
 #define THREEARG(operation, dst, src1, ...) \
 	do \
 	{ \
@@ -40,7 +38,6 @@ using namespace Xbyak;
 GSSetupPrimCodeGenerator::GSSetupPrimCodeGenerator(u64 key, void* code, size_t maxsize)
 	: GSNewCodeGenerator(code, maxsize)
 	, many_regs(false)
-	// On x86 arg registers are very temporary but on x64 they aren't, so on x86 some registers overlap
 #ifdef _WIN32
 	, _64_vertex(rcx)
 	, _index(rdx)
@@ -156,10 +153,7 @@ void GSSetupPrimCodeGenerator::Depth_XMM()
 	{
 		if (m_en.f)
 		{
-			// GSVector4 df = t.wwww();
 			broadcastss(xym1, ptr[_dscan + offsetof(GSVertexSW, t.w)]);
-
-			// m_local.d4.f = GSVector4i(df * 4.0f).xxzzlh();
 
 			THREEARG(mulps, xmm2, xmm1, xmm3);
 			cvttps2dq(xmm2, xmm2);
@@ -169,7 +163,6 @@ void GSSetupPrimCodeGenerator::Depth_XMM()
 
 			for (int i = 0; i < (m_sel.notest ? 1 : 4); i++)
 			{
-				// m_local.d[i].f = GSVector4i(df * m_shift[i]).xxzzlh();
 
 				THREEARG(mulps, xmm2, xmm1, XYm(4 + i));
 				cvttps2dq(xmm2, xmm2);
@@ -181,10 +174,8 @@ void GSSetupPrimCodeGenerator::Depth_XMM()
 
 		if (m_en.z)
 		{
-			// VectorF dz = VectorF::broadcast64(&dscan.p.z)
 			movddup(xmm0, ptr[_dscan + offsetof(GSVertexSW, p.z)]);
 
-			// m_local.d4.z = dz.mul64(GSVector4::f32to64(shift));
 			cvtps2pd(xmm1, xmm3);
 			mulpd(xmm1, xmm0);
 			movaps(_rip_local_d_p(z), xmm1);
@@ -194,8 +185,6 @@ void GSSetupPrimCodeGenerator::Depth_XMM()
 
 			for (int i = 0; i < (m_sel.notest ? 1 : 4); i++)
 			{
-				// m_local.d[i].z0 = dz.mul64(VectorF::f32to64(half_shift[2 * i + 2]));
-				// m_local.d[i].z1 = dz.mul64(VectorF::f32to64(half_shift[2 * i + 3]));
 
 				THREEARG(mulps, xmm1, xmm0, XYm(4 + i));
 				movdqa(_rip_local_di(i, z), xmm1);
@@ -204,15 +193,13 @@ void GSSetupPrimCodeGenerator::Depth_XMM()
 	}
 	else
 	{
-		// GSVector4 p = vertex[index[1]].p;
 
 		movzx(eax, word[_index + sizeof(u16) * 1]);
-		shl(eax, 6); // * sizeof(GSVertexSW)
+		shl(eax, 6);
 		add(rax, _64_vertex);
 
 		if (m_en.f)
 		{
-			// m_local.p.f = GSVector4i(p).zzzzh().zzzz();
 			movaps(xmm0, ptr[rax + offsetof(GSVertexSW, p)]);
 
 			cvttps2dq(xmm1, xmm0);
@@ -223,7 +210,6 @@ void GSSetupPrimCodeGenerator::Depth_XMM()
 
 		if (m_en.z)
 		{
-			// u32 z is bypassed in t.w
 
 			movdqa(xmm0, ptr[rax + offsetof(GSVertexSW, t)]);
 			pshufd(xmm0, xmm0, _MM_SHUFFLE(3, 3, 3, 3));
@@ -243,17 +229,14 @@ void GSSetupPrimCodeGenerator::Depth_YMM()
 	{
 		if (m_en.f)
 		{
-			// GSVector8 df = GSVector8::broadcast32(&dscan.t.w);
 			vbroadcastss(ymm1, ptr[_dscan + offsetof(GSVertexSW, t.w)]);
 
-			// local.d8.p.f = GSVector4i(tstep).extract32<3>();
 			vmulps(xmm0, xmm1, xmm3);
 			cvtps2dq(xmm0, xmm0);
 			movd(_rip_local_d_p(f), xmm0);
 
 			for (int i = 0; i < (m_sel.notest ? 1 : dsize); i++)
 			{
-				// m_local.d[i].f = GSVectorI(df * m_shift[i]).xxzzlh();
 
 				if (i < 4 || many_regs)
 					vmulps(ymm0, Ymm(4 + i), ymm1);
@@ -268,10 +251,8 @@ void GSSetupPrimCodeGenerator::Depth_YMM()
 
 		if (m_en.z)
 		{
-			// const VectorF dz = VectorF::broadcast64(&dscan.p.z);
 			movsd(xmm0, ptr[_dscan + offsetof(GSVertexSW, p.z)]);
 
-			// GSVector4::storel(&local.d8.p.z, dz.extract<0>().mul64(GSVector4::f32to64(shift)));
 			vcvtss2sd(xmm1, xmm3, xmm3);
 			vmulsd(xmm1, xmm0, xmm1);
 			movsd(_rip_local_d_p(z), xmm1);
@@ -281,7 +262,6 @@ void GSSetupPrimCodeGenerator::Depth_YMM()
 
 			for (int i = 0; i < (m_sel.notest ? 1 : dsize); i++)
 			{
-				// m_local.d[i].z = dzf * shift[i + 1];
 
 				if (i < 4 || many_regs)
 					vmulps(ymm1, Ymm(4 + i), ymm0);
@@ -293,15 +273,13 @@ void GSSetupPrimCodeGenerator::Depth_YMM()
 	}
 	else
 	{
-		// GSVector4 p = vertex[index[1]].p;
 
 		movzx(eax, word[_index + sizeof(u16) * 1]);
-		shl(eax, 6); // * sizeof(GSVertexSW)
+		shl(eax, 6);
 		add(rax, _64_vertex);
 
 		if (m_en.f)
 		{
-			// m_local.p.f = GSVector4i(vertex[index[1]].p).extract32<3>();
 
 			movaps(xmm0, ptr[rax + offsetof(GSVertexSW, p)]);
 			cvttps2dq(xmm0, xmm0);
@@ -310,7 +288,6 @@ void GSSetupPrimCodeGenerator::Depth_YMM()
 
 		if (m_en.z)
 		{
-			// m_local.p.z = vertex[index[1]].t.u32[3]; // u32 z is bypassed in t.w
 
 			mov(t1.cvt32(), ptr[rax + offsetof(GSVertexSW, t.w)]);
 			mov(_rip_local(p.z), t1.cvt32());
@@ -325,15 +302,12 @@ void GSSetupPrimCodeGenerator::Texture()
 		return;
 	}
 
-	// GSVector4 t = dscan.t;
-
 	broadcastf128(xym0, ptr[_dscan + offsetof(GSVertexSW, t)]);
 
 	THREEARG(mulps, xmm1, xmm0, xmm3);
 
 	if (m_sel.fst)
 	{
-		// m_local.d4.stq = GSVector4i(t * 4.0f);
 
 		cvttps2dq(xmm1, xmm1);
 
@@ -341,22 +315,17 @@ void GSSetupPrimCodeGenerator::Texture()
 	}
 	else
 	{
-		// m_local.d4.stq = t * 4.0f;
 
 		movaps(_rip_local_d(stq), xmm1);
 	}
 
 	for (int j = 0, k = m_sel.fst ? 2 : 3; j < k; j++)
 	{
-		// GSVector4 ds = t.xxxx();
-		// GSVector4 dt = t.yyyy();
-		// GSVector4 dq = t.zzzz();
 
 		THREEARG(shufps, xym1, xym0, xym0, _MM_SHUFFLE(j, j, j, j));
 
 		for (int i = 0; i < (m_sel.notest ? 1 : dsize); i++)
 		{
-			// GSVector4 v = ds/dt * m_shift[i];
 
 			if (i < 4 || many_regs)
 				THREEARG(mulps, xym2, XYm(4 + i), xym1);
@@ -365,7 +334,6 @@ void GSSetupPrimCodeGenerator::Texture()
 
 			if (m_sel.fst)
 			{
-				// m_local.d[i].s/t = GSVector4i(v);
 
 				cvttps2dq(xym2, xym2);
 
@@ -377,7 +345,6 @@ void GSSetupPrimCodeGenerator::Texture()
 			}
 			else
 			{
-				// m_local.d[i].s/t/q = v;
 
 				switch (j)
 				{
@@ -399,16 +366,13 @@ void GSSetupPrimCodeGenerator::Color()
 
 	if (m_sel.iip)
 	{
-		// GSVector4 c = dscan.c;
 
 		broadcastf128(xym0, ptr[_dscan + offsetof(GSVertexSW, c)]);
 
-		// constexpr VectorI mask16 = VectorI::cxpr(0xFFFF);
 		XYm mask16 = XYm(many_regs ? 12 : m_sel.notest ? 6 : 8);
 		pcmpeqd(mask16, mask16);
 		psrld(mask16, 16);
 
-		// local.d4.c = (GSVector4i(dscan.c * step_shift) & mask16).xzyw().pu32();
 		THREEARG(mulps, xmm1, xmm0, xmm3);
 		cvttps2dq(xmm1, xmm1);
 		pshufd(xmm1, xmm1, _MM_SHUFFLE(3, 1, 2, 0));
@@ -419,17 +383,11 @@ void GSSetupPrimCodeGenerator::Color()
 		else
 			movq(_rip_local_d(c), xmm1);
 
-		// xym3 is not needed anymore
-
-		// GSVector4 dr = c.xxxx();
-		// GSVector4 db = c.zzzz();
-
 		THREEARG(shufps, xym2, xym0, xym0, _MM_SHUFFLE(0, 0, 0, 0));
 		THREEARG(shufps, xym3, xym0, xym0, _MM_SHUFFLE(2, 2, 2, 2));
 
 		for (int i = 0; i < (m_sel.notest ? 1 : dsize); i++)
 		{
-			// VectorI r = (VectorI(dr * shift[1 + i]) & mask16).pu32();
 
 			if (i < 4 || many_regs)
 				THREEARG(mulps, xym0, XYm(4 + i), xym2);
@@ -439,8 +397,6 @@ void GSSetupPrimCodeGenerator::Color()
 			pand(xym0, mask16);
 			packusdw(xym0, xym0);
 
-			// VectorI b = (VectorI(db * shift[1 + i]) & mask16).pu32();
-
 			if (i < 4 || many_regs)
 				THREEARG(mulps, xym1, XYm(4 + i), xym3);
 			else
@@ -449,25 +405,17 @@ void GSSetupPrimCodeGenerator::Color()
 			pand(xym1, mask16);
 			packusdw(xym1, xym1);
 
-			// m_local.d[i].rb = r.upl16(b);
-
 			punpcklwd(xym0, xym1);
 			movdqa(_rip_local_di(i, rb), xym0);
 		}
 
-		// GSVector4 c = dscan.c;
-
-		broadcastf128(xym0, ptr[_dscan + offsetof(GSVertexSW, c)]); // not enough regs, have to reload it
-
-		// GSVector4 dg = c.yyyy();
-		// GSVector4 da = c.wwww();
+		broadcastf128(xym0, ptr[_dscan + offsetof(GSVertexSW, c)]);
 
 		THREEARG(shufps, xym2, xym0, xym0, _MM_SHUFFLE(1, 1, 1, 1));
 		THREEARG(shufps, xym3, xym0, xym0, _MM_SHUFFLE(3, 3, 3, 3));
 
 		for (int i = 0; i < (m_sel.notest ? 1 : dsize); i++)
 		{
-			// VectorI g = (VectorI(dg * shift[1 + i]) & mask16).pu32();
 
 			if (i < 4 || many_regs)
 				THREEARG(mulps, xym0, XYm(4 + i), xym2);
@@ -477,8 +425,6 @@ void GSSetupPrimCodeGenerator::Color()
 			pand(xym0, mask16);
 			packusdw(xym0, xym1);
 
-			// VectorI a = (VectorI(da * shift[1 + i]) & mask16).pu32();
-
 			if (i < 4 || many_regs)
 				THREEARG(mulps, xym1, XYm(4 + i), xym3);
 			else
@@ -487,15 +433,12 @@ void GSSetupPrimCodeGenerator::Color()
 			pand(xym1, mask16);
 			packusdw(xym1, xym1);
 
-			// m_local.d[i].ga = g.upl16(a);
-
 			punpcklwd(xym0, xym1);
 			movdqa(_rip_local_di(i, ga), xym0);
 		}
 	}
 	else
 	{
-		// GSVector4i c = GSVector4i(vertex[index[last].c);
 
 		int last = 0;
 
@@ -507,10 +450,10 @@ void GSSetupPrimCodeGenerator::Color()
 			case GS_SPRITE_CLASS:   last = 1; break;
 		}
 
-		if (!(m_sel.prim == GS_SPRITE_CLASS && (m_en.z || m_en.f))) // if this is a sprite, the last vertex was already loaded in Depth()
+		if (!(m_sel.prim == GS_SPRITE_CLASS && (m_en.z || m_en.f)))
 		{
 			movzx(eax, word[_index + sizeof(u16) * last]);
-			shl(eax, 6); // * sizeof(GSVertexSW)
+			shl(eax, 6);
 			add(rax, _64_vertex);
 		}
 
@@ -524,20 +467,13 @@ void GSSetupPrimCodeGenerator::Color()
 			cvttps2dq(ymm0, ymm0);
 		}
 
-		// c = c.upl16(c.zwxy());
-
 		pshufd(xym1, xym0, _MM_SHUFFLE(1, 0, 3, 2));
 		punpcklwd(xym0, xym1);
-
-		// if (!tme) c = c.srl16(7);
 
 		if (m_sel.tfx == TFX_NONE)
 		{
 			psrlw(xym0, 7);
 		}
-
-		// m_local.c.rb = c.xxxx();
-		// m_local.c.ga = c.zzzz();
 
 		pshufd(xym1, xym0, _MM_SHUFFLE(0, 0, 0, 0));
 		pshufd(xym2, xym0, _MM_SHUFFLE(2, 2, 2, 2));

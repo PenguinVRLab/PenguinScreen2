@@ -19,18 +19,18 @@ GSTexture::~GSTexture() = default;
 bool GSTexture::ValidateUsageAndFormat(Usage usage, Format format)
 {
 	if (IsDepthStencil(usage) && (usage & (Usage::ShaderWrite | Usage::RenderTarget)))
-		return false; // DS is not compatible with Write or RT
+		return false;
 	if (IsFeedback(usage) && !(usage & (Usage::DepthStencil | Usage::RenderTarget)))
-		return false; // Feedback requires RT or DS
+		return false;
 	if (usage == (Usage::ShaderWrite | Usage::RenderTarget))
-		return false; // We always include Feedback for RT+Write
-	if (format == Format::UNorm8 && !IsTexture(usage)) // Unorm8 only used for sampling
 		return false;
-	if (IsFeedback(usage) && !IsFeedbackFormat(format)) // Only some formats used with feedback
+	if (format == Format::UNorm8 && !IsTexture(usage))
 		return false;
-	if (IsShaderWrite(usage) && !IsShaderWriteFormat(format)) // Only some formats used with shader write
+	if (IsFeedback(usage) && !IsFeedbackFormat(format))
 		return false;
-	if (IsDepthStencil(usage) && (format != Format::DepthStencil)) // Only use DepthStencil format with DepthStencil usage
+	if (IsShaderWrite(usage) && !IsShaderWriteFormat(format))
+		return false;
+	if (IsDepthStencil(usage) && (format != Format::DepthStencil))
 		return false;
 	if (!g_gs_device->Features().depth_feedback)
 	{
@@ -42,8 +42,6 @@ bool GSTexture::ValidateUsageAndFormat(Usage usage, Format format)
 
 bool GSTexture::Save(const std::string& fn)
 {
-	// Depth textures need special treatment - we have a stencil component.
-	// Just re-use the existing conversion shader instead.
 	if (m_format == Format::DepthStencil || m_format == Format::DepthColor)
 	{
 		GSTexture* temp = g_gs_device->CreateRenderTarget(GetWidth(), GetHeight(), Format::Color, false);
@@ -134,21 +132,21 @@ u32 GSTexture::GetCompressedBytesPerBlock(Format format)
 	{
 		default:
 			pxFailRel("Invalid texture format");
-		case Format::Invalid:      return 1;  // Invalid
-		case Format::Color:        return 4;  // Color/RGBA8
-		case Format::ColorHQ:      return 4;  // ColorHQ/RGB10A2
-		case Format::ColorHDR:     return 8;  // ColorHDR/RGBA16F
-		case Format::ColorClip:    return 8;  // ColorClip/RGBA16
-		case Format::DepthStencil: return 4;  // DepthStencil
-		case Format::DepthColor:   return 4;  // DepthColor/R32
-		case Format::UNorm8:       return 1;  // UNorm8/R8
-		case Format::UInt16:       return 2;  // UInt16/R16UI
-		case Format::UInt32:       return 4;  // UInt32/R32UI
-		case Format::PrimID:       return 4;  // PrimID/R32
-		case Format::BC1:          return 8;  // BC1 - 16 pixels in 64 bits
-		case Format::BC2:          return 16; // BC2 - 16 pixels in 128 bits
-		case Format::BC3:          return 16; // BC3 - 16 pixels in 128 bits
-		case Format::BC7:          return 16; // BC7 - 16 pixels in 128 bits
+		case Format::Invalid:      return 1;
+		case Format::Color:        return 4;
+		case Format::ColorHQ:      return 4;
+		case Format::ColorHDR:     return 8;
+		case Format::ColorClip:    return 8;
+		case Format::DepthStencil: return 4;
+		case Format::DepthColor:   return 4;
+		case Format::UNorm8:       return 1;
+		case Format::UInt16:       return 2;
+		case Format::UInt32:       return 4;
+		case Format::PrimID:       return 4;
+		case Format::BC1:          return 8;
+		case Format::BC2:          return 16;
+		case Format::BC3:          return 16;
+		case Format::BC7:          return 16;
 	}
 }
 
@@ -227,7 +225,7 @@ GSDownloadTexture::GSDownloadTexture(u32 width, u32 height, GSTexture::Format fo
 
 GSDownloadTexture::~GSDownloadTexture() = default;
 
-u32 GSDownloadTexture::GetBufferSize(u32 width, u32 height, GSTexture::Format format, u32 pitch_align /* = 1 */)
+u32 GSDownloadTexture::GetBufferSize(u32 width, u32 height, GSTexture::Format format, u32 pitch_align )
 {
 	const u32 block_size = GSTexture::GetCompressedBlockSize(format);
 	const u32 bytes_per_block = GSTexture::GetCompressedBytesPerBlock(format);

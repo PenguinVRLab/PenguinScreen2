@@ -5,10 +5,6 @@
 
 #include <cstdint>
 
-// --------------------------------------------------------------------------------------
-//  Basic Atomic Types
-// --------------------------------------------------------------------------------------
-
 using s8 = int8_t;
 using s16 = int16_t;
 using s32 = int32_t;
@@ -24,14 +20,6 @@ using sptr = intptr_t;
 
 using uint = unsigned int;
 
-// --------------------------------------------------------------------------------------
-//  u128 / s128 - A rough-and-ready cross platform 128-bit datatype, Non-SSE style.
-// --------------------------------------------------------------------------------------
-// Note: These structs don't provide any additional constructors because C++ doesn't allow
-// the use of datatypes with constructors in unions (and since unions aren't the primary
-// uses of these types, that means we can't have constructors). Embedded functions for
-// performing explicit conversion from 64 and 32 bit values are provided instead.
-//
 union u128
 {
 	struct
@@ -45,7 +33,6 @@ union u128
 	u16 _u16[8];
 	u8 _u8[16];
 
-	// Explicit conversion from u64. Zero-extends the source through 128 bits.
 	static u128 From64(u64 src)
 	{
 		u128 retval;
@@ -54,7 +41,6 @@ union u128
 		return retval;
 	}
 
-	// Explicit conversion from u32. Zero-extends the source through 128 bits.
 	static u128 From32(u32 src)
 	{
 		u128 retval;
@@ -84,14 +70,12 @@ struct s128
 	s64 lo;
 	s64 hi;
 
-	// explicit conversion from s64, with sign extension.
 	static s128 From64(s64 src)
 	{
 		s128 retval = {src, (src < 0) ? -1 : 0};
 		return retval;
 	}
 
-	// explicit conversion from s32, with sign extension.
 	static s128 From64(s32 src)
 	{
 		s128 retval = {src, (src < 0) ? -1 : 0};

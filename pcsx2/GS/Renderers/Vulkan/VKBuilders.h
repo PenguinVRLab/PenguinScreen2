@@ -19,7 +19,6 @@
 
 namespace Vulkan
 {
-	// Adds a structure to a chain.
 	void AddPointerToChain(void* head, const void* ptr);
 
 	const char* VkResultToString(VkResult res);
@@ -316,9 +315,6 @@ namespace Vulkan
 		void AddSubpassColorAttachment(u32 subpass, u32 attachment, VkImageLayout layout);
 		void AddSubpassDepthAttachment(u32 subpass, u32 attachment, VkImageLayout layout);
 
-		// PCSX2-VR (M4.3-pre): turn this into a multiview (stereo) render pass covering
-		// view_count views (view mask = (1 << view_count) - 1). The view/correlation masks
-		// are stored as members so they outlive the vkCreateRenderPass() call in Create().
 		void SetMultiview(u32 view_count);
 
 	private:
@@ -349,7 +345,6 @@ namespace Vulkan
 
 #ifdef ENABLE_VULKAN_DEBUG_OBJECTS
 
-	// Provides a compile-time mapping between a Vulkan-type into its matching VkObjectType
 	template <typename T>
 	struct VkObjectTypeMap;
 
@@ -414,4 +409,4 @@ namespace Vulkan
 		va_end(ap);
 #endif
 	}
-} // namespace Vulkan
+}

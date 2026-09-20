@@ -76,7 +76,6 @@ void InputBindingWidget::updateText()
 	{
 		setText(tr("%n bindings", "", static_cast<int>(m_bindings_ui.size())));
 
-		// keep the full thing for the tooltip
 		std::stringstream ss;
 		bool first = true;
 		for (const std::string& binding : m_bindings_ui)
@@ -94,7 +93,6 @@ void InputBindingWidget::updateText()
 		QString binding_text(QString::fromStdString(m_bindings_ui[0]));
 		setToolTip(binding_text + binding_tip + binding_clear_tip);
 
-		// fix up accelerators, and if it's too long, ellipsise it
 		if (binding_text.contains('&'))
 			binding_text = binding_text.replace(QStringLiteral("&"), QStringLiteral("&&"));
 		if (binding_text.length() > 35)
@@ -107,7 +105,6 @@ bool InputBindingWidget::eventFilter(QObject* watched, QEvent* event)
 {
 	const QEvent::Type event_type = event->type();
 
-	// if the key is being released, set the input
 	if (event_type == QEvent::KeyRelease || event_type == QEvent::MouseButtonRelease)
 	{
 		setNewBinding();
@@ -122,7 +119,6 @@ bool InputBindingWidget::eventFilter(QObject* watched, QEvent* event)
 	}
 	else if (event_type == QEvent::MouseButtonPress || event_type == QEvent::MouseButtonDblClick)
 	{
-		// double clicks get triggered if we click bind, then click again quickly.
 		if (const u32 button_mask = static_cast<u32>(static_cast<const QMouseEvent*>(event)->button()))
 			m_new_bindings.push_back(InputManager::MakePointerButtonKey(0, std::countr_zero(button_mask)));
 		return true;
@@ -156,8 +152,6 @@ bool InputBindingWidget::eventFilter(QObject* watched, QEvent* event)
 	}
 	else if (event_type == QEvent::MouseMove && m_mouse_mapping_enabled)
 	{
-		// if we've moved more than a decent distance from the center of the widget, bind it.
-		// this is so we don't accidentally bind to the mouse if you bump it while reaching for your pad.
 		static constexpr const s32 THRESHOLD = 50;
 		const QPoint diff(static_cast<QMouseEvent*>(event)->globalPosition().toPoint() - m_input_listen_start_position);
 		bool has_one = false;
@@ -360,26 +354,21 @@ void InputBindingWidget::inputManagerHookCallback(InputBindingKey key, float val
 	{
 		if (other_key.MaskDirection() == key.MaskDirection())
 		{
-			// for pedals, we wait for it to go back to near its starting point to commit the binding
 			if ((reverse_threshold ? ((initial_value - value) <= 0.25f) : (abs_value < 0.5f)))
 			{
-				// did we go the full range?
 				if (reverse_threshold && initial_value > 0.5f && min_value <= -0.5f)
 					other_key.modifier = InputModifier::FullAxis;
 
-				// if this key is in our new binding list, it's a "release", and we're done
 				setNewBinding();
 				stopListeningForInput();
 				return;
 			}
 
-			// otherwise, keep waiting
 			return;
 		}
 	}
 
 
-	// new binding, add it to the list, but wait for a decent distance first, and then wait for release
 	if ((reverse_threshold ? (abs_value < 0.5f) : (abs_value >= 0.5f)))
 	{
 		InputBindingKey key_to_add = key;
@@ -501,16 +490,12 @@ void InputVibrationBindingWidget::onClicked()
 	if (input_dialog.exec() == 0)
 		return;
 
-	// If a controller is unplugged, we won't have the setting string to save
-	// Skip saving if selected is an existing bind from an unplugged controller
 	const int selected = input_ui_options.indexOf(input_dialog.textValue());
 	if (selected >= 0 && selected < input_setting_options.size())
 	{
-		// Update config
 		const std::string new_setting_value(input_setting_options[selected].toStdString());
 		Host::SetBaseStringSettingValue(m_section_name.c_str(), m_key_name.c_str(), new_setting_value.c_str());
 		Host::CommitBaseSettingChanges();
-		// Update ui
 		const QString new_ui_value(input_dialog.textValue());
 		m_binding = new_ui_value.toStdString();
 		setText(new_ui_value);

@@ -20,7 +20,7 @@
 #include <stdexcept>
 #include <string>
 
-#define PSXCLK 36864000 /* 36.864 MHz */
+#define PSXCLK 36864000
 
 namespace USB
 {
@@ -34,7 +34,7 @@ namespace USB
 	static void DoEndpointState(USBEndpoint* ep, StateWrapper& sw);
 	static void DoDeviceState(USBDevice* dev, StateWrapper& sw);
 	static void DoPacketState(USBPacket* p, StateWrapper& sw, const std::array<bool, 2>& valid_devices);
-} // namespace USB
+}
 
 static OHCIState* s_qemu_ohci = nullptr;
 static USBDevice* s_usb_device[USB::NUM_PORTS] = {};
@@ -54,8 +54,6 @@ std::string USB::GetConfigSection(int port)
 
 OHCIPort& USB::GetOHCIPort(u32 port)
 {
-	// Apparently the ports on the hub are swapped.
-	// Get this wrong and games like GT4 won't spin your wheelz.
 	const u32 rhport = (port == 0) ? 1 : 0;
 	return s_qemu_ohci->rhport[rhport];
 }
@@ -274,13 +272,11 @@ void USB::DoDeviceState(USBDevice* dev, StateWrapper& sw)
 
 void USB::DoEndpointState(USBEndpoint* ep, StateWrapper& sw)
 {
-	// assumed the fields above are constant
 	sw.Do(&ep->pipeline);
 	sw.Do(&ep->halted);
 
 	if (sw.IsReading())
 	{
-		// clear out all packets, we'll fill it in later
 		while (!QTAILQ_EMPTY(&ep->queue))
 			QTAILQ_REMOVE(&ep->queue, QTAILQ_FIRST(&ep->queue), queue);
 	}
@@ -393,7 +389,6 @@ bool USB::DoState(StateWrapper& sw)
 			sw.Do(&state_devsubtype);
 			sw.Do(&state_size);
 
-			// this is *assuming* the config is correct... there's no reason it shouldn't be.
 			if (sw.HasError() ||
 				EmuConfig.USB.Ports[port].DeviceType != state_devtype ||
 				EmuConfig.USB.Ports[port].DeviceSubtype != state_devsubtype ||
@@ -409,7 +404,6 @@ bool USB::DoState(StateWrapper& sw)
 
 			if (!s_usb_device[port])
 			{
-				// nothing in this port
 				sw.SkipBytes(state_size);
 				continue;
 			}
@@ -455,7 +449,6 @@ bool USB::DoState(StateWrapper& sw)
 
 			if (!s_usb_device[port])
 			{
-				// nothing in this port
 				continue;
 			}
 
@@ -498,11 +491,6 @@ void USBasync(u32 cycles)
 			s_qemu_ohci->eof_timer = 0;
 			ohci_frame_boundary(s_qemu_ohci);
 
-			/*
-			 * Break out of the loop if bus was stopped.
-			 * If ohci_frame_boundary hits an UE, but doesn't stop processing,
-			 * it seems to cause a hang inside the game instead.
-			*/
 			if (!s_qemu_ohci->eof_timer)
 				break;
 		}
@@ -515,10 +503,6 @@ void USBasync(u32 cycles)
 			s_usb_remaining -= m;
 		}
 	}
-	//if(qemu_ohci->eof_timer <= 0)
-	//{
-	//ohci_frame_boundary(qemu_ohci);
-	//}
 }
 
 int usb_get_ticks_per_second()
@@ -696,7 +680,7 @@ float USB::GetConfigFloat(SettingsInterface& si, u32 port, const char* devname, 
 }
 
 
-std::string USB::GetConfigString(SettingsInterface& si, u32 port, const char* devname, const char* key, const char* default_value /*= ""*/)
+std::string USB::GetConfigString(SettingsInterface& si, u32 port, const char* devname, const char* key, const char* default_value )
 {
 	const std::string real_key(fmt::format("{}_{}", devname, key));
 	return si.GetStringValue(GetConfigSection(port).c_str(), real_key.c_str(), default_value);
@@ -707,7 +691,6 @@ static u32 TryMapGenericMapping(SettingsInterface& si, const std::string& sectio
 	const std::vector<std::pair<GenericInputBinding, std::string>>& mapping, GenericInputBinding generic_name,
 	const char* bind_name)
 {
-	// find the mapping it corresponds to
 	const std::string* found_mapping = nullptr;
 	for (const std::pair<GenericInputBinding, std::string>& it : mapping)
 	{

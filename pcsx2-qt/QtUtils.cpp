@@ -302,13 +302,10 @@ namespace QtUtils
 	QString GetShowInFileExplorerMessage()
 	{
 #if defined(_WIN32)
-		//: Windows action to show a file in Windows Explorer
 		return QCoreApplication::translate("FileOperations", "Show in Explorer");
 #elif defined(__APPLE__)
-		//: macOS action to show a file in Finder
 		return QCoreApplication::translate("FileOperations", "Show in Finder");
 #else
-		//: Linux/*NIX: Opens the system file manager to the directory containing a selected file
 		return QCoreApplication::translate("FileOperations", "Open Containing Directory");
 #endif
 	}
@@ -347,7 +344,7 @@ namespace QtUtils
 		}
 	}
 
-	void BindLabelToSlider(QSlider* slider, QLabel* label, float range /*= 1.0f*/)
+	void BindLabelToSlider(QSlider* slider, QLabel* label, float range )
 	{
 		auto update_label = [label, range](int new_value) {
 			label->setText(QString::number(static_cast<int>(new_value) / range));
@@ -360,7 +357,6 @@ namespace QtUtils
 	{
 		if (QMainWindow* window = qobject_cast<QMainWindow*>(widget); window)
 		{
-			// update status bar grip if present
 			if (QStatusBar* sb = window->statusBar(); sb)
 				sb->setSizeGripEnabled(resizeable);
 		}
@@ -369,7 +365,6 @@ namespace QtUtils
 		{
 			if (resizeable)
 			{
-				// Min/max numbers come from uic.
 				widget->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
 				widget->setMinimumSize(1, 1);
 				widget->setMaximumSize(16777215, 16777215);
@@ -386,7 +381,6 @@ namespace QtUtils
 	{
 		if (resizeable)
 		{
-			// Min/max numbers come from uic.
 			window->setMinimumWidth(1);
 			window->setMinimumHeight(1);
 			window->setMaximumWidth(16777215);
@@ -430,10 +424,8 @@ namespace QtUtils
 	QString AbstractItemModelToCSV(QAbstractItemModel* model, int role, bool useQuotes)
 	{
 		QString csv;
-		// Header
 		for (int col = 0; col < model->columnCount(); col++)
 		{
-			// Encapsulate value in quotes so that commas don't break the column count.
 			QString headerLine = model->headerData(col, Qt::Horizontal, Qt::DisplayRole).toString();
 			csv += useQuotes ? QString("\"%1\"").arg(headerLine) : headerLine;
 			if (col < model->columnCount() - 1)
@@ -442,12 +434,10 @@ namespace QtUtils
 
 		csv += "\n";
 
-		// Data
 		for (int row = 0; row < model->rowCount(); row++)
 		{
 			for (int col = 0; col < model->columnCount(); col++)
 			{
-				// Encapsulate value in quotes so that commas don't break the column count.
 				QString dataLine = model->data(model->index(row, col), role).toString();
 				csv += useQuotes ? QString("\"%1\"").arg(dataLine) : dataLine;
 
@@ -490,7 +480,6 @@ namespace QtUtils
 		{
 			if (object == m_lbl && event->type() == QEvent::DevicePixelRatioChange)
 				m_lbl->setPixmap(m_icn.pixmap(m_size, m_lbl->devicePixelRatioF()));
-			// Don't block the event
 			return false;
 		}
 
@@ -524,7 +513,6 @@ namespace QtUtils
 			if (avail == lang)
 				return entry.second;
 		}
-		// No matches, default to English
 		return QStringLiteral("en-US");
 	}
 
@@ -548,18 +536,15 @@ namespace QtUtils
 			if (actual_language_code == QStringLiteral("en"))
 				country_code = QStringLiteral("US");
 			else
-				return QIcon(); // No flag available
+				return QIcon();
 		}
 
-		// Special cases
 		if (actual_language_code == QStringLiteral("es-419"))
 		{
-			// Latin America (es-419) use Mexico flag as representative
 			country_code = QStringLiteral("MX");
 		}
 		else if (actual_language_code == QStringLiteral("sr-SP"))
 		{
-			// Serbia (SP) is not a valid ISO code, use RS (Serbia)
 			country_code = QStringLiteral("RS");
 		}
 
@@ -569,13 +554,11 @@ namespace QtUtils
 
 	bool IsRunningInFlatpak()
 	{
-		// Checks for the existence of the `.flatpak-info` file which seems to be always present inside flatpak sandboxes.
 		return FileSystem::FileExists("/.flatpak-info");
 	}
 
 	bool IsRunningInAppImage()
 	{
-		// The AppImage runtime sets APPIMAGE environment variable so we can check for that.
 		return std::getenv("APPIMAGE") != nullptr;
 	}
 
@@ -594,7 +577,6 @@ namespace QtUtils
 			return;
 		}
 
-		// Sanitize filename
 		const std::string clean_name = Path::SanitizeFileName(name);
 		std::string clean_path = game_path.empty() ? std::string() : Path::ToNativePath(Path::RealPath(game_path));
 		if (!Path::IsValidFileName(clean_name))
@@ -603,10 +585,6 @@ namespace QtUtils
 			return;
 		}
 
-		// Get path to Desktop or per-user Start Menu\Programs directory
-		// https://superuser.com/questions/1489874/how-can-i-get-the-real-path-of-desktop-in-windows-explorer/1789849#1789849
-		// https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/nf-shlobj_core-shgetknownfolderpath
-		// https://learn.microsoft.com/en-us/windows/win32/shell/knownfolderid
 		std::string link_file;
 		if (wil::unique_cotaskmem_string directory; SUCCEEDED(SHGetKnownFolderPath(is_desktop ? FOLDERID_Desktop : FOLDERID_Programs, 0, NULL, &directory)))
 		{
@@ -632,14 +610,12 @@ namespace QtUtils
 			return;
 		}
 
-		// Check if the same shortcut already exists
 		if (prompt_for_destination && FileSystem::FileExists(link_file.c_str()))
 		{
 			QMessageBox::critical(parent, tr_msg("Failed to create shortcut"), tr_msg("A shortcut with the same name already exists."), QMessageBox::StandardButton::Ok, QMessageBox::StandardButton::Ok);
 			return;
 		}
 
-		// Shortcut CmdLine Args
 		bool lossless = true;
 		for (std::string& arg : passed_cli_args)
 			lossless &= EscapeShortcutCommandLine(&arg);
@@ -674,8 +650,6 @@ namespace QtUtils
 			return fmt::format("{} [{}]", StringUtil::WideStringToUTF8String(errMsg), hr);
 		};
 
-		// Construct the shortcut
-		// https://stackoverflow.com/questions/3906974/how-to-programmatically-create-a-shortcut-using-win32
 		HRESULT res = CoInitialize(NULL);
 		if (FAILED(res))
 		{
@@ -700,7 +674,6 @@ namespace QtUtils
 			return;
 		}
 
-		// Set path to the executable
 		const std::wstring target_file = StringUtil::UTF8StringToWideString(FileSystem::GetProgramPath());
 		res = pShellLink->SetPath(target_file.c_str());
 		if (FAILED(res))
@@ -709,7 +682,6 @@ namespace QtUtils
 			return;
 		}
 
-		// Set the working directory
 		const std::wstring working_dir = StringUtil::UTF8StringToWideString(Path::GetDirectory(FileSystem::GetProgramPath()));
 		res = pShellLink->SetWorkingDirectory(working_dir.c_str());
 		if (FAILED(res))
@@ -718,7 +690,6 @@ namespace QtUtils
 			return;
 		}
 
-		// Set the description (shown as the shortcut's tooltip)
 		const std::wstring description = tr_msg("PlayStation 2 Emulator").toStdWString();
 		res = pShellLink->SetDescription(description.c_str());
 		if (FAILED(res))
@@ -727,7 +698,6 @@ namespace QtUtils
 			return;
 		}
 
-		// Set the launch arguments
 		if (!final_args.empty())
 		{
 			const std::wstring target_cli_args = StringUtil::UTF8StringToWideString(final_args);
@@ -739,7 +709,6 @@ namespace QtUtils
 			}
 		}
 
-		// Set the icon
 		std::string final_icon_path;
 		if (!icon_path.empty())
 		{
@@ -763,7 +732,6 @@ namespace QtUtils
 			return;
 		}
 
-		// Use the IPersistFile object to save the shell link
 		res = pShellLink.query_to(&pPersistFile);
 		if (FAILED(res))
 		{
@@ -771,7 +739,6 @@ namespace QtUtils
 			return;
 		}
 
-		// Save shortcut link to disk
 		const std::wstring w_link_file = StringUtil::UTF8StringToWideString(link_file);
 		res = pPersistFile->Save(w_link_file.c_str(), TRUE);
 		if (FAILED(res))
@@ -790,7 +757,6 @@ namespace QtUtils
 
 		const bool is_flatpak = IsRunningInFlatpak();
 
-		// Sanitize filename and game path
 		const std::string clean_name = Path::SanitizeFileName(name);
 		std::string clean_path = game_path.empty() ? std::string() : Path::Canonicalize(Path::RealPath(game_path));
 		if (!Path::IsValidFileName(clean_name))
@@ -799,7 +765,6 @@ namespace QtUtils
 			return;
 		}
 
-		// Find the executable path
 		std::string executable_path = FileSystem::GetPackagePath();
 		if (executable_path.empty())
 		{
@@ -807,7 +772,6 @@ namespace QtUtils
 			return;
 		}
 
-		// Find the destination directory
 		const QString link_dir = QStandardPaths::writableLocation(is_desktop ? QStandardPaths::DesktopLocation : QStandardPaths::ApplicationsLocation);
 		if (link_dir.isEmpty())
 		{
@@ -828,14 +792,13 @@ namespace QtUtils
 		}
 		else
 		{
-			if (is_flatpak) // Flatpak
+			if (is_flatpak)
 			{
 				executable_path = "flatpak run org.penguinvr.penguinscreen2";
 				icon_name = "org.penguinvr.penguinscreen2";
 			}
 			else
 			{
-				// Copy PenguinScreen2 icon
 				icon_name = "PenguinScreen2";
 				const std::string icon_dest = fmt::format("{}/icons/hicolor/512x512/apps/", QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation).toStdString());
 				const std::string icon_path_dest = fmt::format("{}/{}.png", icon_dest, icon_name);
@@ -844,7 +807,6 @@ namespace QtUtils
 			}
 		}
 
-		// Shortcut CmdLine Args
 		bool lossless = true;
 		for (std::string& arg : passed_cli_args)
 			lossless &= EscapeShortcutCommandLine(&arg);
@@ -861,7 +823,6 @@ namespace QtUtils
 
 		std::string cmdline = StringUtil::JoinString(passed_cli_args.begin(), passed_cli_args.end(), " ");
 
-		// Assembling the .desktop file
 		std::string final_args = executable_path;
 		if (!cmdline.empty())
 			final_args += fmt::format(" {}", cmdline);
@@ -905,14 +866,13 @@ namespace QtUtils
 			}
 		}
 
-		// Write to .desktop file
 		if (!FileSystem::WriteStringToFile(final_path.toStdString().c_str(), sv))
 		{
 			QMessageBox::critical(parent, tr_msg("Failed to create shortcut"), tr_msg("Failed to create .desktop file"), QMessageBox::StandardButton::Ok, QMessageBox::StandardButton::Ok);
 			return;
 		}
 
-		if (chmod(final_path.toStdString().c_str(), S_IRWXU) != 0) // enables user to execute file
+		if (chmod(final_path.toStdString().c_str(), S_IRWXU) != 0)
 			Console.ErrorFmt("Failed to change file permissions for .desktop file: {} ({})", strerror(errno), errno);
 #endif
 	}
@@ -966,7 +926,7 @@ namespace QtUtils
 		const char* next = carg + std::strcspn(carg, RESERVED_CHARS);
 
 		if (next == cend)
-			return true; // No escaping needed, don't modify
+			return true;
 
 		bool lossless = true;
 		std::string temp = "\"";
@@ -1015,4 +975,4 @@ namespace QtUtils
 		return lossless;
 #endif
 	}
-} // namespace QtUtils
+}

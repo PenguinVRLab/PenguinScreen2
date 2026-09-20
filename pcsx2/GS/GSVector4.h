@@ -198,11 +198,8 @@ public:
 		return m;
 	}
 
-	/// Makes Clang think that the whole vector is needed, preventing it from changing shuffles around because it thinks we don't need the whole vector
-	/// Useful for e.g. preventing clang from optimizing shuffles that remove possibly-denormal garbage data from vectors before computing with them
 	__forceinline GSVector4 noopt()
 	{
-		// Note: Clang is currently the only compiler that attempts to optimize vector intrinsics, if that changes in the future the implementation should be updated
 #ifdef __clang__
 		__asm__("":"+x"(m)::);
 #endif
@@ -267,8 +264,6 @@ public:
 		return round<Round_PosInf>();
 	}
 
-	// http://jrfonseca.blogspot.com/2008/09/fast-sse2-pow-tables-or-polynomials.html
-
 #define LOG_POLY0(x, c0) GSVector4(c0)
 #define LOG_POLY1(x, c0, c1) (LOG_POLY0(x, c1).madd(x, GSVector4(c0)))
 #define LOG_POLY2(x, c0, c1, c2) (LOG_POLY1(x, c1, c2).madd(x, GSVector4(c0)))
@@ -278,10 +273,6 @@ public:
 
 	__forceinline GSVector4 log2(int precision = 5) const
 	{
-		// NOTE: sign bit ignored, safe to pass negative numbers
-
-		// The idea behind this algorithm is to split the float into two parts, log2(m * 2^e) => log2(m) + log2(2^e) => log2(m) + e,
-		// and then approximate the logarithm of the mantissa (it's 1.x when normalized, a nice short range).
 
 		GSVector4 one = m_one;
 
@@ -291,8 +282,6 @@ public:
 		GSVector4 m = GSVector4::cast((i << 9) >> 9) | one;
 
 		GSVector4 p;
-
-		// Minimax polynomial fit of log2(x)/(x - 1), for x in range [1, 2[
 
 		switch (precision)
 		{
@@ -311,8 +300,6 @@ public:
 				break;
 		}
 
-		// This effectively increases the polynomial degree by one, but ensures that log2(1) == 0
-
 		p = p * (m - one);
 
 		return p + e;
@@ -320,7 +307,7 @@ public:
 
 	__forceinline GSVector4 madd(const GSVector4& a, const GSVector4& b) const
 	{
-#if 0 //_M_SSE >= 0x501
+#if 0
 
 		return GSVector4(_mm_fmadd_ps(m, a, b));
 
@@ -333,7 +320,7 @@ public:
 
 	__forceinline GSVector4 msub(const GSVector4& a, const GSVector4& b) const
 	{
-#if 0 //_M_SSE >= 0x501
+#if 0
 
 		return GSVector4(_mm_fmsub_ps(m, a, b));
 
@@ -346,7 +333,7 @@ public:
 
 	__forceinline GSVector4 nmadd(const GSVector4& a, const GSVector4& b) const
 	{
-#if 0 //_M_SSE >= 0x501
+#if 0
 
 		return GSVector4(_mm_fnmadd_ps(m, a, b));
 
@@ -359,7 +346,7 @@ public:
 
 	__forceinline GSVector4 nmsub(const GSVector4& a, const GSVector4& b) const
 	{
-#if 0 //_M_SSE >= 0x501
+#if 0
 
 		return GSVector4(_mm_fnmsub_ps(m, a, b));
 
@@ -372,12 +359,12 @@ public:
 
 	__forceinline GSVector4 addm(const GSVector4& a, const GSVector4& b) const
 	{
-		return a.madd(b, *this); // *this + a * b
+		return a.madd(b, *this);
 	}
 
 	__forceinline GSVector4 subm(const GSVector4& a, const GSVector4& b) const
 	{
-		return a.nmadd(b, *this); // *this - a * b
+		return a.nmadd(b, *this);
 	}
 
 	__forceinline GSVector4 hadd() const
@@ -627,28 +614,6 @@ public:
 		b = f;
 		c = g;
 		d = h;
-/*
-		GSVector4 v0 = a.xyxy(b);
-		GSVector4 v1 = c.xyxy(d);
-		GSVector4 v2 = a.zwzw(b);
-		GSVector4 v3 = c.zwzw(d);
-
-		a = v0.xzxz(v1);
-		b = v0.ywyw(v1);
-		c = v2.xzxz(v3);
-		d = v2.ywyw(v3);
-*/
-/*
-		GSVector4 v0 = a.upl(b);
-		GSVector4 v1 = a.uph(b);
-		GSVector4 v2 = c.upl(d);
-		GSVector4 v3 = c.uph(d);
-
-		a = v0.l2h(v2);
-		b = v2.h2l(v0);
-		c = v1.l2h(v3);
-		d = v3.h2l(v1);
-*/
 	}
 
 	__forceinline GSVector4 operator-() const

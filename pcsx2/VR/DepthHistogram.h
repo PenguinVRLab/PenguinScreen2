@@ -11,32 +11,23 @@
 
 namespace VR
 {
-
 	enum class DrawClass : u8
 	{
-
 		Displaced = 0,
-
 		FstExcluded,
-
 		UniformQPinned,
-
 		MonoCentre,
-
 		StereoOff,
-
 		AccurateStqFlagged,
 	};
 
 	struct DepthHistogram
 	{
-
 		static constexpr int kSchema = 2;
 		static constexpr int kBinsPerOctave = 6;
 		static constexpr int kLog2WMin = -6;
 		static constexpr int kLog2WMax = 10;
 		static constexpr int kBinCount = (kLog2WMax - kLog2WMin) * kBinsPerOctave;
-
 		static constexpr double kQOverflow = 1e30;
 
 		struct Bucket
@@ -47,7 +38,6 @@ namespace VR
 			u64 verts = 0;
 
 			void Add(double area_fraction, double q, u32 n_prims, u32 n_verts);
-
 			double MeanQ() const;
 		};
 
@@ -59,7 +49,6 @@ namespace VR
 			u64 mono_centre = 0;
 			u64 stereo_off = 0;
 			u64 accurate_stq_flagged = 0;
-
 			u64 wide_q_displaced = 0;
 
 			u64 Total() const;
@@ -101,26 +90,21 @@ namespace VR
 		void NoteTargetSize(int unscaled_w, int unscaled_h);
 
 		static int BinIndexForW(double w);
-
 		static double BinCentreW(int i);
-
 		static double BinEdgeW(int i);
 
 		Summary ComputeSummary() const;
 
 		std::string ToJson() const;
-
 		bool WriteJson(const std::string& path, std::string* error = nullptr) const;
 	};
 
 	namespace detail
 	{
-
 		extern bool g_qhist_armed;
 	}
 
 	void ArmDepthHistogram(bool armed);
-
 	inline bool DepthHistogramArmed()
 	{
 		return detail::g_qhist_armed;

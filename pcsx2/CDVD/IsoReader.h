@@ -140,8 +140,6 @@ public:
 
 	const ISOPrimaryVolumeDescriptor& GetPVD() const { return m_pvd; }
 
-	// TODO: Eventually we'll want to pass a handle to the currently-open file here.
-	// ... once I have the energy to make CDVD not depend on a global object.
 	bool Open(Error* error = nullptr);
 
 	std::vector<std::string> GetFilesInDirectory(const std::string_view path, Error* error = nullptr);

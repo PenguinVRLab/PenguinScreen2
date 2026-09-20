@@ -9,28 +9,24 @@ namespace VR::StereoState
 {
 	namespace
 	{
-
 		std::mutex s_mutex;
 		Params s_params;
 	}
 
 	void Publish(const Params& params)
 	{
-
 		std::lock_guard lock(s_mutex);
 		s_params = params;
 	}
 
 	Params Get()
 	{
-
 		std::lock_guard lock(s_mutex);
 		return s_params;
 	}
 
 	namespace
 	{
-
 		u32 s_current_eye = 0;
 	}
 
@@ -41,7 +37,6 @@ namespace VR::StereoState
 
 	float GetCurrentEyeSign()
 	{
-
 		return (s_current_eye == 0) ? -1.0f : 1.0f;
 	}
 

@@ -10,8 +10,6 @@
 
 class SymbolTreeValueDelegate;
 
-// A symbol tree view with its associated refresh button, filter box and
-// right-click menu. Supports grouping, sorting and various other settings.
 class SymbolTreeView : public DebuggerView
 {
 	Q_OBJECT

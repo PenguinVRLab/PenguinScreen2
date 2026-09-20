@@ -23,9 +23,6 @@
 #include <sys/syscall.h>
 #endif
 
-//#define ProfileWithPerf
-//#define ProfileWithPerfJitDump
-
 #if defined(ENABLE_VTUNE) && defined(_WIN32)
 #pragma comment(lib, "jitprofiling.lib")
 #endif
@@ -39,7 +36,6 @@ namespace Perf
 	Group vu1("VU1");
 	Group vif("VIF");
 
-// Perf is only supported on linux
 #if defined(__linux__) && defined(ProfileWithPerf)
 	static std::FILE* s_map_file = nullptr;
 	static bool s_map_file_opened = false;
@@ -77,7 +73,7 @@ namespace Perf
 #pragma pack(push, 1)
 	struct JITDUMP_HEADER
 	{
-		u32 magic = 0x4A695444; // JiTD
+		u32 magic = 0x4A695444;
 		u32 version = 1;
 		u32 header_size = sizeof(JITDUMP_HEADER);
 		u32 elf_mach;
@@ -101,7 +97,6 @@ namespace Perf
 		u64 code_addr;
 		u64 code_size;
 		u64 code_index;
-		// name
 	};
 #pragma pack(pop)
 
@@ -212,4 +207,4 @@ namespace Perf
 	void Group::RegisterPC(const void* ptr, size_t size, u32 pc) {}
 	void Group::RegisterKey(const void* ptr, size_t size, const char* prefix, u64 key) {}
 #endif
-} // namespace Perf
+}

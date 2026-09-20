@@ -23,13 +23,10 @@ public:
 		CLONE_LAYOUT,
 	};
 
-	// Bundles together a creation mode and a default dock layout index.
 	using InitialState = std::pair<CreationMode, size_t>;
 
-	// Create a "New Layout" dialog.
 	LayoutEditorDialog(NameValidator name_validator, bool can_clone_current_layout, QWidget* parent = nullptr);
 
-	// Create a "Edit Layout" dialog.
 	LayoutEditorDialog(const QString& name, BreakPointCpu cpu, NameValidator name_validator, QWidget* parent = nullptr);
 
 	QString name();

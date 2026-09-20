@@ -20,56 +20,56 @@
 namespace usb_printer
 {
 	static const uint8_t dpp_mp1_dev_desciptor[] = {
-		0x12,        // bLength
-		0x01,        // bDescriptorType (Device)
-		0x10, 0x01,  // bcdUSB 1.10
-		0x00,        // bDeviceClass (Use class information in the Interface Descriptors)
-		0x00,        // bDeviceSubClass
-		0x00,        // bDeviceProtocol
-		0x08,        // bMaxPacketSize0 8
-		0x4C, 0x05,  // idVendor 0x054C
-		0x65, 0x00,  // idProduct 0x0065
-		0x04, 0x02,  // bcdDevice 2.04
-		0x01,        // iManufacturer (String Index)
-		0x02,        // iProduct (String Index)
-		0x00,        // iSerialNumber (String Index)
-		0x01,        // bNumConfigurations 1
+		0x12,
+		0x01,
+		0x10, 0x01,
+		0x00,
+		0x00,
+		0x00,
+		0x08,
+		0x4C, 0x05,
+		0x65, 0x00,
+		0x04, 0x02,
+		0x01,
+		0x02,
+		0x00,
+		0x01,
 	};
 	static int dpp_mp1_dev_desciptor_size = sizeof(dpp_mp1_dev_desciptor);
 
 	static const uint8_t dpp_mp1_config_descriptor[] = {
-		0x09,        // bLength
-		0x02,        // bDescriptorType (Configuration)
-		0x20, 0x00,  // wTotalLength 32
-		0x01,        // bNumInterfaces 1
-		0x01,        // bConfigurationValue
-		0x00,        // iConfiguration (String Index)
-		0xC0,        // bmAttributes Self Powered
-		0x00,        // bMaxPower 0mA
+		0x09,
+		0x02,
+		0x20, 0x00,
+		0x01,
+		0x01,
+		0x00,
+		0xC0,
+		0x00,
 
-		0x09,        // bLength
-		0x04,        // bDescriptorType (Interface)
-		0x00,        // bInterfaceNumber 0
-		0x00,        // bAlternateSetting
-		0x02,        // bNumEndpoints 2
-		0x07,        // bInterfaceClass
-		0x01,        // bInterfaceSubClass
-		0x02,        // bInterfaceProtocol
-		0x00,        // iInterface (String Index)
+		0x09,
+		0x04,
+		0x00,
+		0x00,
+		0x02,
+		0x07,
+		0x01,
+		0x02,
+		0x00,
 
-		0x07,        // bLength
-		0x05,        // bDescriptorType (Endpoint)
-		0x01,        // bEndpointAddress (OUT/H2D)
-		0x02,        // bmAttributes (Bulk)
-		0x40, 0x00,  // wMaxPacketSize 64
-		0x00,        // bInterval 0 (unit depends on device speed)
+		0x07,
+		0x05,
+		0x01,
+		0x02,
+		0x40, 0x00,
+		0x00,
 
-		0x07,        // bLength
-		0x05,        // bDescriptorType (Endpoint)
-		0x82,        // bEndpointAddress (IN/D2H)
-		0x02,        // bmAttributes (Bulk)
-		0x40, 0x00,  // wMaxPacketSize 64
-		0x00,        // bInterval 0 (unit depends on device speed)
+		0x07,
+		0x05,
+		0x82,
+		0x02,
+		0x40, 0x00,
+		0x00,
 	};
 	static int dpp_mp1_config_descriptor_size = sizeof(dpp_mp1_config_descriptor);
 
@@ -135,4 +135,4 @@ namespace usb_printer
 	};
 #pragma pack(pop)
 
-} // namespace usb_printer
+}

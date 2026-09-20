@@ -53,7 +53,6 @@ protected:
 	void dropEvent(QDropEvent* event) override;
 };
 
-// Must be included *after* the custom widgets.
 #include "ui_MemoryCardSettingsWidget.h"
 
 class MemoryCardSettingsWidget : public SettingsWidget

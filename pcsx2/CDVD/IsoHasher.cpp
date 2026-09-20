@@ -84,7 +84,6 @@ bool IsoHasher::Open(std::string iso_path, Error* error)
 			return false;
 		}
 
-		// sanity check..
 		if (next_td.lsn < td.lsn)
 		{
 			Error::SetString(error,
@@ -152,7 +151,6 @@ void IsoHasher::ComputeHashes(ProgressCallback* callback)
 
 bool IsoHasher::ComputeTrackHash(Track& track, ProgressCallback* callback)
 {
-	// use 2048 byte reads for DVDs, otherwise 2352 raw.
 	const int read_mode = m_is_cd ? CDVD_MODE_2352 : CDVD_MODE_2048;
 	const u32 sector_size = m_is_cd ? 2352 : 2048;
 	std::vector<u8> sector_buffer(sector_size);

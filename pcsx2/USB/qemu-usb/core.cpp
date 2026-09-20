@@ -39,8 +39,6 @@
 void usb_pick_speed(USBPort* port)
 {
 	static const int speeds[] = {
-		//USB_SPEED_SUPER,
-		//USB_SPEED_HIGH,
 		USB_SPEED_FULL,
 		USB_SPEED_LOW,
 	};
@@ -111,7 +109,7 @@ void usb_device_reset(USBDevice* dev)
 void usb_wakeup(USBEndpoint* ep, unsigned int stream)
 {
 	USBDevice* dev = ep->dev;
-	USBBus* bus = dev->bus; //usb_bus_from_device(dev);
+	USBBus* bus = dev->bus;
 
 	if (dev->remote_wakeup && dev->port && dev->port->ops->wakeup)
 	{
@@ -122,13 +120,6 @@ void usb_wakeup(USBEndpoint* ep, unsigned int stream)
 		bus->ops->wakeup_endpoint(bus, ep, stream);
 	}
 }
-
-/**********************/
-
-/* generic USB device helpers (you are not forced to use them when
-   writing your USB device driver, but they help handling the
-   protocol)
-*/
 
 #define SETUP_STATE_IDLE 0
 #define SETUP_STATE_SETUP 1
@@ -254,11 +245,9 @@ static void do_token_out(USBDevice* s, USBPacket* p)
 			if (s->setup_buf[0] & USB_DIR_IN)
 			{
 				s->setup_state = SETUP_STATE_IDLE;
-				/* transfer OK */
 			}
 			else
 			{
-				/* ignore additional output */
 			}
 			break;
 
@@ -336,10 +325,6 @@ static void do_parameter(USBDevice* s, USBPacket* p)
 	}
 }
 
-/* ctrl complete function for devices which use usb_generic_handle_packet and
-   may return USB_RET_ASYNC from their handle_control callback. Device code
-   which does this *must* call this function instead of the normal
-   usb_packet_complete to complete their async control packets. */
 void usb_generic_async_ctrl_complete(USBDevice* s, USBPacket* p)
 {
 	if (p->status < 0)
@@ -400,16 +385,10 @@ static void usb_process_one(USBPacket* p)
 {
 	USBDevice* dev = p->ep->dev;
 
-	/*
-     * Handlers expect status to be initialized to USB_RET_SUCCESS, but it
-     * can be USB_RET_NAK here from a previous usb_process_one() call,
-     * or USB_RET_ASYNC from going through usb_queue_one().
-     */
 	p->status = USB_RET_SUCCESS;
 
 	if (p->ep->nr == 0)
 	{
-		/* control pipe */
 		if (p->parameter)
 		{
 			do_parameter(dev, p);
@@ -432,7 +411,6 @@ static void usb_process_one(USBPacket* p)
 	}
 	else
 	{
-		/* data pipe */
 		usb_device_handle_data(dev, p);
 	}
 }
@@ -444,9 +422,6 @@ static void usb_queue_one(USBPacket* p)
 	p->status = USB_RET_ASYNC;
 }
 
-/* Hand over a packet to a device for processing.  p->status ==
-   USB_RET_ASYNC indicates the processing isn't finished yet, the
-   driver will call usb_packet_complete() when done processing it. */
 void usb_handle_packet(USBDevice* dev, USBPacket* p)
 {
 	if (dev == nullptr)
@@ -459,7 +434,6 @@ void usb_handle_packet(USBDevice* dev, USBPacket* p)
 	usb_packet_check_state(p, USB_PACKET_SETUP);
 	assert(p->ep != nullptr);
 
-	/* Submitting a new packet clears halt */
 	if (p->ep->halted)
 	{
 		assert(QTAILQ_EMPTY(&p->ep->queue));
@@ -471,9 +445,7 @@ void usb_handle_packet(USBDevice* dev, USBPacket* p)
 		usb_process_one(p);
 		if (p->status == USB_RET_ASYNC)
 		{
-			/* hcd drivers cannot handle async for isoc */
 			assert(p->ep->type != USB_ENDPOINT_XFER_ISOC);
-			/* using async for interrupt packets breaks migration */
 			assert(p->ep->type != USB_ENDPOINT_XFER_INT ||
 				   (dev->flags & (1 << USB_DEV_FLAG_IS_HOST)));
 			usb_packet_set_state(p, USB_PACKET_ASYNC);
@@ -485,10 +457,6 @@ void usb_handle_packet(USBDevice* dev, USBPacket* p)
 		}
 		else
 		{
-			/*
-             * When pipelining is enabled usb-devices must always return async,
-             * otherwise packets can complete out of order!
-             */
 			assert(p->stream || !p->ep->pipeline ||
 				   QTAILQ_EMPTY(&p->ep->queue));
 			if (p->status != USB_RET_NAK)
@@ -520,9 +488,6 @@ void usb_packet_complete_one(USBDevice* dev, USBPacket* p)
 	dev->port->ops->complete(dev->port, p);
 }
 
-/* Notify the controller that an async packet is complete.  This should only
-   be called for packets previously deferred by returning USB_RET_ASYNC from
-   handle_packet. */
 void usb_packet_complete(USBDevice* dev, USBPacket* p)
 {
 	USBEndpoint* ep = p->ep;
@@ -535,7 +500,6 @@ void usb_packet_complete(USBDevice* dev, USBPacket* p)
 		p = QTAILQ_FIRST(&ep->queue);
 		if (ep->halted)
 		{
-			/* Empty the queue on a halt */
 			p->status = USB_RET_REMOVE_FROM_QUEUE;
 			dev->port->ops->complete(dev->port, p);
 			continue;
@@ -555,9 +519,6 @@ void usb_packet_complete(USBDevice* dev, USBPacket* p)
 	}
 }
 
-/* Cancel an active packet.  The packed must have been deferred by
-   returning USB_RET_ASYNC from handle_packet, and not yet
-   completed.  */
 void usb_cancel_packet(USBPacket* p)
 {
 	bool callback = (p->state == USB_PACKET_ASYNC);
@@ -571,16 +532,15 @@ void usb_cancel_packet(USBPacket* p)
 }
 
 #if 0
-// Unused
 static const char* usb_packet_state_name(USBPacketState state)
 {
 	static const char* name[] = {
-		/*[USB_PACKET_UNDEFINED] =*/"undef",
-		/*[USB_PACKET_SETUP]     =*/"setup",
-		/*[USB_PACKET_QUEUED]    =*/"queued",
-		/*[USB_PACKET_ASYNC]     =*/"async",
-		/*[USB_PACKET_COMPLETE]  =*/"complete",
-		/*[USB_PACKET_CANCELED]  =*/"canceled",
+"undef",
+"setup",
+"queued",
+"async",
+"complete",
+"canceled",
 	};
 	if (static_cast<u32>(state) < std::size(name))
 	{
@@ -596,25 +556,11 @@ void usb_packet_check_state(USBPacket* p, USBPacketState expected)
 	{
 		return;
 	}
-	//trace_usb_packet_state_fault(bus->busnr, dev->port->path, p->ep->nr, p,
-	//                             usb_packet_state_name(p->state),
-	//                             usb_packet_state_name(expected));
 	assert(!"usb packet state check failed");
 }
 
 void usb_packet_set_state(USBPacket* p, USBPacketState state)
 {
-	/*if (p->ep) {
-        USBDevice *dev = p->ep->dev;
-        USBBus *bus = usb_bus_from_device(dev);
-        trace_usb_packet_state_change(bus->busnr, dev->port->path, p->ep->nr, p,
-                                      usb_packet_state_name(p->state),
-                                      usb_packet_state_name(state));
-    } else {
-        trace_usb_packet_state_change(-1, "", -1, p,
-                                      usb_packet_state_name(p->state),
-                                      usb_packet_state_name(state));
-    }*/
 	p->state = state;
 }
 
@@ -737,10 +683,10 @@ void usb_ep_init(USBDevice* dev)
 void usb_ep_dump(USBDevice* dev)
 {
 	static const char* tname[] = {
-		/* [USB_ENDPOINT_XFER_CONTROL] = */ "control",
-		/* [USB_ENDPOINT_XFER_ISOC]    = */ "isoc",
-		/* [USB_ENDPOINT_XFER_BULK]    = */ "bulk",
-		/* [USB_ENDPOINT_XFER_INT]     = */ "int",
+ "control",
+ "isoc",
+ "bulk",
+ "int",
 	};
 
 	Console.Warning("Device \"%s\", config %d\n",

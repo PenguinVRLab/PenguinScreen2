@@ -12,7 +12,6 @@
 #include <vector>
 
 #ifdef ENABLE_VULKAN
-
 #define XR_USE_GRAPHICS_API_VULKAN
 #include <openxr/openxr_platform.h>
 #endif
@@ -31,7 +30,6 @@ namespace VR::XRSession
 		bool s_cylinder_supported = false;
 
 #ifdef ENABLE_VULKAN
-
 		PFN_xrGetVulkanGraphicsRequirements2KHR s_xrGetVulkanGraphicsRequirements2KHR = nullptr;
 		PFN_xrCreateVulkanInstanceKHR s_xrCreateVulkanInstanceKHR = nullptr;
 		PFN_xrGetVulkanGraphicsDevice2KHR s_xrGetVulkanGraphicsDevice2KHR = nullptr;
@@ -152,7 +150,6 @@ namespace VR::XRSession
 		XrResult res = xrCreateInstance(&ici, &s_instance);
 		if (XR_FAILED(res))
 		{
-
 			Console.Warning("(VR) xrCreateInstance failed (%d) — is an OpenXR runtime installed and active? Running flat.",
 				static_cast<int>(res));
 			s_instance = XR_NULL_HANDLE;
@@ -422,7 +419,6 @@ namespace VR::XRSession
 
 				case XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING:
 				{
-
 					Console.WriteLn("(VR) Reference space recentered.");
 					break;
 				}

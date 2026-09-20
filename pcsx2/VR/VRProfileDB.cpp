@@ -627,6 +627,179 @@ static void readOptionalFloat(const std::string_view serial, const ryml::ConstNo
 		Console.WarningFmt("(VR) ProfileDB: Serial '{}' has an invalid {}; keeping the default.", serial, what);
 }
 
+
+static std::optional<VR::ProfileDB::SplitParams> parseSplit(
+	const std::string_view serial, const ryml::ConstNodeRef& snode)
+{
+	using SplitParams = VR::ProfileDB::SplitParams;
+	SplitParams sp;
+	const auto reject = [&](std::string msg) -> std::optional<SplitParams> {
+		advise(serial, "split", std::move(msg) + " — the whole split block is DROPPED; "
+			"this game will never split-present until the profile is fixed.");
+		return std::nullopt;
+	};
+
+	if (snode.has_child("layout"))
+	{
+		const std::string_view v = nodeVal(snode["layout"]);
+		if (StringUtil::compareNoCase(v, "horizontal"))
+			sp.layout = SplitParams::Layout::Horizontal;
+		else if (StringUtil::compareNoCase(v, "vertical"))
+			sp.layout = SplitParams::Layout::Vertical;
+		else
+			return reject(fmt::format("layout '{}' is not horizontal|vertical", v));
+	}
+
+	if (snode.has_child("views"))
+	{
+		const std::optional<u32> v = parseHexU32(nodeVal(snode["views"]));
+		if (!v.has_value() || v.value() != 2)
+			return reject("views must be 2 (the only supported count; the key exists so 4-way is additive later)");
+		sp.views = 2;
+	}
+
+	if (snode.has_child("localView"))
+	{
+		const std::optional<u32> v = parseHexU32(nodeVal(snode["localView"]));
+		if (!v.has_value() || v.value() > 1)
+			return reject("localView must be 0 or 1 (reading order)");
+		sp.local_view = static_cast<u8>(v.value());
+	}
+
+	if (snode.has_child("localPadPort"))
+	{
+		const std::optional<u32> v = parseHexU32(nodeVal(snode["localPadPort"]));
+		if (!v.has_value() || v.value() > 1)
+			return reject("localPadPort must be 0 or 1");
+		sp.local_pad_port = static_cast<u8>(v.value());
+	}
+
+	if (sp.layout == SplitParams::Layout::Horizontal)
+	{
+		sp.rects[0] = {0.0f, 0.0f, 1.0f, 0.5f};
+		sp.rects[1] = {0.0f, 0.5f, 1.0f, 0.5f};
+	}
+	else
+	{
+		sp.rects[0] = {0.0f, 0.0f, 0.5f, 1.0f};
+		sp.rects[1] = {0.5f, 0.0f, 0.5f, 1.0f};
+	}
+	if (snode.has_child("rects"))
+	{
+		if (!snode["rects"].is_seq() || snode["rects"].num_children() != 2)
+			return reject("rects must be a sequence of exactly 2 entries");
+		size_t i = 0;
+		for (const ryml::ConstNodeRef& r : snode["rects"].children())
+		{
+			SplitParams::Rect rect;
+			const char* keys[4] = {"x", "y", "w", "h"};
+			float* dsts[4] = {&rect.x, &rect.y, &rect.w, &rect.h};
+			for (int k = 0; k < 4; k++)
+			{
+				const ryml::csubstr ck = ryml::to_csubstr(keys[k]);
+				if (!r.has_child(ck))
+					return reject(fmt::format("rects[{}] is missing '{}'", i, keys[k]));
+				const std::optional<float> v = StringUtil::FromChars<float>(nodeVal(r[ck]));
+				if (!v.has_value() || !std::isfinite(v.value()))
+					return reject(fmt::format("rects[{}].{} is not a finite number", i, keys[k]));
+				*dsts[k] = v.value();
+			}
+			if (rect.x < 0.0f || rect.y < 0.0f || rect.w <= 0.0f || rect.h <= 0.0f ||
+				rect.x + rect.w > 1.0f + 1e-4f || rect.y + rect.h > 1.0f + 1e-4f)
+				return reject(fmt::format("rects[{}] must lie inside the unit square with positive size", i));
+			sp.rects[i++] = rect;
+		}
+		{
+			const auto& a = sp.rects[0];
+			const auto& b = sp.rects[1];
+			const float ox = std::max(0.0f, std::min(a.x + a.w, b.x + b.w) - std::max(a.x, b.x));
+			const float oy = std::max(0.0f, std::min(a.y + a.h, b.y + b.h) - std::max(a.y, b.y));
+			if (ox * oy > 0.001f)
+				return reject(fmt::format("rects overlap by {:.1f}% of the frame — split viewports must be disjoint",
+					ox * oy * 100.0f));
+		}
+		sp.rects_explicit = true;
+	}
+
+	if (snode.has_child("active"))
+	{
+		const ryml::ConstNodeRef a = snode["active"];
+		if (!a.is_map() || !a.has_child("address"))
+			return reject("active needs a map with at least an address");
+		SplitParams::Probe probe;
+		const std::optional<u32> addr = parseAddress(nodeVal(a["address"]));
+		if (!addr.has_value())
+			return reject("active.address does not parse");
+		probe.ee_address = addr.value();
+		const bool has_eq = a.has_child("equals");
+		const bool has_al = a.has_child("atLeast");
+		if (has_eq == has_al)
+			return reject("active needs exactly ONE of equals|atLeast");
+		const std::optional<u32> cmp = parseHexU32(nodeVal(a[has_eq ? "equals" : "atLeast"]));
+		if (!cmp.has_value())
+			return reject("active comparand does not parse");
+		probe.threshold = cmp.value();
+		probe.at_least = has_al;
+		if (a.has_child("width"))
+		{
+			const std::optional<u32> w = parseHexU32(nodeVal(a["width"]));
+			if (!w.has_value() || (w.value() != 1 && w.value() != 2 && w.value() != 4))
+				return reject("active.width must be 1, 2 or 4");
+			probe.width = static_cast<u8>(w.value());
+		}
+		if (!inMainRam(probe.ee_address, probe.width))
+			return reject(fmt::format("active.address {:#x} is outside EE main RAM", probe.ee_address));
+		sp.active = probe;
+	}
+
+	if (snode.has_child("mode"))
+	{
+		const std::string_view v = nodeVal(snode["mode"]);
+		if (StringUtil::compareNoCase(v, "focus"))
+			sp.mode = SplitParams::Mode::Focus;
+		else if (StringUtil::compareNoCase(v, "duo"))
+			sp.mode = SplitParams::Mode::Duo;
+		else if (StringUtil::compareNoCase(v, "mirror"))
+			sp.mode = SplitParams::Mode::Mirror;
+		else
+			return reject(fmt::format("mode '{}' is not focus|duo|mirror", v));
+	}
+
+	if (snode.has_child("sideScale"))
+	{
+		const std::optional<float> v = StringUtil::FromChars<float>(nodeVal(snode["sideScale"]));
+		if (!v.has_value() || !(v.value() > 0.05f) || !(v.value() <= 1.0f))
+			return reject("sideScale must be in (0.05, 1.0]");
+		sp.side_scale = v.value();
+	}
+	if (snode.has_child("sideAngleDeg"))
+	{
+		const std::optional<float> v = StringUtil::FromChars<float>(nodeVal(snode["sideAngleDeg"]));
+		if (!v.has_value() || !(std::fabs(v.value()) <= 90.0f))
+			return reject("sideAngleDeg must be within +/-90");
+		sp.side_angle_deg = v.value();
+	}
+	if (snode.has_child("stereo"))
+	{
+		const std::string_view v = nodeVal(snode["stereo"]);
+		if (StringUtil::compareNoCase(v, "on") || StringUtil::compareNoCase(v, "true"))
+			sp.stereo_on = true;
+		else if (StringUtil::compareNoCase(v, "off") || StringUtil::compareNoCase(v, "false"))
+			sp.stereo_on = false;
+		else
+			return reject(fmt::format("stereo '{}' is not on|off", v));
+	}
+
+	if (sp.layout == SplitParams::Layout::Vertical)
+		advise(serial, "split",
+			fmt::format("(VR) ProfileDB: {} split: vertical layout parsed, but the A6 "
+						"separation rescale has no live consumer yet — stereo in a "
+						"vertical split will read ~2x too deep until that wiring lands. "
+						"Horizontal splits are unaffected.", serial));
+
+	return sp;
+}
+
 static std::optional<s64> parseSignedOffset(std::string_view str)
 {
 	bool neg = false;
@@ -1513,6 +1686,9 @@ bool VR::ProfileDB::parseProfile(const std::string_view serial, const ryml::Node
 
 	if (node.has_child("camera") && node["camera"].is_map())
 		out.camera = parseCamera(serial, node["camera"]);
+
+	if (node.has_child("split") && node["split"].is_map())
+		out.split = parseSplit(serial, node["split"]);
 
 	if (node.has_child("name"))
 		out.name.assign(nodeVal(node["name"]));

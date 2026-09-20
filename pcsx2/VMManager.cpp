@@ -5,6 +5,7 @@
 #include "BuildVersion.h"
 #ifdef ENABLE_VR
 #include "VR/CameraDriver.h"
+#include "VR/SplitState.h"
 #include "VR/VRManager.h"
 #endif
 #include "CDVD/CDVD.h"
@@ -2776,6 +2777,7 @@ void VMManager::Internal::VSyncOnCPUThread()
 #ifdef ENABLE_VR
 	VR::CameraDriver::Apply();
 	VR::ApplySceneStereo();
+	VR::SplitState::Apply();
 #endif
 
 	if (s_frame_advance_count > 0)

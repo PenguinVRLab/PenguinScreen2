@@ -4,6 +4,7 @@
 #include "VR/VRManager.h"
 #include "VR/StereoState.h"
 #include "VR/VRProfileDB.h"
+#include "VR/SplitState.h"
 #include "VR/XRCompositor.h"
 #include "VR/XRSession.h"
 
@@ -369,6 +370,7 @@ namespace VR
 
 		s_scene_published = -1;
 		s_scene_memo_valid = false;
+		SplitState::InvalidateMemo();
 		s_scene_pending = -1;
 		s_scene_pending_count = 0;
 	}

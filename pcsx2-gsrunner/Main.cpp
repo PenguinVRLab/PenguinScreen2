@@ -1057,6 +1057,21 @@ int main(int argc, char* argv[])
 			}
 			std::fflush(stderr);
 		}
+
+		{
+			const auto& advisories = VR::ProfileDB::ProfileAdvisories();
+			for (const auto& a : advisories)
+				std::fputs(fmt::format("{}\n", a.message).c_str(), stderr);
+			if (!advisories.empty())
+			{
+				std::fputs(fmt::format("(VR) {} profile block(s) DROPPED as out of range — the affected "
+									   "games run, but without the feature the profile authored.\n",
+							   advisories.size())
+							   .c_str(),
+					stderr);
+			}
+			std::fflush(stderr);
+		}
 	}
 #endif
 

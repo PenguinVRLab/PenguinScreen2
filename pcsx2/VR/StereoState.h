@@ -17,6 +17,8 @@ namespace VR::StereoState
 
 		bool pin_uniform_q = false;
 
+		bool z_driven_depth = false;
+
 		float collimate_disparity = 0.0f;
 
 		struct CollimateRule

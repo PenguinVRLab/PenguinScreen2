@@ -115,6 +115,8 @@ static constexpr float kNarrowIpdMetres = 0.053f;
 static constexpr float kShipScreenDistanceM = 2.0f;
 static constexpr float kShipScreenArcDeg = 100.0f;
 
+static constexpr float kDivergenceToleranceArcmin = 51.0f;
+
 static constexpr float kFixationGapArcmin = 20.0f;
 
 static float arcminPerNdc(float screen_arc_deg)
@@ -130,6 +132,14 @@ static float divergenceArcmin(float ipd_m, float screen_distance_m)
 }
 
 static std::vector<VR::ProfileDB::StereoRailFinding> s_rail_findings;
+
+static std::vector<VR::ProfileDB::ProfileAdvisory> s_advisories;
+
+static void advise(const std::string_view serial, const char* site, std::string msg)
+{
+	Console.Warning(msg);
+	s_advisories.push_back({StringUtil::toUpper(serial), site, std::move(msg)});
+}
 
 static bool resolveDepthMap(const std::string_view serial, const char* where,
 	VR::ProfileDB::StereoMap map, const std::vector<float>& splits_w,
@@ -306,15 +316,27 @@ static void railAtInfinity(const std::string_view serial, const std::string& sit
 	const float d_ndc = maxDisplacementNdc(map, separation, convergence);
 	const float arcmin = d_ndc * arcmin_per_ndc;
 	const std::string display = StringUtil::toUpper(serial);
-	const float wall_arcmin = divergenceArcmin(kNarrowIpdMetres, screen_distance_m);
+	const float parallel_arcmin = divergenceArcmin(kNarrowIpdMetres, screen_distance_m);
+	const float hard_arcmin = parallel_arcmin + kDivergenceToleranceArcmin;
 
-	if (arcmin > wall_arcmin)
+	if (arcmin > hard_arcmin)
 	{
 		std::string msg = fmt::format(
-			"(VR) ProfileDB: {} {}: far-field separation {:.4f} NDC is past this profile's safe "
-			"range ({:.4f} NDC). Distant content may not fuse and can appear doubled for some "
-			"viewers. Rendering as authored.",
-			display, site, d_ndc, wall_arcmin / arcmin_per_ndc);
+			"(VR) ProfileDB: {} {}: far-field separation {:.4f} NDC is past this profile's safe range "
+			"({:.4f} NDC). Distant content cannot be fused and will appear doubled — this one is not "
+			"content-dependent; fix the profile. Rendering as authored.",
+			display, site, d_ndc, hard_arcmin / arcmin_per_ndc);
+		Console.Warning(msg);
+		s_rail_findings.push_back({StereoRail::Divergence, display, site, arcmin, from_map, std::move(msg)});
+	}
+	else if (arcmin > parallel_arcmin)
+	{
+		std::string msg = fmt::format(
+			"(VR) ProfileDB: {} {}: far-field separation {:.4f} NDC is past the comfortable range "
+			"({:.4f} NDC) but still within tolerance. Whether it reads well depends on the content: "
+			"small, sharp, distant objects are the ones that double, hazy ones are not. ADVISORY — "
+			"verify it in a headset. Rendering as authored.",
+			display, site, d_ndc, parallel_arcmin / arcmin_per_ndc);
 		Console.Warning(msg);
 		s_rail_findings.push_back({StereoRail::Divergence, display, site, arcmin, from_map, std::move(msg)});
 	}
@@ -990,9 +1012,39 @@ static std::optional<VR::ProfileDB::CameraProfile> parseCamera(const std::string
 			pl.latch = StringUtil::compareNoCase(nodeVal(pnode["latch"]), "true");
 		readOptionalFloat(serial, pnode, "releaseDeg", "camera.padLook releaseDeg", pl.release_deg);
 		pl.release_deg = std::clamp(pl.release_deg, 0.5f, 45.0f);
-		if (pl.max_look_deg <= 0.0f || pl.engage_deg < 0.0f || pl.engage_deg >= pl.max_look_deg)
+		readOptionalFloat(serial, pnode, "stickFloor", "camera.padLook stickFloor", pl.stick_floor);
+
+		const bool ramp_ok = (pl.max_look_deg > 0.0f) && (pl.engage_deg >= 0.0f) &&
+							 (pl.engage_deg < pl.max_look_deg);
+		const bool gate_ok = (pl.release_deg >= 0.0f) && (pl.release_deg < pl.engage_deg);
+		const bool floor_ok = std::isfinite(pl.stick_floor) && (pl.stick_floor >= 0.0f) &&
+							  (pl.stick_floor < 1.0f);
+		if (!ramp_ok)
 		{
-			Console.WarningFmt("(VR) ProfileDB: Serial '{}' camera.padLook has out-of-order engageDeg/maxLookDeg; ignoring the padLook block.", serial);
+			advise(serial, "camera.padLook",
+				fmt::format("(VR) ProfileDB: {} camera.padLook: engageDeg {:g} / maxLookDeg {:g} are out of "
+							"order (need 0 <= engageDeg < maxLookDeg) — the whole padLook block is DROPPED, "
+							"so this game gets no head-look at all.",
+					StringUtil::toUpper(serial), pl.engage_deg, pl.max_look_deg));
+		}
+		else if (!gate_ok)
+		{
+			advise(serial, "camera.padLook",
+				fmt::format("(VR) ProfileDB: {} camera.padLook: releaseDeg {:g} is not below engageDeg {:g} "
+							"(need 0 <= releaseDeg < engageDeg) — a gate that releases at or above the angle "
+							"it engages at is not hysteresis. The whole padLook block is DROPPED, so this "
+							"game gets no head-look at all. releaseDeg DEFAULTS to 4 deg: an engageDeg at or "
+							"under 4 must set it explicitly.",
+					StringUtil::toUpper(serial), pl.release_deg, pl.engage_deg));
+		}
+		else if (!floor_ok)
+		{
+			advise(serial, "camera.padLook",
+				fmt::format("(VR) ProfileDB: {} camera.padLook: stickFloor {:g} is out of range (need "
+							"0 <= stickFloor < 1; it is a FRACTION of full stick deflection, not degrees "
+							"and not a percent) — the whole padLook block is DROPPED, so this game gets no "
+							"head-look at all.",
+					StringUtil::toUpper(serial), pl.stick_floor));
 		}
 		else
 		{
@@ -1344,6 +1396,9 @@ bool VR::ProfileDB::parseProfile(const std::string_view serial, const ryml::Node
 		if (snode.has_child("pinUniformQ"))
 			sp.pin_uniform_q = StringUtil::compareNoCase(nodeVal(snode["pinUniformQ"]), "true");
 
+		if (snode.has_child("zDrivenDepth"))
+			sp.z_driven_depth = StringUtil::compareNoCase(nodeVal(snode["zDrivenDepth"]), "true");
+
 		if (snode.has_child("hudCollimate") && snode["hudCollimate"].is_map())
 			sp.hud_collimate = parseHudCollimate(serial, snode["hudCollimate"], kMaxCollimateRules);
 		else if (snode.has_child("hudCollimate"))
@@ -1676,6 +1731,7 @@ static void loadScanned(const ScanResult& sr)
 	s_profiles.clear();
 	s_load_issues.clear();
 	s_rail_findings.clear();
+	s_advisories.clear();
 
 	if (sr.shipped == ShippedSource::Legacy)
 	{
@@ -1748,6 +1804,12 @@ const std::vector<VR::ProfileDB::StereoRailFinding>& VR::ProfileDB::StereoRailFi
 	return s_rail_findings;
 }
 
+const std::vector<VR::ProfileDB::ProfileAdvisory>& VR::ProfileDB::ProfileAdvisories()
+{
+	EnsureLoaded();
+	return s_advisories;
+}
+
 const VR::ProfileDB::Profile* VR::ProfileDB::Lookup(const std::string_view serial, u32 crc)
 {
 	EnsureLoaded();
@@ -1773,6 +1835,7 @@ void VR::ProfileDB::Reset()
 	s_profiles.clear();
 	s_load_issues.clear();
 	s_rail_findings.clear();
+	s_advisories.clear();
 	s_stamp = LoadStamp{};
 	s_loaded = false;
 }

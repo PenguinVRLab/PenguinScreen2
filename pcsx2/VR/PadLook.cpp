@@ -4,6 +4,7 @@
 #include "VR/PadLook.h"
 
 #include "Host.h"
+#include "Memory.h"
 #include "VR/CameraDriver.h"
 #include "VR/XRCompositor.h"
 #include "VR/XRSession.h"
@@ -12,13 +13,209 @@
 
 #include <algorithm>
 #include <atomic>
+#include <bit>
 #include <cmath>
+#include <cstdarg>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <string>
+#include <vector>
 
 namespace VR::PadLook
 {
 	namespace
 	{
 		std::atomic<int> s_rx_offset{0};
+
+		struct SeqStep
+		{
+			int rx;
+			u64 polls;
+		};
+
+		float ProbeF32(u32 addr)
+		{
+			if (!eeMem)
+				return 0.0f;
+			u32 raw;
+			std::memcpy(&raw, &eeMem->Main[addr & 0x01FFFFFFu], sizeof(raw));
+			return std::bit_cast<float>(raw);
+		}
+
+		u8 ProbeU8(u32 addr)
+		{
+			if (!eeMem)
+				return 0;
+			return eeMem->Main[addr & 0x01FFFFFFu];
+		}
+
+		class Sequencer
+		{
+		public:
+			static Sequencer& Get()
+			{
+				static Sequencer s;
+				return s;
+			}
+
+			bool Armed() const { return m_armed; }
+
+			u8 Tick(u8 real)
+			{
+				if (m_step >= m_steps.size())
+					return static_cast<u8>(m_hold);
+
+				const SeqStep& st = m_steps[m_step];
+				const bool last_poll_of_step = (m_in_step + 1 >= st.polls);
+
+				Sample(real, st.rx, last_poll_of_step);
+
+				if (last_poll_of_step)
+				{
+					if (!m_dump_dir.empty())
+						DumpRam();
+					m_in_step = 0;
+					m_hold = st.rx;
+					if (++m_step >= m_steps.size())
+					{
+						Log("# SEQ_DONE polls=%llu\n", static_cast<unsigned long long>(m_poll));
+						if (m_fp)
+							std::fflush(m_fp);
+						Console.WriteLn("(VR) padLook measurement sequence complete (%llu polls).",
+							static_cast<unsigned long long>(m_poll));
+					}
+				}
+				else
+				{
+					m_in_step++;
+				}
+				m_poll++;
+				return static_cast<u8>(st.rx);
+			}
+
+		private:
+			Sequencer()
+			{
+				const char* seq = std::getenv("PCSX2_VR_PADLOOK_SEQ");
+				if (!seq || !*seq)
+					return;
+				ParseSeq(seq);
+				if (m_steps.empty())
+				{
+					Console.Error("(VR) PCSX2_VR_PADLOOK_SEQ set but no valid steps parsed — lane stays inert.");
+					return;
+				}
+				if (const char* pr = std::getenv("PCSX2_VR_PADLOOK_PROBE"))
+					ParseProbes(pr, m_probes);
+				if (const char* pr8 = std::getenv("PCSX2_VR_PADLOOK_PROBE8"))
+					ParseProbes(pr8, m_probes8);
+				if (const char* dd = std::getenv("PCSX2_VR_PADLOOK_DUMP"))
+					m_dump_dir = dd;
+				if (const char* lp = std::getenv("PCSX2_VR_PADLOOK_LOG"))
+					m_fp = std::fopen(lp, "wb");
+
+				m_armed = true;
+				Log("# padLook transfer-function lane: %zu steps, %zu probes\n",
+					m_steps.size(), m_probes.size());
+				Log("poll,step,rx,real");
+				for (size_t i = 0; i < m_probes.size(); i++)
+					Log(",p%zu_%08X", i, m_probes[i]);
+				for (size_t i = 0; i < m_probes8.size(); i++)
+					Log(",b%zu_%08X", i, m_probes8[i]);
+				Log("\n");
+				Console.WriteLn("(VR) padLook measurement lane ARMED: %zu steps, %zu probes.",
+					m_steps.size(), m_probes.size());
+			}
+
+			void ParseSeq(const char* s)
+			{
+				const char* p = s;
+				while (*p)
+				{
+					char* end = nullptr;
+					const long rx = std::strtol(p, &end, 0);
+					if (end == p || *end != ':')
+						break;
+					p = end + 1;
+					const long polls = std::strtol(p, &end, 0);
+					if (end == p || polls <= 0)
+						break;
+					m_steps.push_back({static_cast<int>(std::clamp(rx, 0L, 255L)),
+						static_cast<u64>(polls)});
+					p = end;
+					if (*p == ',')
+						p++;
+				}
+			}
+
+			void ParseProbes(const char* s, std::vector<u32>& out)
+			{
+				const char* p = s;
+				while (*p)
+				{
+					char* end = nullptr;
+					const unsigned long a = std::strtoul(p, &end, 0);
+					if (end == p)
+						break;
+					out.push_back(static_cast<u32>(a));
+					p = end;
+					if (*p == ',')
+						p++;
+				}
+			}
+
+			void Sample(u8 real, int rx, bool )
+			{
+				Log("%llu,%zu,%d,%u", static_cast<unsigned long long>(m_poll), m_step, rx,
+					static_cast<unsigned>(real));
+				for (const u32 a : m_probes)
+					Log(",%.6f", static_cast<double>(ProbeF32(a)));
+				for (const u32 a : m_probes8)
+					Log(",%u", static_cast<unsigned>(ProbeU8(a)));
+				Log("\n");
+				if ((m_poll & 0x3F) == 0 && m_fp)
+					std::fflush(m_fp);
+			}
+
+			void DumpRam()
+			{
+				if (!eeMem)
+					return;
+				char path[1024];
+				std::snprintf(path, sizeof(path), "%s/step%02zu_rx%03d.eeMemory.bin",
+					m_dump_dir.c_str(), m_step, m_steps[m_step].rx);
+				if (std::FILE* f = std::fopen(path, "wb"))
+				{
+					std::fwrite(eeMem->Main, 1, Ps2MemSize::MainRam, f);
+					std::fclose(f);
+					Log("# DUMP step=%zu rx=%d -> %s\n", m_step, m_steps[m_step].rx, path);
+				}
+				else
+				{
+					Log("# DUMP-FAILED step=%zu path=%s\n", m_step, path);
+				}
+			}
+
+			void Log(const char* fmt, ...)
+			{
+				va_list ap;
+				va_start(ap, fmt);
+				std::vfprintf(m_fp ? m_fp : stderr, fmt, ap);
+				va_end(ap);
+			}
+
+			bool m_armed = false;
+			std::vector<SeqStep> m_steps;
+			std::vector<u32> m_probes;
+			std::vector<u32> m_probes8;
+			std::string m_dump_dir;
+			std::FILE* m_fp = nullptr;
+			size_t m_step = 0;
+			u64 m_in_step = 0;
+			u64 m_poll = 0;
+			int m_hold = 127;
+		};
 	}
 
 	void Publish(float deflection)
@@ -32,6 +229,9 @@ namespace VR::PadLook
 
 	u8 ApplyRx(u8 real)
 	{
+		if (Sequencer::Get().Armed()) [[unlikely]]
+			return Sequencer::Get().Tick(real);
+
 		const int offset = s_rx_offset.load(std::memory_order_relaxed);
 		if (offset == 0)
 			return real;

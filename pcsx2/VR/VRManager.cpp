@@ -319,6 +319,7 @@ namespace VR
 									? StereoState::Params::UvPolicy::World
 									: StereoState::Params::UvPolicy::Screen;
 			stereo.pin_uniform_q = profile->stereo->pin_uniform_q;
+			stereo.z_driven_depth = profile->stereo->z_driven_depth;
 			CopyCollimate(stereo, *profile->stereo);
 			CopyResolvedMap(stereo, profile->stereo->resolved);
 			from_profile = true;
@@ -443,6 +444,7 @@ namespace VR
 		                       StereoState::Params::UvPolicy::World :
 		                       StereoState::Params::UvPolicy::Screen;
 		stereo.pin_uniform_q = base.pin_uniform_q;
+		stereo.z_driven_depth = base.z_driven_depth;
 		CopyCollimate(stereo, base);
 		CopyResolvedMap(stereo, base.resolved);
 		if (match >= 0)

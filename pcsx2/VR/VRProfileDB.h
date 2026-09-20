@@ -269,6 +269,44 @@ namespace VR::ProfileDB
 		std::optional<CameraPadLook> pad_look;
 	};
 
+	struct SplitParams
+	{
+		enum class Layout : u8
+		{
+			Horizontal,
+			Vertical,
+		};
+		enum class Mode : u8
+		{
+			Focus,
+			Duo,
+			Mirror,
+		};
+		struct Probe
+		{
+			u32 ee_address = 0;
+			u32 threshold = 0;
+			bool at_least = false;
+			u8 width = 4;
+		};
+		struct Rect
+		{
+			float x = 0.0f, y = 0.0f, w = 1.0f, h = 1.0f;
+		};
+
+		Layout layout = Layout::Horizontal;
+		u8 views = 2;
+		u8 local_view = 0;
+		u8 local_pad_port = 0;
+		Rect rects[2];
+		bool rects_explicit = false;
+		std::optional<Probe> active;
+		Mode mode = Mode::Focus;
+		float side_scale = 0.4f;
+		float side_angle_deg = 35.0f;
+		bool stereo_on = true;
+	};
+
 	struct Profile
 	{
 		std::string serial;
@@ -280,6 +318,7 @@ namespace VR::ProfileDB
 		std::optional<float> screen_height;
 		std::optional<float> screen_arc_deg;
 		std::optional<CameraProfile> camera;
+		std::optional<SplitParams> split;
 		std::string notes;
 	};
 

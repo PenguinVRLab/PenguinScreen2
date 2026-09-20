@@ -115,7 +115,13 @@ namespace GSTextureReplacements
 
 	static void StartWorkerThread();
 	static void StopWorkerThread();
-	static void QueueWorkerThreadItem(std::function<void()> fn, bool high_priority);
+	enum class WorkerItemKind : u8
+	{
+		Load,
+		Dump,
+	};
+	static void QueueWorkerThreadItem(std::function<void()> fn, bool high_priority,
+		WorkerItemKind kind = WorkerItemKind::Load);
 	static void WorkerThreadEntryPoint();
 	static void SyncWorkerThread();
 	static void CancelPendingLoadsAndDumps();
@@ -139,7 +145,13 @@ namespace GSTextureReplacements
 	static std::thread s_worker_thread;
 	static std::mutex s_worker_thread_mutex;
 	static std::condition_variable s_worker_thread_cv;
-	static std::deque<std::pair<std::function<void()>, bool>> s_worker_thread_queue;
+	struct WorkerItem
+	{
+		std::function<void()> fn;
+		bool high_priority;
+		WorkerItemKind kind;
+	};
+	static std::deque<WorkerItem> s_worker_thread_queue;
 	static bool s_worker_thread_running = false;
 };
 
@@ -873,11 +885,12 @@ void GSTextureReplacements::DumpTexture(const GSTextureCache::HashCacheKey& hash
 	psm.rtx(mem, mem.GetOffset(TEX0.TBP0, TEX0.TBW, TEX0.PSM), block_rect, buffer, pitch, TEXA);
 
 	const u32 buffer_offset = ((rect.top - block_rect.top) * pitch) + ((rect.left - block_rect.left) * sizeof(u32));
-	QueueWorkerThreadItem([filename = std::move(filename), tw, th, pitch, buffer, buffer_offset]() {
-		if (!SavePNGImage(filename.c_str(), tw, th, buffer + buffer_offset, pitch))
+	std::shared_ptr<u8> owned_buffer(buffer, [](u8* p) { _aligned_free(p); });
+	QueueWorkerThreadItem([filename = std::move(filename), tw, th, pitch,
+							  owned_buffer = std::move(owned_buffer), buffer_offset]() {
+		if (!SavePNGImage(filename.c_str(), tw, th, owned_buffer.get() + buffer_offset, pitch))
 			Console.Error(fmt::format("Failed to dump texture to '{}'.", filename));
-		_aligned_free(buffer);
-	}, false);
+	}, false, WorkerItemKind::Dump);
 }
 
 void GSTextureReplacements::ClearDumpedTextureList()
@@ -930,21 +943,22 @@ void GSTextureReplacements::StopWorkerThread()
 	CancelPendingLoadsAndDumps();
 }
 
-void GSTextureReplacements::QueueWorkerThreadItem(std::function<void()> fn, bool high_priority)
+void GSTextureReplacements::QueueWorkerThreadItem(std::function<void()> fn, bool high_priority,
+	WorkerItemKind kind)
 {
 	pxAssert(s_worker_thread.joinable());
 
 	std::unique_lock<std::mutex> lock(s_worker_thread_mutex);
 	if (!high_priority)
 	{
-		s_worker_thread_queue.emplace_back(std::move(fn), false);
+		s_worker_thread_queue.push_back(WorkerItem{std::move(fn), false, kind});
 	}
 	else
 	{
 		auto iter = s_worker_thread_queue.rbegin();
 		for (; iter != s_worker_thread_queue.rend(); ++iter)
 		{
-			if (iter->second)
+			if (iter->high_priority)
 			{
 				break;
 			}
@@ -952,11 +966,11 @@ void GSTextureReplacements::QueueWorkerThreadItem(std::function<void()> fn, bool
 
 		if (iter != s_worker_thread_queue.rend())
 		{
-			s_worker_thread_queue.insert(iter.base(), std::make_pair(std::move(fn), true));
+			s_worker_thread_queue.insert(iter.base(), WorkerItem{std::move(fn), true, kind});
 		}
 		else
 		{
-			s_worker_thread_queue.emplace_front(std::move(fn), true);
+			s_worker_thread_queue.push_front(WorkerItem{std::move(fn), true, kind});
 		}
 	}
 
@@ -974,7 +988,7 @@ void GSTextureReplacements::WorkerThreadEntryPoint()
 			continue;
 		}
 
-		std::function<void()> fn = std::move(s_worker_thread_queue.front().first);
+		std::function<void()> fn = std::move(s_worker_thread_queue.front().fn);
 		s_worker_thread_queue.pop_front();
 		lock.unlock();
 		fn();
@@ -1001,6 +1015,17 @@ void GSTextureReplacements::SyncWorkerThread()
 
 void GSTextureReplacements::CancelPendingLoadsAndDumps()
 {
+	{
+		std::unique_lock<std::mutex> lock(s_worker_thread_mutex);
+		const size_t before = s_worker_thread_queue.size();
+		std::erase_if(s_worker_thread_queue,
+			[](const WorkerItem& item) { return item.kind == WorkerItemKind::Load; });
+		const size_t dropped = before - s_worker_thread_queue.size();
+		if (dropped > 0)
+			DevCon.WriteLn(fmt::format("Dropped {} queued texture load(s); {} dump(s) still to finish.",
+				dropped, s_worker_thread_queue.size()));
+	}
+
 	SyncWorkerThread();
 
 	std::unique_lock<std::mutex> lock(s_worker_thread_mutex);

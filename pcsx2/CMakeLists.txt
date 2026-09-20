@@ -1063,6 +1063,7 @@ set(pcsx2arm64Headers
 # PCSX2-VR: OpenXR support
 set(pcsx2VRSources
 	VR/CameraDriver.cpp
+	VR/SplitState.cpp
 	VR/DepthHistogram.cpp
 	VR/HeadPose.cpp
 	VR/PadLook.cpp
@@ -1076,6 +1077,7 @@ set(pcsx2VRSources
 
 set(pcsx2VRHeaders
 	VR/CameraDriver.h
+	VR/SplitState.h
 	VR/DepthHistogram.h
 	VR/HeadPose.h
 	VR/PadLook.h

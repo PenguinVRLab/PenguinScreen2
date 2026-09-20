@@ -787,6 +787,7 @@ struct Pcsx2Config
 					DumpTexturesWithFMVActive : 1,
 					DumpDirectTextures : 1,
 					DumpPaletteTextures : 1,
+					ClassicTextureNames : 1,
 					LoadTextureReplacements : 1,
 					LoadTextureReplacementsAsync : 1,
 					PrecacheTextureReplacements : 1,
@@ -1280,7 +1281,7 @@ struct Pcsx2Config
 
 	struct VROptions
 	{
-		bool Enable = true;
+		bool Enable = false;
 
 		float ScreenDistance = 2.0f;
 		float ScreenHeight = 1.4f;

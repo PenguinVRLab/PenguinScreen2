@@ -17,7 +17,21 @@ namespace VR
 
 	bool WantsVR();
 
+	bool EffectiveVREnabled(bool cfg_enable);
+
+	void SetLaunchRequestedVR(bool requested);
+
 	bool LaunchRequestedVR();
+
+	void SetStereoRenderArmed(bool armed);
+
+	bool StereoRenderArmed();
+
+	constexpr bool StereoGateOpen(bool cfg_enable, bool launch_armed, bool render_armed, bool stereo_mode,
+		bool profile_ok)
+	{
+		return (cfg_enable || launch_armed) && stereo_mode && profile_ok && (launch_armed || render_armed);
+	}
 
 	enum class SessionStatus
 	{

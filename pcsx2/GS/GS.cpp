@@ -845,7 +845,8 @@ void GSUpdateConfig(const Pcsx2Config::GSOptions& new_config)
 		GSTextureReplacements::UpdateConfig(old_config);
 
 	if (GSConfig.LoadTextureReplacements != old_config.LoadTextureReplacements ||
-		GSConfig.DumpReplaceableTextures != old_config.DumpReplaceableTextures)
+		GSConfig.DumpReplaceableTextures != old_config.DumpReplaceableTextures ||
+		GSConfig.ClassicTextureNames != old_config.ClassicTextureNames)
 	{
 		g_gs_renderer->PurgeTextureCache(true, false, true);
 	}
@@ -1320,6 +1321,30 @@ BEGIN_HOTKEY_LIST(g_gs_hotkeys){"Screenshot", TRANSLATE_NOOP("Hotkeys", "Graphic
 					EmuConfig.GS.DumpReplaceableTextures ? TRANSLATE_STR("Hotkeys", "Texture dumping is now enabled.") :
 														   TRANSLATE_STR("Hotkeys", "Texture dumping is now disabled."),
 					Host::OSD_INFO_DURATION);
+				MTGS::ApplySettings();
+			}
+		}},
+	{"ToggleClassicTextureDump", TRANSLATE_NOOP("Hotkeys", "Graphics"),
+		TRANSLATE_NOOP("Hotkeys", "Toggle Classic Texture Dumping (pre-4034 names)"),
+		[](s32 pressed) {
+			if (!pressed)
+			{
+				const bool enabling = !EmuConfig.GS.ClassicTextureNames;
+				EmuConfig.GS.ClassicTextureNames = enabling;
+				if (enabling && !EmuConfig.GS.DumpReplaceableTextures)
+				{
+					EmuConfig.GS.DumpReplaceableTextures = true;
+					Host::AddKeyedOSDMessage("ToggleClassicTextureDump",
+						TRANSLATE_STR("Hotkeys", "Classic texture dumping enabled (pre-4034 names; texture dumping was off — now on, dumping both eras)."),
+						Host::OSD_INFO_DURATION);
+				}
+				else
+				{
+					Host::AddKeyedOSDMessage("ToggleClassicTextureDump",
+						enabling ? TRANSLATE_STR("Hotkeys", "Classic texture dumping enabled (pre-4034 names alongside modern).") :
+								   TRANSLATE_STR("Hotkeys", "Classic texture dumping disabled (modern dumping unchanged)."),
+						Host::OSD_INFO_DURATION);
+				}
 				MTGS::ApplySettings();
 			}
 		}},

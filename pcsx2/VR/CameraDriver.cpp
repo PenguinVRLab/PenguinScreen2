@@ -4,6 +4,7 @@
 #include "VR/CameraDriver.h"
 #include "VR/HeadPose.h"
 #include "VR/PadLook.h"
+#include "VR/VRManager.h"
 #include "VR/VRProfileDB.h"
 
 #include "Config.h"
@@ -934,7 +935,7 @@ namespace VR::CameraDriver
 		s_vsync_counter++;
 		MaybeRunSelfTest();
 
-		const bool switched_on = EmuConfig.VR.Enable && EmuConfig.VR.HeadCamera;
+		const bool switched_on = EffectiveVREnabled(EmuConfig.VR.Enable) && EmuConfig.VR.HeadCamera;
 
 		const VMState vm_state = VMManager::GetState();
 		const bool vm_live = (vm_state == VMState::Running || vm_state == VMState::Paused);

@@ -6165,9 +6165,24 @@ GSTextureCache::HashCacheEntry* GSTextureCache::LookupHashCache(const GIFRegTEX0
 
 	HashCacheKey key{HashCacheKey::Create(TEX0, TEXA, (dump || replace || !paltex) ? clut : nullptr, lod, region)};
 
+	const bool classic = GSConfig.ClassicTextureNames && (dump || replace) &&
+	                     (region.HasEither() || TEX0.TCC != 0);
+	HashCacheKey classic_key = key;
+	if (classic)
+	{
+		if (region.HasEither())
+		{
+			classic_key = HashCacheKey::Create(
+				TEX0, TEXA, (dump || replace || !paltex) ? clut : nullptr, lod, SourceRegion{});
+		}
+		classic_key.TEX0.TCC = TEX0.TCC;
+	}
+
 	if (dump)
 	{
 		GSTextureReplacements::DumpTexture(key, TEX0, TEXA, region, g_gs_renderer->m_mem, 0);
+		if (classic)
+			GSTextureReplacements::DumpTexture(classic_key, TEX0, TEXA, SourceRegion{}, g_gs_renderer->m_mem, 0);
 
 		if (lod && GSConfig.DumpReplaceableMipmaps)
 		{
@@ -6177,6 +6192,8 @@ GSTextureCache::HashCacheEntry* GSTextureCache::LookupHashCache(const GIFRegTEX0
 			{
 				const GIFRegTEX0 MIP_TEX0{g_gs_renderer->GetTex0Layer(basemip + mip)};
 				GSTextureReplacements::DumpTexture(key, MIP_TEX0, TEXA, region, g_gs_renderer->m_mem, mip);
+				if (classic)
+					GSTextureReplacements::DumpTexture(classic_key, MIP_TEX0, TEXA, SourceRegion{}, g_gs_renderer->m_mem, mip);
 			}
 		}
 	}
@@ -6204,6 +6221,12 @@ GSTextureCache::HashCacheEntry* GSTextureCache::LookupHashCache(const GIFRegTEX0
 		std::pair<u8, u8> alpha_minmax;
 		GSTexture* replacement_tex = GSTextureReplacements::LookupReplacementTexture(key, lod != nullptr,
 			&replacement_texture_pending, &alpha_minmax);
+		if (!replacement_tex && !replacement_texture_pending && classic)
+		{
+			replacement_tex = GSTextureReplacements::LookupReplacementTexture(classic_key, lod != nullptr,
+				&replacement_texture_pending, &alpha_minmax, true,
+				region, 1u << TEX0.TW, 1u << TEX0.TH);
+		}
 		if (replacement_tex)
 		{
 			paltex = false;
@@ -6214,7 +6237,8 @@ GSTextureCache::HashCacheEntry* GSTextureCache::LookupHashCache(const GIFRegTEX0
 		else if (
 			replacement_texture_pending ||
 
-			(paltex && GSTextureReplacements::HasReplacementTextureWithOtherPalette(key)))
+			(paltex && (GSTextureReplacements::HasReplacementTextureWithOtherPalette(key) ||
+						   (classic && GSTextureReplacements::HasReplacementTextureWithOtherPalette(classic_key)))))
 		{
 			paltex = false;
 

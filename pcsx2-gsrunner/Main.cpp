@@ -47,6 +47,7 @@
 #include "pcsx2/VMManager.h"
 #ifdef ENABLE_VR
 #include "pcsx2/VR/DepthHistogram.h"
+#include "pcsx2/VR/VRManager.h"
 #include "pcsx2/VR/VRProfileDB.h"
 #endif
 
@@ -160,6 +161,11 @@ bool GSRunner::InitializeConfig()
 	Host::Internal::SetBaseSettingsLayer(&si);
 
 	VMManager::SetDefaultSettings(si, true, true, true, true, true);
+
+#ifdef ENABLE_VR
+	si.SetBoolValue("VR", "Enable", true);
+	VR::SetStereoRenderArmed(true);
+#endif
 
 	VMManager::Internal::LoadStartupSettings();
 	return true;
@@ -502,6 +508,10 @@ static void PrintCommandLineHelp(const char* progname)
 	std::fprintf(stderr, "  -noshadercache: Disables the shader cache (useful for parallel runs).\n");
 	std::fprintf(stderr, "  -perf: Enable frame timing performance stats.\n");
 #ifdef ENABLE_VR
+	std::fprintf(stderr, "  -vr: (VR) Arm a real OpenXR SESSION for this run. NOT needed for stereo rendering --\n"
+						 "    gsrunner already renders stereo by default (that is what the replay harness is\n"
+						 "    for). Pass this only from scripts that deliberately stand up a runtime; it is\n"
+						 "    the flag that makes a replay able to seize a live headset.\n");
 	std::fprintf(stderr, "  -qhist <file>: (VR) Write the scene depth distribution (log2(w) histogram) to <file> at\n"
 						 "    shutdown. Flag only -- there is no env-var equivalent, on purpose. If the\n"
 						 "    GSRendererHW measurement hook is not applied, the artifact is still written\n"
@@ -655,6 +665,12 @@ bool GSRunner::ParseCommandLineArgs(int argc, char* argv[], VMBootParameters& pa
 				continue;
 			}
 #ifdef ENABLE_VR
+			else if (CHECK_ARG("-vr") || CHECK_ARG("--vr"))
+			{
+				VR::SetLaunchRequestedVR(true);
+				Console.WriteLn("(VR) Armed for VR by -vr: this run may create an OpenXR session.");
+				continue;
+			}
 			else if (CHECK_ARG_PARAM("-qhist"))
 			{
 				s_qhist_path = StringUtil::StripWhitespace(argv[++i]);

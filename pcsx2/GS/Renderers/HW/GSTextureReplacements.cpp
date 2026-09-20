@@ -18,7 +18,9 @@
 #include "GS/Renderers/HW/GSTextureReplacements.h"
 #include "VMManager.h"
 
+#include <algorithm>
 #include <cinttypes>
+#include <cstdio>
 #include <condition_variable>
 #include <cstring>
 #include <deque>
@@ -156,6 +158,8 @@ TextureName GSTextureReplacements::CreateTextureName(const GSTextureCache::HashC
 	name.miplevel = miplevel;
 	name.region_width = hash.region_width;
 	name.region_height = hash.region_height;
+	if (GSConfig.ClassicTextureNames)
+		name.unused0 = hash.TEX0.TCC;
 	return name;
 }
 
@@ -191,7 +195,6 @@ std::optional<TextureName> GSTextureReplacements::ParseReplacementName(const std
 			&ret.region_width, &ret.region_height, &ret.bits, &extension_dot) == 6 &&
 		extension_dot == '.')
 	{
-		ret.RemoveUnusedBits();
 		return ret;
 	}
 
@@ -199,7 +202,6 @@ std::optional<TextureName> GSTextureReplacements::ParseReplacementName(const std
 			&ret.region_width, &ret.region_height, &ret.bits, &extension_dot) == 5 &&
 		extension_dot == '.')
 	{
-		ret.RemoveUnusedBits();
 		ret.CLUTHash = 0;
 		return ret;
 	}
@@ -208,7 +210,6 @@ std::optional<TextureName> GSTextureReplacements::ParseReplacementName(const std
 			&full_region.bits, &ret.bits, &extension_dot) == 5 &&
 		extension_dot == '.')
 	{
-		ret.RemoveUnusedBits();
 		ret.region_width = static_cast<u32>(full_region.GetWidth());
 		ret.region_height = static_cast<u32>(full_region.GetHeight());
 		return ret;
@@ -218,7 +219,6 @@ std::optional<TextureName> GSTextureReplacements::ParseReplacementName(const std
 			&ret.bits, &extension_dot) == 4 &&
 		extension_dot == '.')
 	{
-		ret.RemoveUnusedBits();
 		ret.CLUTHash = 0;
 		ret.region_width = static_cast<u32>(full_region.GetWidth());
 		ret.region_height = static_cast<u32>(full_region.GetHeight());
@@ -232,7 +232,6 @@ std::optional<TextureName> GSTextureReplacements::ParseReplacementName(const std
 			&extension_dot) == 4 &&
 		extension_dot == '.')
 	{
-		ret.RemoveUnusedBits();
 		return ret;
 	}
 
@@ -240,7 +239,6 @@ std::optional<TextureName> GSTextureReplacements::ParseReplacementName(const std
 			3 &&
 		extension_dot == '.')
 	{
-		ret.RemoveUnusedBits();
 		ret.CLUTHash = 0;
 		return ret;
 	}
@@ -410,11 +408,22 @@ void GSTextureReplacements::ReloadReplacementMap()
 		if (!name.has_value())
 			continue;
 
-		DbgCon.WriteLn("Found %ux%u replacement '%.*s'", name->Width(), name->Height(), static_cast<int>(filename.size()), filename.data());
-		s_replacement_texture_filenames.emplace(name.value(), std::move(fd.FileName));
+		const bool tcc_alias = GSConfig.ClassicTextureNames && (name->unused0 != 0);
+		TextureName canonical = name.value();
+		canonical.RemoveUnusedBits();
 
-		name->CLUTHash = 0;
-		s_replacement_textures_without_clut_hash.insert(name.value());
+		DbgCon.WriteLn("Found %ux%u replacement '%.*s'", canonical.Width(), canonical.Height(), static_cast<int>(filename.size()), filename.data());
+		if (tcc_alias)
+			s_replacement_texture_filenames.emplace(name.value(), fd.FileName);
+		s_replacement_texture_filenames.emplace(canonical, std::move(fd.FileName));
+
+		canonical.CLUTHash = 0;
+		s_replacement_textures_without_clut_hash.insert(canonical);
+		if (tcc_alias)
+		{
+			name->CLUTHash = 0;
+			s_replacement_textures_without_clut_hash.insert(name.value());
+		}
 	}
 
 	if (!s_replacement_texture_filenames.empty())
@@ -453,6 +462,14 @@ void GSTextureReplacements::UpdateConfig(Pcsx2Config::GSOptions& old_config)
 
 	if (GSConfig.LoadTextureReplacements && GSConfig.PrecacheTextureReplacements && !old_config.PrecacheTextureReplacements)
 		PrecacheReplacementTextures();
+
+	if (GSConfig.ClassicTextureNames != old_config.ClassicTextureNames)
+	{
+		CancelPendingLoadsAndDumps();
+		ClearDumpedTextureList();
+		if (GSConfig.LoadTextureReplacements)
+			ReloadReplacementMap();
+	}
 }
 
 void GSTextureReplacements::Shutdown()
@@ -481,10 +498,38 @@ bool GSTextureReplacements::HasReplacementTextureWithOtherPalette(const GSTextur
 }
 
 GSTexture* GSTextureReplacements::LookupReplacementTexture(const GSTextureCache::HashCacheKey& hash, bool mipmap,
-	bool* pending, std::pair<u8, u8>* alpha_minmax)
+	bool* pending, std::pair<u8, u8>* alpha_minmax, bool force_sync,
+	GSTextureCache::SourceRegion classic_region, u32 base_width, u32 base_height)
 {
 	const TextureName name(CreateTextureName(hash, 0));
 	*pending = false;
+
+	const auto classic_crop = [&](const ReplacementTexture& rtex) -> GSVector4i {
+		if (!classic_region.HasEither() || base_width == 0 || base_height == 0)
+			return GSVector4i::zero();
+		if (rtex.format != GSTexture::Format::Color)
+		{
+			static bool warned = false;
+			if (!warned)
+			{
+				Console.Warning("Classic Dump: compressed replacement for a region-clamped "
+								"texture cannot be region-cropped; expect atlas artifacts.");
+				warned = true;
+			}
+			return GSVector4i::zero();
+		}
+		const GSVector4i rrect = classic_region.GetRect(static_cast<int>(base_width), static_cast<int>(base_height));
+		const float sx = static_cast<float>(rtex.width) / static_cast<float>(base_width);
+		const float sy = static_cast<float>(rtex.height) / static_cast<float>(base_height);
+		GSVector4i crop(static_cast<int>(rrect.x * sx + 0.5f), static_cast<int>(rrect.y * sy + 0.5f),
+			static_cast<int>(rrect.z * sx + 0.5f), static_cast<int>(rrect.w * sy + 0.5f));
+		crop = crop.max_i32(GSVector4i::zero());
+		crop = crop.min_i32(GSVector4i(static_cast<int>(rtex.width), static_cast<int>(rtex.height),
+			static_cast<int>(rtex.width), static_cast<int>(rtex.height)));
+		if (crop.rempty() || crop.eq(GSVector4i(0, 0, static_cast<int>(rtex.width), static_cast<int>(rtex.height))))
+			return GSVector4i::zero();
+		return crop;
+	};
 
 	auto fnit = s_replacement_texture_filenames.find(name);
 	if (fnit == s_replacement_texture_filenames.end())
@@ -496,11 +541,11 @@ GSTexture* GSTextureReplacements::LookupReplacementTexture(const GSTextureCache:
 		if (it != s_replacement_texture_cache.end())
 		{
 			*alpha_minmax = it->second.alpha_minmax;
-			return CreateReplacementTexture(it->second, mipmap);
+			return CreateReplacementTexture(it->second, mipmap, classic_crop(it->second));
 		}
 	}
 
-	if (GSConfig.LoadTextureReplacementsAsync)
+	if (GSConfig.LoadTextureReplacementsAsync && !force_sync)
 	{
 		std::unique_lock<std::mutex> lock(s_replacement_texture_cache_mutex);
 		QueueAsyncReplacementTextureLoad(name, fnit->second, mipmap, false);
@@ -518,7 +563,7 @@ GSTexture* GSTextureReplacements::LookupReplacementTexture(const GSTextureCache:
 		const ReplacementTexture& rtex = s_replacement_texture_cache.emplace(name, std::move(replacement.value())).first->second;
 
 		*alpha_minmax = rtex.alpha_minmax;
-		return CreateReplacementTexture(rtex, mipmap);
+		return CreateReplacementTexture(rtex, mipmap, classic_crop(rtex));
 	}
 }
 
@@ -686,8 +731,55 @@ void GSTextureReplacements::ClearReplacementTextures()
 	s_async_loaded_textures.clear();
 }
 
-GSTexture* GSTextureReplacements::CreateReplacementTexture(const ReplacementTexture& rtex, bool mipmap)
+GSTexture* GSTextureReplacements::CreateReplacementTexture(const ReplacementTexture& rtex, bool mipmap, const GSVector4i& crop)
 {
+	if (!crop.rempty())
+	{
+		const int cw = (crop.x >= 0 && crop.x < static_cast<int>(rtex.width))
+		                   ? std::min(crop.width(), static_cast<int>(rtex.width) - crop.x)
+		                   : 0;
+		const int ch = (crop.y >= 0 && crop.y < static_cast<int>(rtex.height))
+		                   ? std::min(crop.height(), static_cast<int>(rtex.height) - crop.y)
+		                   : 0;
+		const size_t row_bytes = static_cast<size_t>(cw) * 4;
+		bool ok = cw > 0 && ch > 0 && row_bytes <= rtex.pitch;
+		std::vector<u8> cropped;
+		if (ok)
+		{
+			cropped.resize(row_bytes * static_cast<size_t>(ch));
+			for (int row = 0; row < ch && ok; row++)
+			{
+				const size_t src_off = (static_cast<size_t>(crop.y) + static_cast<size_t>(row)) *
+				                            static_cast<size_t>(rtex.pitch) +
+				                        static_cast<size_t>(crop.x) * 4;
+				if (src_off + row_bytes > rtex.data.size())
+				{
+					ok = false;
+					break;
+				}
+				std::memcpy(cropped.data() + static_cast<size_t>(row) * row_bytes, rtex.data.data() + src_off, row_bytes);
+			}
+		}
+		if (ok)
+		{
+			GSTexture* ctex = g_gs_device->CreateTexture(cw, ch, 1, rtex.format);
+			if (!ctex)
+				return nullptr;
+			ctex->Update(GSVector4i(0, 0, cw, ch), cropped.data(), static_cast<int>(row_bytes));
+			return ctex;
+		}
+		static bool warned = false;
+		if (!warned)
+		{
+			Console.Warning("Classic Dump: computed crop rect (%d,%d %dx%d, clamped %dx%d) does not fit "
+							"a %ux%u replacement (pitch %u) — injecting uncropped instead of risking an "
+							"out-of-bounds read. Expect an atlas artifact on this texture; please "
+							"report it.",
+				crop.x, crop.y, crop.width(), crop.height(), cw, ch, rtex.width, rtex.height, rtex.pitch);
+			warned = true;
+		}
+	}
+
 	if (mipmap && GSTexture::IsCompressedFormat(rtex.format) && rtex.mips.empty())
 	{
 		static bool log_once = false;
@@ -823,7 +915,12 @@ void GSTextureReplacements::StopWorkerThread()
 		std::unique_lock<std::mutex> lock(s_worker_thread_mutex);
 		if (!s_worker_thread.joinable())
 			return;
+	}
 
+	SyncWorkerThread();
+
+	{
+		std::unique_lock<std::mutex> lock(s_worker_thread_mutex);
 		s_worker_thread_running = false;
 		s_worker_thread_cv.notify_one();
 	}
@@ -904,9 +1001,9 @@ void GSTextureReplacements::SyncWorkerThread()
 
 void GSTextureReplacements::CancelPendingLoadsAndDumps()
 {
+	SyncWorkerThread();
+
 	std::unique_lock<std::mutex> lock(s_worker_thread_mutex);
-	while (!s_worker_thread_queue.empty())
-		s_worker_thread_queue.pop_back();
 	s_async_loaded_textures.clear();
 	s_pending_async_load_textures.clear();
 }

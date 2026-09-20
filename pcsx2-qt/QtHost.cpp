@@ -2135,6 +2135,9 @@ void QtHost::PrintCommandLineHelp(const std::string_view progname)
 	std::fprintf(stderr, "  -raintegration: Use RAIntegration instead of built-in achievement support.\n");
 #endif
 #ifdef ENABLE_VR
+	std::fprintf(stderr, "  --vr: Arm VR for THIS launch (explicit per-invocation signal; no environment\n"
+						 "    variable ever arms VR). Without it the binary runs flat and never creates\n"
+						 "    an OpenXR instance. The shipped launch-vr-session.sh passes it.\n");
 	std::fprintf(stderr, "  -vr-info: Prints OpenXR runtime/headset information and exits.\n");
 #endif
 	std::fprintf(stderr, "  --: Signals that no more arguments will follow and the remaining\n"
@@ -2178,6 +2181,11 @@ bool QtHost::ParseCommandLineOptions(const QStringList& args, std::shared_ptr<VM
 				return false;
 			}
 #ifdef ENABLE_VR
+			else if (CHECK_ARG(QStringLiteral("--vr")) || CHECK_ARG(QStringLiteral("-vr")))
+			{
+				VR::SetLaunchRequestedVR(true);
+				continue;
+			}
 			else if (CHECK_ARG(QStringLiteral("-vr-info")))
 			{
 				PrintCommandLineVersion();

@@ -758,6 +758,7 @@ Pcsx2Config::GSOptions::GSOptions()
 	DumpTexturesWithFMVActive = false;
 	DumpDirectTextures = true;
 	DumpPaletteTextures = true;
+	ClassicTextureNames = false;
 	LoadTextureReplacements = false;
 	LoadTextureReplacementsAsync = true;
 	PrecacheTextureReplacements = false;
@@ -999,6 +1000,7 @@ void Pcsx2Config::GSOptions::LoadSave(SettingsWrapper& wrap)
 	SettingsWrapBitBool(DumpTexturesWithFMVActive);
 	SettingsWrapBitBool(DumpDirectTextures);
 	SettingsWrapBitBool(DumpPaletteTextures);
+	SettingsWrapBitBool(ClassicTextureNames);
 	SettingsWrapBitBool(LoadTextureReplacements);
 	SettingsWrapBitBool(LoadTextureReplacementsAsync);
 	SettingsWrapBitBool(PrecacheTextureReplacements);

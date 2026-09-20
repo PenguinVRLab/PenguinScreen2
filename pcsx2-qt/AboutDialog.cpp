@@ -37,6 +37,17 @@ AboutDialog::AboutDialog(QWidget* parent)
 {
 	m_ui.setupUi(this);
 
+	if (const QPixmap logo = m_ui.icon->pixmap(Qt::ReturnByValue); !logo.isNull())
+	{
+		constexpr int kLogoHeight = 48;
+		if (logo.height() != kLogoHeight)
+		{
+			m_ui.icon->setPixmap(logo.scaledToHeight(
+				kLogoHeight * devicePixelRatioF(), Qt::SmoothTransformation));
+			m_ui.icon->setFixedHeight(kLogoHeight);
+		}
+	}
+
 	setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
 	setFixedSize(geometry().width(), geometry().height());
 

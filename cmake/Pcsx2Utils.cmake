@@ -46,9 +46,9 @@ endfunction()
 function(get_git_version_info)
 	# PenguinScreen2 release stamp: a git-less derived tree carries its
 	# version in PS2_VERSION (written by the derive) — read it, skip git.
-	# A blank file falls through to the git path (strict-review #33), and
+	# A blank file falls through to the git path, and
 	# the file is a configure dependency so version bumps re-run cmake in
-	# an existing build dir (strict-review #34).
+	# an existing build dir.
 	if(EXISTS ${PROJECT_SOURCE_DIR}/PS2_VERSION)
 		file(READ ${PROJECT_SOURCE_DIR}/PS2_VERSION PS2_VERSION_STAMP)
 		string(STRIP "${PS2_VERSION_STAMP}" PS2_VERSION_STAMP)

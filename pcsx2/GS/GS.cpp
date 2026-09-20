@@ -65,13 +65,11 @@ GSRendererType GSGetCurrentRenderer()
 
 bool GSIsHardwareRenderer()
 {
-	// Null gets flagged as hw.
 	return (GSCurrentRenderer != GSRendererType::SW);
 }
 
 std::string GetDefaultAdapter()
 {
-	// Will be treated as empty.
 	return "(Default)";
 }
 
@@ -98,7 +96,6 @@ static RenderAPI GetAPIForRenderer(GSRendererType renderer)
 			return RenderAPI::Metal;
 #endif
 
-			// We could end up here if we ever removed a renderer.
 		default:
 			return GetAPIForRenderer(GSUtil::GetPreferredRenderer());
 	}
@@ -187,7 +184,6 @@ static void GSClampUpscaleMultiplier(Pcsx2Config::GSOptions& config)
 	const u32 max_upscale_multiplier = GSGetMaxUpscaleMultiplier(g_gs_device->GetMaxTextureSize());
 	if (config.UpscaleMultiplier <= static_cast<float>(max_upscale_multiplier))
 	{
-		// Shouldn't happen, but just in case.
 		if (config.UpscaleMultiplier < 0.0f)
 			config.UpscaleMultiplier = 0.0f;
 		return;
@@ -202,7 +198,6 @@ static void GSClampUpscaleMultiplier(Pcsx2Config::GSOptions& config)
 
 static bool OpenGSRenderer(GSRendererType renderer, u8* basemem)
 {
-	// Must be done first, initialization routines in GSState use GSIsHardwareRenderer().
 	GSCurrentRenderer = renderer;
 
 	GSVertexSW::InitStatic();
@@ -248,7 +243,6 @@ bool GSreopen(bool recreate_device, bool recreate_renderer, GSRendererType new_r
 
 	if (recreate_device && !recreate_renderer)
 	{
-		// Keeping the renderer around, this probably means we lost the device, so toss everything.
 		g_gs_renderer->PurgeTextureCache(true, true, true);
 		g_gs_device->ClearCurrent();
 		g_gs_device->PurgePool();
@@ -293,7 +287,6 @@ bool GSreopen(bool recreate_device, bool recreate_renderer, GSRendererType new_r
 
 	if (recreate_device)
 	{
-		// We need a new render window when changing APIs.
 		const bool recreate_window = (g_gs_device->GetRenderAPI() != GetAPIForRenderer(GSConfig.Renderer));
 		const GSVSyncMode vsync_mode = g_gs_device->GetVSyncMode();
 		const bool allow_present_throttle = g_gs_device->IsPresentThrottleAllowed();
@@ -382,8 +375,6 @@ void GSreset(bool hardware_reset)
 {
 	g_gs_renderer->Reset(hardware_reset);
 
-	// Restart video capture if it's been started.
-	// Otherwise we get a buildup of audio frames from the CPU thread.
 	if (hardware_reset && GSCapture::IsCapturing())
 	{
 		std::string next_filename = GSCapture::GetNextCaptureFileName();
@@ -438,7 +429,6 @@ void GSgifTransfer3(u8* mem, u32 size)
 
 void GSvsync(u32 field, bool registers_written)
 {
-	// Update this here because we need to check if the pending draw affects the current frame, so our regs need to be updated.
 	g_gs_renderer->PCRTCDisplays.SetVideoMode(g_gs_renderer->GetVideoMode());
 	g_gs_renderer->PCRTCDisplays.EnableDisplays(g_gs_renderer->m_regs->PMODE, g_gs_renderer->m_regs->SMODE2, g_gs_renderer->isReallyInterlaced());
 	g_gs_renderer->PCRTCDisplays.SetRects(0, g_gs_renderer->m_regs->DISP[0].DISPLAY, g_gs_renderer->m_regs->DISP[0].DISPFB);
@@ -447,8 +437,6 @@ void GSvsync(u32 field, bool registers_written)
 	g_gs_renderer->PCRTCDisplays.CalculateDisplayOffset(g_gs_renderer->m_scanmask_used);
 	g_gs_renderer->PCRTCDisplays.CalculateFramebufferOffset(g_gs_renderer->m_scanmask_used, g_gs_renderer->m_regs->DISP[0].DISPFB, g_gs_renderer->m_regs->DISP[1].DISPFB);
 
-	// Do not move the flush into the VSync() method. It's here because EE transfers
-	// get cleared in HW VSync, and may be needed for a buffered draw (FFX FMVs).
 	g_gs_renderer->Flush(GSState::VSYNC);
 	g_gs_renderer->VSync(field, registers_written, g_gs_renderer->IsIdleFrame());
 }
@@ -463,15 +451,10 @@ int GSfreeze(FreezeAction mode, freezeData* data)
 	{
 		return g_gs_renderer->Freeze(data, true);
 	}
-	else // if (mode == FreezeAction::Load)
+	else
 	{
-		// Since Defrost doesn't do a hardware reset (since it would be clearing
-		// local memory just before it's overwritten), we have to manually wipe
-		// out the current textures.
 		g_gs_device->ClearCurrent();
 
-		// Dump audio frames in video capture if it's been started, otherwise we get
-		// a buildup of audio frames from the CPU thread.
 		if (GSCapture::IsCapturing())
 			GSCapture::Flush();
 
@@ -514,7 +497,6 @@ void GSThrottlePresentation()
 {
 	if (g_gs_device->GetVSyncMode() == GSVSyncMode::FIFO)
 	{
-		// Let vsync take care of throttling.
 		return;
 	}
 
@@ -636,7 +618,6 @@ std::vector<GSAdapterInfo> GSGetAdapterInfo(GSRendererType renderer)
 
 u32 GSGetMaxUpscaleMultiplier(u32 max_texture_size)
 {
-	// Maximum GS target size is 1280x1280. Assume we want to upscale the max size target.
 	return std::max(max_texture_size / 1280, 1u);
 }
 
@@ -675,17 +656,17 @@ void GSgetStats(SmallStringBase& info)
 
 		if (pps >= 170000000)
 		{
-			pps /= _1gb; // Gpps
+			pps /= _1gb;
 			prefix = 'G';
 		}
 		else if (pps >= 35000000)
 		{
-			pps /= _1mb; // Mpps
+			pps /= _1mb;
 			prefix = 'M';
 		}
 		else if (pps >= _1kb)
 		{
-			pps /= _1kb; // kpps
+			pps /= _1kb;
 			prefix = 'k';
 		}
 
@@ -719,7 +700,6 @@ void GSgetStats(SmallStringBase& info)
 		}
 		else
 		{
-			// Add ROV stats along standard stats.
 			info.format("{} HW | {} PRIM | {} DRW | {}/{} DRWC | {}/{} BAR | {} RP | {} RB | {}/{} TC | {} TU",
 				api_name,
 				(int)pm.Get(GSPerfMon::Prim),
@@ -745,7 +725,6 @@ void GSgetMemoryStats(SmallStringBase& info)
 		return;
 	}
 
-	// Get megabyte values. Round negligible values to 0.1 MB to avoid swamping.
 	const auto get_MB = [](const double bytes) {
 		return (bytes <= 0.0 ? bytes : std::max(0.1, bytes / static_cast<double>(_1mb)));
 	};
@@ -803,14 +782,12 @@ void GSUpdateConfig(const Pcsx2Config::GSOptions& new_config)
 	if (!g_gs_renderer)
 		return;
 
-	// Handle OSD scale changes by pushing a window resize through.
 	if (new_config.OsdScale != old_config.OsdScale)
 		ImGuiManager::RequestScaleUpdate();
 
 	if (new_config.OsdFontPath != old_config.OsdFontPath)
 		ImGuiManager::ReloadFonts();
 
-	// Options which need a full teardown/recreate.
 	if (!GSConfig.RestartOptionsAreEqual(old_config))
 	{
 		if (!GSreopen(true, true, GSConfig.Renderer, &old_config))
@@ -818,10 +795,8 @@ void GSUpdateConfig(const Pcsx2Config::GSOptions& new_config)
 		return;
 	}
 
-	// Ensure upscale multiplier is in range.
 	GSClampUpscaleMultiplier(GSConfig);
 
-	// Options which aren't using the global struct yet, so we need to recreate all GS objects.
 	if (GSConfig.SWExtraThreads != old_config.SWExtraThreads ||
 		GSConfig.SWExtraThreadsHeight != old_config.SWExtraThreadsHeight)
 	{
@@ -840,10 +815,8 @@ void GSUpdateConfig(const Pcsx2Config::GSOptions& new_config)
 		g_gs_renderer->UpdateRenderFixes();
 	}
 
-	// renderer-specific options (e.g. auto flush, TC offset)
 	g_gs_renderer->UpdateSettings(old_config);
 
-	// reload texture cache when trilinear filtering or TC options change
 	if (
 		(GSIsHardwareRenderer() && GSConfig.HWMipmap != old_config.HWMipmap) ||
 		GSConfig.TexturePreloading != old_config.TexturePreloading ||
@@ -865,16 +838,12 @@ void GSUpdateConfig(const Pcsx2Config::GSOptions& new_config)
 		g_gs_device->PurgePool();
 	}
 
-	// clear out the sampler cache when AF options change, since the anisotropy gets baked into them
 	if (GSConfig.MaxAnisotropy != old_config.MaxAnisotropy)
 		g_gs_device->ClearSamplerCache();
 
-	// texture dumping/replacement options
 	if (GSIsHardwareRenderer())
 		GSTextureReplacements::UpdateConfig(old_config);
 
-	// clear the hash texture cache since we might have replacements now
-	// also clear it when dumping changes, since we want to dump everything being used
 	if (GSConfig.LoadTextureReplacements != old_config.LoadTextureReplacements ||
 		GSConfig.DumpReplaceableTextures != old_config.DumpReplaceableTextures)
 	{
@@ -903,7 +872,6 @@ void GSSetSoftwareRendering(bool software_renderer, GSInterlaceMode new_interlac
 
 	if (!GSIsHardwareRenderer() != software_renderer)
 	{
-		// Config might be SW, and we're switching to HW -> use Auto.
 		const GSRendererType renderer = (software_renderer ? GSRendererType::SW :
 			(GSConfig.Renderer == GSRendererType::SW ? GSRendererType::Auto : GSConfig.Renderer));
 		if (!GSreopen(false, true, renderer, std::nullopt))
@@ -936,7 +904,6 @@ void* GSAllocateWrappedMemory(size_t size, size_t repeat)
 		return nullptr;
 	}
 
-	// Reserve the whole area with repeats.
 	u8* base = static_cast<u8*>(VirtualAlloc2(
 		GetCurrentProcess(), nullptr, repeat * size,
 		MEM_RESERVE | MEM_RESERVE_PLACEHOLDER, PAGE_NOACCESS,
@@ -946,7 +913,6 @@ void* GSAllocateWrappedMemory(size_t size, size_t repeat)
 		bool okay = true;
 		for (size_t i = 0; i < repeat; i++)
 		{
-			// Everything except the last needs the placeholders split to map over them. Then map the same file over the region.
 			u8* addr = base + i * size;
 			if ((i != (repeat - 1) && !VirtualFreeEx(GetCurrentProcess(), addr, size, MEM_RELEASE | MEM_PRESERVE_PLACEHOLDER)) ||
 				!MapViewOfFile3(s_fh, GetCurrentProcess(), addr, 0, size, MEM_REPLACE_PLACEHOLDER, PAGE_READWRITE, nullptr, 0))
@@ -1005,7 +971,7 @@ void* GSAllocateWrappedMemory(size_t size, size_t repeat)
 	s_shm_fd = shm_open(file_name, O_RDWR | O_CREAT | O_EXCL, 0600);
 	if (s_shm_fd != -1)
 	{
-		shm_unlink(file_name); // file is deleted but descriptor is still open
+		shm_unlink(file_name);
 	}
 	else
 	{
@@ -1130,7 +1096,6 @@ static void HotkeyAdjustUpscaleMultiplier(const float delta)
 		return;
 	}
 
-	// Clamp logic mirrors GraphicsSettingsWidget::populateUpscaleMultipliers().
 	float candidate_multiplier = EmuConfig.GS.UpscaleMultiplier + delta;
 	const float max_multiplier = static_cast<float>(std::clamp(GSGetMaxUpscaleMultiplier(g_gs_device->GetMaxTextureSize()),
 													10u, EmuConfig.GS.ExtendedUpscalingMultipliers ? 25u : 12u));
@@ -1152,17 +1117,13 @@ static void HotkeyAdjustUpscaleMultiplier(const float delta)
 							  delta > 0 ? TRANSLATE_STR("GS", "increased") : TRANSLATE_STR("GS", "decreased"), candidate_multiplier);
 	}
 
-	// Need to calculate our own target resolution. Reading after applying settings is a race condition.
 	const GSVector2i base_resolution = g_gs_renderer ? g_gs_renderer->PCRTCDisplays.GetResolution() : GSVector2i(0, 0);
 	const int target_iwidth = static_cast<int>(std::round(static_cast<float>(base_resolution.x) * candidate_multiplier));
 	const int target_iheight = static_cast<int>(std::round(static_cast<float>(base_resolution.y) * candidate_multiplier));
 
-	//: Leftmost value is an OSD message about the upscale multiplier. Values in parentheses are a resolution width (left) and height (right).
 	Host::AddIconOSDMessage("UpscaleMultiplierChanged", ICON_FA_ARROW_UP_RIGHT_FROM_SQUARE,
 							fmt::format(TRANSLATE_FS("GS", "{} ({} x {})"), osd_message, target_iwidth, target_iheight), Host::OSD_QUICK_DURATION);
 
-	// This is pretty slow. We only really need to flush the TC and recompile shaders.
-	// TODO(Stenzek): Make it faster at some point in the future.
 	EmuConfig.GS.UpscaleMultiplier = candidate_multiplier;
 	MTGS::ApplySettings();
 }
@@ -1206,7 +1167,6 @@ BEGIN_HOTKEY_LIST(g_gs_hotkeys){"Screenshot", TRANSLATE_NOOP("Hotkeys", "Graphic
 					g_gs_renderer->BeginCapture(std::move(filename));
 				});
 
-				// Sync GS thread. We want to start adding audio at the same time as video.
 				MTGS::WaitGS(false, false, false);
 			}
 		}},
@@ -1254,7 +1214,6 @@ BEGIN_HOTKEY_LIST(g_gs_hotkeys){"Screenshot", TRANSLATE_NOOP("Hotkeys", "Graphic
 			if (pressed)
 				return;
 
-			// technically this races, but the worst that'll happen is one frame uses the old AR.
 			EmuConfig.CurrentAspectRatio = static_cast<AspectRatioType>(
 				(static_cast<int>(EmuConfig.CurrentAspectRatio) + 1) % static_cast<int>(AspectRatioType::MaxCount));
 			Host::AddKeyedOSDMessage("CycleAspectRatio",

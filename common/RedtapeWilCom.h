@@ -7,7 +7,6 @@
 
 #include "common/RedtapeWindows.h"
 
-// warning : variable 's_hrErrorLast' set but not used [-Wunused-but-set-variable]
 #ifdef __clang__
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-but-set-variable"

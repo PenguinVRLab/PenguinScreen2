@@ -5,13 +5,11 @@
 
 #include "CDVDcommon.h"
 
-// Not used.
 typedef struct
 {
 	s32 y0, y1;
 } ADPCM_Decode_t;
 
-// Not used.
 typedef struct
 {
 	s32 freq;
@@ -65,7 +63,7 @@ struct cdrStruct
 
 	int Init;
 
-	u8 IrqMask; // psxdev: Added on initial psx work, not referenced since. Is it needed?
+	u8 IrqMask;
 	u8 Irq;
 	u32 eCycle;
 

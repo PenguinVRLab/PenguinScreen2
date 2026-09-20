@@ -8,9 +8,6 @@
 
 #include "common/Assertions.h"
 
-// Every potential jump point in the PS2's addressable memory has a BASEBLOCK
-// associated with it. So that means a BASEBLOCK for every 4 bytes of PS2
-// addressable memory.  Yay!
 struct BASEBLOCK
 {
 	uptr m_pFnptr;
@@ -19,18 +16,14 @@ struct BASEBLOCK
 	void __inline SetFnptr(uptr ptr) { m_pFnptr = ptr; }
 };
 
-// extra block info (only valid for start of fn)
 struct BASEBLOCKEX
 {
 	uptr fnptr;
 	u32 startpc;
-	u32 size;    // The size in dwords (equivalent to the number of instructions)
-	u32 x86size; // The size in byte of the translated x86 instructions
+	u32 size;
+	u32 x86size;
 
 #ifdef PCSX2_DEVBUILD
-	// Could be useful to instrument the block
-	//u32 visited; // number of times called
-	//u64 ltime; // regs it assumes to have set already
 #endif
 };
 
@@ -78,10 +71,9 @@ public:
 	{
 		if (_Size + 1 >= _Reserved)
 		{
-			reserve(_Reserved + 0x2000); // some games requires even more!
+			reserve(_Reserved + 0x2000);
 		}
 
-		// Insert the the new BASEBLOCKEX by startpc order
 		int imin = 0, imax = _Size, imid;
 
 		while (imin < imax)
@@ -98,7 +90,6 @@ public:
 
 		if (imin < _Size)
 		{
-			// make a hole for a new block.
 			memmove(blocks + imin + 1, blocks + imin, (_Size - imin) * sizeof(BASEBLOCKEX));
 		}
 
@@ -143,7 +134,6 @@ class BaseBlocks
 protected:
 	typedef std::multimap<u32, uptr>::iterator linkiter_t;
 
-	// switch to a hash map later?
 	std::multimap<u32, uptr> links;
 	uptr recompiler;
 	BaseBlockArray blocks;
@@ -162,7 +152,6 @@ public:
 
 	BASEBLOCKEX* New(u32 startpc, uptr fnptr);
 	int LastIndex(u32 startpc) const;
-	//BASEBLOCKEX* GetByX86(uptr ip);
 
 	__fi int Index(u32 startpc) const
 	{
@@ -196,24 +185,18 @@ public:
 		{
 			pxAssert(idx <= last);
 
-			//u32 startpc = blocks[idx].startpc;
 			std::pair<linkiter_t, linkiter_t> range = links.equal_range(blocks[idx].startpc);
 			for (linkiter_t i = range.first; i != range.second; ++i)
 				*(u32*)i->second = recompiler - (i->second + 4);
 
 			if (IsDevBuild)
 			{
-				// Clear the first instruction to 0xcc (breakpoint), as a way to assert if some
-				// static jumps get left behind to this block.  Note: Do not clear more than the
-				// first byte, since this code is called during exception handlers and event handlers
-				// both of which expect to be able to return to the recompiled code.
 
 				BASEBLOCKEX effu(blocks[idx]);
 				memset((void*)effu.fnptr, 0xcc, 1);
 			}
 		} while (idx++ < last);
 
-		// TODO: remove links from this block?
 		blocks.erase(first, last + 1);
 	}
 
@@ -228,16 +211,9 @@ public:
 
 #define PC_GETBLOCK_(x, reclut) ((BASEBLOCK*)(reclut[((u32)(x)) >> 16] + (x) * (sizeof(BASEBLOCK) / 4)))
 
-/**
- * Add a page to the recompiler lookup table
- *
- * Will associate `reclut[pagebase + pageidx]` with `mapbase[mappage << 14]`
- * Will associate `hwlut[pagebase + pageidx]` with `pageidx << 16`
- */
 static inline void recLUT_SetPage(uptr reclut[0x10000], u32 hwlut[0x10000],
                                   BASEBLOCK* mapbase, uint pagebase, uint pageidx, uint mappage)
 {
-	// this value is in 64k pages!
 	uint page = pagebase + pageidx;
 
 	pxAssert(page < 0x10000);

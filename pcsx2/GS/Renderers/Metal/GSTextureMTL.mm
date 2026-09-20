@@ -10,7 +10,6 @@
 
 #ifdef __APPLE__
 
-// Uploads/downloads need 32-byte alignment for AVX2.
 static constexpr u32 PITCH_ALIGNMENT = 32;
 
 GSTextureMTL::GSTextureMTL(GSDeviceMTL* dev, MRCOwned<id<MTLTexture>> texture, MRCOwned<id<MTLTexture>> rov_texture, Usage usage, Format format)
@@ -80,7 +79,6 @@ void* GSTextureMTL::MapWithPitch(const GSVector4i& r, int pitch, int layer)
 	if (m_state == GSTexture::State::Cleared)
 	{
 		m_state = GSTexture::State::Dirty;
-		// Not uploading to full texture
 		needs_clear = r.left > 0 || r.top > 0 || r.right < m_size.x || r.bottom < m_size.y;
 	}
 
@@ -100,7 +98,6 @@ void* GSTextureMTL::MapWithPitch(const GSVector4i& r, int pitch, int layer)
 		enc = m_dev->GetTextureUploadEncoder();
 		map = m_dev->Allocate(m_dev->m_texture_upload_buf, size);
 	}
-	// Copy is scheduled now, won't happen until the encoder is committed so no problems with ordering
 	[enc copyFromBuffer:map.gpu_buffer
 	       sourceOffset:map.gpu_offset
 	  sourceBytesPerRow:pitch
@@ -117,7 +114,6 @@ void* GSTextureMTL::MapWithPitch(const GSVector4i& r, int pitch, int layer)
 
 void GSTextureMTL::Unmap()
 {
-	// Nothing to do here, upload is already scheduled
 }
 
 void GSTextureMTL::GenerateMipmap()
@@ -222,13 +218,11 @@ void GSDownloadTextureMTL::CopyFromTexture(
 
 bool GSDownloadTextureMTL::Map(const GSVector4i& read_rc)
 {
-	// Always mapped.
 	return true;
 }
 
 void GSDownloadTextureMTL::Unmap()
 {
-	// Always mapped.
 }
 
 void GSDownloadTextureMTL::Flush()
@@ -238,18 +232,15 @@ void GSDownloadTextureMTL::Flush()
 
 	m_needs_flush = false;
 
-	// If it's the same buffer currently being encoded, we need to kick it (and spin).
 	if (m_copy_cmdbuffer == m_dev->GetRenderCmdBufWithoutCreate())
 		m_dev->FlushEncodersForReadback();
 
 	if (IsCommandBufferCompleted([m_copy_cmdbuffer status]))
 	{
-		// Asynchronous readback which already completed.
 		m_copy_cmdbuffer = nil;
 		return;
 	}
 
-	// Asynchrous readback, but the GPU isn't done yet.
 	if (GSConfig.HWSpinCPUForReadbacks)
 	{
 		do

@@ -12,11 +12,6 @@
 class PadBase
 {
 public:
-	// How many commands the pad should pretend to be ejected for.
-	// Since changing pads in the UI or ejecting a multitap is instant,
-	// this simulates the time it would take for a human to plug in the pad.
-	// That gives games a chance to see a pad get inserted rather than the
-	// pad's type magically changing from one frame to the next.
 	size_t ejectTicks = 0;
 
 protected:
@@ -29,7 +24,7 @@ protected:
 	bool analogLight = false;
 	bool analogLocked = false;
 
-public: // Public members
+public:
 	PadBase(u8 unifiedSlot, size_t ejectTicks = 0);
 	virtual ~PadBase();
 

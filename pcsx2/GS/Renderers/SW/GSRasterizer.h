@@ -80,7 +80,6 @@ protected:
 	struct { int sum, actual, total; } m_pixels;
 	int m_primcount;
 
-	// For the current draw.
 	GSScanlineLocalData m_local = {};
 	GSDrawScanline::SetupPrimPtr m_setup_prim = nullptr;
 	GSDrawScanline::DrawScanlinePtr m_draw_scanline = nullptr;
@@ -174,7 +173,6 @@ protected:
 
 	GSDrawScanline m_ds;
 
-	// Worker threads depend on the rasterizers, so don't change the order.
 	std::vector<std::unique_ptr<GSRasterizer>> m_r;
 	std::vector<std::unique_ptr<GSWorker>> m_workers;
 	u8* m_scanline;
@@ -189,8 +187,6 @@ public:
 	~GSRasterizerList() override;
 
 	static std::unique_ptr<IRasterizer> Create(int threads);
-
-	// IRasterizer
 
 	void Queue(const GSRingHeap::SharedPtr<GSRasterizerData>& data) override;
 	void Sync() override;

@@ -43,14 +43,13 @@ namespace
 		void DestroyContextAndStream();
 
 #ifdef _WIN32
-		// Keep it as the first field, as COM must uninitialize last.
 		wil::unique_couninitialize_call m_coUninit{false};
 #endif
 
 		cubeb* m_context = nullptr;
 		cubeb_stream* stream = nullptr;
 	};
-} // namespace
+}
 
 static TinyString GetCubebErrorString(int rv)
 {
@@ -141,23 +140,17 @@ bool CubebAudioStream::Initialize(const char* driver_name, const char* device_na
 	static constexpr const std::array<std::pair<cubeb_channel_layout, SampleReader>,
 		static_cast<size_t>(AudioExpansionMode::Count)>
 		channel_setups = {{
-			// Disabled
 			{CUBEB_LAYOUT_STEREO, StereoSampleReaderImpl},
-			// StereoLFE
 			{CUBEB_LAYOUT_STEREO_LFE, &SampleReaderImpl<AudioExpansionMode::StereoLFE, READ_CHANNEL_FRONT_LEFT,
 										  READ_CHANNEL_FRONT_RIGHT, READ_CHANNEL_LFE>},
-			// Quadraphonic
 			{CUBEB_LAYOUT_QUAD, &SampleReaderImpl<AudioExpansionMode::Quadraphonic, READ_CHANNEL_FRONT_LEFT,
 									READ_CHANNEL_FRONT_RIGHT, READ_CHANNEL_REAR_LEFT, READ_CHANNEL_REAR_RIGHT>},
-			// QuadraphonicLFE
 			{CUBEB_LAYOUT_QUAD_LFE,
 				&SampleReaderImpl<AudioExpansionMode::QuadraphonicLFE, READ_CHANNEL_FRONT_LEFT, READ_CHANNEL_FRONT_RIGHT,
 					READ_CHANNEL_LFE, READ_CHANNEL_REAR_LEFT, READ_CHANNEL_REAR_RIGHT>},
-			// Surround51
 			{CUBEB_LAYOUT_3F2_LFE_BACK,
 				&SampleReaderImpl<AudioExpansionMode::Surround51, READ_CHANNEL_FRONT_LEFT, READ_CHANNEL_FRONT_RIGHT,
 					READ_CHANNEL_FRONT_CENTER, READ_CHANNEL_LFE, READ_CHANNEL_REAR_LEFT, READ_CHANNEL_REAR_RIGHT>},
-			// Surround71
 			{CUBEB_LAYOUT_3F4_LFE,
 				&SampleReaderImpl<AudioExpansionMode::Surround71, READ_CHANNEL_FRONT_LEFT, READ_CHANNEL_FRONT_RIGHT,
 					READ_CHANNEL_FRONT_CENTER, READ_CHANNEL_LFE, READ_CHANNEL_REAR_LEFT, READ_CHANNEL_REAR_RIGHT,
@@ -193,7 +186,6 @@ bool CubebAudioStream::Initialize(const char* driver_name, const char* device_na
 		DEV_LOG("Minimum latency: {} ms ({} audio frames)", minimum_latency_ms, min_latency_frames);
 		if (m_parameters.minimal_output_latency)
 		{
-			// use minimum
 			latency_frames = min_latency_frames;
 		}
 		else if (minimum_latency_ms > m_parameters.output_latency_ms)
@@ -272,7 +264,6 @@ bool CubebAudioStream::Initialize(const char* driver_name, const char* device_na
 
 void CubebAudioStream::StateCallback(cubeb_stream* stream, void* user_ptr, cubeb_state state)
 {
-	// noop
 }
 
 long CubebAudioStream::DataCallback(cubeb_stream* stm, void* user_ptr, const void* input_buffer, void* output_buffer,
@@ -324,9 +315,6 @@ std::vector<AudioStream::DeviceInfo> AudioStream::GetCubebOutputDevices(const ch
 	ret.emplace_back(std::string(), TRANSLATE_STR("AudioStream", "Default"), 0);
 
 #ifdef _WIN32
-	// For enumeration, we need *any* COM context. multi- or single-threaded.
-	// Cubeb theoretically wants an MTA context, but this is only relevant when creating streams,
-	// which enumerating devices does not do.
 	HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 	if (hr == RPC_E_CHANGED_MODE)
 	{
@@ -360,7 +348,6 @@ std::vector<AudioStream::DeviceInfo> AudioStream::GetCubebOutputDevices(const ch
 
 	ScopedGuard devices_cleanup([context, &devices]() { cubeb_device_collection_destroy(context, &devices); });
 
-	// we need stream parameters to query latency
 	cubeb_stream_params params = {};
 	params.format = CUBEB_SAMPLE_FLOAT32LE;
 	params.rate = 48000;

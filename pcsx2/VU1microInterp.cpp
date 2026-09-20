@@ -38,11 +38,11 @@ static void _vu1Exec(VURegs* VU)
 	ptr = (u32*)&VU->Micro[VU->VI[REG_TPC].UL];
 	VU->VI[REG_TPC].UL += 8;
 
-	if (ptr[1] & 0x40000000) // E flag
+	if (ptr[1] & 0x40000000)
 	{
 		VU->ebit = 2;
 	}
-	if (ptr[1] & 0x10000000) // D flag
+	if (ptr[1] & 0x10000000)
 	{
 		if (VU0.VI[REG_FBRST].UL & 0x400)
 		{
@@ -51,7 +51,7 @@ static void _vu1Exec(VURegs* VU)
 			VU->ebit = 1;
 		}
 	}
-	if (ptr[1] & 0x08000000) // T flag
+	if (ptr[1] & 0x08000000)
 	{
 		if (VU0.VI[REG_FBRST].UL & 0x800)
 		{
@@ -61,8 +61,6 @@ static void _vu1Exec(VURegs* VU)
 		}
 	}
 
-	//VUM_LOG("VU->cycle = %d (flags st=%x;mac=%x;clip=%x,q=%f)", VU->cycle, VU->statusflag, VU->macflag, VU->clipflag, VU->q.F);
-
 	VU->code = ptr[1];
 	VU1regs_UPPER_OPCODE[VU->code & 0x3f](&uregs);
 
@@ -70,8 +68,7 @@ static void _vu1Exec(VURegs* VU)
 
 	_vuTestUpperStalls(VU, &uregs);
 
-	/* check upper flags */
-	if (ptr[1] & 0x80000000) // I Flag (Lower op is a float)
+	if (ptr[1] & 0x80000000)
 	{
 		_vuTestPipes(VU);
 
@@ -81,8 +78,6 @@ static void _vu1Exec(VURegs* VU)
 		_vu1ExecUpper(VU, ptr);
 
 		VU->VI[REG_I].UL = ptr[0];
-		//Lower not used, set to 0 to fill in the FMAC stall gap
-		//Could probably get away with just running upper stalls, but lets not tempt fate.
 		memset(&lregs, 0, sizeof(lregs));
 	}
 	else
@@ -109,13 +104,11 @@ static void _vu1Exec(VURegs* VU)
 		{
 			if (lregs.VFwrite == uregs.VFwrite)
 			{
-				//Console.Warning("*PCSX2*: Warning, VF write to the same reg in both lower/upper cycle pc=%x", VU->VI[REG_TPC].UL);
 				discard = 1;
 			}
 			if (lregs.VFread0 == uregs.VFwrite ||
 				lregs.VFread1 == uregs.VFwrite)
 			{
-				//Console.WriteLn("saving reg %d at pc=%x", uregs.VFwrite, VU->VI[REG_TPC].UL);
 				_VF = VU->VF[uregs.VFwrite];
 				vfreg = uregs.VFwrite;
 			}
@@ -124,12 +117,10 @@ static void _vu1Exec(VURegs* VU)
 		{
 			if (lregs.VIwrite & (1 << REG_CLIP_FLAG))
 			{
-				//Console.Warning("*PCSX2*: Warning, VI write to the same reg in both lower/upper cyclepc=%x", VU->VI[REG_TPC].UL);
 				discard = 1;
 			}
 			if (lregs.VIread & (1 << REG_CLIP_FLAG))
 			{
-				//Console.Warning("*PCSX2*: Warning, VI read same cycle as write pc=%x", VU->VI[REG_TPC].UL);
 				_VI = VU->VI[REG_CLIP_FLAG];
 				vireg = REG_CLIP_FLAG;
 			}
@@ -162,7 +153,6 @@ static void _vu1Exec(VURegs* VU)
 			}
 		}
 	}
-	// Clear an FMAC read for use
 	if (uregs.pipe == VUPIPE_FMAC || lregs.pipe == VUPIPE_FMAC)
 		_vuClearFMAC(VU);
 
@@ -177,7 +167,6 @@ static void _vu1Exec(VURegs* VU)
 
 			if (VU->takedelaybranch)
 			{
-				//DevCon.Warning("VU1 - Branch/Jump in Delay Slot");
 				VU->branch = 1;
 				VU->branchpc = VU->delaybranchpc;
 				VU->takedelaybranch = false;
@@ -196,15 +185,11 @@ static void _vu1Exec(VURegs* VU)
 
 			if(VU1.xgkickenable)
 				_vuXGKICKTransfer(0, true);
-			// In instant VU mode, VU1 goes WAY ahead of the CPU, making the XGKick fall way behind
-			// We also have some code to update it in VIF Unpacks too, since in some games (Aggressive Inline) overwrite the XGKick data
-			// VU currently flushes XGKICK on end, so this isn't needed, yet
 			if (INSTANT_VU1)
 				VU1.xgkicklastcycle = cpuRegs.cycle;
 		}
 	}
 
-	// Progress the write position of the FMAC pipeline by one place
 	if (uregs.pipe == VUPIPE_FMAC || lregs.pipe == VUPIPE_FMAC)
 		VU->fmacwritepos = (VU->fmacwritepos + 1) & 3;
 }

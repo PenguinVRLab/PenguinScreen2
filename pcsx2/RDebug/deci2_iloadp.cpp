@@ -5,22 +5,22 @@
 #include "deci2.h"
 
 struct DECI2_ILOADP_HEADER{
-	DECI2_HEADER	h;			//+00
-	u8				code,		//+08	cmd
-					action,		//+09
-					result,		//+0A
-					stamp;		//+0B
-	u32				moduleId;	//+0C
-};			//=10
+	DECI2_HEADER	h;
+	u8				code,
+					action,
+					result,
+					stamp;
+	u32				moduleId;
+};
 
 struct DECI2_ILOADP_INFO{
-	u16		version,		//+00
-			flags;			//+02
-	u32		module_address,	//+04
-			text_size,		//+08
-			data_size,		//+0C
-			bss_size,		//+10
-			_pad[3];		//+14
+	u16		version,
+			flags;
+	u32		module_address,
+			text_size,
+			data_size,
+			bss_size,
+			_pad[3];
 };
 
 void writeInfo(DECI2_ILOADP_INFO *info,
@@ -42,10 +42,10 @@ void D2_ILOADP(const u8 *inbuffer, u8 *outbuffer, char *message){
 	const irxImageInfo	*iii;
 	static char line[1024];
 
-	memcpy(outbuffer, inbuffer, 128*1024);//BUFFERSIZE
+	memcpy(outbuffer, inbuffer, 128*1024);
 	out->h.length=sizeof(DECI2_ILOADP_HEADER);
 	out->code++;
-	out->result=0;	//ok
+	out->result=0;
 	exchangeSD((DECI2_HEADER*)out);
 	switch(in->code){
 		case 0:

@@ -134,7 +134,6 @@ DebuggerWindow* DebuggerWindow::getInstance()
 
 DebuggerWindow* DebuggerWindow::createInstance()
 {
-	// Setup KDDockWidgets.
 	DockManager::configureDockingSystem();
 
 	if (g_debugger_window)
@@ -161,9 +160,6 @@ DockManager& DebuggerWindow::dockManager()
 
 void DebuggerWindow::setupDefaultToolBarState()
 {
-	// Hiding all the toolbars lets us save the default state of the window with
-	// all the toolbars hidden. The DockManager will show the appropriate ones
-	// later anyway.
 	for (QToolBar* toolbar : findChildren<QToolBar*>())
 		toolbar->hide();
 
@@ -239,18 +235,13 @@ int DebuggerWindow::fontSize()
 
 void DebuggerWindow::updateTheme()
 {
-	// Detect recursive StyleChange events caused by updating the stylesheet.
 	if (m_is_updating_theme)
 		return;
 
 	m_is_updating_theme = true;
 
-	// TODO: Migrate away from stylesheets to improve performance.
 	setStyleSheet(QString("font-size: %1pt;").arg(m_font_size));
 
-	// HACK: Improve performance for the default font size setting. It seems we
-	// need to call setStyleSheet twice here otherwise some widgets do not
-	// update properly.
 	if (m_font_size == QApplication::font().pointSize())
 		setStyleSheet(QString());
 
@@ -331,9 +322,6 @@ void DebuggerWindow::onVMPaused()
 
 	if (CBreakPoints::GetBreakpointTriggered())
 	{
-		// Select a layout tab corresponding to the CPU that triggered the
-		// breakpoint and make it start blinking unless said breakpoint was
-		// generated as a result of stepping.
 		const BreakPointCpu cpu_type = CBreakPoints::GetBreakpointTriggeredCpu();
 		if (cpu_type == BREAKPOINT_EE || cpu_type == BREAKPOINT_IOP)
 		{
@@ -346,15 +334,11 @@ void DebuggerWindow::onVMPaused()
 			CBreakPoints::ClearTemporaryBreakPoints();
 			CBreakPoints::SetBreakpointTriggered(false, BREAKPOINT_IOP_AND_EE);
 
-			// Our current PC is on a breakpoint.
-			// When we run the core again, we want to skip this breakpoint and run.
 			CBreakPoints::SetSkipFirst(BREAKPOINT_EE, r5900Debug.getPC());
 			CBreakPoints::SetSkipFirst(BREAKPOINT_IOP, r3000Debug.getPC());
 		});
 	}
 
-	// Stops us from telling the disassembly view to jump somwhere because
-	// breakpoint code paused the core.
 	if (!CBreakPoints::GetCorePaused())
 		emit onVMActuallyPaused();
 	else
@@ -415,13 +399,12 @@ void DebuggerWindow::onStepInto()
 	if (!cpu->isAlive() || !cpu->isCpuPaused())
 		return;
 
-	// Allow the cpu to skip this pc if it is a breakpoint
 	CBreakPoints::SetSkipFirst(cpu->getCpuType(), cpu->getPC());
 
 	const u32 pc = cpu->getPC();
 	const MIPSAnalyst::MipsOpcodeInfo info = MIPSAnalyst::GetOpcodeInfo(cpu, pc);
 
-	u32 bpAddr = pc + 0x4; // Default to the next instruction
+	u32 bpAddr = pc + 0x4;
 
 	if (info.isBranch)
 	{
@@ -437,13 +420,13 @@ void DebuggerWindow::onStepInto()
 			}
 			else
 			{
-				bpAddr = pc + (2 * 4); // Skip branch delay slot
+				bpAddr = pc + (2 * 4);
 			}
 		}
 	}
 
 	if (info.isSyscall)
-		bpAddr = info.branchTarget; // Syscalls are always taken
+		bpAddr = info.branchTarget;
 
 	Host::RunOnCPUThread([cpu, bpAddr] {
 		CBreakPoints::AddBreakPoint(cpu->getCpuType(), bpAddr, true, true, true);
@@ -465,24 +448,22 @@ void DebuggerWindow::onStepOver()
 	const u32 pc = cpu->getPC();
 	const MIPSAnalyst::MipsOpcodeInfo info = MIPSAnalyst::GetOpcodeInfo(cpu, pc);
 
-	u32 bpAddr = pc + 0x4; // Default to the next instruction
+	u32 bpAddr = pc + 0x4;
 
 	if (info.isBranch)
 	{
 		if (!info.isConditional)
 		{
-			if (info.isLinkedBranch) // jal, jalr
+			if (info.isLinkedBranch)
 			{
-				// it's a function call with a delay slot - skip that too
 				bpAddr += 4;
 			}
-			else // j, ...
+			else
 			{
-				// in case of absolute branches, set the breakpoint at the branch target
 				bpAddr = info.branchTarget;
 			}
 		}
-		else // beq, ...
+		else
 		{
 			if (info.conditionMet)
 			{
@@ -490,7 +471,7 @@ void DebuggerWindow::onStepOver()
 			}
 			else
 			{
-				bpAddr = pc + (2 * 4); // Skip branch delay slot
+				bpAddr = pc + (2 * 4);
 			}
 		}
 	}
@@ -512,7 +493,6 @@ void DebuggerWindow::onStepOut()
 	if (!cpu->isAlive() || !cpu->isCpuPaused())
 		return;
 
-	// Allow the cpu to skip this pc if it is a breakpoint
 	CBreakPoints::SetSkipFirst(cpu->getCpuType(), cpu->getPC());
 
 	std::vector<MipsStackWalk::StackFrame> stack_frames;

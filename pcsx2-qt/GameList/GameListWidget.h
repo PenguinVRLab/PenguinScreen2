@@ -65,7 +65,6 @@ public:
 
 	std::optional<GameList::Entry> getSelectedEntry() const;
 
-	/// Rescans a single file. NOTE: Happens on UI thread.
 	void rescanFile(const std::string& path);
 
 Q_SIGNALS:

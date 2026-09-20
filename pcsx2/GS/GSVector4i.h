@@ -90,7 +90,6 @@ public:
 		m = _mm_loadl_epi64((__m128i*)&v);
 	}
 
-	// MSVC has bad codegen for the constexpr version when applied to non-constexpr things (https://godbolt.org/z/h8qbn7), so leave the non-constexpr version default
 	__forceinline explicit GSVector4i(int i)
 	{
 		*this = i;
@@ -140,8 +139,6 @@ public:
 		return m;
 	}
 
-	// rect
-
 	__forceinline int width() const
 	{
 		return right - left;
@@ -154,7 +151,7 @@ public:
 
 	__forceinline GSVector4i rsize() const
 	{
-		return *this - xyxy(); // same as GSVector4i(0, 0, width(), height());
+		return *this - xyxy();
 	}
 
 	__forceinline unsigned int rarea() const
@@ -204,7 +201,6 @@ public:
 		return v.andnot(mask.xyxy());
 	}
 
-	/// Align the rect using mask values that already have one subtracted (1 << n - 1 aligns to 1 << n)
 	template <Align_Mode mode>
 	GSVector4i ralign_presub(const GSVector2i& a) const
 	{
@@ -214,7 +210,6 @@ public:
 	template <Align_Mode mode>
 	GSVector4i ralign(const GSVector2i& a) const
 	{
-		// a must be 1 << n
 
 		return _ralign_helper<mode>(GSVector4i(a) - GSVector4i(1, 1));
 	}
@@ -222,8 +217,6 @@ public:
 	GSVector4i fit(int arx, int ary) const;
 
 	GSVector4i fit(int preset) const;
-
-	//
 
 	__forceinline u32 rgba32() const
 	{
@@ -414,8 +407,6 @@ public:
 #endif
 	}
 
-	/// Equivalent to blend with the given mask broadcasted across the vector
-	/// May be faster than blend in some cases
 	template <u32 mask>
 	__forceinline GSVector4i smartblend(const GSVector4i& a) const
 	{
@@ -546,7 +537,7 @@ public:
 
 	__forceinline GSVector4i upl8() const
 	{
-#if 0 // _M_SSE >= 0x401 // TODO: compiler bug
+#if 0
 
 		return GSVector4i(_mm_cvtepu8_epi16(m));
 
@@ -564,7 +555,7 @@ public:
 
 	__forceinline GSVector4i upl16() const
 	{
-#if 0 //_M_SSE >= 0x401 // TODO: compiler bug
+#if 0
 
 		return GSVector4i(_mm_cvtepu16_epi32(m));
 
@@ -582,7 +573,7 @@ public:
 
 	__forceinline GSVector4i upl32() const
 	{
-#if 0 //_M_SSE >= 0x401 // TODO: compiler bug
+#if 0
 
 		return GSVector4i(_mm_cvtepu32_epi64(m));
 
@@ -607,11 +598,6 @@ public:
 	{
 		return GSVector4i(_mm_unpackhi_epi64(m, _mm_setzero_si128()));
 	}
-
-	// WARNING!!!
-	//
-	// MSVC (2008, 2010 ctp) believes that there is a "mem, reg" form of the pmovz/sx* instructions,
-	// turning these intrinsics into a minefield, don't spill regs when using them...
 
 	__forceinline GSVector4i i8to16() const
 	{
@@ -978,7 +964,6 @@ public:
 	template <int shift>
 	__forceinline GSVector4i lerp16(const GSVector4i& a, const GSVector4i& f) const
 	{
-		// (a - this) * f << shift + this
 
 		return add16(a.sub16(*this).modulate16<shift>(f));
 	}
@@ -986,7 +971,6 @@ public:
 	template <int shift>
 	__forceinline static GSVector4i lerp16(const GSVector4i& a, const GSVector4i& b, const GSVector4i& c)
 	{
-		// (a - b) * c << shift
 
 		return a.sub16(b).modulate16<shift>(c);
 	}
@@ -994,14 +978,12 @@ public:
 	template <int shift>
 	__forceinline static GSVector4i lerp16(const GSVector4i& a, const GSVector4i& b, const GSVector4i& c, const GSVector4i& d)
 	{
-		// (a - b) * c << shift + d
 
 		return d.add16(a.sub16(b).modulate16<shift>(c));
 	}
 
 	__forceinline GSVector4i lerp16_4(const GSVector4i& a, const GSVector4i& f) const
 	{
-		// (a - this) * f >> 4 + this (a, this: 8-bit, f: 4-bit)
 
 		return add16(a.sub16(*this).mul16l(f).sra16<4>());
 	}
@@ -1009,14 +991,12 @@ public:
 	template <int shift>
 	__forceinline GSVector4i modulate16(const GSVector4i& f) const
 	{
-		// a * f << shift
 
 		return sll16<shift + 1>().mul16hs(f);
 	}
 
 	__forceinline bool eq(const GSVector4i& v) const
 	{
-		// pxor, ptest, je
 
 		GSVector4i t = *this ^ v;
 
@@ -1629,15 +1609,6 @@ public:
 	{
 		return loadh(ph, loadl(pl));
 	}
-/*
-	__forceinline static GSVector4i load(const void* pl, const void* ph)
-	{
-		__m128i lo = _mm_loadl_epi64((__m128i*)pl);
-		__m128i hi = _mm_loadl_epi64((__m128i*)ph);
-
-		return GSVector4i(_mm_unpacklo_epi64(lo, hi));
-	}
-*/
 	template <bool aligned>
 	__forceinline static GSVector4i load(const void* p)
 	{
@@ -2065,7 +2036,6 @@ public:
 
 	// clang-format on
 
-	/// Noop, here so broadcast128 can be used generically over all vectors
 	__forceinline static GSVector4i broadcast128(const GSVector4i& v)
 	{
 		return v;

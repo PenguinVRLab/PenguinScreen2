@@ -11,39 +11,28 @@ namespace PacketReader::IP::UDP::DHCP
 	DHCP_Packet::DHCP_Packet(const u8* buffer, int bufferSize)
 	{
 		int offset = 0;
-		//Bits 0-31 //Bytes 0-3
 		NetLib::ReadByte08(buffer, &offset, &op);
 		NetLib::ReadByte08(buffer, &offset, &hardwareType);
 		NetLib::ReadByte08(buffer, &offset, &hardwareAddressLength);
 		NetLib::ReadByte08(buffer, &offset, &hops);
 
-		//Bits 32-63 //Bytes 4-7
 		NetLib::ReadUInt32(buffer, &offset, &transactionID);
 
-		//Bits 64-95 //Bytes 8-11
 		NetLib::ReadUInt16(buffer, &offset, &seconds);
 		NetLib::ReadUInt16(buffer, &offset, &flags);
 
-		//Bits 96-127 //Bytes 12-15
 		NetLib::ReadIPAddress(buffer, &offset, &clientIP);
 
-		//Bits 128-159 //Bytes 16-19
 		NetLib::ReadIPAddress(buffer, &offset, &yourIP);
 
-		//Bits 160-191 //Bytes 20-23
 		NetLib::ReadIPAddress(buffer, &offset, &serverIP);
 
-		//Bits 192-223 //Bytes 24-27
 		NetLib::ReadIPAddress(buffer, &offset, &gatewayIP);
 
-		//Bits 192+ //Bytes 28-43
 		NetLib::ReadByteArray(buffer, &offset, 16, clientHardwareAddress);
 
-		//Bytes 44-235
-		//Assume BOOTP unused
 		offset += 192;
 
-		//Bytes 236-239
 		NetLib::ReadUInt32(buffer, &offset, &magicCookie);
 		bool opReadFin = false;
 
@@ -90,7 +79,6 @@ namespace PacketReader::IP::UDP::DHCP
 					options.push_back(new DHCPopBCIP(buffer, offset));
 					break;
 				case 46:
-					//Do we actually care about this?
 					options.push_back(new DHCPopNBIOSType(buffer, offset));
 					break;
 				case 50:
@@ -124,7 +112,6 @@ namespace PacketReader::IP::UDP::DHCP
 					options.push_back(new DHCPopClassID(buffer, offset));
 					break;
 				case 61:
-					//Do we actully care about this?
 					options.push_back(new DHCPopClientID(buffer, offset));
 					break;
 				default:
@@ -156,9 +143,7 @@ namespace PacketReader::IP::UDP::DHCP
 		, maxLength{original.maxLength}
 	{
 		memcpy(clientHardwareAddress, original.clientHardwareAddress, 16);
-		//Assume BOOTP unused
 
-		//Clone options
 		options.reserve(original.options.size());
 		for (size_t i = 0; i < options.size(); i++)
 			options.push_back(original.options[i]->Clone());
@@ -189,7 +174,6 @@ namespace PacketReader::IP::UDP::DHCP
 		NetLib::WriteIPAddress(buffer, offset, gatewayIP);
 
 		NetLib::WriteByteArray(buffer, offset, 16, clientHardwareAddress);
-		//empty bytes
 		memset(buffer + *offset, 0, 64 + 128);
 		*offset += 64 + 128;
 
@@ -206,7 +190,6 @@ namespace PacketReader::IP::UDP::DHCP
 			else
 			{
 				Console.Error("DEV9: DHCP_Packet: Oversized DHCP packet not handled");
-				//We need space for DHCP End
 				if (len == maxLength)
 				{
 					i -= 1;
@@ -238,4 +221,4 @@ namespace PacketReader::IP::UDP::DHCP
 		for (size_t i = 0; i < options.size(); i++)
 			delete options[i];
 	}
-} // namespace PacketReader::IP::UDP::DHCP
+}

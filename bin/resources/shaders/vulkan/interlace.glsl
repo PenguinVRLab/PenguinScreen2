@@ -29,13 +29,12 @@ layout(push_constant) uniform cb0
 layout(set = 0, binding = 0) uniform sampler2D samp0;
 
 
-// Weave shader
 #ifdef ps_main0
 void ps_main0()
 {
-	const int idx   = int(ZrH.x);          // buffer index passed from CPU
-	const int field = idx & 1;             // current field
-	const int vpos  = int(gl_FragCoord.y); // vertical position of destination texture
+	const int idx   = int(ZrH.x);
+	const int field = idx & 1;
+	const int vpos  = int(gl_FragCoord.y);
 
 	if ((vpos & 1) == field)
 		o_col0 = textureLod(samp0, v_tex, 0);
@@ -45,7 +44,6 @@ void ps_main0()
 #endif
 
 
-// Bob shader
 #ifdef ps_main1
 void ps_main1()
 {
@@ -54,7 +52,6 @@ void ps_main1()
 #endif
 
 
-// Blend shader
 #ifdef ps_main2
 void ps_main2()
 {
@@ -68,26 +65,17 @@ void ps_main2()
 #endif
 
 
-// MAD shader - buffering
 #ifdef ps_main3
 void ps_main3()
 {
-	// We take half the lines from the current frame and stores them in the MAD frame buffer.
-	// the MAD frame buffer is split in 2 consecutive banks of 2 fields each, the fields in each bank
-	// are interleaved (top field at even lines and bottom field at odd lines).
-	// When the source texture has an odd vres, the first line of bank 1 would be an odd index
-	// causing the wrong lines to be discarded, so a vertical offset (lofs) is added to the vertical
-	// position of the destination texture to force the proper field alignment
 
-	const int  idx    = int(ZrH.x);                               // buffer index passed from CPU
-	const int  bank   = idx >> 1;                                 // current bank
-	const int  field  = idx & 1;                                  // current field
-	const int  vres   = int(ZrH.z) >> 1;                          // vertical resolution of source texture
-	const int  lofs   = ((((vres + 1) >> 1) << 1) - vres) & bank; // line alignment offset for bank 1
-	const int  vpos   = int(gl_FragCoord.y) + lofs;               // vertical position of destination texture
+	const int  idx    = int(ZrH.x);
+	const int  bank   = idx >> 1;
+	const int  field  = idx & 1;
+	const int  vres   = int(ZrH.z) >> 1;
+	const int  lofs   = ((((vres + 1) >> 1) << 1) - vres) & bank;
+	const int  vpos   = int(gl_FragCoord.y) + lofs;
 
-	// if the index of current destination line belongs to the current fiels we update it, otherwise
-	// we leave the old line in the destination buffer
 	if ((vpos & 1) == field)
 		o_col0 = textureLod(samp0, v_tex, 0);
 	else
@@ -96,28 +84,25 @@ void ps_main3()
 #endif
 
 
-// MAD shader - reconstruction
 #ifdef ps_main4
 void ps_main4()
 {
-	// we use the contents of the MAD frame buffer to reconstruct the missing lines from the current
-	// field.
 
-	const int   idx          = int(ZrH.x);                         // buffer index passed from CPU
-	const int   bank         = idx >> 1;                           // current bank
-	const int   field        = idx & 1;                            // current field
-	const int   vpos         = int(gl_FragCoord.y);                // vertical position of destination texture
-	const float sensitivity  = ZrH.w;                              // passed from CPU, higher values mean more likely to use weave
-	const vec3  motion_thr   = vec3(1.0, 1.0, 1.0) * sensitivity;  //
-	const vec2  bofs         = vec2(0.0f, 0.5f);                   // position of the bank 1 relative to source texture size
-	const vec2  vscale       = vec2(1.0f, 0.5f);                   // scaling factor from source to destination texture
-	const vec2  lofs         = vec2(0.0f, ZrH.y) * vscale;         // distance between two adjacent lines relative to source texture size
-	const vec2  iptr         = v_tex * vscale;                     // pointer to the current pixel in the source texture
+	const int   idx          = int(ZrH.x);
+	const int   bank         = idx >> 1;
+	const int   field        = idx & 1;
+	const int   vpos         = int(gl_FragCoord.y);
+	const float sensitivity  = ZrH.w;
+	const vec3  motion_thr   = vec3(1.0, 1.0, 1.0) * sensitivity;
+	const vec2  bofs         = vec2(0.0f, 0.5f);
+	const vec2  vscale       = vec2(1.0f, 0.5f);
+	const vec2  lofs         = vec2(0.0f, ZrH.y) * vscale;
+	const vec2  iptr         = v_tex * vscale;
 
-	vec2 p_t0; // pointer to current pixel (missing or not) from most recent frame
-	vec2 p_t1; // pointer to current pixel (missing or not) from one frame back
-	vec2 p_t2; // pointer to current pixel (missing or not) from two frames back
-	vec2 p_t3; // pointer to current pixel (missing or not) from three frames back
+	vec2 p_t0;
+	vec2 p_t1;
+	vec2 p_t2;
+	vec2 p_t3;
 
 	switch (idx)
 	{
@@ -147,59 +132,48 @@ void ps_main4()
 			break;
 	}
 
-	// calculating motion, only relevant for missing lines where the "center line" is pointed by p_t1
+	vec4 hn = textureLod(samp0, p_t0 - lofs, 0);
+	vec4 cn = textureLod(samp0, p_t1, 0);
+	vec4 ln = textureLod(samp0, p_t0 + lofs, 0);
 
-	vec4 hn = textureLod(samp0, p_t0 - lofs, 0); // new high pixel
-	vec4 cn = textureLod(samp0, p_t1, 0);        // new center pixel
-	vec4 ln = textureLod(samp0, p_t0 + lofs, 0); // new low pixel
+	vec4 ho = textureLod(samp0, p_t2 - lofs, 0);
+	vec4 co = textureLod(samp0, p_t3, 0);
+	vec4 lo = textureLod(samp0, p_t2 + lofs, 0);
 
-	vec4 ho = textureLod(samp0, p_t2 - lofs, 0); // old high pixel
-	vec4 co = textureLod(samp0, p_t3, 0);        // old center pixel
-	vec4 lo = textureLod(samp0, p_t2 + lofs, 0); // old low pixel
-
-	vec3 mh = hn.rgb - ho.rgb; // high pixel motion
-	vec3 mc = cn.rgb - co.rgb; // center pixel motion
-	vec3 ml = ln.rgb - lo.rgb; // low pixel motion
+	vec3 mh = hn.rgb - ho.rgb;
+	vec3 mc = cn.rgb - co.rgb;
+	vec3 ml = ln.rgb - lo.rgb;
 
 	mh = max(mh, -mh) - motion_thr;
 	mc = max(mc, -mc) - motion_thr;
 	ml = max(ml, -ml) - motion_thr;
 
-	#if 1 // use this code to evaluate each color motion separately
+	#if 1
 		float mh_max = max(max(mh.x, mh.y), mh.z);
 		float mc_max = max(max(mc.x, mc.y), mc.z);
 		float ml_max = max(max(ml.x, ml.y), ml.z);
-	#else // use this code to evaluate average color motion
+	#else
 		float mh_max = mh.x + mh.y + mh.z;
 		float mc_max = mc.x + mc.y + mc.z;
 		float ml_max = ml.x + ml.y + ml.z;
 	#endif
 
-	// selecting deinterlacing output
-
-	if ((vpos & 1) == field) // output coordinate present on current field
+	if ((vpos & 1) == field)
 	{
-		// output coordinate present on current field
 		o_col0 = textureLod(samp0, p_t0, 0);
 	}
 	else if ((iptr.y > 0.5f - lofs.y) || (iptr.y < 0.0 + lofs.y))
 	{
-		// top and bottom lines are always weaved
 		o_col0 = cn;
 	}
 	else
 	{
-		// missing line needs to be reconstructed
 		if(((mh_max > 0.0f) || (ml_max > 0.0f)) || (mc_max > 0.0f))
-			// high motion -> interpolate pixels above and below
 			o_col0 = (hn + ln) / 2.0f;
 		else
 		{
-			// Check if it's completely static first, we don't need to mess with any of that.
 			if((mh_max != -motion_thr.x) || (ml_max != -motion_thr.x) || (mc_max != -motion_thr.x))
 			{
-				// Check the diff with the above and below lines, if the difference is smaller between the new high and low lines
-				// compared to the new centre line and the high line (with some threshold of about 25 color steps), then reconstruct.
 				vec3 mhln = hn.rgb - ln.rgb;
 				vec3 mchn = hn.rgb - cn.rgb;
 
@@ -209,15 +183,12 @@ void ps_main4()
 				float mhln_max = max(max(mhln.x, mhln.y), mhln.z);
 				float mchn_max = max(max(mchn.x, mchn.y), mchn.z);
 
-				// The new centre line is a fair chunk different from those surrounding it, so quite likely incorrect.
 				if (mhln_max < 0.0f && mchn_max >= (mhln_max * 0.90f))
 					o_col0 = (hn + ln) / 2.0f;
 				else
-					// low motion -> weave
 					o_col0 = cn;
 			}
 			else
-				// low motion -> weave
 				o_col0 = cn;
 		}
 	}

@@ -39,7 +39,7 @@ namespace usb_eyetoy
 				return 0;
 			}
 		};
-	} // namespace noop_api
+	}
 
 	std::unique_ptr<VideoDevice> VideoDevice::CreateInstance()
 	{
@@ -50,4 +50,4 @@ namespace usb_eyetoy
 	{
 		return {};
 	}
-} // namespace usb_eyetoy
+}

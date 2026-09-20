@@ -28,16 +28,6 @@
 #include <ApplicationServices/ApplicationServices.h>
 #include <IOKit/pwr_mgt/IOPMLib.h>
 
-// Darwin (OSX) is a bit different from Linux when requesting properties of
-// the OS because of its BSD/Mach heritage. Helpfully, most of this code
-// should translate pretty well to other *BSD systems. (e.g.: the sysctl(3)
-// interface).
-//
-// For an overview of all of Darwin's sysctls, check:
-// https://developer.apple.com/library/mac/documentation/Darwin/Reference/ManPages/man3/sysctl.3.html
-
-// Return the total physical memory on the machine, in bytes. Returns 0 on
-// failure (not supported by the operating system).
 u64 GetPhysicalMemory()
 {
 	u64 getmem = 0;
@@ -53,22 +43,18 @@ u64 GetAvailablePhysicalMemory()
 	const mach_port_t host_port = mach_host_self();
 	vm_size_t page_size;
 
-	// Get the system's page size.
 	if (host_page_size(host_port, &page_size) != KERN_SUCCESS)
 		return 0;
 
 	vm_statistics64_data_t vm_stat;
 	mach_msg_type_number_t host_size = sizeof(vm_statistics64_data_t) / sizeof(integer_t);
 
-	// Get system memory statistics.
 	if (host_statistics64(host_port, HOST_VM_INFO, reinterpret_cast<host_info64_t>(&vm_stat), &host_size) != KERN_SUCCESS)
 		return 0;
 
-	// Get the number of free and inactive pages.
 	const u64 free_pages = static_cast<u64>(vm_stat.free_count);
 	const u64 inactive_pages = static_cast<u64>(vm_stat.inactive_count);
 
-	// Calculate available memory.
 	const u64 get_available_mem = (free_pages + inactive_pages) * page_size;
 
 	return get_available_mem;
@@ -81,23 +67,11 @@ static const u64 tickfreq = []() {
 	return (u64)1e9 * (u64)s_timebase_info.denom / (u64)s_timebase_info.numer;
 }();
 
-// returns the performance-counter frequency: ticks per second (Hz)
-//
-// usage:
-//   u64 seconds_passed = GetCPUTicks() / GetTickFrequency();
-//   u64 millis_passed = (GetCPUTicks() * 1000) / GetTickFrequency();
-//
-// NOTE: multiply, subtract, ... your ticks before dividing by
-// GetTickFrequency() to maintain good precision.
 u64 GetTickFrequency()
 {
 	return tickfreq;
 }
 
-// return the number of "ticks" since some arbitrary, fixed time in the
-// past. On OSX x86(-64), this is actually the number of nanoseconds passed,
-// because mach_timebase_info.numer == denom == 1. So "ticks" ==
-// nanoseconds.
 u64 GetCPUTicks()
 {
 	return mach_absolute_time();
@@ -154,13 +128,9 @@ bool Common::InhibitScreensaver(bool inhibit)
 
 void Common::SetMousePosition(int x, int y)
 {
-	// Little bit ugly but;
-	// Creating mouse move events and posting them wasn't very reliable.
-	// Calling CGWarpMouseCursorPosition without CGAssociateMouseAndMouseCursorPosition(false)
-	// ends up with the cursor feeling "sticky".
 	CGAssociateMouseAndMouseCursorPosition(false);
 	CGWarpMouseCursorPosition(CGPointMake(x, y));
-	CGAssociateMouseAndMouseCursorPosition(true); // The default state
+	CGAssociateMouseAndMouseCursorPosition(true);
 	return;
 }
 
@@ -222,7 +192,6 @@ void Threading::Sleep(int ms)
 
 void Threading::SleepUntil(u64 ticks)
 {
-	// This is definitely sub-optimal, but apparently clock_nanosleep() doesn't exist.
 	const s64 diff = static_cast<s64>(ticks - GetCPUTicks());
 	if (diff <= 0)
 		return;
@@ -345,24 +314,22 @@ void HostSys::EndCodeWrite()
 	if ((bits & 0x0a000000) != 0x08000000)
 		return false;
 
-	// if (Mask(LoadStorePairAnyFMask) == LoadStorePairAnyFixed)
 	if ((bits & 0x3a000000) == 0x28000000)
 	{
-		// return Mask(LoadStorePairLBit) == 0
 		return (bits & (1 << 22)) == 0;
 	}
 
 	switch (bits & 0xC4C00000)
 	{
-		case 0x00000000: // STRB_w
-		case 0x40000000: // STRH_w
-		case 0x80000000: // STR_w
-		case 0xC0000000: // STR_x
-		case 0x04000000: // STR_b
-		case 0x44000000: // STR_h
-		case 0x84000000: // STR_s
-		case 0xC4000000: // STR_d
-		case 0x04800000: // STR_q
+		case 0x00000000:
+		case 0x40000000:
+		case 0x80000000:
+		case 0xC0000000:
+		case 0x04000000:
+		case 0x44000000:
+		case 0x84000000:
+		case 0xC4000000:
+		case 0x04800000:
 			return true;
 
 		default:
@@ -370,7 +337,7 @@ void HostSys::EndCodeWrite()
 	}
 }
 
-#endif // ARCH_ARM64
+#endif
 
 #define USE_MACH_EXCEPTION_PORTS
 
@@ -386,7 +353,7 @@ namespace PageFaultHandler
 	static std::recursive_mutex s_exception_handler_mutex;
 	static bool s_in_exception_handler = false;
 	static bool s_installed = false;
-} // namespace PageFaultHandler
+}
 
 #ifdef USE_MACH_EXCEPTION_PORTS
 
@@ -445,7 +412,6 @@ void PageFaultHandler::SignalHandler(mach_port_t port)
 
 		if (msg_in.Head.msgh_id == MACH_NOTIFY_NO_SENDERS)
 		{
-			// the other thread exited
 			mach_port_deallocate(mach_task_self(), port);
 			return;
 		}
@@ -477,23 +443,20 @@ void PageFaultHandler::SignalHandler(mach_port_t port)
 			s_in_exception_handler = false;
 		}
 
-		// Set up the reply.
 		msg_out.Head.msgh_bits = MACH_MSGH_BITS(MACH_MSGH_BITS_REMOTE(msg_in.Head.msgh_bits), 0);
 		msg_out.Head.msgh_remote_port = msg_in.Head.msgh_remote_port;
 		msg_out.Head.msgh_local_port = MACH_PORT_NULL;
 		msg_out.Head.msgh_id = msg_in.Head.msgh_id + 100;
 		msg_out.NDR = msg_in.NDR;
 
-		if (result != HandlerResult::ContinueExecution) // cooked
+		if (result != HandlerResult::ContinueExecution)
 		{
-			// Continue to the next exception handler (debugger or crash)
 			msg_out.RetCode = KERN_FAILURE;
 			msg_out.flavor = 0;
 			msg_out.new_stateCnt = 0;
 		}
 		else
 		{
-			// Resumes execution right where we left off (re-executes instruction that caused the SIGSEGV)
 			msg_out.RetCode = KERN_SUCCESS;
 			msg_out.flavor = THREAD_STATE64;
 			msg_out.new_stateCnt = THREAD_STATE64_COUNT;
@@ -583,10 +546,8 @@ void PageFaultHandler::SignalHandler(int sig, siginfo_t* info, void* ctx)
 	const bool is_write = IsStoreInstruction(exception_pc);
 #endif
 
-	// Executing the handler concurrently from multiple threads wouldn't go down well.
 	s_exception_handler_mutex.lock();
 
-	// Prevent recursive exception filtering.
 	HandlerResult result = HandlerResult::ExecuteNextHandler;
 	if (!s_in_exception_handler)
 	{
@@ -597,11 +558,9 @@ void PageFaultHandler::SignalHandler(int sig, siginfo_t* info, void* ctx)
 
 	s_exception_handler_mutex.unlock();
 
-	// Resumes execution right where we left off (re-executes instruction that caused the SIGSEGV).
 	if (result == HandlerResult::ContinueExecution)
 		return;
 
-	// We couldn't handle it. Pass it off to the crash dumper.
 	CrashHandler::CrashSignalHandler(sig, info, ctx);
 }
 
@@ -616,7 +575,6 @@ bool PageFaultHandler::Install(Error* error)
 	sa.sa_flags = SA_SIGINFO;
 	sa.sa_sigaction = SignalHandler;
 
-	// MacOS uses SIGBUS for memory permission violations, as well as SIGSEGV on ARM64.
 	if (sigaction(SIGBUS, &sa, nullptr) != 0)
 	{
 		Error::SetErrno(error, "sigaction() for SIGBUS failed: ", errno);
@@ -631,7 +589,6 @@ bool PageFaultHandler::Install(Error* error)
 	}
 #endif
 
-	// Allow us to ignore faults when running under lldb.
 	task_set_exception_ports(mach_task_self(), EXC_MASK_BAD_ACCESS, MACH_PORT_NULL, EXCEPTION_DEFAULT, 0);
 
 	s_installed = true;

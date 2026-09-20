@@ -68,34 +68,16 @@ namespace x86Emitter
 
 	struct xImplAVX_CmpInt
 	{
-		// Compare packed bytes for equality.
-		// If a data element in dest is equal to the corresponding date element src, the
-		// corresponding data element in dest is set to all 1s; otherwise, it is set to all 0s.
 		const xImplAVX_ThreeArgYMM EQB;
 
-		// Compare packed words for equality.
-		// If a data element in dest is equal to the corresponding date element src, the
-		// corresponding data element in dest is set to all 1s; otherwise, it is set to all 0s.
 		const xImplAVX_ThreeArgYMM EQW;
 
-		// Compare packed doublewords [32-bits] for equality.
-		// If a data element in dest is equal to the corresponding date element src, the
-		// corresponding data element in dest is set to all 1s; otherwise, it is set to all 0s.
 		const xImplAVX_ThreeArgYMM EQD;
 
-		// Compare packed signed bytes for greater than.
-		// If a data element in dest is greater than the corresponding date element src, the
-		// corresponding data element in dest is set to all 1s; otherwise, it is set to all 0s.
 		const xImplAVX_ThreeArgYMM GTB;
 
-		// Compare packed signed words for greater than.
-		// If a data element in dest is greater than the corresponding date element src, the
-		// corresponding data element in dest is set to all 1s; otherwise, it is set to all 0s.
 		const xImplAVX_ThreeArgYMM GTW;
 
-		// Compare packed signed doublewords [32-bits] for greater than.
-		// If a data element in dest is greater than the corresponding date element src, the
-		// corresponding data element in dest is set to all 1s; otherwise, it is set to all 0s.
 		const xImplAVX_ThreeArgYMM GTD;
 	};
-} // namespace x86Emitter
+}

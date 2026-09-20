@@ -9,10 +9,6 @@
 
 #pragma optimize("", off)
 
-// The problem with AVX2 builds on Windows, is that MSVC generates AVX instructions for zeroing memory,
-// which is pretty common in our global object constructors. So, we have to use a special object which
-// gets initialized before all other global objects, that does the hardware check, and terminates the
-// process before main() or any of the other objects are constructed (which would subsequently crash).
 struct EarlyHardwareCheckObject
 {
 	EarlyHardwareCheckObject()
@@ -21,7 +17,6 @@ struct EarlyHardwareCheckObject
 		if (VMManager::PerformEarlyHardwareChecks(&error))
 			return;
 
-		// we can't use StringUtil::UTF8StringToWideString because *that* constructor uses AVX..
 		const int error_len = static_cast<int>(std::strlen(error));
 		int wlen = MultiByteToWideChar(CP_UTF8, 0, error, error_len, nullptr, 0);
 		if (wlen > 0)
@@ -38,7 +33,7 @@ struct EarlyHardwareCheckObject
 		TerminateProcess(GetCurrentProcess(), 0xFFFFFFFF);
 	}
 };
-#pragma warning(disable : 4075) // warning C4075: initializers put in unrecognized initialization area
+#pragma warning(disable : 4075)
 #pragma init_seg(".CRT$XCT")
 EarlyHardwareCheckObject s_hardware_checker;
 

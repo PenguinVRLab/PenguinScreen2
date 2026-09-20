@@ -25,15 +25,13 @@ class GSTextureMTL : public GSTexture
 	bool m_has_mipmaps = false;
 
 public:
-	u64 m_last_read = 0;  ///< Last time this texture was read by a draw
-	u64 m_last_write = 0; ///< Last time this texture was written by a draw
+	u64 m_last_read = 0;
+	u64 m_last_write = 0;
 	GSTextureMTL(GSDeviceMTL* dev, MRCOwned<id<MTLTexture>> texture, MRCOwned<id<MTLTexture>> rov_texture, Usage usage, Format format);
 	~GSTextureMTL();
 
-	/// For making fake backbuffers
 	void SetSize(GSVector2i size) { m_size = size; }
 
-	/// Flushes requested clears to the texture
 	void FlushClears();
 
 	void* GetNativeHandle() const override;

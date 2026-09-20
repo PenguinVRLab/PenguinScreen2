@@ -32,7 +32,6 @@ static std::optional<float> GetRefreshRateFromDisplayConfig(HWND hwnd)
 	DynamicHeapArray<DISPLAYCONFIG_PATH_INFO> path_info;
 	DynamicHeapArray<DISPLAYCONFIG_MODE_INFO> mode_info;
 
-	// I guess this could fail if it changes inbetween two calls... unlikely.
 	for (;;)
 	{
 		UINT32 path_size = 0, mode_size = 0;
@@ -71,7 +70,6 @@ static std::optional<float> GetRefreshRateFromDisplayConfig(HWND hwnd)
 
 		if (std::wcscmp(sdn.viewGdiDeviceName, mi.szDevice) == 0)
 		{
-			// Found the monitor!
 			return static_cast<float>(static_cast<double>(pi.targetInfo.refreshRate.Numerator) /
 									  static_cast<double>(pi.targetInfo.refreshRate.Denominator));
 		}
@@ -113,7 +111,6 @@ static std::optional<float> GetRefreshRateFromMonitor(HWND hwnd)
 		DEVMODEW dm = {};
 		dm.dmSize = sizeof(dm);
 
-		// 0/1 are reserved for "defaults".
 		if (EnumDisplaySettingsW(mi.szDevice, ENUM_CURRENT_SETTINGS, &dm) && dm.dmDisplayFrequency > 1)
 			return static_cast<float>(dm.dmDisplayFrequency);
 	}
@@ -127,7 +124,6 @@ std::optional<float> WindowInfo::QueryRefreshRateForWindow(const WindowInfo& wi)
 	if (wi.type != Type::Win32 || !wi.window_handle)
 		return ret;
 
-	// Try DWM first, then fall back to integer values.
 	const HWND hwnd = static_cast<HWND>(wi.window_handle);
 	ret = GetRefreshRateFromDisplayConfig(hwnd);
 	if (!ret.has_value())
@@ -242,7 +238,7 @@ static std::optional<float> GetRefreshRateFromXRandR(const WindowInfo& wi)
 		static_cast<double>(mode->dotClock) / (static_cast<double>(mode->hTotal) * static_cast<double>(mode->vTotal)));
 }
 
-#endif // X11_API
+#endif
 
 std::optional<float> WindowInfo::QueryRefreshRateForWindow(const WindowInfo& wi)
 {

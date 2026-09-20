@@ -23,14 +23,11 @@ public:
 	D3D12StreamBuffer();
 	~D3D12StreamBuffer();
 
-	// gpu_backed_buffer specifies if a second buffer should be created in the default heap.
 	bool Create(u32 size, bool gpu_backed_buffer = false);
 
 	__fi bool IsValid() const { return static_cast<bool>(m_buffer_upload); }
 	__fi ID3D12Resource* GetBuffer() const
 	{
-		// This function is currently only used for textures, which already need to bt copied to a texture resource.
-		// For now, assert that gpu_backed_buffer was false.
 		pxAssert(m_buffer_default == nullptr);
 		return m_buffer_upload.get();
 	}
@@ -44,7 +41,6 @@ public:
 
 	bool ReserveMemory(u32 num_bytes, u32 alignment);
 	void CommitMemory(u32 final_num_bytes);
-	// Queues copy to default heap if gpu_backed_buffer was true.
 	void FlushMemory();
 
 	void Destroy(bool defer = true);
@@ -53,7 +49,6 @@ private:
 	void UpdateCurrentFencePosition();
 	void UpdateGPUPosition();
 
-	// Waits for as many fences as needed to allocate num_bytes bytes from the buffer.
 	bool WaitForClearSpace(u32 num_bytes);
 
 	u32 m_size = 0;
@@ -69,6 +64,5 @@ private:
 	D3D12_GPU_VIRTUAL_ADDRESS m_gpu_pointer = {};
 	u8* m_host_pointer = nullptr;
 
-	// List of fences and the corresponding positions in the buffer
 	std::deque<std::pair<u64, u32>> m_tracked_fences;
 };

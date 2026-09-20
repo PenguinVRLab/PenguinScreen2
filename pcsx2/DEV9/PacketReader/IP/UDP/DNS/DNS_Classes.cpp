@@ -29,7 +29,6 @@ namespace PacketReader::IP::UDP::DNS
 
 			if (len >= 192)
 			{
-				//len instead contains a pointer to the rest of the string
 				u8 addrB[2];
 				NetLib::ReadByteArray(buffer, offset, 2, addrB);
 
@@ -41,7 +40,6 @@ namespace PacketReader::IP::UDP::DNS
 				std::string o;
 				ReadDNS_String(buffer, &tmp, &o);
 				*value += o;
-				//Ends with the pointer, no null char
 				return;
 			}
 			else
@@ -54,7 +52,6 @@ namespace PacketReader::IP::UDP::DNS
 					*value += ".";
 			}
 		}
-		//null char
 		*offset += 1;
 	}
 	void DNS_QuestionEntry::WriteDNS_String(u8* buffer, int* offset, const std::string& value) const
@@ -82,7 +79,6 @@ namespace PacketReader::IP::UDP::DNS
 			NetLib::WriteByte08(buffer, offset, segmentLength);
 			NetLib::WriteByteArray(buffer, offset, segmentLength, (u8*)&value.c_str()[segmentStart]);
 		}
-		//null char
 		NetLib::WriteByte08(buffer, offset, 0);
 	}
 
@@ -128,4 +124,4 @@ namespace PacketReader::IP::UDP::DNS
 		NetLib::WriteUInt16(buffer, offset, data.size());
 		NetLib::WriteByteArray(buffer, offset, data.size(), &data[0]);
 	}
-} // namespace PacketReader::IP::UDP::DNS
+}

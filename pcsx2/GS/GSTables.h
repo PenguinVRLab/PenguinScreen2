@@ -5,10 +5,8 @@
 
 #include "common/Assertions.h"
 
-/// Table for storing swizzling of blocks within a page
 struct alignas(64) GSBlockSwizzleTable
 {
-	// Some swizzles are 4x8 and others are 8x4.  An 8x8 table can store either at the cost of 2x size
 	u8 value[8][8];
 
 	constexpr u8 lookup(int x, int y) const
@@ -17,14 +15,11 @@ struct alignas(64) GSBlockSwizzleTable
 	}
 };
 
-/// Adds sizes to GSBlockSwizzleTable for to feel better about not making mistakes
 template <int Height, int Width>
 struct GSSizedBlockSwizzleTable : public GSBlockSwizzleTable
 {
 };
 
-/// Table for storing offsets of x = 0 pixels from the beginning of the page
-/// Add values from a GSPixelRowOffsetTable to get the pixels for x != 0
 template <int Height>
 struct alignas(128) GSPixelColOffsetTable
 {
@@ -36,8 +31,6 @@ struct alignas(128) GSPixelColOffsetTable
 	}
 };
 
-/// Table for storing offsets of x != 0 pixels from the pixel at the same y where x = 0
-/// Unlike ColOffsets, this table stretches to the maximum size of a texture so no masking is needed
 struct alignas(128) GSPixelRowOffsetTable
 {
 	int value[4096] = {};
@@ -49,16 +42,11 @@ struct alignas(128) GSPixelRowOffsetTable
 	}
 };
 
-/// Adds size to GSPixelRowOffsetTable to feel better about not making mistakes
 template <int PageWidth>
 struct GSSizedPixelRowOffsetTable : public GSPixelRowOffsetTable
 {
 };
 
-/// List of row offset tables
-/// Some swizzlings (PSMT8 and PSMT4) have different row offsets depending on which column they're a part of
-/// The ones that do use an a a b b b b a a pattern that repeats every 8 rows.
-/// You can always look up the correct row in this list with y & 7, but if you use y & Mask where Mask is known at compile time, the compiler should be able to optimize better
 template <int PageWidth, int Mask>
 struct alignas(sizeof(void*) * 8) GSPixelRowOffsetTableList
 {
@@ -70,8 +58,6 @@ struct alignas(sizeof(void*) * 8) GSPixelRowOffsetTableList
 	}
 };
 
-/// Full pixel offset table
-/// Template values are for objects constructing from one of these tables
 template <int PageHeight, int PageWidth, int BlockHeight, int BlockWidth, int RowMask>
 struct GSSwizzleTableList
 {
@@ -80,7 +66,6 @@ struct GSSwizzleTableList
 	const GSPixelRowOffsetTableList<PageWidth, RowMask>& row;
 };
 
-/// List of all tables for a given swizzle for easy setup
 template <int PageHeight, int PageWidth, int BlockHeight, int BlockWidth, int RowMask>
 constexpr GSSwizzleTableList<PageHeight, PageWidth, BlockHeight, BlockWidth, RowMask>
 makeSwizzleTableList(
@@ -125,7 +110,6 @@ constexpr GSPixelRowOffsetTableList<PageWidth, 7> makeRowOffsetTableList(
 	return {{a, a, b, b, b, b, a, a}};
 }
 
-/// Just here to force external linkage so we don't end up with multiple copies of pixelRowOffset*
 struct GSTables
 {
 	static const GSSizedPixelRowOffsetTable< 64> _pixelRowOffset32;

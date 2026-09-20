@@ -184,7 +184,7 @@ namespace ImGuiFullscreen
 	static std::vector<Notification> s_notifications;
 	static float s_notification_vertical_position = 0.15f;
 	static float s_notification_vertical_direction = 1.0f;
-	static float s_notification_horizontal_position = 0.0f; // 0.0 = left, 0.5 = center, 1.0 = right
+	static float s_notification_horizontal_position = 0.0f;
 
 	static std::string s_toast_title;
 	static std::string s_toast_message;
@@ -204,7 +204,7 @@ namespace ImGuiFullscreen
 	static std::mutex s_progress_dialog_lock;
 
 	static InputLayout s_gamepad_layout = InputLayout::Unknown;
-} // namespace ImGuiFullscreen
+}
 
 void ImGuiFullscreen::SetFont(ImFont* standard_font)
 {
@@ -366,10 +366,8 @@ GSTexture* ImGuiFullscreen::GetCachedTextureAsync(std::string_view name)
 	std::shared_ptr<GSTexture>* tex_ptr = s_texture_cache.Lookup(name);
 	if (!tex_ptr)
 	{
-		// insert the placeholder
 		tex_ptr = s_texture_cache.Insert(std::string(name), s_placeholder_texture);
 
-		// queue the actual load
 		std::unique_lock lock(s_texture_load_mutex);
 		s_texture_load_queue.emplace_back(name);
 		s_texture_load_cv.notify_one();
@@ -378,14 +376,10 @@ GSTexture* ImGuiFullscreen::GetCachedTextureAsync(std::string_view name)
 	return tex_ptr->get();
 }
 
-// Renders an SVG image to specified size into a texture of ceil(size).
-// The region donated by size is positioned top left of the image when size != ceil(size).
-// The image is scaled to fit within, and rendered center of, size.
 std::optional<RGBA8Image> ImGuiFullscreen::LoadSvgTextureImage(const char* path, ImVec2 size, SvgScaling mode)
 {
 	std::optional<RGBA8Image> image;
 
-	// Cache SVG files as we may need to re-render at a new size later.
 	std::vector<u8>* data_ptr = s_svg_data_cache.Lookup(path);
 	if (!data_ptr)
 	{
@@ -400,7 +394,6 @@ std::optional<RGBA8Image> ImGuiFullscreen::LoadSvgTextureImage(const char* path,
 
 	if (data_ptr)
 	{
-		// Load SVG
 		plutosvg_document_t* pluto_svg = plutosvg_document_load_from_data(reinterpret_cast<char*>(data_ptr->data()),
 			data_ptr->size(), -1, -1, nullptr, nullptr);
 
@@ -413,7 +406,6 @@ std::optional<RGBA8Image> ImGuiFullscreen::LoadSvgTextureImage(const char* path,
 		const float base_width = plutosvg_document_get_width(pluto_svg);
 		const float base_height = plutosvg_document_get_height(pluto_svg);
 
-		// Create a surface large enough to store the SVG.
 		const int px_width = std::ceil(size.x);
 		const int px_height = std::ceil(size.y);
 
@@ -429,7 +421,6 @@ std::optional<RGBA8Image> ImGuiFullscreen::LoadSvgTextureImage(const char* path,
 			return image;
 		}
 
-		// Create a drawing canvas.
 		plutovg_canvas_t* pluto_canvas = plutovg_canvas_create(pluto_surface);
 		if (pluto_canvas == nullptr)
 		{
@@ -439,8 +430,6 @@ std::optional<RGBA8Image> ImGuiFullscreen::LoadSvgTextureImage(const char* path,
 			return image;
 		}
 
-		// Scale & position SVG.
-		// ImGui positions images from top left, so we can ignore integer size of surface.
 		switch (mode)
 		{
 			case SvgScaling::Stretch:
@@ -464,10 +453,8 @@ std::optional<RGBA8Image> ImGuiFullscreen::LoadSvgTextureImage(const char* path,
 			}
 		}
 
-		// Render
 		const bool success = plutosvg_document_render(pluto_svg, nullptr, pluto_canvas, nullptr, nullptr, nullptr);
 
-		// Free pluto objects
 		plutovg_canvas_destroy(pluto_canvas);
 		plutovg_surface_destroy(pluto_surface);
 		plutosvg_document_destroy(pluto_svg);
@@ -478,7 +465,6 @@ std::optional<RGBA8Image> ImGuiFullscreen::LoadSvgTextureImage(const char* path,
 			return image;
 		}
 
-		// Convert to RGBA8Image
 		plutovg_convert_argb_to_rgba(reinterpret_cast<unsigned char*>(pixel_data.data()), reinterpret_cast<unsigned char*>(pixel_data.data()),
 			px_width, px_height, px_width * 4);
 		image = RGBA8Image(px_width, px_height, std::move(pixel_data));
@@ -526,10 +512,8 @@ GSTexture* ImGuiFullscreen::GetCachedSvgTextureAsync(std::string_view name, ImVe
 	std::shared_ptr<GSTexture>* tex_ptr = s_texture_cache.Lookup(svg_key);
 	if (!tex_ptr)
 	{
-		// insert the placeholder
 		tex_ptr = s_texture_cache.Insert(std::string(svg_key), s_placeholder_texture);
 
-		// queue the actual load
 		std::unique_lock lock(s_texture_load_mutex);
 		s_svg_texture_load_queue.emplace_back(std::tuple(name, size, mode));
 		s_texture_load_cv.notify_one();
@@ -588,7 +572,6 @@ void ImGuiFullscreen::TextureLoaderThread()
 			std::optional<RGBA8Image> image(LoadTextureImage(path.c_str()));
 			lock.lock();
 
-			// don't bother queuing back if it doesn't exist
 			if (image)
 				s_texture_upload_queue.emplace_back(std::move(path), std::move(image.value()));
 		}
@@ -605,7 +588,6 @@ void ImGuiFullscreen::TextureLoaderThread()
 			std::optional<RGBA8Image> image(LoadSvgTextureImage(path.c_str(), size, mode));
 			lock.lock();
 
-			// don't bother queuing back if it doesn't exist
 			if (image)
 			{
 				std::string svg_key = fmt::format("{}_{}x{}_{}", path, size.x, size.y, static_cast<u8>(mode));
@@ -630,14 +612,12 @@ bool ImGuiFullscreen::UpdateLayoutScale()
 
 	if (screen_ratio > LAYOUT_RATIO)
 	{
-		// screen is wider, use height, pad width
 		g_layout_scale = screen_height / LAYOUT_SCREEN_HEIGHT;
 		g_layout_padding_top = 0.0f;
 		g_layout_padding_left = (screen_width - (LAYOUT_SCREEN_WIDTH * g_layout_scale)) / 2.0f;
 	}
 	else
 	{
-		// screen is taller, use width, pad height
 		g_layout_scale = screen_width / LAYOUT_SCREEN_WIDTH;
 		g_layout_padding_top = (screen_height - (LAYOUT_SCREEN_HEIGHT * g_layout_scale)) / 2.0f;
 		g_layout_padding_left = 0.0f;
@@ -663,7 +643,6 @@ ImRect ImGuiFullscreen::CenterImage(const ImVec2& fit_size, const ImVec2& image_
 	ImRect ret;
 	if ((fit_ar > image_ar) ^ fill)
 	{
-		// center horizontally
 		const float width = fit_size.y * image_ar;
 		const float offset = (fit_size.x - width) / 2.0f;
 		const float height = fit_size.y;
@@ -671,7 +650,6 @@ ImRect ImGuiFullscreen::CenterImage(const ImVec2& fit_size, const ImVec2& image_
 	}
 	else
 	{
-		// center vertically
 		const float height = fit_size.x / image_ar;
 		const float offset = (fit_size.y - height) / 2.0f;
 		const float width = fit_size.x;
@@ -690,8 +668,6 @@ ImRect ImGuiFullscreen::CenterImage(const ImRect& fit_rect, const ImVec2& image_
 
 void ImGuiFullscreen::BeginLayout()
 {
-	// we evict from the texture cache at the start of the frame, in case we go over mid-frame,
-	// we need to keep all those textures alive until the end of the frame
 	s_texture_cache.ManualEvict();
 
 	PushResetLayout();
@@ -710,14 +686,13 @@ void ImGuiFullscreen::EndLayout()
 	const float spacing = LayoutScale(10.0f);
 	const float notification_vertical_pos = GetNotificationVerticalPosition();
 
-	// Get the horizonal position based on alignment
 	float horizontal_pos;
 	if (s_notification_horizontal_position <= 0.0f)
-		horizontal_pos = notification_margin; // Left
+		horizontal_pos = notification_margin;
 	else if (s_notification_horizontal_position >= 1.0f)
-		horizontal_pos = ImGui::GetIO().DisplaySize.x - notification_margin; // Right
+		horizontal_pos = ImGui::GetIO().DisplaySize.x - notification_margin;
 	else
-		horizontal_pos = ImGui::GetIO().DisplaySize.x * s_notification_horizontal_position; // Center
+		horizontal_pos = ImGui::GetIO().DisplaySize.x * s_notification_horizontal_position;
 
 	ImVec2 position(horizontal_pos, notification_vertical_pos * ImGui::GetIO().DisplaySize.y +
 											 ((notification_vertical_pos >= 0.5f) ? -notification_margin : notification_margin));
@@ -778,14 +753,12 @@ bool ImGuiFullscreen::ResetFocusHere()
 	if (s_focus_reset_queued == FocusResetType::None)
 		return false;
 
-	// don't take focus from dialogs
 	if (ImGui::FindBlockingModal(ImGui::GetCurrentWindow()))
 		return false;
 
 	s_focus_reset_queued = FocusResetType::None;
 	ImGui::SetWindowFocus();
 
-	// only do the active selection magic when we're using keyboard/gamepad
 	return (GImGui->NavInputSource == ImGuiInputSource_Keyboard || GImGui->NavInputSource == ImGuiInputSource_Gamepad);
 }
 
@@ -810,10 +783,8 @@ void ImGuiFullscreen::ForceKeyNavEnabled()
 
 bool ImGuiFullscreen::WantsToCloseMenu()
 {
-	// Used for the key macros below.
 	ImGuiContext& g = *ImGui::GetCurrentContext();
 
-	// Wait for the Close button to be released, THEN pressed
 	if (s_close_button_state == 0)
 	{
 		if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
@@ -831,7 +802,6 @@ bool ImGuiFullscreen::WantsToCloseMenu()
 
 void ImGuiFullscreen::ResetCloseMenuIfNeeded()
 {
-	// If s_close_button_state reached the "Released" state, reset it after the tick
 	if (s_close_button_state > 1)
 	{
 		s_close_button_state = 0;
@@ -912,8 +882,8 @@ void ImGuiFullscreen::EndFullscreenColumnWindow()
 }
 
 bool ImGuiFullscreen::BeginFullscreenWindow(float left, float top, float width, float height, const char* name,
-	const ImVec4& background /* = HEX_TO_IMVEC4(0x212121, 0xFF) */, float rounding /*= 0.0f*/,
-	const ImVec2& padding /*= 0.0f*/, ImGuiWindowFlags flags /*= 0*/)
+	const ImVec4& background , float rounding ,
+	const ImVec2& padding , ImGuiWindowFlags flags )
 {
 	if (left < 0.0f)
 		left = (LAYOUT_SCREEN_WIDTH - width) * -left;
@@ -926,8 +896,8 @@ bool ImGuiFullscreen::BeginFullscreenWindow(float left, float top, float width, 
 }
 
 bool ImGuiFullscreen::BeginFullscreenWindow(const ImVec2& position, const ImVec2& size, const char* name,
-	const ImVec4& background /* = HEX_TO_IMVEC4(0x212121, 0xFF) */, float rounding /*= 0.0f*/,
-	const ImVec2& padding /*= 0.0f*/, ImGuiWindowFlags flags /*= 0*/)
+	const ImVec4& background , float rounding ,
+	const ImVec2& padding , ImGuiWindowFlags flags )
 {
 	ImGui::SetNextWindowPos(position);
 	ImGui::SetNextWindowSize(size);
@@ -1060,7 +1030,6 @@ void ImGuiFullscreen::QueueFooterHint(std::span<const std::pair<const char*, std
 void ImGuiFullscreen::DrawFullscreenFooter()
 {
 	const ImGuiIO& io = ImGui::GetIO();
-	// Apply any queued hints before drawing.
 	if (!s_footer_hint_queue.empty())
 	{
 		AppendToFullscreenFooterText(s_footer_hint_queue);
@@ -1127,7 +1096,6 @@ void ImGuiFullscreen::PrerenderMenuButtonBorder()
 	if (!s_had_hovered_menu_item)
 		return;
 
-	// updating might finish the animation
 	const ImVec2& min = s_menu_button_frame_min_animated.UpdateAndGetValue();
 	const ImVec2& max = s_menu_button_frame_max_animated.UpdateAndGetValue();
 	const ImU32 col = ImGui::GetColorU32(ImGuiCol_ButtonHovered, 0.7f);
@@ -1231,7 +1199,7 @@ void ImGuiFullscreen::GetMenuButtonFrameBounds(float height, ImVec2* pos, ImVec2
 }
 
 void ImGuiFullscreen::DrawMenuButtonFrame(const ImVec2& p_min, const ImVec2& p_max, ImU32 fill_col,
-	bool border /* = true */, float rounding /* = 0.0f */)
+	bool border , float rounding )
 {
 	ImVec2 frame_min = p_min;
 	ImVec2 frame_max = p_max;
@@ -1340,7 +1308,7 @@ bool ImGuiFullscreen::MenuButtonFrame(
 }
 
 bool ImGuiFullscreen::MenuButtonFrame(const char* str_id, bool enabled, float height, bool* visible, bool* hovered, ImVec2* min,
-	ImVec2* max, ImGuiButtonFlags flags /*= 0*/, float hover_alpha /*= 0.7f*/)
+	ImVec2* max, ImGuiButtonFlags flags , float hover_alpha )
 {
 	ImRect bb;
 	const bool result = MenuButtonFrame(str_id, enabled, height, visible, hovered, &bb, flags, hover_alpha);
@@ -1355,7 +1323,7 @@ void ImGuiFullscreen::ResetMenuButtonFrame()
 	s_has_hovered_menu_item = false;
 }
 
-void ImGuiFullscreen::MenuHeading(const char* title, bool draw_line /*= true*/)
+void ImGuiFullscreen::MenuHeading(const char* title, bool draw_line )
 {
 	const float line_thickness = draw_line ? LayoutScale(1.0f) : 0.0f;
 	const float line_padding = draw_line ? LayoutScale(5.0f) : 0.0f;
@@ -1381,7 +1349,7 @@ void ImGuiFullscreen::MenuHeading(const char* title, bool draw_line /*= true*/)
 }
 
 bool ImGuiFullscreen::MenuHeadingButton(
-	const char* title, const char* value /*= nullptr*/, bool enabled /*= true*/, bool draw_line /*= true*/)
+	const char* title, const char* value , bool enabled , bool draw_line )
 {
 	const float line_thickness = draw_line ? LayoutScale(1.0f) : 0.0f;
 	const float line_padding = draw_line ? LayoutScale(5.0f) : 0.0f;
@@ -1428,7 +1396,6 @@ bool ImGuiFullscreen::ActiveButtonWithRightText(const char* title, const char* r
 {
 	if (is_active)
 	{
-		// don't draw over a prerendered border
 		const float border_size = ImGui::GetStyle().FrameBorderSize;
 		const ImVec2 border_size_v = ImVec2(border_size, border_size);
 		ImVec2 pos, size;
@@ -1977,7 +1944,7 @@ bool ImGuiFullscreen::EnumChoiceButtonImpl(const char* title, const char* summar
 	return changed;
 }
 
-void ImGuiFullscreen::BeginNavBar(float x_padding /*= LAYOUT_MENU_BUTTON_X_PADDING*/, float y_padding /*= LAYOUT_MENU_BUTTON_Y_PADDING*/)
+void ImGuiFullscreen::BeginNavBar(float x_padding , float y_padding )
 {
 	s_menu_button_index = 0;
 
@@ -1994,7 +1961,7 @@ void ImGuiFullscreen::EndNavBar()
 	ImGui::PopStyleVar(4);
 }
 
-void ImGuiFullscreen::NavTitle(const char* title, float height /*= LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY*/, std::pair<ImFont*, float> font /*= g_large_font*/)
+void ImGuiFullscreen::NavTitle(const char* title, float height , std::pair<ImFont*, float> font )
 {
 	ImGuiWindow* window = ImGui::GetCurrentWindow();
 	if (window->SkipItems)
@@ -2022,8 +1989,8 @@ void ImGuiFullscreen::NavTitle(const char* title, float height /*= LAYOUT_MENU_B
 	ImGui::PopFont();
 }
 
-void ImGuiFullscreen::RightAlignNavButtons(u32 num_items /*= 0*/, float item_width /*= LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY*/,
-	float item_height /*= LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY*/)
+void ImGuiFullscreen::RightAlignNavButtons(u32 num_items , float item_width ,
+	float item_height )
 {
 	ImGuiWindow* window = ImGui::GetCurrentWindow();
 	const ImGuiStyle& style = ImGui::GetStyle();
@@ -2033,8 +2000,8 @@ void ImGuiFullscreen::RightAlignNavButtons(u32 num_items /*= 0*/, float item_wid
 	ImGui::SetCursorPosX(window->InnerClipRect.Max.x - margin - style.FramePadding.x);
 }
 
-bool ImGuiFullscreen::NavButton(const char* title, bool is_active, bool enabled /* = true */, float width /* = -1.0f */,
-	float height /* = LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY */, std::pair<ImFont*, float> font /* = g_large_font */)
+bool ImGuiFullscreen::NavButton(const char* title, bool is_active, bool enabled , float width ,
+	float height , std::pair<ImFont*, float> font )
 {
 	ImGuiWindow* window = ImGui::GetCurrentWindow();
 	if (window->SkipItems)
@@ -2055,8 +2022,6 @@ bool ImGuiFullscreen::NavButton(const char* title, bool is_active, bool enabled 
 	const ImGuiID id = window->GetID(title);
 	if (enabled)
 	{
-		// bit contradictory - we don't want this button to be used for *gamepad* navigation, since they're usually
-		// activated with the bumpers and/or the back button.
 		if (!ImGui::ItemAdd(bb, id, nullptr, ImGuiItemFlags_NoNav | ImGuiItemFlags_NoNavDefaultFocus))
 			return false;
 	}
@@ -2101,8 +2066,8 @@ bool ImGuiFullscreen::NavButton(const char* title, bool is_active, bool enabled 
 }
 
 
-bool ImGuiFullscreen::NavTab(const char* title, bool is_active, bool enabled /* = true */, float width, float height,
-	const ImVec4& background, std::pair<ImFont*, float> font /* = g_large_font */)
+bool ImGuiFullscreen::NavTab(const char* title, bool is_active, bool enabled , float width, float height,
+	const ImVec4& background, std::pair<ImFont*, float> font )
 {
 	ImGuiWindow* window = ImGui::GetCurrentWindow();
 	if (window->SkipItems)
@@ -2123,8 +2088,6 @@ bool ImGuiFullscreen::NavTab(const char* title, bool is_active, bool enabled /* 
 	const ImGuiID id = window->GetID(title);
 	if (enabled)
 	{
-		// bit contradictory - we don't want this button to be used for *gamepad* navigation, since they're usually
-		// activated with the bumpers and/or the back button.
 		if (!ImGui::ItemAdd(bb, id, nullptr, ImGuiItemFlags_NoNav | ImGuiItemFlags_NoNavDefaultFocus))
 			return false;
 	}
@@ -2160,7 +2123,6 @@ bool ImGuiFullscreen::NavTab(const char* title, bool is_active, bool enabled /* 
 	}
 
 #if 0
-	// This looks a bit rubbish... but left it here if someone thinks they can improve it.
 	if (is_active)
 	{
 		const float line_thickness = LayoutScale(2.0f);
@@ -2321,7 +2283,6 @@ void ImGuiFullscreen::PopulateFileSelectorItems()
 			parent_path = s_file_selector_current_directory.substr(0, sep_pos);
 
 #ifndef _WIN32
-			// Special case for going to root list on Linux.
 			if (parent_path.empty() && s_file_selector_current_directory.size() > 1)
 				parent_path = "/";
 #endif
@@ -2767,7 +2728,6 @@ void ImGuiFullscreen::DrawInputDialog()
 
 		if (ActiveButton(s_input_dialog_ok_text.c_str(), false, ok_enabled) && ok_enabled)
 		{
-			// have to move out in case they open another dialog in the callback
 			InputStringDialogCallback cb(std::move(s_input_dialog_callback));
 			std::string text(std::move(s_input_dialog_text));
 			CloseInputDialog();
@@ -2933,7 +2893,6 @@ void ImGuiFullscreen::DrawMessageDialog()
 
 	if (!is_open || result.has_value())
 	{
-		// have to move out in case they open another dialog in the callback
 		auto cb = (std::move(s_message_dialog_callback));
 		CloseMessageDialog();
 
@@ -3099,10 +3058,6 @@ void ImGuiFullscreen::DrawProgressDialogs(ImVec2& position, float spacing)
 	}
 }
 
-//////////////////////////////////////////////////////////////////////////
-// Notifications
-//////////////////////////////////////////////////////////////////////////
-
 void ImGuiFullscreen::AddNotification(std::string key, float duration, std::string title, std::string text,
 	std::string image_path)
 {
@@ -3119,7 +3074,6 @@ void ImGuiFullscreen::AddNotification(std::string key, float duration, std::stri
 				it->text = std::move(text);
 				it->badge_path = std::move(image_path);
 
-				// Don't fade it in again
 				const float time_passed =
 					static_cast<float>(Common::Timer::ConvertValueToSeconds(current_time - it->start_time));
 				it->start_time =
@@ -3231,7 +3185,6 @@ void ImGuiFullscreen::DrawNotifications(ImVec2& position, float spacing)
 			}
 		}
 
-		// Adjust horizontal position based on alignment
 		float final_x = position.x;
 		if (s_notification_horizontal_position >= 1.0f)
 			final_x = position.x - box_width;
@@ -3308,7 +3261,6 @@ void ImGuiFullscreen::DrawToast()
 		return;
 	}
 
-	// fade out the last second
 	const float alpha = std::min(std::min(elapsed * 4.0f, s_toast_duration - elapsed), 1.0f);
 
 	const float max_width = LayoutScale(600.0f);

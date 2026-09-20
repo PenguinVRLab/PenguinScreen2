@@ -82,7 +82,7 @@ void ThreadView::onDoubleClick(const QModelIndex& index)
 			goToInDisassembler(m_model->data(real_index, Qt::UserRole).toUInt(), true);
 			break;
 		}
-		default: // Default to PC
+		default:
 		{
 			QModelIndex pc_index = m_model->index(real_index.row(), ThreadModel::ThreadColumns::PC);
 			goToInDisassembler(m_model->data(pc_index, Qt::UserRole).toUInt(), true);

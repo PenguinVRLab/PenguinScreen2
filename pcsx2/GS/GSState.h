@@ -25,7 +25,6 @@ public:
 	static constexpr int GetSaveStateSize(int version);
 
 private:
-	// RESTRICT prevents multiple loads of the same part of the register when accessing its bitfields (the compiler is happy to know that memory writes in-between will not go there)
 
 	typedef void (GSState::*GIFPackedRegHandler)(const GIFPackedReg* RESTRICT r);
 
@@ -139,8 +138,8 @@ protected:
 	struct GSVertexBuff
 	{
 		GSVertex* buff;
-		GSVertex* buff_copy; // same size buffer to copy/modify the original buffer
-		u32 head, tail, next, maxcount; // head: first vertex, tail: last vertex + 1, next: last indexed + 1
+		GSVertex* buff_copy;
+		u32 head, tail, next, maxcount;
 		u32 xy_tail;
 		GSVector4i xy[4];
 		GSVector4i xyhead;
@@ -192,8 +191,6 @@ protected:
 
 	template <u32 prim, bool auto_flush> void VertexKick(u32 skip);
 
-	// following functions need m_vt to be initialized
-
 	GSVertexTrace m_vt;
 	GSVertexTrace::VertexAlpha& GetAlphaMinMax()
 	{
@@ -212,8 +209,8 @@ protected:
 			USES_BOUNDARY_U = USES_BOUNDARY_LEFT | USES_BOUNDARY_RIGHT,
 			USES_BOUNDARY_V = USES_BOUNDARY_TOP | USES_BOUNDARY_BOTTOM,
 		};
-		GSVector4i coverage; ///< Part of the texture used
-		u8 uses_boundary;    ///< Whether or not the usage touches the left, top, right, or bottom edge (and therefore needs wrap modes preserved)
+		GSVector4i coverage;
+		u8 uses_boundary;
 	};
 	TextureMinMaxResult GetTextureMinMax(GIFRegTEX0 TEX0, GIFRegCLAMP CLAMP, bool linear, bool clamp_to_tsize);
 	bool TryAlphaTest(u32& fm, u32& zm);
@@ -227,7 +224,6 @@ protected:
 	void CalcAlphaMinMax(const int tex_min, const int tex_max);
 	void CorrectATEAlphaMinMax(const u32 atst, const int aref);
 
-	// Utility functions for getting position/texture coordinates.
 	GSVector4 GetXYWindow(const GSVertex& v);
 	template<bool fst>
 	GSVector4 GetTexCoordsImpl(const GSVertex& v, float q);
@@ -236,12 +232,10 @@ protected:
 	GSVector4 GetTexCoords(const GSVertex& v, float q);
 	GSVector4 GetTexCoords(const GSVertex& v);
 
-	// Utility functions to detect and get corners of quads.
 	template<u32 primclass, bool tme = false, bool fst = false>
 	static bool GetQuadCornersImpl(const GSVertex* v, const u16* i, GSVertex& vout0, GSVertex& vout1);
 	bool GetQuadCorners(const GSVertex* v, const u16* i, GSVertex& vout0, GSVertex& vout1);
 
-	// Utility functions to get window/texture coordinates of a quad.
 	template<u32 primclass>
 	void GetQuadBBoxWindowImpl(const GSVertex& v0, const GSVertex& v1, GSVector4& xyout);
 	template<u32 primclass, bool tme = false, bool fst = false>
@@ -249,7 +243,6 @@ protected:
 	void GetQuadBBoxWindow(const GSVertex& v0, const GSVertex& v1, GSVector4& xyout);
 	void GetQuadBBoxWindow(const GSVertex& v0, const GSVertex& v1, GSVector4& xyout, GSVector4& texout, bool keep_tex_order = true);
 
-	// Adjusts a quad so that it contains exactly the centers of the pixels that the GS would rasterize.
 	static void GetQuadRasterizedPoints(GSVector4& xy, bool keep_order = true);
 	static void GetQuadRasterizedPoints(GSVector4& xy, GSVector4& tex, bool keep_order = true);
 
@@ -317,8 +310,8 @@ public:
 	static u64 s_last_transfer_draw_n;
 	static u64 s_transfer_n;
 
-	GSPerfMon m_perfmon_frame; // Track stat across a frame.
-	GSPerfMon m_perfmon_draw;  // Track stat across a draw.
+	GSPerfMon m_perfmon_frame;
+	GSPerfMon m_perfmon_draw;
 
 	static constexpr u32 STATE_VERSION = 9;
 
@@ -424,19 +417,16 @@ public:
 
 		bool IsAnalogue();
 
-		// Calculates which display is closest to matching zero offsets in either direction.
 		GSVector2i NearestToZeroOffset();
 
 		void SetVideoMode(GSVideoMode videoModeIn);
 
-		// Enable each of the displays.
 		void EnableDisplays(GSRegPMODE pmode, GSRegSMODE2 smode2, bool smodetoggle);
 
 		void CheckSameSource();
 		
 		bool FrameWrap();
 
-		// If the start point of both frames match, we can do a single read
 		bool FrameRectMatch();
 
 		GSVector2i GetResolution();
@@ -447,29 +437,20 @@ public:
 
 		GSVector2i GetFramebufferSize(int display);
 
-		// Sets up the rectangles for both the framebuffer read and the displays for the merge circuit.
 		void SetRects(int display, GSRegDISPLAY displayReg, GSRegDISPFB framebufferReg);
 
-		// Calculate framebuffer read offsets, should be considered if only one circuit is enabled, or difference is more than 1 line.
-		// Only considered if "Anti-blur" is enabled.
 		void CalculateFramebufferOffset(bool scanmask, GSRegDISPFB framebuffer0Reg, GSRegDISPFB framebuffer1Reg);
 
-		// Used in software mode to align the buffer when reading. Offset is accounted for (block aligned) by GetOutput.
 		void RemoveFramebufferOffset(int display);
 
-		// If the two displays are offset from each other, move them to the correct offsets.
-		// If using screen offsets, calculate the positions here.
 		void CalculateDisplayOffset(bool scanmask);
 	} PCRTCDisplays;
 
 public:
-	/// Returns the appropriate directory for draw dumping.
 	static std::string GetDrawDumpPath(const char* format, ...);
 
-	/// Expands dither matrix, suitable for software renderer.
 	static void ExpandDIMX(GSVector4i* dimx, const GIFRegDIMX DIMX);
 
-	/// Returns a string representing the flush reason.
 	static const char* GetFlushReasonString(GSFlushReason reason);
 
 	void ResetHandlers();
@@ -542,7 +523,6 @@ public:
 	GIFRegTEX0 GetTex0Layer(u32 lod);
 };
 
-// We put this in the header because of Multi-ISA.
 inline void GSState::ExpandDIMX(GSVector4i* dimx, const GIFRegDIMX DIMX)
 {
 	dimx[1] = GSVector4i(DIMX.DM00, 0, DIMX.DM01, 0, DIMX.DM02, 0, DIMX.DM03, 0);

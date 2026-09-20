@@ -11,7 +11,6 @@
 
 namespace VR::Internal
 {
-
 	struct VulkanHandles
 	{
 		VkInstance instance = VK_NULL_HANDLE;

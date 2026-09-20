@@ -32,7 +32,7 @@ using namespace std::chrono_literals;
 namespace Sessions
 {
 	const std::chrono::duration<std::chrono::steady_clock::rep, std::chrono::steady_clock::period>
-		UDP_Session::MAX_IDLE = 120s; // See RFC 4787 section 4.3
+		UDP_Session::MAX_IDLE = 120s;
 
 	UDP_Session::UDP_Session(ConnectionKey parKey, IP_Address parAdapterIP)
 		: UDP_BaseSession(parKey, parAdapterIP)
@@ -119,7 +119,6 @@ namespace Sessions
 
 		if (destPort != 0)
 		{
-			// Already created client!?
 			if (!(udp.destinationPort == destPort && udp.sourcePort == srcPort))
 			{
 				Console.Error("DEV9: UDP: Packet invalid for current session (duplicate key?)");
@@ -128,7 +127,6 @@ namespace Sessions
 		}
 		else
 		{
-			// Create client
 			destPort = udp.destinationPort;
 			srcPort = udp.sourcePort;
 
@@ -164,7 +162,6 @@ namespace Sessions
 
 		PayloadPtr* udpPayload = static_cast<PayloadPtr*>(udp.GetPayload());
 
-		// Send Packet
 		int ret = SOCKET_ERROR;
 		if (isBroadcast)
 		{
@@ -196,12 +193,6 @@ namespace Sessions
 #endif
 			Console.Error("DEV9: UDP: Send error %d", ret);
 
-			/*
-			 * We can receive an ICMP Port Unreacable error, which can get raised in send (and maybe sendto?)
-			 * On Windows this is an WSAECONNRESET error, although I've not been able to reproduce in testing
-			 * On Linux this is an ECONNREFUSED error (Testing needed to confirm full behaviour)
-			 * We ignore the error and resend to allow packet capture (i.e. wireshark) for server resurrection projects
-			 */
 #ifdef _WIN32
 			if (ret == WSAECONNRESET)
 #elif defined(__POSIX__)
@@ -264,4 +255,4 @@ namespace Sessions
 			client = INVALID_SOCKET;
 		}
 	}
-} // namespace Sessions
+}

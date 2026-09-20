@@ -54,7 +54,6 @@ std::string HostSys::GetFileMappingName(const char* prefix)
 {
 	const unsigned pid = static_cast<unsigned>(getpid());
 #if defined(__FreeBSD__)
-	// FreeBSD's shm_open(3) requires name to be absolute
 	return fmt::format("/tmp/{}_{}", prefix, pid);
 #else
 	return fmt::format("{}_{}", prefix, pid);
@@ -70,10 +69,8 @@ void* HostSys::CreateSharedMemory(const char* name, size_t size)
 		return nullptr;
 	}
 
-	// we're not going to be opening this mapping in other processes, so remove the file
 	shm_unlink(name);
 
-	// ensure it's the correct size
 	if (ftruncate(fd, static_cast<off_t>(size)) < 0)
 	{
 		std::fprintf(stderr, "ftruncate(%zu) failed: %d\n", size, errno);
@@ -177,16 +174,12 @@ u8* SharedMemoryMappingArea::Map(void* file_handle, size_t file_offset, void* ma
 	if (file_handle)
 	{
 		const int fd = static_cast<int>(reinterpret_cast<intptr_t>(file_handle));
-		// MAP_FIXED is okay here, since we've reserved the entire region, and *want* to overwrite the mapping.
 		void* const ptr = mmap(map_base, map_size, lnxmode, MAP_SHARED | MAP_FIXED, fd, static_cast<off_t>(file_offset));
 		if (ptr == MAP_FAILED)
 			return nullptr;
 	}
 	else
 	{
-		// macOS doesn't seem to allow MAP_JIT with MAP_FIXED
-		// So we do the MAP_JIT in the allocation, and just mprotect here
-		// Note that this will only work the first time for a given region
 		if (mprotect(map_base, map_size, lnxmode) < 0)
 			return nullptr;
 	}
@@ -215,14 +208,14 @@ void HostSys::FlushInstructionCache(void* address, u32 size)
 
 #endif
 
-#ifndef __APPLE__ // These are done in DarwinMisc
+#ifndef __APPLE__
 
 namespace PageFaultHandler
 {
 	static std::recursive_mutex s_exception_handler_mutex;
 	static bool s_in_exception_handler = false;
 	static bool s_installed = false;
-} // namespace PageFaultHandler
+}
 
 #ifdef ARCH_ARM64
 
@@ -236,24 +229,22 @@ namespace PageFaultHandler
 	if ((bits & 0x0a000000) != 0x08000000)
 		return false;
 
-	// if (Mask(LoadStorePairAnyFMask) == LoadStorePairAnyFixed)
 	if ((bits & 0x3a000000) == 0x28000000)
 	{
-		// return Mask(LoadStorePairLBit) == 0
 		return (bits & (1 << 22)) == 0;
 	}
 
 	switch (bits & 0xC4C00000)
 	{
-		case 0x00000000: // STRB_w
-		case 0x40000000: // STRH_w
-		case 0x80000000: // STR_w
-		case 0xC0000000: // STR_x
-		case 0x04000000: // STR_b
-		case 0x44000000: // STR_h
-		case 0x84000000: // STR_s
-		case 0xC4000000: // STR_d
-		case 0x04800000: // STR_q
+		case 0x00000000:
+		case 0x40000000:
+		case 0x80000000:
+		case 0xC0000000:
+		case 0x04000000:
+		case 0x44000000:
+		case 0x84000000:
+		case 0xC4000000:
+		case 0x04800000:
 			return true;
 
 		default:
@@ -261,12 +252,12 @@ namespace PageFaultHandler
 	}
 }
 
-#endif // ARCH_ARM64
+#endif
 
 namespace PageFaultHandler
 {
 	static void SignalHandler(int sig, siginfo_t* info, void* ctx);
-} // namespace PageFaultHandler
+}
 
 void PageFaultHandler::SignalHandler(int sig, siginfo_t* info, void* ctx)
 {
@@ -295,10 +286,8 @@ void PageFaultHandler::SignalHandler(int sig, siginfo_t* info, void* ctx)
 
 #endif
 
-	// Executing the handler concurrently from multiple threads wouldn't go down well.
 	s_exception_handler_mutex.lock();
 
-	// Prevent recursive exception filtering.
 	HandlerResult result = HandlerResult::ExecuteNextHandler;
 	if (!s_in_exception_handler)
 	{
@@ -309,11 +298,9 @@ void PageFaultHandler::SignalHandler(int sig, siginfo_t* info, void* ctx)
 
 	s_exception_handler_mutex.unlock();
 
-	// Resumes execution right where we left off (re-executes instruction that caused the SIGSEGV).
 	if (result == HandlerResult::ContinueExecution)
 		return;
 
-	// We couldn't handle it. Pass it off to the crash dumper.
 	CrashHandler::CrashSignalHandler(sig, info, ctx);
 }
 
@@ -335,7 +322,6 @@ bool PageFaultHandler::Install(Error* error)
 	}
 
 #ifdef ARCH_ARM64
-	// We can get SIGBUS on ARM64.
 	if (sigaction(SIGBUS, &sa, nullptr) != 0)
 	{
 		Error::SetErrno(error, "sigaction() for SIGBUS failed: ", errno);
@@ -349,4 +335,4 @@ bool PageFaultHandler::Install(Error* error)
 
 bool PageFaultHandler::InstallSecondaryThread() { return true; }
 
-#endif // __APPLE__
+#endif

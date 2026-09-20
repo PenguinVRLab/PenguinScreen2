@@ -7,7 +7,6 @@
 
 using namespace R5900;
 
-// This should be moved to analysis...
 extern int cop2flags(u32 code);
 
 AnalysisPass::AnalysisPass() = default;
@@ -61,8 +60,6 @@ void COP2FlagHackPass::Run(u32 start, u32 end, EEINST* inst_cache)
 	m_cfc2_pc = start;
 
 	ForEachInstruction(start, end, inst_cache, [this, end](u32 apc, EEINST* inst) {
-		// catch SB/SH/SW to potential DMA->VIF0->VU0 exec.
-		// this is very unlikely in a cop2 chain.
 		if (_Opcode_ == 050 || _Opcode_ == 051 || _Opcode_ == 053)
 		{
 			CommitAllFlags();
@@ -70,15 +67,11 @@ void COP2FlagHackPass::Run(u32 start, u32 end, EEINST* inst_cache)
 		}
 		else if (_Opcode_ != 022)
 		{
-			// not COP2
 			return true;
 		}
 
-		// Detect ctc2 Status, zero, ..., cfc2 v0, Status pattern where we need accurate sticky bits.
-		// Test case: Tekken Tag Tournament.
 		if (_Rs_ == 6 && _Rd_ == REG_STATUS_FLAG)
 		{
-			// Read ahead, looking for cfc2.
 			m_cfc2_pc = apc;
 			ForEachInstruction(apc, end, inst, [this](u32 capc, EEINST*) {
 				if (_Opcode_ == 022 && _Rs_ == 2 && _Rd_ == REG_STATUS_FLAG)
@@ -94,7 +87,6 @@ void COP2FlagHackPass::Run(u32 start, u32 end, EEINST* inst_cache)
 #endif
 		}
 
-		// CFC2/CTC2
 		if (_Rs_ == 6 || _Rs_ == 2)
 		{
 			switch (_Rd_)
@@ -110,7 +102,6 @@ void COP2FlagHackPass::Run(u32 start, u32 end, EEINST* inst_cache)
 					break;
 				case REG_FBRST:
 				{
-					// only apply to CTC2, is FBRST readable?
 					if (_Rs_ == 2)
 						CommitAllFlags();
 				}
@@ -120,16 +111,13 @@ void COP2FlagHackPass::Run(u32 start, u32 end, EEINST* inst_cache)
 
 		if (((cpuRegs.code >> 25 & 1) == 1) && ((cpuRegs.code >> 2 & 15) == 14))
 		{
-			// VCALLMS, everything needs to be up to date
 			CommitAllFlags();
 		}
 
-		// 1 - status, 2 - mac, 3 - clip
 		const int flags = cop2flags(cpuRegs.code);
 		if (flags == 0)
 			return true;
 
-		// STATUS
 		if (flags & 1)
 		{
 			if (!m_status_denormalized)
@@ -138,8 +126,6 @@ void COP2FlagHackPass::Run(u32 start, u32 end, EEINST* inst_cache)
 				m_status_denormalized = true;
 			}
 
-			// If we're still behind the next CFC2 after the sticky bits got cleared, we need to update flags.
-			// Also do this if we're a vsqrt/vrsqrt/vdiv, these update status unconditionally.
 			const u32 sub_opcode = (cpuRegs.code & 3) | ((cpuRegs.code >> 4) & 0x7c);
 			if (apc < m_cfc2_pc || (_Rs_ >= 020 && _Funct_ >= 074 && sub_opcode >= 070 && sub_opcode <= 072))
 				inst->info |= EEINST_COP2_STATUS_FLAG;
@@ -147,17 +133,13 @@ void COP2FlagHackPass::Run(u32 start, u32 end, EEINST* inst_cache)
 			m_last_status_write = inst;
 		}
 
-		// MAC
 		if (flags & 2)
 		{
 			m_last_mac_write = inst;
 		}
 
-		// CLIP
 		if (flags & 4)
 		{
-			// we don't track the clip flag yet..
-			// but it's unlikely that we'll have more than 4 clip flags in a row, because that would be pointless?
 			inst->info |= EEINST_COP2_CLIP_FLAG;
 			m_last_clip_write = inst;
 		}
@@ -227,8 +209,6 @@ void COP2MicroFinishPass::Run(u32 start, u32 end, EEINST* inst_cache)
 	bool needs_vu0_finish = true;
 	bool block_interlocked = CHECK_FULLVU0SYNCHACK;
 
-	// First pass through the block to find out if it's interlocked or not. If it is, we need to use tighter
-	// synchronization on all COP2 instructions, otherwise Crash Twinsanity breaks.
 	ForEachInstruction(start, end, inst_cache, [&block_interlocked](u32 apc, EEINST* inst) {
 		if (_Opcode_ == 022 && (_Rs_ == 001 || _Rs_ == 002 || _Rs_ == 005 || _Rs_ == 006) && cpuRegs.code & 1)
 		{
@@ -239,29 +219,16 @@ void COP2MicroFinishPass::Run(u32 start, u32 end, EEINST* inst_cache)
 	});
 
 	ForEachInstruction(start, end, inst_cache, [this, end, inst_cache, &needs_vu0_sync, &needs_vu0_finish, block_interlocked](u32 apc, EEINST* inst) {
-		// Catch SQ/SB/SH/SW/SD to potential DMA->VIF0->VU0 exec.
-		// Also VCALLMS/VCALLMSR, that can start a micro, so the next instruction needs to finish it.
-		// This is very unlikely in a cop2 chain.
 		if (_Opcode_ == 050 || _Opcode_ == 051 || _Opcode_ == 053 || _Opcode_ == 077 || (_Opcode_ == 022 && _Rs_ >= 020 && (_Funct_ == 070 || _Funct_ == 071)))
 		{
-			// If we started a micro, we'll need to finish it before the first COP2 instruction.
 			needs_vu0_sync = true;
 			needs_vu0_finish = true;
 			inst->info |= EEINST_COP2_FLUSH_VU0_REGISTERS;
 			return true;
 		}
 
-		// LQC2/SQC2 - these don't interlock with VU0, but still sync, so we can persist the cached registers
-		// for a LQC2..COP2 sequence. If there's no COP2 instructions following, don't bother, just yolo it.
-		// We do either a sync or a finish here depending on which COP2 instruction follows - we don't want
-		// to run the program until end if there's nothing which would actually trigger that.
-		//
-		// In essence, what we're doing is moving the finish from the COP2 instruction to the LQC2 in a LQC2..COP2
-		// chain, so that we can preserve the cached registers and not need to reload them.
-		//
 		const bool is_lqc_sqc = (_Opcode_ == 066 || _Opcode_ == 076);
 		const bool is_non_interlocked_move = (_Opcode_ == 022 && _Rs_ < 020 && ((cpuRegs.code & 1) == 0));
-		// Moving zero to the VU registers, so likely removing a loop/lock.
 		const bool likely_clear = _Opcode_ == 022 && _Rs_ < 020 && _Rs_ > 004 && _Rt_ == 000;
 		if ((needs_vu0_sync && (is_lqc_sqc || is_non_interlocked_move)) || likely_clear)
 		{
@@ -269,13 +236,9 @@ void COP2MicroFinishPass::Run(u32 start, u32 end, EEINST* inst_cache)
 			ForEachInstruction(apc + 4, end, inst_cache + 1, [&following_needs_finish](u32 apc2, EEINST* inst2) {
 				if (_Opcode_ == 022)
 				{
-					// For VCALLMS/VCALLMSR, we only sync, because the VCALLMS in itself will finish.
-					// Since we're paying the cost of syncing anyway, better to be less risky.
 					if (_Rs_ >= 020 && (_Funct_ == 070 || _Funct_ == 071))
 						return false;
 
-					// Allow the finish from COP2 to be moved to the first LQC2 of LQC2..QMTC2..COP2.
-					// Otherwise, keep searching for a finishing COP2.
 					following_needs_finish = _Rs_ >= 020;
 					if (following_needs_finish)
 						return false;
@@ -299,11 +262,9 @@ void COP2MicroFinishPass::Run(u32 start, u32 end, EEINST* inst_cache)
 			return true;
 		}
 
-		// Look for COP2 instructions.
 		if (_Opcode_ != 022)
 			return true;
 
-		// Set the flag on the current instruction, and clear it for the next.
 		if (_Rs_ >= 020 && needs_vu0_finish)
 		{
 			inst->info |= EEINST_COP2_FLUSH_VU0_REGISTERS | EEINST_COP2_FINISH_VU0;
@@ -312,7 +273,6 @@ void COP2MicroFinishPass::Run(u32 start, u32 end, EEINST* inst_cache)
 		}
 		else if (needs_vu0_sync)
 		{
-			// Starting a sync-free block!
 			inst->info |= EEINST_COP2_FLUSH_VU0_REGISTERS | EEINST_COP2_SYNC_VU0;
 			needs_vu0_sync = block_interlocked;
 		}
@@ -348,12 +308,6 @@ void COP2MicroFinishPass::Run(u32 start, u32 end, EEINST* inst_cache)
 	Console.WriteLn("-- End of COP2 block at %08X - %08X", start, end);
 #endif
 }
-
-/////////////////////////////////////////////////////////////////////
-// Back-Prop Function Tables - Gathering Info
-// Note to anyone changing these: writes must go before reads.
-// Otherwise the last use flag won't get set.
-/////////////////////////////////////////////////////////////////////
 
 #define recBackpropSetGPRRead(reg) \
 	do \
@@ -500,81 +454,81 @@ void recBackpropBSC(u32 code, EEINST* prev, EEINST* pinst)
 		case 1:
 			recBackpropREGIMM(code, prev, pinst);
 			break;
-		case 2: // j
+		case 2:
 			break;
-		case 3: // jal
+		case 3:
 			recBackpropSetGPRWrite(31);
 			break;
-		case 4: // beq
-		case 5: // bne
-		case 20: // beql
-		case 21: // bnel
+		case 4:
+		case 5:
+		case 20:
+		case 21:
 			recBackpropSetGPRRead(rs);
 			recBackpropSetGPRRead(rt);
 			break;
 
-		case 6: // blez
-		case 7: // bgtz
-		case 22: // blezl
-		case 23: // bgtzl
+		case 6:
+		case 7:
+		case 22:
+		case 23:
 			recBackpropSetGPRRead(rs);
 			break;
 
-		case 15: // lui
+		case 15:
 			recBackpropSetGPRWrite(rt);
 			break;
 
-		case 8: // addi
-		case 9: // addiu
-		case 10: // slti
-		case 11: // sltiu
-		case 12: // andi
-		case 13: // ori
-		case 14: // xori
-		case 24: // daddi
-		case 25: // daddiu
-			recBackpropSetGPRWrite(rt);
-			recBackpropSetGPRRead(rs);
-			break;
-
-		case 32: // lb
-		case 33: // lh
-		case 35: // lw
-		case 36: // lbu
-		case 37: // lhu
-		case 39: // lwu
-		case 55: // ld
+		case 8:
+		case 9:
+		case 10:
+		case 11:
+		case 12:
+		case 13:
+		case 14:
+		case 24:
+		case 25:
 			recBackpropSetGPRWrite(rt);
 			recBackpropSetGPRRead(rs);
 			break;
 
-		case 30: // lq
+		case 32:
+		case 33:
+		case 35:
+		case 36:
+		case 37:
+		case 39:
+		case 55:
+			recBackpropSetGPRWrite(rt);
+			recBackpropSetGPRRead(rs);
+			break;
+
+		case 30:
 			recBackpropSetGPRWrite128(rt);
 			recBackpropSetGPRRead(rs);
 			break;
 
-		case 26: // ldl
-		case 27: // ldr
-		case 34: // lwl
-		case 38: // lwr
+		case 26:
+		case 27:
+		case 34:
+		case 38:
 			recBackpropSetGPRWrite(rt);
 			recBackpropSetGPRRead(rs);
 			recBackpropSetGPRRead(rt);
 			break;
 
-		case 40: // sb
-		case 41: // sh
-		case 42: // swl
-		case 43: // sw
-		case 44: // sdl
-		case 45: // sdr
-		case 46: // swr
-		case 63: // sd
+		case 40:
+		case 41:
+		case 42:
+		case 43:
+		case 44:
+		case 45:
+		case 46:
+		case 63:
 			recBackpropSetGPRRead(rt);
 			recBackpropSetGPRRead(rs);
 			break;
 
-		case 31: // sq
+		case 31:
 			recBackpropSetGPRRead(rt);
 			recBackpropSetGPRRead128(rs);
 			break;
@@ -595,31 +549,31 @@ void recBackpropBSC(u32 code, EEINST* prev, EEINST* pinst)
 			recBackpropMMI(code, prev, pinst);
 			break;
 
-		case 49: // lwc1
+		case 49:
 			recBackpropSetGPRRead(rs);
 			recBackpropSetFPURead(rt);
 			break;
 
-		case 57: // swc1
+		case 57:
 			recBackpropSetGPRRead(rs);
 			recBackpropSetFPURead(rt);
 			break;
 
-		case 54: // lqc2
+		case 54:
 			recBackpropSetVFWrite(rt);
 			recBackpropSetGPRRead128(rs);
 			break;
 
-		case 62: // sqc2
+		case 62:
 			recBackpropSetGPRRead128(rs);
 			recBackpropSetVFRead(rt);
 			break;
 
-		case 47: // cache
+		case 47:
 			recBackpropSetGPRRead(rs);
 			break;
 
-		case 51: // pref
+		case 51:
 			break;
 
 		default:
@@ -637,57 +591,57 @@ void recBackpropSPECIAL(u32 code, EEINST* prev, EEINST* pinst)
 
 	switch (funct)
 	{
-		case 0: // sll
-		case 2: // srl
-		case 3: // sra
-		case 56: // dsll
-		case 58: // dsrl
-		case 59: // dsra
-		case 60: // dsll32
-		case 62: // dsrl32
-		case 63: // dsra32
+		case 0:
+		case 2:
+		case 3:
+		case 56:
+		case 58:
+		case 59:
+		case 60:
+		case 62:
+		case 63:
 			recBackpropSetGPRWrite(rd);
 			recBackpropSetGPRRead(rt);
 			break;
 
-		case 4: // sllv
-		case 6: // srlv
-		case 7: // srav
-		case 10: // movz
-		case 11: // movn
-		case 20: // dsllv
-		case 22: // dsrlv
-		case 23: // dsrav
-		case 32: // add
-		case 33: // addu
-		case 34: // sub
-		case 35: // subu
-		case 36: // and
-		case 37: // or
-		case 38: // xor
-		case 39: // nor
-		case 42: // slt
-		case 43: // sltu
-		case 44: // dadd
-		case 45: // daddu
-		case 46: // dsub
-		case 47: // dsubu
+		case 4:
+		case 6:
+		case 7:
+		case 10:
+		case 11:
+		case 20:
+		case 22:
+		case 23:
+		case 32:
+		case 33:
+		case 34:
+		case 35:
+		case 36:
+		case 37:
+		case 38:
+		case 39:
+		case 42:
+		case 43:
+		case 44:
+		case 45:
+		case 46:
+		case 47:
 			recBackpropSetGPRWrite(rd);
 			recBackpropSetGPRRead(rs);
 			recBackpropSetGPRRead(rt);
 			break;
 
-		case 8: // jr
+		case 8:
 			recBackpropSetGPRRead(rs);
 			break;
 
-		case 9: // jalr
+		case 9:
 			recBackpropSetGPRWrite(rd);
 			recBackpropSetGPRRead(rs);
 			break;
 
-		case 24: // mult
-		case 25: // multu
+		case 24:
+		case 25:
 			recBackpropSetGPRWrite(rd);
 			recBackpropSetGPRWrite(XMMGPR_LO);
 			recBackpropSetGPRWrite(XMMGPR_HI);
@@ -695,56 +649,56 @@ void recBackpropSPECIAL(u32 code, EEINST* prev, EEINST* pinst)
 			recBackpropSetGPRRead(rt);
 			break;
 
-		case 26: // div
-		case 27: // divu
+		case 26:
+		case 27:
 			recBackpropSetGPRWrite(XMMGPR_LO);
 			recBackpropSetGPRWrite(XMMGPR_HI);
 			recBackpropSetGPRRead(rs);
 			recBackpropSetGPRRead(rt);
 			break;
 
-		case 16: // mfhi
+		case 16:
 			recBackpropSetGPRWrite(rd);
 			recBackpropSetGPRRead(XMMGPR_HI);
 			break;
 
-		case 17: // mthi
+		case 17:
 			recBackpropSetGPRWrite(XMMGPR_HI);
 			recBackpropSetGPRRead(rs);
 			break;
 
-		case 18: // mflo
+		case 18:
 			recBackpropSetGPRWrite(rd);
 			recBackpropSetGPRRead(XMMGPR_LO);
 			break;
 
-		case 19: // mtlo
+		case 19:
 			recBackpropSetGPRWrite(XMMGPR_LO);
 			recBackpropSetGPRRead(rs);
 			break;
 
-		case 40: // mfsa
+		case 40:
 			recBackpropSetGPRWrite(rd);
 			break;
 
-		case 41: // mtsa
+		case 41:
 			recBackpropSetGPRRead(rs);
 			break;
 
-		case 48: // tge
-		case 49: // tgeu
-		case 50: // tlt
-		case 51: // tltu
-		case 52: // teq
-		case 54: // tne
+		case 48:
+		case 49:
+		case 50:
+		case 51:
+		case 52:
+		case 54:
 			recBackpropSetGPRRead(rs);
 			break;
 
-		case 15: // sync
+		case 15:
 			break;
 
-		case 12: // syscall
-		case 13: // break
+		case 12:
+		case 13:
 			_recClearInst(prev);
 			prev->info = 0;
 			break;
@@ -762,26 +716,25 @@ void recBackpropREGIMM(u32 code, EEINST* prev, EEINST* pinst)
 
 	switch (rt)
 	{
-		case 0: // bltz
-		case 1: // bgez
-		case 2: // bltzl
-		case 3: // bgezl
-		case 9: // tgei
-		case 10: // tgeiu
-		case 11: // tlti
-		case 12: // tltiu
-		case 13: // teqi
-		case 15: // tnei
-		case 24: // mtsab
-		case 25: // mtsah
+		case 0:
+		case 1:
+		case 2:
+		case 3:
+		case 9:
+		case 10:
+		case 11:
+		case 12:
+		case 13:
+		case 15:
+		case 24:
+		case 25:
 			recBackpropSetGPRRead(rs);
 			break;
 
-		case 16: // bltzal
-		case 17: // bgezal
-		case 18: // bltzall
-		case 19: // bgezall
-			// do not write 31
+		case 16:
+		case 17:
+		case 18:
+		case 19:
 			recBackpropSetGPRRead(rs);
 			break;
 
@@ -798,18 +751,18 @@ void recBackpropCOP0(u32 code, EEINST* prev, EEINST* pinst)
 
 	switch (rs)
 	{
-		case 0: // mfc0
-		case 2: // cfc0
+		case 0:
+		case 2:
 			recBackpropSetGPRWrite(rt);
 			break;
 
-		case 4: // mtc0
-		case 6: // ctc0
+		case 4:
+		case 6:
 			recBackpropSetGPRRead(rt);
 			break;
 
-		case 8: // bc0f/bc0t/bc0fl/bc0tl
-		case 16: // tlb/eret/ei/di
+		case 8:
+		case 16:
 			break;
 
 		default:
@@ -829,93 +782,88 @@ void recBackpropCOP1(u32 code, EEINST* prev, EEINST* pinst)
 
 	switch (fmt)
 	{
-		case 0: // mfc1
+		case 0:
 			recBackpropSetGPRWrite(rt);
 			recBackpropSetFPURead(fs);
 			break;
 
-		case 2: // cfc1
+		case 2:
 			recBackpropSetGPRWrite(rt);
-			// read fprc[31] or fprc[0]
 			break;
 
-		case 4: // mtc1
+		case 4:
 			recBackpropSetFPUWrite(fs);
 			recBackpropSetGPRRead(rt);
 			break;
 
-		case 6: // ctc1
+		case 6:
 			recBackpropSetGPRRead(rt);
-			// write fprc[fs]
 			break;
 
-		case 8: // bc1f/bc1t/bc1fl/bc1tl
-			// read fprc[31]
+		case 8:
 			break;
 
-		case 16: // cop1.s
+		case 16:
 		{
 			switch (funct)
 			{
-				case 0: // add.s
-				case 1: // sub.s
-				case 2: // mul.s
-				case 3: // div.s
-				case 40: // max.s
-				case 41: // min.s
+				case 0:
+				case 1:
+				case 2:
+				case 3:
+				case 40:
+				case 41:
 					recBackpropSetFPUWrite(fd);
 					recBackpropSetFPURead(fs);
 					recBackpropSetFPURead(ft);
 					break;
 
-				case 5: // abs.s
-				case 6: // mov.s
-				case 7: // neg.s
-				case 36: // cvt.w
+				case 5:
+				case 6:
+				case 7:
+				case 36:
 					recBackpropSetFPUWrite(fd);
 					recBackpropSetFPURead(fs);
 					break;
 
-				case 24: // adda.s
-				case 25: // suba.s
-				case 26: // mula.s
+				case 24:
+				case 25:
+				case 26:
 					recBackpropSetFPUWrite(XMMFPU_ACC);
 					recBackpropSetFPURead(fs);
 					recBackpropSetFPURead(ft);
 					break;
 
-				case 28: // madd.s
-				case 29: // msub.s
+				case 28:
+				case 29:
 					recBackpropSetFPUWrite(fd);
 					recBackpropSetFPURead(fs);
 					recBackpropSetFPURead(ft);
 					recBackpropSetFPURead(XMMFPU_ACC);
 					break;
 
-				case 30: // madda.s
-				case 31: // msuba.s
+				case 30:
+				case 31:
 					recBackpropSetFPUWrite(XMMFPU_ACC);
 					recBackpropSetFPURead(fs);
 					recBackpropSetFPURead(ft);
 					recBackpropSetFPURead(XMMFPU_ACC);
 					break;
 
-				case 4: // sqrt.s
-				case 22: // rsqrt.s
+				case 4:
+				case 22:
 					recBackpropSetFPUWrite(fd);
 					recBackpropSetFPURead(ft);
 					break;
 
-				case 48: // c.f
-					// read + write fprc
+				case 48:
 					break;
 
-				case 50: // c.eq
-				case 52: // c.lt
-				case 54: // c.le
+				case 50:
+				case 52:
+				case 54:
 					recBackpropSetFPURead(fs);
 					recBackpropSetFPURead(ft);
-					// read + write fprc
 					break;
 
 				default:
@@ -925,11 +873,11 @@ void recBackpropCOP1(u32 code, EEINST* prev, EEINST* pinst)
 		}
 		break;
 
-		case 20: // cop1.w
+		case 20:
 		{
 			switch (funct)
 			{
-				case 32: // cvt.s
+				case 32:
 					recBackpropSetFPUWrite(fd);
 					recBackpropSetFPURead(fs);
 					break;
@@ -961,31 +909,30 @@ void recBackpropCOP2(u32 code, EEINST* prev, EEINST* pinst)
 
 	switch (fmt)
 	{
-		case 1: // qmfc2
+		case 1:
 			recBackpropSetGPRWrite128(rt);
 			recBackpropSetVFRead(fs);
 			break;
 
-		case 2: // cfc1
+		case 2:
 			recBackpropSetGPRWrite(rt);
 			recBackpropSetVIRead(fs);
 			break;
 
-		case 5: // qmtc2
+		case 5:
 			recBackpropSetVFWrite(fs);
 			recBackpropSetGPRRead128(rt);
 			break;
 
-		case 6: // ctc2
+		case 6:
 			recBackpropSetVIWrite(fs);
 			recBackpropSetGPRRead(rt);
 			break;
 
-		case 8: // bc2f/bc2t/bc2fl/bc2tl
-			// read vi[29]
+		case 8:
 			break;
 
-		case 16: // SPEC1
+		case 16:
 		case 17:
 		case 18:
 		case 19:
@@ -1000,52 +947,52 @@ void recBackpropCOP2(u32 code, EEINST* prev, EEINST* pinst)
 		case 28:
 		case 29:
 		case 30:
-		case 31: // SPEC1
+		case 31:
 		{
 			switch (funct)
 			{
-				case 0: // VADDx
-				case 1: // VADDy
-				case 2: // VADDz
-				case 3: // VADDw
-				case 4: // VSUBx
-				case 5: // VSUBy
-				case 6: // VSUBz
-				case 7: // VSUBw
-				case 16: // VMAXx
-				case 17: // VMAXy
-				case 18: // VMAXz
-				case 19: // VMAXw
-				case 20: // VMINIx
-				case 21: // VMINIy
-				case 22: // VMINIz
-				case 23: // VMINIw
-				case 24: // VMULx
-				case 25: // VMULy
-				case 26: // VMULz
-				case 27: // VMULw
-				case 40: // VADD
-				case 42: // VMUL
-				case 43: // VMAX
-				case 44: // VSUB
-				case 47: // VMINI
+				case 0:
+				case 1:
+				case 2:
+				case 3:
+				case 4:
+				case 5:
+				case 6:
+				case 7:
+				case 16:
+				case 17:
+				case 18:
+				case 19:
+				case 20:
+				case 21:
+				case 22:
+				case 23:
+				case 24:
+				case 25:
+				case 26:
+				case 27:
+				case 40:
+				case 42:
+				case 43:
+				case 44:
+				case 47:
 					recBackpropSetVFWrite(fd);
 					recBackpropSetVFRead(fs);
 					recBackpropSetVFRead(ft);
-					recBackpropSetVFRead(fd); // unnecessary if _X_Y_Z_W == 0xF
+					recBackpropSetVFRead(fd);
 					break;
 
-				case 8: // VMADDx
-				case 9: // VMADDy
-				case 10: // VMADDz
-				case 11: // VMADDw
-				case 12: // VMSUBx
-				case 13: // VMSUBy
-				case 14: // VMSUBz
-				case 15: // VMSUBw
-				case 41: // VMADD
-				case 45: // VMSUB
-				case 46: // VOPMSUB
+				case 8:
+				case 9:
+				case 10:
+				case 11:
+				case 12:
+				case 13:
+				case 14:
+				case 15:
+				case 41:
+				case 45:
+				case 46:
 					recBackpropSetVFWrite(fd);
 					recBackpropSetVFRead(fs);
 					recBackpropSetVFRead(ft);
@@ -1053,45 +1000,43 @@ void recBackpropCOP2(u32 code, EEINST* prev, EEINST* pinst)
 					recBackpropSetVFRead(fd);
 					break;
 
-				case 29: // VMAXi
-				case 30: // VMULi
-				case 31: // VMINIi
-				case 34: // VADDi
-				case 38: // VSUBi
+				case 29:
+				case 30:
+				case 31:
+				case 34:
+				case 38:
 					recBackpropSetVFWrite(fd);
 					recBackpropSetVFRead(fs);
 					recBackpropSetVFRead(VF_I);
 					break;
 
-				case 35: // VMADDi
-				case 39: // VMSUBi
+				case 35:
+				case 39:
 					recBackpropSetVFWrite(fd);
 					recBackpropSetVFRead(fs);
 					recBackpropSetVFRead(VF_ACC);
 					recBackpropSetVFRead(VF_I);
 					break;
 
-				case 28: // VMULq
-				case 32: // VADDq
-				case 36: // VSUBq
+				case 28:
+				case 32:
+				case 36:
 					recBackpropSetVFWrite(fd);
 					recBackpropSetVFRead(fs);
-					// recBackpropSetVIRead(REG_Q);
 					break;
 
-				case 33: // VMADDq
-				case 37: // VMSUBq
+				case 33:
+				case 37:
 					recBackpropSetVFWrite(fd);
 					recBackpropSetVFRead(fs);
-					// recBackpropSetVIRead(REG_Q);
 					recBackpropSetVFRead(VF_ACC);
 					break;
 
-				case 48: // VIADD
-				case 49: // VISUB
-				case 50: // VIADDI
-				case 52: // VIAND
-				case 53: // VIOR
+				case 48:
+				case 49:
+				case 50:
+				case 52:
+				case 53:
 				{
 					const u32 is = fs & 0xFu;
 					const u32 it = ft & 0xFu;
@@ -1104,173 +1049,166 @@ void recBackpropCOP2(u32 code, EEINST* prev, EEINST* pinst)
 				break;
 
 
-				case 56: // VCALLMS
-				case 57: // VCALLMSR
+				case 56:
+				case 57:
 					break;
 
-				case 60: // COP2_SPEC2
-				case 61: // COP2_SPEC2
-				case 62: // COP2_SPEC2
-				case 63: // COP2_SPEC2
+				case 60:
+				case 61:
+				case 62:
+				case 63:
 				{
 					const u32 idx = (code & 3u) | ((code >> 4) & 0x7cu);
 					switch (idx)
 					{
-						case 0: // VADDAx
-						case 1: // VADDAy
-						case 2: // VADDAz
-						case 3: // VADDAw
-						case 4: // VSUBAx
-						case 5: // VSUBAy
-						case 6: // VSUBAz
-						case 7: // VSUBAw
-						case 24: // VMULAx
-						case 25: // VMULAy
-						case 26: // VMULAz
-						case 27: // VMULAw
-						case 40: // VADDA
-						case 42: // VMULA
-						case 44: // VSUBA
+						case 0:
+						case 1:
+						case 2:
+						case 3:
+						case 4:
+						case 5:
+						case 6:
+						case 7:
+						case 24:
+						case 25:
+						case 26:
+						case 27:
+						case 40:
+						case 42:
+						case 44:
 							recBackpropSetVFWrite(VF_ACC);
 							recBackpropSetVFRead(fs);
 							recBackpropSetVFRead(ft);
 							recBackpropSetVFRead(VF_ACC);
 							break;
 
-						case 8: // VMADDAx
-						case 9: // VMADDAy
-						case 10: // VMADDAz
-						case 11: // VMADDAw
-						case 12: // VMSUBAx
-						case 13: // VMSUBAy
-						case 14: // VMSUBAz
-						case 15: // VMSUBAw
-						case 41: // VMADDA
-						case 45: // VMSUBA
-						case 46: // VOPMULA
+						case 8:
+						case 9:
+						case 10:
+						case 11:
+						case 12:
+						case 13:
+						case 14:
+						case 15:
+						case 41:
+						case 45:
+						case 46:
 							recBackpropSetVFWrite(VF_ACC);
 							recBackpropSetVFRead(fs);
 							recBackpropSetVFRead(ft);
 							recBackpropSetVFRead(VF_ACC);
 							break;
 
-						case 16: // VITOF0
-						case 17: // VITOF4
-						case 18: // VITOF12
-						case 19: // VITOF15
-						case 20: // VFTOI0
-						case 21: // VFTOI4
-						case 22: // VFTOI12
-						case 23: // VFTOI15
-						case 29: // VABS
-						case 48: // VMOVE
-						case 49: // VMR32
+						case 16:
+						case 17:
+						case 18:
+						case 19:
+						case 20:
+						case 21:
+						case 22:
+						case 23:
+						case 29:
+						case 48:
+						case 49:
 							recBackpropSetVFWrite(ft);
 							recBackpropSetVFRead(fs);
 							recBackpropSetVFRead(ft);
 							break;
 
-						case 31: // VCLIP
+						case 31:
 							recBackpropSetVFRead(fs);
-							// Write CLIP
 							break;
 
-						case 30: // VMULAi
-						case 34: // VADDAi
-						case 38: // VSUBAi
+						case 30:
+						case 34:
+						case 38:
 							recBackpropSetVFWrite(VF_ACC);
 							recBackpropSetVFRead(fs);
 							recBackpropSetVFRead(VF_I);
 							recBackpropSetVFRead(VF_ACC);
 							break;
 
-						case 35: // VMADDAi
-						case 39: // VMSUBAi
+						case 35:
+						case 39:
 							recBackpropSetVFWrite(VF_ACC);
 							recBackpropSetVFRead(fs);
 							recBackpropSetVFRead(VF_I);
 							recBackpropSetVFRead(VF_ACC);
 							break;
 
-						case 32: // VADDAq
-						case 36: // VSUBAq
-						case 28: // VMULAq
+						case 32:
+						case 36:
+						case 28:
 							recBackpropSetVFWrite(VF_ACC);
 							recBackpropSetVFRead(fs);
-							// recBackpropSetVIRead(REG_Q);
 							recBackpropSetVFRead(VF_ACC);
 							break;
 
-						case 33: // VMADDAq
-						case 37: // VMSUBAq
+						case 33:
+						case 37:
 							recBackpropSetVFWrite(VF_ACC);
 							recBackpropSetVFRead(fs);
-							// recBackpropSetVIRead(REG_Q);
 							recBackpropSetVFRead(VF_ACC);
 							break;
 
-						case 52: // VLQI
-						case 54: // VLQD
+						case 52:
+						case 54:
 							recBackpropSetVFWrite(ft);
 							recBackpropSetVIWrite(fs & 0xFu);
 							recBackpropSetVIRead(fs & 0xFu);
 							recBackpropSetVFRead(ft);
 							break;
 
-						case 53: // VSQI
-						case 55: // VSQD
+						case 53:
+						case 55:
 							recBackpropSetVIWrite(ft & 0xFu);
 							recBackpropSetVIRead(ft & 0xFu);
 							recBackpropSetVFRead(fs);
 							break;
 
-						case 56: // VDIV
-						case 58: // VRSQRT
-							// recBackpropSetVIWrite(REG_Q);
+						case 56:
+						case 58:
 							recBackpropSetVFRead(fs);
 							recBackpropSetVFRead(ft);
 							break;
 
-						case 57: // VSQRT
+						case 57:
 							recBackpropSetVFRead(ft);
 							break;
 
 
-						case 60: // VMTIR
+						case 60:
 							recBackpropSetVIWrite(ft & 0xFu);
 							recBackpropSetVFRead(fs);
 							break;
 
-						case 61: // VMFIR
+						case 61:
 							recBackpropSetVFWrite(ft);
 							recBackpropSetVIRead(fs & 0xFu);
 							break;
 
-						case 62: // VILWR
+						case 62:
 							recBackpropSetVIWrite(ft & 0xFu);
 							recBackpropSetVIRead(fs & 0xFu);
 							break;
 
-						case 63: // VISWR
+						case 63:
 							recBackpropSetVIRead(fs & 0xFu);
 							recBackpropSetVIRead(ft & 0xFu);
 							break;
 
-						case 64: // VRNEXT
-						case 65: // VRGET
+						case 64:
+						case 65:
 							recBackpropSetVFWrite(ft);
-							// recBackpropSetVIRead(REG_R);
 							break;
 
-						case 66: // VRINIT
-						case 67: // VRXOR
-							// recBackpropSetVIWrite(REG_R);
+						case 66:
+						case 67:
 							recBackpropSetVFRead(fs);
-							// recBackpropSetVIRead(REG_R);
 							break;
 
-						case 47: // VNOP
-						case 59: // VWAITQ
+						case 47:
+						case 59:
 							break;
 
 						default:
@@ -1301,8 +1239,8 @@ void recBackpropMMI(u32 code, EEINST* prev, EEINST* pinst)
 
 	switch (funct)
 	{
-		case 0: // madd
-		case 1: // maddu
+		case 0:
+		case 1:
 			recBackpropSetGPRWrite(XMMGPR_LO);
 			recBackpropSetGPRWrite(XMMGPR_HI);
 			recBackpropSetGPRRead(rs);
@@ -1311,8 +1249,8 @@ void recBackpropMMI(u32 code, EEINST* prev, EEINST* pinst)
 			recBackpropSetGPRRead(XMMGPR_HI);
 			break;
 
-		case 32: // madd1
-		case 33: // maddu1
+		case 32:
+		case 33:
 			recBackpropSetGPRPartialWrite128(XMMGPR_LO);
 			recBackpropSetGPRPartialWrite128(XMMGPR_HI);
 			recBackpropSetGPRRead(rs);
@@ -1321,8 +1259,8 @@ void recBackpropMMI(u32 code, EEINST* prev, EEINST* pinst)
 			recBackpropSetGPRRead128(XMMGPR_HI);
 			break;
 
-		case 24: // mult1
-		case 25: // multu1
+		case 24:
+		case 25:
 			recBackpropSetGPRPartialWrite128(XMMGPR_LO);
 			recBackpropSetGPRPartialWrite128(XMMGPR_HI);
 			recBackpropSetGPRRead(rs);
@@ -1330,96 +1268,96 @@ void recBackpropMMI(u32 code, EEINST* prev, EEINST* pinst)
 			recBackpropSetGPRWrite(rd);
 			break;
 
-		case 26: // div1
-		case 27: // divu1
+		case 26:
+		case 27:
 			recBackpropSetGPRPartialWrite128(XMMGPR_LO);
 			recBackpropSetGPRPartialWrite128(XMMGPR_HI);
 			recBackpropSetGPRRead(rs);
 			recBackpropSetGPRRead(rt);
 			break;
 
-		case 16: // mfhi1
+		case 16:
 			recBackpropSetGPRRead128(XMMGPR_HI);
 			recBackpropSetGPRWrite(rd);
 			break;
 
-		case 17: // mthi1
+		case 17:
 			recBackpropSetGPRPartialWrite128(XMMGPR_HI);
 			recBackpropSetGPRRead(rs);
 			break;
 
-		case 18: // mflo1
+		case 18:
 			recBackpropSetGPRRead128(XMMGPR_LO);
 			recBackpropSetGPRWrite(rd);
 			break;
 
-		case 19: // mtlo1
+		case 19:
 			recBackpropSetGPRPartialWrite128(XMMGPR_LO);
 			recBackpropSetGPRRead(rs);
 			break;
 
-		case 4: // plzcw
+		case 4:
 			recBackpropSetGPRRead(rs);
 			recBackpropSetGPRWrite(rd);
 			break;
 
-		case 48: // pmfhl
+		case 48:
 			recBackpropSetGPRPartialWrite128(rd);
 			recBackpropSetGPRRead128(XMMGPR_LO);
 			recBackpropSetGPRRead128(XMMGPR_HI);
 			break;
 
-		case 49: // pmthl
+		case 49:
 			recBackpropSetGPRPartialWrite128(XMMGPR_LO);
 			recBackpropSetGPRPartialWrite128(XMMGPR_HI);
 			recBackpropSetGPRRead128(rs);
 			break;
 
-		case 52: // psllh
-		case 54: // psrlh
-		case 55: // psrah
-		case 60: // psllw
-		case 62: // psrlw
-		case 63: // psraw
+		case 52:
+		case 54:
+		case 55:
+		case 60:
+		case 62:
+		case 63:
 			recBackpropSetGPRWrite128(rd);
 			recBackpropSetGPRRead128(rt);
 			break;
 
-		case 8: // mmi0
+		case 8:
 		{
 			const u32 idx = ((code >> 6) & 0x1F);
 			switch (idx)
 			{
-				case 0: // PADDW
-				case 1: // PSUBW
-				case 2: // PCGTW
-				case 3: // PMAXW
-				case 4: // PADDH
-				case 5: // PSUBH
-				case 6: // PCGTH
-				case 7: // PMAXH
-				case 8: // PADDB
-				case 9: // PSUBB
-				case 10: // PCGTB
-				case 16: // PADDSW
-				case 17: // PSUBSW
-				case 18: // PEXTLW
-				case 19: // PPACW
-				case 20: // PADDSH
-				case 21: // PSUBSH
-				case 22: // PEXTLH
-				case 23: // PPACH
-				case 24: // PADDSB
-				case 25: // PSUBSB
-				case 26: // PEXTLB
-				case 27: // PPACB
+				case 0:
+				case 1:
+				case 2:
+				case 3:
+				case 4:
+				case 5:
+				case 6:
+				case 7:
+				case 8:
+				case 9:
+				case 10:
+				case 16:
+				case 17:
+				case 18:
+				case 19:
+				case 20:
+				case 21:
+				case 22:
+				case 23:
+				case 24:
+				case 25:
+				case 26:
+				case 27:
 					recBackpropSetGPRWrite128(rd);
 					recBackpropSetGPRRead128(rs);
 					recBackpropSetGPRRead128(rt);
 					break;
 
-				case 30: // PEXT5
-				case 31: // PPAC5
+				case 30:
+				case 31:
 					recBackpropSetGPRWrite128(rd);
 					recBackpropSetGPRRead128(rt);
 					break;
@@ -1431,39 +1369,39 @@ void recBackpropMMI(u32 code, EEINST* prev, EEINST* pinst)
 		}
 		break;
 
-		case 40: // mmi1
+		case 40:
 		{
 			const u32 idx = ((code >> 6) & 0x1F);
 			switch (idx)
 			{
-				case 2: // PCEQW
-				case 3: // PMINW
-				case 4: // PADSBH
-				case 6: // PCEQH
-				case 7: // PMINH
-				case 10: // PCEQB
-				case 16: // PADDUW
-				case 17: // PSUBUW
-				case 18: // PEXTUW
-				case 20: // PADDUH
-				case 21: // PSUBUH
-				case 22: // PEXTUH
-				case 24: // PADDUB
-				case 25: // PSUBUB
-				case 26: // PEXTUB
-				case 27: // QFSRV
+				case 2:
+				case 3:
+				case 4:
+				case 6:
+				case 7:
+				case 10:
+				case 16:
+				case 17:
+				case 18:
+				case 20:
+				case 21:
+				case 22:
+				case 24:
+				case 25:
+				case 26:
+				case 27:
 					recBackpropSetGPRWrite128(rd);
 					recBackpropSetGPRRead128(rs);
 					recBackpropSetGPRRead128(rt);
 					break;
 
-				case 1: // PABSW
-				case 5: // PABSH
+				case 1:
+				case 5:
 					recBackpropSetGPRWrite128(rd);
 					recBackpropSetGPRRead128(rt);
 					break;
 
-				case 0: // MMI_Unknown
+				case 0:
 				default:
 					Console.Warning("Unknown R5900 MMI1: %08X", code);
 					break;
@@ -1471,17 +1409,17 @@ void recBackpropMMI(u32 code, EEINST* prev, EEINST* pinst)
 		}
 		break;
 
-		case 9: // mmi2
+		case 9:
 		{
 			const u32 idx = ((code >> 6) & 0x1F);
 			switch (idx)
 			{
-				case 0: // PMADDW
-				case 4: // PMSUBW
-				case 16: // PMADDH
-				case 17: // PHMADH
-				case 20: // PMSUBH
-				case 21: // PHMSBH
+				case 0:
+				case 4:
+				case 16:
+				case 17:
+				case 20:
+				case 21:
 					recBackpropSetGPRWrite128(rd);
 					recBackpropSetGPRWrite128(XMMGPR_LO);
 					recBackpropSetGPRWrite128(XMMGPR_HI);
@@ -1491,8 +1429,8 @@ void recBackpropMMI(u32 code, EEINST* prev, EEINST* pinst)
 					recBackpropSetGPRRead128(XMMGPR_HI);
 					break;
 
-				case 12: // PMULTW
-				case 28: // PMULTH
+				case 12:
+				case 28:
 					recBackpropSetGPRWrite128(rd);
 					recBackpropSetGPRWrite128(XMMGPR_LO);
 					recBackpropSetGPRWrite128(XMMGPR_HI);
@@ -1500,39 +1438,39 @@ void recBackpropMMI(u32 code, EEINST* prev, EEINST* pinst)
 					recBackpropSetGPRRead128(rt);
 					break;
 
-				case 13: // PDIVW
-				case 29: // PDIVBW
+				case 13:
+				case 29:
 					recBackpropSetGPRWrite128(XMMGPR_LO);
 					recBackpropSetGPRWrite128(XMMGPR_HI);
 					recBackpropSetGPRRead128(rs);
 					recBackpropSetGPRRead128(rt);
 					break;
 
-				case 2: // PSLLVW
-				case 3: // PSRLVW
-				case 10: // PINTH
-				case 14: // PCPYLD
-				case 18: // PAND
-				case 19: // PXOR
+				case 2:
+				case 3:
+				case 10:
+				case 14:
+				case 18:
+				case 19:
 					recBackpropSetGPRWrite128(rd);
 					recBackpropSetGPRRead128(rs);
 					recBackpropSetGPRRead128(rt);
 					break;
 
-				case 8: // PMFHI
+				case 8:
 					recBackpropSetGPRWrite128(rd);
 					recBackpropSetGPRRead128(XMMGPR_LO);
 					break;
 
-				case 9: // PMFLO
+				case 9:
 					recBackpropSetGPRWrite128(rd);
 					recBackpropSetGPRRead128(XMMGPR_HI);
 					break;
 
-				case 26: // PEXEH
-				case 27: // PREVH
-				case 30: // PEXEW
-				case 31: // PROT3W
+				case 26:
+				case 27:
+				case 30:
+				case 31:
 					recBackpropSetGPRWrite128(rd);
 					recBackpropSetGPRRead128(rt);
 					break;
@@ -1544,12 +1482,12 @@ void recBackpropMMI(u32 code, EEINST* prev, EEINST* pinst)
 		}
 		break;
 
-		case 41: // mmi3
+		case 41:
 		{
 			const u32 idx = ((code >> 6) & 0x1F);
 			switch (idx)
 			{
-				case 0: // PMADDUW
+				case 0:
 					recBackpropSetGPRWrite128(rd);
 					recBackpropSetGPRWrite128(XMMGPR_LO);
 					recBackpropSetGPRWrite128(XMMGPR_HI);
@@ -1559,34 +1497,34 @@ void recBackpropMMI(u32 code, EEINST* prev, EEINST* pinst)
 					recBackpropSetGPRRead128(XMMGPR_HI);
 					break;
 
-				case 3: // PSRAVW
-				case 10: // PINTEH
-				case 18: // POR
-				case 19: // PNOR
-				case 14: // PCPYUD
+				case 3:
+				case 10:
+				case 18:
+				case 19:
+				case 14:
 					recBackpropSetGPRWrite128(rd);
 					recBackpropSetGPRRead128(rs);
 					recBackpropSetGPRRead128(rt);
 					break;
 
-				case 26: // PEXCH
-				case 27: // PCPYH
-				case 30: // PEXCW
+				case 26:
+				case 27:
+				case 30:
 					recBackpropSetGPRWrite128(rd);
 					recBackpropSetGPRRead128(rt);
 					break;
 
-				case 8: // PMTHI
+				case 8:
 					recBackpropSetGPRWrite128(XMMGPR_HI);
 					recBackpropSetGPRRead128(rs);
 					break;
 
-				case 9: // PMTLO
+				case 9:
 					recBackpropSetGPRWrite128(XMMGPR_LO);
 					recBackpropSetGPRRead128(rs);
 					break;
 
-				case 12: // PMULTUW
+				case 12:
 					recBackpropSetGPRWrite128(rd);
 					recBackpropSetGPRWrite128(XMMGPR_LO);
 					recBackpropSetGPRWrite128(XMMGPR_HI);
@@ -1594,7 +1532,7 @@ void recBackpropMMI(u32 code, EEINST* prev, EEINST* pinst)
 					recBackpropSetGPRRead128(rt);
 					break;
 
-				case 13: // PDIVUW
+				case 13:
 					recBackpropSetGPRWrite128(XMMGPR_LO);
 					recBackpropSetGPRWrite128(XMMGPR_HI);
 					recBackpropSetGPRRead128(rs);

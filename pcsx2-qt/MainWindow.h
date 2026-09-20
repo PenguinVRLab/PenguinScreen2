@@ -46,9 +46,6 @@ class MainWindow final : public QMainWindow
 	Q_OBJECT
 
 public:
-	/// This class is a scoped lock on the VM, which prevents it from running while
-	/// the object exists. Its purpose is to be used for blocking/modal popup boxes,
-	/// where the VM needs to exit fullscreen temporarily.
 	class VMLock
 	{
 	public:
@@ -59,11 +56,8 @@ public:
 		VMLock& operator=(VMLock&& lock);
 		VMLock& operator=(const VMLock&) = delete;
 
-		/// Returns the parent widget, which can be used for any popup dialogs.
 		__fi QWidget* getDialogParent() const { return m_dialog_parent; }
 
-		/// Cancels any pending unpause/fullscreen transition.
-		/// Call when you're going to destroy the VM anyway.
 		void cancelResume();
 
 	private:
@@ -77,10 +71,8 @@ public:
 		bool m_owns_dialog_parent;
 	};
 
-	/// Default filter for opening a file.
 	static const char* OPEN_FILE_FILTER;
 
-	/// Default filter for opening a disc image.
 	static const char* DISC_IMAGE_FILTER;
 
 public:
@@ -93,10 +85,8 @@ public:
 	void resetSettings(bool ui);
 	void quit();
 
-	/// Locks the VM by pausing it, while a popup dialog is displayed.
 	VMLock pauseAndLockVM();
 
-	/// Accessors for the status bar widgets, updated by the emulation thread.
 	__fi QLabel* getStatusVerboseWidget() const { return m_status_verbose_widget; }
 	__fi QToolButton* getStatusSpeedWidget() const { return m_status_speed_widget; }
 	__fi QToolButton* getStatusVolumeWidget() const { return m_status_volume_widget; }
@@ -106,10 +96,8 @@ public:
 	__fi QLabel* getStatusFPSWidget() const { return m_status_fps_widget; }
 	__fi QLabel* getStatusVPSWidget() const { return m_status_vps_widget; }
 
-	/// Rescans a single file. NOTE: Happens on UI thread.
 	void rescanFile(const std::string& path);
 
-	/// Start a file from a user action (e.g. dragging a file onto the main window or with macOS open with)
 	bool startFile(const QString& path);
 
 	void doSettings(const char* category = nullptr);
@@ -205,7 +193,6 @@ private Q_SLOTS:
 	void onVideoCaptureToggled(bool checked);
 	void onSettingsTriggeredFromToolbar();
 
-	// Input Recording
 	void onInputRecNewActionTriggered();
 	void onInputRecPlayActionTriggered();
 	void onInputRecStopActionTriggered();

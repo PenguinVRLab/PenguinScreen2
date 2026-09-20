@@ -7,33 +7,24 @@
 #include "VUops.h"
 #include "R5900.h"
 
-static const uint VU0_MEMSIZE	= 0x1000;		// 4kb
-static const uint VU0_PROGSIZE	= 0x1000;		// 4kb
-static const uint VU1_MEMSIZE	= 0x4000;		// 16kb
-static const uint VU1_PROGSIZE	= 0x4000;		// 16kb
+static const uint VU0_MEMSIZE	= 0x1000;
+static const uint VU0_PROGSIZE	= 0x1000;
+static const uint VU1_MEMSIZE	= 0x4000;
+static const uint VU1_PROGSIZE	= 0x4000;
 
 static const uint VU0_MEMMASK	= VU0_MEMSIZE-1;
 static const uint VU0_PROGMASK	= VU0_PROGSIZE-1;
 static const uint VU1_MEMMASK	= VU1_MEMSIZE-1;
 static const uint VU1_PROGMASK	= VU1_PROGSIZE-1;
 
-#define vu1RunCycles (3000000) // mVU1 uses this for inf loop detection on dev builds
+#define vu1RunCycles (3000000)
 
 
-// --------------------------------------------------------------------------------------
-//  BaseVUmicroCPU
-// --------------------------------------------------------------------------------------
-// Layer class for possible future implementation (currently is nothing more than a type-safe
-// type define).
-//
 class BaseVUmicroCPU
 {
 public:
 	int m_Idx = 0;
 
-	// this boolean indicates to some generic logging facilities if the VU's registers
-	// are valid for logging or not. (see DisVU1Micro.cpp, etc)  [kinda hacky, might
-	// be removed in the future]
 	bool	IsInterpreter;
 
 public:
@@ -47,9 +38,6 @@ public:
 	virtual const char* GetShortName() const=0;
 	virtual const char* GetLongName() const=0;
 
-	// returns the number of bytes committed to the working caches for this CPU
-	// provider (typically this refers to recompiled code caches, but could also refer
-	// to other optional growable allocations).
 	virtual size_t GetCommittedCache() const
 	{
 		return 0;
@@ -63,23 +51,13 @@ public:
 	virtual void Step()=0;
 	virtual void Clear(u32 Addr, u32 Size)=0;
 
-	// Executes a Block based on EE delta time (see VUmicro.cpp)
 	void ExecuteBlock(bool startUp = 0);
 
-	// C++ Calling Conventions are unstable, and some compilers don't even allow us to take the
-	// address of C++ methods.  We need to use a wrapper function to invoke the ExecuteBlock from
-	// recompiled code.
 	static void ExecuteBlockJIT(BaseVUmicroCPU* cpu, bool interlocked);
 
-	// VU1 sometimes needs to break execution on XGkick Path1 transfers if
-	// there is another gif path 2/3 transfer already taking place.
-	// Use this method to resume execution of VU1.
 	virtual void ResumeXGkick() {}
 };
 
-// --------------------------------------------------------------------------------------
-//  InterpVU0 / InterpVU1
-// --------------------------------------------------------------------------------------
 class InterpVU0 final : public BaseVUmicroCPU
 {
 public:
@@ -117,9 +95,6 @@ public:
 	void ResumeXGkick() override {}
 };
 
-// --------------------------------------------------------------------------------------
-//  recMicroVU0 / recMicroVU1
-// --------------------------------------------------------------------------------------
 class recMicroVU0 final : public BaseVUmicroCPU
 {
 public:
@@ -168,14 +143,12 @@ extern BaseVUmicroCPU* CpuVU0;
 extern BaseVUmicroCPU* CpuVU1;
 
 
-// VU0
 extern void vu0ResetRegs();
 extern void vu0ExecMicro(u32 addr);
 extern void vu0Exec(VURegs* VU);
 extern void _vu0FinishMicro();
 extern void vu0Finish();
 
-// VU1
 extern void vu1Finish(bool add_cycles);
 extern void vu1ResetRegs();
 extern void vu1ExecMicro(u32 addr);

@@ -5,7 +5,6 @@
 
 enum microOpcode
 {
-	// Upper Instructions
 	opABS, opCLIP, opOPMULA, opOPMSUB, opNOP,
 	opADD,   opADDi,   opADDq,   opADDx,   opADDy,   opADDz,   opADDw,
 	opADDA,  opADDAi,  opADDAq,  opADDAx,  opADDAy,  opADDAz,  opADDAw,
@@ -21,7 +20,6 @@ enum microOpcode
 	opMINI,  opMINIi,            opMINIx,  opMINIy,   opMINIz, opMINIw,
 	opFTOI0, opFTOI4, opFTOI12, opFTOI15,
 	opITOF0, opITOF4, opITOF12, opITOF15,
-	// Lower Instructions
 	opDIV, opSQRT, opRSQRT,
 	opIADD, opIADDI, opIADDIU,
 	opIAND, opIOR,
@@ -45,7 +43,6 @@ enum microOpcode
 };
 
 static const char microOpcodeName[][16] = {
-	// Upper Instructions
 	"ABS", "CLIP", "OPMULA", "OPMSUB", "NOP",
 	"ADD",   "ADDi",   "ADDq",   "ADDx",   "ADDy",   "ADDz",   "ADDw",
 	"ADDA",  "ADDAi",  "ADDAq",  "ADDAx",  "ADDAy",  "ADDAz",  "ADDAw",
@@ -61,7 +58,6 @@ static const char microOpcodeName[][16] = {
 	"MINI",  "MINIi",            "MINIx",  "MINIy",  "MINIz",  "MINIw",
 	"FTOI0", "FTOI4", "FTOI12", "FTOI15",
 	"ITOF0", "ITOF4", "ITOF12", "ITOF15",
-	// Lower Instructions
 	"DIV", "SQRT", "RSQRT",
 	"IADD", "IADDI", "IADDIU",
 	"IAND", "IOR",

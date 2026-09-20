@@ -103,7 +103,6 @@ namespace usb_eyetoy
 		int DirectShow::InitializeDevice(const std::wstring& selectedDevice)
 		{
 
-			// Create the Capture Graph Builder.
 			HRESULT hr = CoCreateInstance(CLSID_CaptureGraphBuilder2, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pGraphBuilder));
 			if (FAILED(hr))
 			{
@@ -111,7 +110,6 @@ namespace usb_eyetoy
 				return -1;
 			}
 
-			// Create the Filter Graph Manager.
 			hr = CoCreateInstance(CLSID_FilterGraph, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pGraph));
 			if (FAILED(hr))
 			{
@@ -133,7 +131,6 @@ namespace usb_eyetoy
 				return -1;
 			}
 
-			// enumerate all video capture devices
 			wil::com_ptr_nothrow<ICreateDevEnum> pCreateDevEnum = wil::CoCreateInstanceNoThrow<ICreateDevEnum>(CLSID_SystemDeviceEnum);
 			if (!pCreateDevEnum)
 			{
@@ -181,7 +178,6 @@ namespace usb_eyetoy
 					break;
 				}
 
-				//add a filter for the device
 				hr = pGraph->AddSourceFilterForMoniker(pMoniker.get(), NULL, L"sourcefilter", &sourcefilter);
 				if (FAILED(hr))
 				{
@@ -196,10 +192,8 @@ namespace usb_eyetoy
 					int iCount = 0, iSize = 0;
 					hr = pSourceConfig->GetNumberOfCapabilities(&iCount, &iSize);
 
-					// Check the size to make sure we pass in the correct structure.
 					if (iSize == sizeof(VIDEO_STREAM_CONFIG_CAPS))
 					{
-						// Use the video capabilities structure.
 						for (int iFormat = 0; iFormat < iCount; iFormat++)
 						{
 							VIDEO_STREAM_CONFIG_CAPS scc;
@@ -223,13 +217,11 @@ namespace usb_eyetoy
 										Console.Warning("Camera: SetFormat err : %x", hr);
 									}
 								}
-								//DeleteMediaType(pmtConfig);
 							}
 						}
 					}
 				}
 
-				// Create the Sample Grabber filter.
 				hr = CoCreateInstance(CLSID_SampleGrabber, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&samplegrabberfilter));
 				if (FAILED(hr))
 				{
@@ -244,7 +236,6 @@ namespace usb_eyetoy
 					break;
 				}
 
-				//set mediatype on the samplegrabber
 				hr = samplegrabberfilter->QueryInterface(IID_PPV_ARGS(&samplegrabber));
 				if (FAILED(hr))
 				{
@@ -263,7 +254,6 @@ namespace usb_eyetoy
 					break;
 				}
 
-				//add the callback to the samplegrabber
 				hr = samplegrabber->SetCallback(callbackhandler, 0);
 				if (hr != S_OK)
 				{
@@ -271,7 +261,6 @@ namespace usb_eyetoy
 					break;
 				}
 
-				//set the null renderer
 				hr = CoCreateInstance(CLSID_NullRenderer, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&nullrenderer));
 				if (FAILED(hr))
 				{
@@ -286,7 +275,6 @@ namespace usb_eyetoy
 					break;
 				}
 
-				//set the render path
 				hr = pGraphBuilder->RenderStream(&PIN_CATEGORY_PREVIEW, &MEDIATYPE_Video, sourcefilter.get(), samplegrabberfilter.get(), nullrenderer.get());
 				if (FAILED(hr))
 				{
@@ -294,7 +282,6 @@ namespace usb_eyetoy
 					break;
 				}
 
-				// if the stream is started, start capturing immediatly
 				hr = pGraphBuilder->ControlStream(&PIN_CATEGORY_CAPTURE, &MEDIATYPE_Video, sourcefilter.get(), &start, &stop, 1, 2);
 				if (FAILED(hr))
 				{
@@ -373,7 +360,6 @@ namespace usb_eyetoy
 				}
 				else if (frame_format == format_jpeg)
 				{
-					// flip Y - always required on windows
 					unsigned char* data2 = (unsigned char*)calloc(1, comprBufSize);
 					for (int y = 0; y < frame_height; y++)
 					{
@@ -571,7 +557,7 @@ namespace usb_eyetoy
 		};
 
 		void DirectShow::SetMirroring(bool state) { mirroring_enabled = state; }
-	} // namespace windows_api
+	}
 
 	std::unique_ptr<VideoDevice> VideoDevice::CreateInstance()
 	{
@@ -582,7 +568,7 @@ namespace usb_eyetoy
 	{
 		return windows_api::getDevList();
 	}
-} // namespace usb_eyetoy
+}
 
 #ifdef __clang__
 #pragma clang diagnostic pop

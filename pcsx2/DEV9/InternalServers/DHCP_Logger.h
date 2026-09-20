@@ -27,9 +27,7 @@ namespace InternalServers
 		void Init(ifaddrs* adapter);
 #endif
 
-		// Expects a UDP_payload
 		void InspectRecv(PacketReader::IP::IP_Payload* payload);
-		// Expects a UDP_payload
 		void InspectSend(PacketReader::IP::IP_Payload* payload);
 
 	private:
@@ -44,4 +42,4 @@ namespace InternalServers
 		const char* MessageCodeToString(u8 msg);
 		void LogPacket(PacketReader::IP::UDP::DHCP::DHCP_Packet* payload);
 	};
-} // namespace InternalServers
+}

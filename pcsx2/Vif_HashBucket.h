@@ -6,22 +6,19 @@
 #include <array>
 #include "common/AlignedMalloc.h"
 
-// nVifBlock - Ordered for Hashing; the 'num' and 'upkType' fields are
-//             used as the hash bucket selector.
 union nVifBlock
 {
-	// Warning: order depends on the newVifDynaRec code
 	struct
 	{
-		u8 num;        // [00] Num Field
-		u8 upkType;    // [01] Unpack Type [usn1:mask1:upk*4]
-		u16 length;    // [02] Extra: pre computed Length
-		u32 mask;      // [04] Mask Field
-		u8 mode;       // [08] Mode Field
-		u8 aligned;    // [09] Packet Alignment
-		u8 cl;         // [10] CL Field
-		u8 wl;         // [11] WL Field
-		uptr startPtr; // [12] Start Ptr of RecGen Code
+		u8 num;
+		u8 upkType;
+		u16 length;
+		u32 mask;
+		u8 mode;
+		u8 aligned;
+		u8 cl;
+		u8 wl;
+		uptr startPtr;
 	};
 
 	struct
@@ -33,19 +30,10 @@ union nVifBlock
 		uptr value;
 	};
 
-}; // 16 bytes
+};
 
-// 0x4000 is enough but 0x10000 allow
-// * to skip the compare value of the first double world in lookup
-// * to use a 16 bits move instead of an 'and' mask to compute the hashed key
-#define hSize 0x10000 // [usn*1:mask*1:upk*4:num*8] hash...
+#define hSize 0x10000
 
-// HashBucket is a container which uses a built-in hash function
-// to perform quick searches. It is designed around the nVifBlock structure
-//
-// The hash function is determined by taking the first bytes of data and
-// performing a modulus the size of hSize. So the most diverse-data should
-// be in the first bytes of the struct. (hence why nVifBlock is specifically sorted)
 class HashBucket
 {
 protected:
@@ -81,14 +69,11 @@ public:
 
 		u32 size = bucket_size(dataPtr);
 
-		// Warning there is an extra +1 due to the empty cell
-		// Performance note: 64B align to reduce cache miss penalty in `find`
 		if ((m_bucket[b] = (nVifBlock*)pcsx2_aligned_realloc(m_bucket[b], sizeof(nVifBlock) * (size + 2), 64, sizeof(nVifBlock) * (size + 1))) == NULL)
 		{
 			pxFailRel("Failed to allocate HashBucket Chain");
 		}
 
-		// Replace the empty cell by the new block and create a new empty cell
 		memcpy(&m_bucket[b][size++], &dataPtr, sizeof(nVifBlock));
 		memset(&m_bucket[b][size], 0, sizeof(nVifBlock));
 
@@ -121,7 +106,6 @@ public:
 	{
 		clear();
 
-		// Allocate an empty cell for all buckets
 		for (auto& bucket : m_bucket)
 		{
 			if ((bucket = (nVifBlock*)_aligned_malloc(sizeof(nVifBlock), 16)) == nullptr)

@@ -13,13 +13,6 @@
 #include "SettingWidgetBinder.h"
 #include "SettingsWindow.h"
 
-//Figure out lists
-//On export, we take list from settings (or are given it from the DEV9 panel)
-//We display, then export
-
-//On import, we read file
-//we display, then pass list back to main DEV9 panel
-
 DEV9DnsHostDialog::DEV9DnsHostDialog(std::vector<HostEntryUi> hosts, QWidget* parent)
 	: QDialog(parent)
 {
@@ -120,7 +113,6 @@ bool DEV9DnsHostDialog::eventFilter(QObject* object, QEvent* event)
 {
 	if (object == m_ui.hostList)
 	{
-		//Check isVisible to avoind an unnessecery call to ResizeColumnsForTableView()
 		if (event->type() == QEvent::Resize && m_ui.hostList->isVisible())
 			QtUtils::ResizeColumnsForTableView(m_ui.hostList, {80, -1, 170, 90, 80});
 		else if (event->type() == QEvent::Show)

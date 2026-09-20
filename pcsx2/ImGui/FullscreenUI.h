@@ -30,7 +30,6 @@ namespace FullscreenUI
 	void ReportStateLoadError(const std::string& message, std::optional<s32> slot, bool backup);
 	void ReportStateSaveError(const std::string& message, std::optional<s32> slot);
 
-	// NOTE: Only call from GS thread.
 	bool IsAchievementsWindowOpen();
 	bool IsLeaderboardsWindowOpen();
 	void ReturnToPreviousWindow();
@@ -47,21 +46,16 @@ namespace FullscreenUI
 	
 	bool CreateHardDriveWithProgress(const std::string& filePath, int sizeInGB, bool use48BitLBA = true);
 	void CancelAllHddOperations();
-} // namespace FullscreenUI
+}
 
-// Host UI triggers from Big Picture mode.
 namespace Host
 {
-	/// Requests shut down and exit of the hosting application. This may not actually exit,
-	/// if the user cancels the shutdown confirmation.
 	void RequestExitApplication(bool allow_confirm);
 
-	/// Requests Big Picture mode to be shut down, returning to the desktop interface.
 	void RequestExitBigPicture();
 
 	void OnCoverDownloaderOpenRequested();
 	void OnCreateMemoryCardOpenRequested();
 
-	/// Did Playstation in the currently selected locale use circle as confirm
 	bool LocaleCircleConfirm();
-} // namespace Host
+}

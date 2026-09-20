@@ -32,7 +32,6 @@ protected:
 		addPageHeader(header);
 	}
 
-	// Create a settings tab with a scroll area.
 	template <typename ContentsUi>
 	QWidget* setupTab(ContentsUi& contents_ui, QString name = QString())
 	{
@@ -46,8 +45,6 @@ protected:
 	QWidget* addTab(QString name, QWidget* contents, bool custom_margins = false);
 	void setTabVisible(QWidget* tab, bool is_visible, QWidget* switch_to = nullptr);
 
-	// Rearrange the checkboxes in a group so that there aren't any gaps. To be
-	// used if checkboxes have been hidden programmatically.
 	void reflowCheckBoxes(QGridLayout* layout);
 
 private:

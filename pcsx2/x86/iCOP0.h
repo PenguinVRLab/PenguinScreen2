@@ -5,11 +5,6 @@
 
 #include "COP0.h"
 
-/*********************************************************
-*   COP0 opcodes                                         *
-*                                                        *
-*********************************************************/
-
 namespace R5900 {
 namespace Dynarec {
 namespace OpcodeImpl {
@@ -29,7 +24,7 @@ namespace COP0 {
 	void recDI();
 	void recEI();
 
-} // namespace COP0
-} // namespace OpcodeImpl
-} // namespace Dynarec
-} // namespace R5900
+}
+}
+}
+}

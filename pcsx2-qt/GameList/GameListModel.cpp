@@ -24,7 +24,6 @@ static constexpr int COVER_ART_WIDTH = 350;
 static constexpr int COVER_ART_HEIGHT = 512;
 static constexpr int COVER_ART_SPACING = 32;
 
-// Scaling these is not a linear transform due to float conversions; add them together here.
 static constexpr int SIZE_HINT_WIDTH = COVER_ART_WIDTH + (COVER_ART_SPACING / 2);
 static constexpr int SIZE_HINT_HEIGHT = COVER_ART_HEIGHT + (COVER_ART_SPACING / 2);
 static constexpr int SIZE_HINT_HEIGHT_TITLES = SIZE_HINT_HEIGHT + COVER_ART_SPACING;
@@ -73,7 +72,7 @@ const char* GameListModel::getColumnName(const Column col)
 	return s_column_names[static_cast<int>(col)];
 }
 
-GameListModel::GameListModel(const float cover_scale, const bool show_cover_titles, bool show_full_cover_titles, const qreal dpr, QObject* parent /* = nullptr */)
+GameListModel::GameListModel(const float cover_scale, const bool show_cover_titles, bool show_full_cover_titles, const qreal dpr, QObject* parent )
 	: QAbstractTableModel(parent)
 	, m_show_titles_for_covers(show_cover_titles)
 	, m_show_full_titles_for_covers(show_full_cover_titles)
@@ -114,7 +113,6 @@ void GameListModel::refreshCovers()
 
 void GameListModel::updateCacheSize(int width, int height)
 {
-	// This is a bit conversative, since it doesn't consider padding, but better to be over than under.
 	const int cover_width = getCoverArtWidth();
 	const int cover_height = getCoverArtHeight();
 	const int num_columns = ((width + (cover_width - 1)) / cover_width);
@@ -131,27 +129,22 @@ void GameListModel::setDevicePixelRatio(qreal dpr)
 
 void GameListModel::loadOrGenerateCover(const GameList::Entry* ge)
 {
-	// Why this counter: Every time we change the cover scale, we increment the counter variable. This way if the scale is changed
-	// while there's outstanding jobs, the old jobs won't proceed (at the wrong size), or get added into the grid.
 	const u32 counter = m_cover_scale_counter.load(std::memory_order_acquire);
 
 	QFuture<QPixmap> future = QtConcurrent::run([this, entry = *ge, counter]() -> QPixmap {
 		QPixmap image;
 
-		// Initial check that the scale is unchanged before we run costly image generation.
 		if (m_cover_scale_counter.load(std::memory_order_acquire) == counter)
 		{
 			const std::string cover_path(GameList::GetCoverImagePathForEntry(&entry));
 			if (!cover_path.empty())
 				image = QPixmap(QString::fromStdString(cover_path));
 
-			// Create placeholder image if no user-provided cover exists.
 			if (image.isNull())
 			{
 				const std::string& title = entry.GetTitle(m_prefer_english_titles);
 				image = createPlaceholderImage(m_placeholder_pixmap, getCoverArtWidth(), getCoverArtHeight(), m_cover_scale, m_dpr, title);
 			}
-			// Create resized image from user-provided cover.
 			else
 			{
 				image.setDevicePixelRatio(m_dpr);
@@ -159,11 +152,9 @@ void GameListModel::loadOrGenerateCover(const GameList::Entry* ge)
 			}
 		}
 
-		// Final check that scale is unchanged before we send out the produced image.
 		return m_cover_scale_counter.load(std::memory_order_acquire) == counter ? image : QPixmap();
 	});
 
-	// Context must be 'this' so we run on the UI thread.
 	future.then(this, [this, path = ge->path, counter](QPixmap pm) {
 		if (m_cover_scale_counter.load(std::memory_order_acquire) != counter)
 			return;
@@ -175,7 +166,6 @@ void GameListModel::loadOrGenerateCover(const GameList::Entry* ge)
 
 void GameListModel::invalidateCoverForPath(const std::string& path)
 {
-	// This isn't ideal, but not sure how else we can get the row, when it might change while scanning...
 	const auto lock = GameList::GetLock();
 	const u32 count = GameList::GetEntryCount();
 
@@ -217,7 +207,6 @@ int GameListModel::columnCount(const QModelIndex& parent) const
 
 QString GameListModel::formatTimespan(const time_t timespan)
 {
-	// Avoid an extra string conversion over calling QString::fromStdString(GameList::FormatTimespan).
 	const u32 hours = static_cast<u32>(timespan / 3600);
 	if (hours > 0)
 		return qApp->translate("GameList", "%n hours", "", hours);
@@ -243,7 +232,6 @@ QVariant GameListModel::data(const QModelIndex& index, const int role) const
 	if (!ge)
 		return QVariant();
 
-	// See: https://doc.qt.io/qt-6/qt.html#ItemDataRole-enum
 	switch (role)
 	{
 		case Qt::DisplayRole:
@@ -301,7 +289,6 @@ QVariant GameListModel::data(const QModelIndex& index, const int role) const
 					if (pm)
 						return *pm;
 
-					// Insert the placeholder into the cache so we don't repeatedly queue loading jobs for this game.
 					const_cast<GameListModel*>(this)->loadOrGenerateCover(ge);
 					return *m_cover_pixmap_cache.Insert(ge->path, m_loading_pixmap);
 				}
@@ -322,7 +309,6 @@ QVariant GameListModel::data(const QModelIndex& index, const int role) const
 
 					if (m_show_full_titles_for_covers && m_show_titles_for_covers)
 					{
-						// Find height needed for the longest title at the current font/width
 						const int text_width = static_cast<int>(static_cast<float>(COVER_ART_WIDTH) * m_cover_scale);
 						QFont font;
 						font.setPointSizeF(20.0f * m_cover_scale); 

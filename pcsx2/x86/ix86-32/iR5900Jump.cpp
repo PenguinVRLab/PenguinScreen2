@@ -10,10 +10,6 @@ using namespace x86Emitter;
 namespace R5900::Dynarec::OpcodeImpl
 {
 
-/*********************************************************
-* Jump to target                                         *
-* Format:  OP target                                     *
-*********************************************************/
 #ifndef JUMP_RECOMPILE
 
 namespace Interp = R5900::Interpreter::OpcodeImpl;
@@ -25,12 +21,10 @@ REC_SYS_DEL(JALR, _Rd_);
 
 #else
 
-////////////////////////////////////////////////////
 void recJ()
 {
 	EE::Profiler.EmitOp(eeOpcode::J);
 
-	// SET_FPUSTATE;
 	u32 newpc = (_InstrucTarget_ << 2) + (pc & 0xf0000000);
 	recompileNextInstruction(true, false);
 	if (EmuConfig.Gamefixes.GoemonTlbHack)
@@ -39,7 +33,6 @@ void recJ()
 		SetBranchImm(newpc);
 }
 
-////////////////////////////////////////////////////
 void recJAL()
 {
 	EE::Profiler.EmitOp(eeOpcode::JAL);
@@ -65,12 +58,6 @@ void recJAL()
 		SetBranchImm(newpc);
 }
 
-/*********************************************************
-* Register jump                                          *
-* Format:  OP rs, rd                                     *
-*********************************************************/
-
-////////////////////////////////////////////////////
 void recJR()
 {
 	EE::Profiler.EmitOp(eeOpcode::JR);
@@ -90,7 +77,6 @@ void recJR()
 
 		recompileNextInstruction(true, false);
 
-		// the next instruction may have flushed the register.. so reload it if so.
 		if (x86regs[wbreg].inuse && x86regs[wbreg].type == X86TYPE_PCWRITEBACK)
 		{
 			xMOV(eax, xRegister32(wbreg));
@@ -115,11 +101,9 @@ void recJR()
 	}
 
 
-	// Target passed in eax
 	SetBranchReg();
 }
 
-////////////////////////////////////////////////////
 void recJALR()
 {
 	EE::Profiler.EmitOp(eeOpcode::JALR);
@@ -160,7 +144,6 @@ void recJALR()
 	{
 		recompileNextInstruction(true, false);
 
-		// the next instruction may have flushed the register.. so reload it if so.
 		if (x86regs[wbreg].inuse && x86regs[wbreg].type == X86TYPE_PCWRITEBACK)
 		{
 			xMOV(eax, xRegister32(wbreg));
@@ -184,10 +167,9 @@ void recJALR()
 		}
 	}
 
-	// Target passed in eax
 	SetBranchReg();
 }
 
 #endif
 
-} // namespace R5900::Dynarec::OpcodeImpl
+}

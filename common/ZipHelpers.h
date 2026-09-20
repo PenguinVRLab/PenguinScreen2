@@ -16,7 +16,6 @@ static inline std::unique_ptr<zip_t, void (*)(zip_t*)> zip_open_managed(const ch
 	zip_t* zip = nullptr;
 	if (zs && !(zip = zip_open_from_source(zs, flags, ze)))
 	{
-		// have to clean up source
 		zip_source_free(zs);
 	}
 
@@ -39,7 +38,6 @@ static inline std::unique_ptr<zip_t, void (*)(zip_t*)> zip_open_buffer_managed(c
 	zip_t* zip = nullptr;
 	if (zs && !(zip = zip_open_from_source(zs, flags, ze)))
 	{
-		// have to clean up source
 		zip_source_free(zs);
 	}
 
@@ -104,12 +102,10 @@ static inline std::optional<T> ReadFileInZipToContainer(zip_file_t* file, u32 ch
 		const s64 read = zip_fread(file, ret->data() + pos, chunk_size);
 		if (read < 0)
 		{
-			// read error
 			ret.reset();
 			break;
 		}
 
-		// if less than chunk size, we're EOF
 		if (read != static_cast<s64>(chunk_size))
 		{
 			ret->resize(pos + static_cast<size_t>(read));

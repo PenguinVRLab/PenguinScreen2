@@ -46,8 +46,6 @@ QString DebuggerView::displayName() const
 {
 	QString name = displayNameWithoutSuffix();
 
-	// If there are multiple debugger views with the same name, append a number
-	// to the display name.
 	if (m_display_name_suffix_number.has_value())
 		name = tr("%1 #%2").arg(name).arg(*m_display_name_suffix_number);
 
@@ -192,8 +190,6 @@ void DebuggerView::updateStyleSheet()
 
 	if (m_flags & MONOSPACE_FONT)
 	{
-		// Easiest way to handle cross platform monospace fonts
-		// There are issues related to TabWidget -> Children font inheritance otherwise
 #if defined(WIN32)
 		stylesheet += QStringLiteral("font-family: 'Lucida Console';");
 #elif defined(__APPLE__)

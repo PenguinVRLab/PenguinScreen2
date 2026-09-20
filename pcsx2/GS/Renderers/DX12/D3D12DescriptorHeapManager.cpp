@@ -28,7 +28,6 @@ bool D3D12DescriptorHeapManager::Create(
 	m_descriptor_increment_size = device->GetDescriptorHandleIncrementSize(type);
 	m_shader_visible = shader_visible;
 
-	// Set all slots to unallocated (1)
 	const u32 bitset_count = num_descriptors / BITSET_SIZE + (((num_descriptors % BITSET_SIZE) != 0) ? 1 : 0);
 	m_free_slots.resize(bitset_count);
 	for (BitSetType& bs : m_free_slots)
@@ -57,7 +56,6 @@ void D3D12DescriptorHeapManager::Destroy()
 
 bool D3D12DescriptorHeapManager::Allocate(D3D12DescriptorHandle* handle)
 {
-	// Start past the temporary slots, no point in searching those.
 	for (u32 group = 0; group < m_free_slots.size(); group++)
 	{
 		BitSetType& bs = m_free_slots[group];

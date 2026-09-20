@@ -36,17 +36,13 @@ void GSDumpBase::AddHeader(const std::string& serial, u32 crc,
 	u32 screenshot_width, u32 screenshot_height, const u32* screenshot_pixels,
 	const freezeData& fd, const GSPrivRegSet* regs)
 {
-	// New header: CRC of FFFFFFFF, secondary header, full header follows.
 	const u32 fake_crc = 0xFFFFFFFFu;
 	AppendRawData(&fake_crc, 4);
 
-	// Compute full header size (with serial).
-	// This acts as the state size for loading older dumps.
 	const u32 screenshot_size = screenshot_width * screenshot_height * sizeof(screenshot_pixels[0]);
 	const u32 header_size = sizeof(GSDumpHeader) + static_cast<u32>(serial.size()) + screenshot_size;
 	AppendRawData(&header_size, 4);
 
-	// Write hader.
 	GSDumpHeader header = {};
 	header.state_version = GSState::STATE_VERSION;
 	header.state_size = fd.size;
@@ -63,7 +59,6 @@ void GSDumpBase::AddHeader(const std::string& serial, u32 crc,
 	if (screenshot_pixels)
 		AppendRawData(screenshot_pixels, screenshot_size);
 
-	// Then the real state data.
 	AppendRawData(fd.data, fd.size);
 	AppendRawData(regs, sizeof(*regs));
 }
@@ -90,7 +85,6 @@ void GSDumpBase::ReadFIFO(u32 size)
 
 bool GSDumpBase::VSync(int field, bool last, const GSPrivRegSet* regs)
 {
-	// dump file is bad, return done to delete the object
 	if (!m_gs)
 		return true;
 
@@ -115,10 +109,6 @@ void GSDumpBase::Write(const void* data, size_t size)
 	if (written != size)
 		Console.Error("GSDump: Error failed to write data");
 }
-
-//////////////////////////////////////////////////////////////////////
-// GSDump implementation
-//////////////////////////////////////////////////////////////////////
 
 namespace
 {
@@ -151,7 +141,7 @@ namespace
 	{
 		Write(&c, 1);
 	}
-} // namespace
+}
 
 std::unique_ptr<GSDumpBase> GSDumpBase::CreateUncompressedDump(
 	const std::string& fn, const std::string& serial, u32 crc,
@@ -212,11 +202,8 @@ namespace
 		const size_t alloc_size = std::max(m_buffer.size() * 2, new_size);
 		m_buffer.resize(alloc_size);
 	}
-} // namespace
+}
 
-//////////////////////////////////////////////////////////////////////
-// GSDumpXz implementation
-//////////////////////////////////////////////////////////////////////
 namespace
 {
 	class GSDumpXz final : public GsDumpBuffered
@@ -293,7 +280,7 @@ namespace
 			return;
 		}
 	}
-} // namespace
+}
 
 std::unique_ptr<GSDumpBase> GSDumpBase::CreateXzDump(
 	const std::string& fn, const std::string& serial, u32 crc,
@@ -304,10 +291,6 @@ std::unique_ptr<GSDumpBase> GSDumpBase::CreateXzDump(
 		screenshot_width, screenshot_height, screenshot_pixels,
 		fd, regs);
 }
-
-//////////////////////////////////////////////////////////////////////
-// GSDumpZstd implementation
-//////////////////////////////////////////////////////////////////////
 
 namespace
 {
@@ -337,7 +320,6 @@ namespace
 	{
 		m_strm = ZSTD_createCStream();
 
-		// Compression level 6 provides a good balance between speed and ratio.
 		ZSTD_CCtx_setParameter(m_strm, ZSTD_c_compressionLevel, 6);
 
 		m_in_buff.reserve(_1mb);
@@ -348,7 +330,6 @@ namespace
 
 	GSDumpZst::~GSDumpZst()
 	{
-		// Finish the stream
 		Compress(ZSTD_e_end);
 
 		ZSTD_freeCStream(m_strm);
@@ -400,13 +381,11 @@ namespace
 
 			if (action == ZSTD_e_end)
 			{
-				// break when compression output has finished
 				if (remaining == 0)
 					break;
 			}
 			else
 			{
-				// break when all input data is consumed
 				if (inbuf.pos == inbuf.size)
 					break;
 			}
@@ -414,7 +393,7 @@ namespace
 
 		m_in_buff.clear();
 	}
-} // namespace
+}
 
 std::unique_ptr<GSDumpBase> GSDumpBase::CreateZstDump(
 	const std::string& fn, const std::string& serial, u32 crc,

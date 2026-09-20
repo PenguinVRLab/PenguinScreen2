@@ -15,6 +15,6 @@ namespace OpcodeImpl {
 	void recMOVN();
 	void recMOVZ();
 
-} // namespace OpcodeImpl
-} // namespace Dynarec
-} // namespace R5900
+}
+}
+}

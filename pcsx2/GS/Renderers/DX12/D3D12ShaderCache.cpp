@@ -56,7 +56,6 @@ bool D3D12ShaderCache::CacheIndexKey::operator!=(const CacheIndexKey& key) const
 
 bool D3D12ShaderCache::Open(D3D::ShaderModel shader_model, bool debug)
 {
-	// Only support SM5.1 for now, which is the minimum for D3D12.
 	pxAssert(shader_model >= D3D::ShaderModel::SM51);
 	m_shader_model = shader_model;
 	m_debug = debug;
@@ -191,8 +190,6 @@ bool D3D12ShaderCache::ReadExisting(const std::string& index_filename, const std
 	index_file = FileSystem::OpenCFile(index_filename.c_str(), "r+b");
 	if (!index_file)
 	{
-		// special case here: when there's a sharing violation (i.e. two instances running),
-		// we don't want to blow away the cache. so just continue without a cache.
 		if (errno == EACCES)
 		{
 			Console.WriteLn("Failed to open shader cache index with EACCES, are you running two instances?");
@@ -248,7 +245,6 @@ bool D3D12ShaderCache::ReadExisting(const std::string& index_filename, const std
 		index.emplace(key, data);
 	}
 
-	// ensure we don't write before seeking
 	std::fseek(index_file, 0, SEEK_END);
 
 	DevCon.WriteLn("Read %zu entries from '%s'", index.size(), index_filename.c_str());
@@ -394,7 +390,7 @@ D3D12ShaderCache::CacheIndexKey D3D12ShaderCache::GetPipelineCacheKey(const D3D1
 }
 
 D3D12ShaderCache::ComPtr<ID3DBlob> D3D12ShaderCache::GetShaderBlob(EntryType type, std::string_view shader_code,
-	const D3D_SHADER_MACRO* macros /* = nullptr */, const char* entry_point /* = "main" */)
+	const D3D_SHADER_MACRO* macros , const char* entry_point )
 {
 	const auto key = GetShaderCacheKey(type, shader_code, macros, entry_point);
 	auto iter = m_shader_index.find(key);

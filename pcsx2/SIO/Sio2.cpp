@@ -84,17 +84,14 @@ void Sio2::SoftReset()
 	queuePosition = 0;
 	commandLength = 0;
 	processedLength = 0;
-	// Clear dmaBlockSize, in case the next SIO2 command is not sent over DMA11.
 	dmaBlockSize = 0;
 	queueComplete = false;
 
-	// Anything in g_Sio2FifoIn which was not necessary to consume should be cleared out prior to the next SIO2 cycle.
 	while (!g_Sio2FifoIn.empty())
 	{
 		g_Sio2FifoIn.pop_front();
 	}
 
-	// cmd_stat should always be reassembled based on the devices being probed by the packet.
 	CmdStat = 0;
 }
 
@@ -138,7 +135,6 @@ void Sio2::Pad()
 	MultitapProtocol& mtap = g_MultitapArr.at(port);
 	PadBase* pad = Pad::GetPad(port, mtap.GetPadSlot());
 
-	// Update the third nibble with which ports have been accessed
 	if (this->CmdStat & CmdStat::ONE_PORT_OPEN)
 	{
 		this->CmdStat &= ~(CmdStat::ONE_PORT_OPEN);
@@ -149,10 +145,8 @@ void Sio2::Pad()
 		this->CmdStat |= CmdStat::ONE_PORT_OPEN;
 	}
 
-	// This bit is always set, whether the pad is present or missing
 	this->CmdStat |= CmdStat::NO_DEVICES_MISSING;
 
-	// If the currently accessed pad is missing, also tick those bits
 	if (pad->GetType() == Pad::ControllerType::NotConnected || pad->ejectTicks)
 	{
 		if (!port)
@@ -168,16 +162,13 @@ void Sio2::Pad()
 	g_Sio2FifoOut.push_back(0xff);
 	pad->SoftReset();
 
-	// Then for every byte in g_Sio2FifoIn, pass to PAD and see what it kicks back to us.
 	while (!g_Sio2FifoIn.empty())
 	{
-		// If the pad is "ejected", respond with nothing
 		if (pad->ejectTicks)
 		{
 			g_Sio2FifoIn.pop_front();
 			g_Sio2FifoOut.push_back(0xff);
 		}
-		// Else, actually forward to the pad.
 		else
 		{
 			const u8 commandByte = g_Sio2FifoIn.front();
@@ -187,9 +178,6 @@ void Sio2::Pad()
 		}
 	}
 
-	// If the pad is "ejected", then decrement one tick.
-	// This needs to happen AFTER anything else which might
-	// consider if the pad is "ejected"!
 	if (pad->ejectTicks)
 	{
 		pad->ejectTicks -= 1;
@@ -200,7 +188,6 @@ void Sio2::Multitap()
 {
 	const bool multitapEnabled = EmuConfig.Pad.IsMultitapPortEnabled(this->port);
 	
-	// Update the third nibble with which ports have been accessed
 	if (this->CmdStat & CmdStat::ONE_PORT_OPEN)
 	{
 		this->CmdStat &= ~(CmdStat::ONE_PORT_OPEN);
@@ -211,19 +198,8 @@ void Sio2::Multitap()
 		this->CmdStat |= CmdStat::ONE_PORT_OPEN;
 	}
 
-	// This bit is always set, whether the pad is present or missing
 	this->CmdStat |= CmdStat::NO_DEVICES_MISSING;
 
-	// If the currently accessed multitap is missing, also tick those bits.
-	// MTAPMAN is special though.
-	// 
-	// For PADMAN and pads, the bits represented by PORT_1_MISSING and PORT_2_MISSING
-	// are always faithful - suppose your game only opened port 2 for some reason,
-	// then a disconnect value would look like 0x0002D100.
-	//
-	// MTAPMAN however does not check the bit set by 0x00020000. It only checks the bit
-	// set by 0x00010000. So even if port 2 is being addressed, cmd stat should be 0x0001D100
-	// (or 0x0001D200 if there are both ports being accessed in that packet).
 	if (!multitapEnabled)
 	{
 		this->CmdStat |= CmdStat::PORT_1_MISSING;
@@ -251,12 +227,10 @@ void Sio2::Memcard()
 
 	mcd = &mcds[port][mtap.GetMemcardSlot()];
 
-	// Check if auto ejection is active. If so, set cmd stat to DISCONNECTED,
-	// and zero out the fifo to simulate dead air over the wire.
 	if (mcd->autoEjectTicks)
 	{
 		SetCmdStat(CmdStat::DISCONNECTED);
-		g_Sio2FifoOut.push_back(0xff); // Because Sio2::Write pops the first g_Sio2FifoIn member
+		g_Sio2FifoOut.push_back(0xff);
 
 		while (!g_Sio2FifoIn.empty())
 		{
@@ -383,7 +357,6 @@ void Sio2::Write(u8 data)
 
 	if (!queueRead)
 	{
-		// No more queue positions to access, but the game is still sending us SIO2 writes. Lets ignore them.
 		if (queuePosition > CmdQueue.size())
 		{
 			Console.Warning("%s(%02X) Received data after exhausting all queue entries!", __FUNCTION__, data);
@@ -395,15 +368,11 @@ void Sio2::Write(u8 data)
 		commandLength = (currentCmd >> 8) & Sio2Cmd::COMMAND_LENGTH_MASK;
 		queueRead = true;
 
-		// The freshly read cmd position had a length of 0, so we are done handling SIO2 commands until
-		// the next cmd writes.
 		if (commandLength == 0)
 		{
 			queueComplete = true;
 		}
 
-		// If the prior command did not need to fully pop g_Sio2FifoIn, do so now,
-		// so that the next command isn't trying to read the last command's leftovers.
 		while (!g_Sio2FifoIn.empty())
 		{
 			g_Sio2FifoIn.pop_front();
@@ -417,17 +386,11 @@ void Sio2::Write(u8 data)
 
 	g_Sio2FifoIn.push_back(data);
 
-	// We have received as many command bytes as we expect, and...
-	//
-	// ... These were from direct writes into IOP memory (DMA block size is zero when direct writes occur)
-	// ... These were from SIO2 DMA (DMA block size is non-zero when SIO2 DMA occurs)
 	if ((g_Sio2FifoIn.size() == g_Sio2.commandLength && g_Sio2.dmaBlockSize == 0) || g_Sio2FifoIn.size() == g_Sio2.dmaBlockSize)
 	{
-		// Go ahead and prep so the next write triggers a load of the new cmd value.
 		g_Sio2.queueRead = false;
 		g_Sio2.queuePosition++;
 
-		// Check the SIO mode
 		const u8 sioMode = g_Sio2FifoIn.front();
 		g_Sio2FifoIn.pop_front();
 
@@ -452,7 +415,6 @@ void Sio2::Write(u8 data)
 				break;
 		}
 
-		// If command was sent over SIO2 DMA, align g_Sio2FifoOut to the block size
 		if (g_Sio2.dmaBlockSize > 0)
 		{
 			const size_t dmaDiff = g_Sio2FifoOut.size() % g_Sio2.dmaBlockSize;
@@ -516,8 +478,6 @@ bool Sio2::DoState(StateWrapper& sw)
 	sw.Do(&g_Sio2FifoIn);
 	sw.Do(&g_Sio2FifoOut);
 
-	// CRCs for memory cards.
-	// If the memory card hasn't changed when loading state, we can safely skip ejecting it.
 	u64 mcdCrcs[SIO::PORTS][SIO::SLOTS];
 	if (sw.IsWriting())
 	{

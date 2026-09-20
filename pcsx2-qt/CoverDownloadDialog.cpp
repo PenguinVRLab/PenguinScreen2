@@ -10,7 +10,7 @@
 #include "common/Assertions.h"
 #include "common/SettingsInterface.h"
 
-CoverDownloadDialog::CoverDownloadDialog(QWidget* parent /*= nullptr*/)
+CoverDownloadDialog::CoverDownloadDialog(QWidget* parent )
 	: QDialog(parent)
 {
 	m_ui.setupUi(this);
@@ -43,8 +43,6 @@ void CoverDownloadDialog::onDownloadStatus(const QString& text)
 
 void CoverDownloadDialog::onDownloadProgress(int value, int range)
 {
-	// Limit to once every five seconds, otherwise it's way too flickery.
-	// Ideally in the future we'd have some way to invalidate only a single cover.
 	if (m_last_refresh_time.GetTimeSeconds() >= 5.0f)
 	{
 		emit coverRefreshRequested();

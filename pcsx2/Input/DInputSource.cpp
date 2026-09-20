@@ -82,7 +82,6 @@ bool DInputSource::Initialize(SettingsInterface& si, std::unique_lock<std::mutex
 		return false;
 	}
 
-	// need to release the lock while we're enumerating, because we call winId().
 	settings_lock.unlock();
 	const std::optional<WindowInfo> toplevel_wi(Host::GetTopLevelWindowInfo());
 	settings_lock.lock();
@@ -110,10 +109,8 @@ static BOOL CALLBACK EnumCallback(LPCDIDEVICEINSTANCEW lpddi, LPVOID pvRef)
 
 bool DInputSource::ReloadDevices()
 {
-	// detect any removals
 	PollEvents();
 
-	// look for new devices
 	std::vector<DIDEVICEINSTANCEW> devices;
 	m_dinput->EnumDevices(DI8DEVCLASS_GAMECTRL, EnumCallback, &devices, DIEDFL_ATTACHEDONLY);
 
@@ -122,11 +119,9 @@ bool DInputSource::ReloadDevices()
 	bool changed = false;
 	for (DIDEVICEINSTANCEW inst : devices)
 	{
-		// do we already have this one?
 		if (std::any_of(
 				m_controllers.begin(), m_controllers.end(), [&inst](const ControllerData& cd) { return inst.guidInstance == cd.guid; }))
 		{
-			// yup, so skip it
 			continue;
 		}
 
@@ -215,7 +210,6 @@ bool DInputSource::AddDevice(ControllerData& cd, const std::string& name)
 		offsetof(DIJOYSTATE2, rglSlider[1])};
 	for (const u32 offset : axis_offsets)
 	{
-		// ask for 16 bits of axis range
 		DIPROPRANGE range = {};
 		range.diph.dwSize = sizeof(range);
 		range.diph.dwHeaderSize = sizeof(range.diph);
@@ -225,7 +219,6 @@ bool DInputSource::AddDevice(ControllerData& cd, const std::string& name)
 		range.lMax = std::numeric_limits<s16>::max();
 		hr = cd.device->SetProperty(DIPROP_RANGE, &range.diph);
 
-		// did it apply?
 		if (SUCCEEDED(cd.device->GetProperty(DIPROP_RANGE, &range.diph)))
 			cd.axis_offsets.push_back(offset);
 	}
@@ -322,12 +315,10 @@ InputLayout DInputSource::GetControllerLayout(u32 index)
 
 void DInputSource::UpdateMotorState(InputBindingKey key, float intensity)
 {
-	// not supported
 }
 
 void DInputSource::UpdateMotorState(InputBindingKey large_key, InputBindingKey small_key, float large_intensity, float small_intensity)
 {
-	// not supported
 }
 
 std::optional<InputBindingKey> DInputSource::ParseKeyString(const std::string_view device, const std::string_view binding)
@@ -386,7 +377,6 @@ std::optional<InputBindingKey> DInputSource::ParseKeyString(const std::string_vi
 			}
 		}
 
-		// bad direction
 		return std::nullopt;
 	}
 	else if (binding.starts_with("Button"))
@@ -400,7 +390,6 @@ std::optional<InputBindingKey> DInputSource::ParseKeyString(const std::string_vi
 		return key;
 	}
 
-	// unknown axis/button
 	return std::nullopt;
 }
 
@@ -425,7 +414,6 @@ TinyString DInputSource::ConvertKeyToString(InputBindingKey key, bool display, b
 		}
 		else if (key.source_subtype == InputSubclass::ControllerButton && key.data >= MAX_NUM_BUTTONS)
 		{
-			// Note, hats currently get mapped to buttons
 			const u32 hat_num = (key.data - MAX_NUM_BUTTONS) / NUM_HAT_DIRECTIONS;
 			const u32 hat_dir = (key.data - MAX_NUM_BUTTONS) % NUM_HAT_DIRECTIONS;
 			if (display)
@@ -466,7 +454,6 @@ void DInputSource::CheckForStateChanges(size_t index, const DIJOYSTATE2& new_sta
 		{
 			std::memcpy(reinterpret_cast<u8*>(&cd.last_state) + cd.axis_offsets[i], &new_value, sizeof(new_value));
 
-			// TODO: Use the range from caps?
 			const float value = static_cast<float>(new_value) / (new_value < 0 ? 32768.0f : 32767.0f);
 			InputManager::InvokeEvents(MakeGenericControllerAxisKey(InputSourceType::DInput, static_cast<u32>(index), static_cast<u32>(i)),
 				value, GenericInputBinding::Unknown);
@@ -489,7 +476,6 @@ void DInputSource::CheckForStateChanges(size_t index, const DIJOYSTATE2& new_sta
 	{
 		if (last_state.rgdwPOV[i] != new_state.rgdwPOV[i])
 		{
-			// map hats to the last buttons
 			const std::array<bool, NUM_HAT_DIRECTIONS> old_buttons(GetHatButtons(last_state.rgdwPOV[i]));
 			const std::array<bool, NUM_HAT_DIRECTIONS> new_buttons(GetHatButtons(new_state.rgdwPOV[i]));
 			last_state.rgdwPOV[i] = new_state.rgdwPOV[i];

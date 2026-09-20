@@ -5,9 +5,6 @@
 
 #include <queue>
 
-// TODO:
-// - configure frame advance amount
-
 class InputRecordingControls
 {
 public:

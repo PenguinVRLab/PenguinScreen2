@@ -84,7 +84,6 @@ QVariant BreakpointModel::data(const QModelIndex& index, int role) const
 				case BreakpointColumns::SIZE_LABEL:
 					return QString::fromStdString(m_cpu.GetSymbolGuardian().FunctionStartingAtAddress(bp->addr).name);
 				case BreakpointColumns::OPCODE:
-					// Note: Fix up the disassemblymanager so we can use it here, instead of calling a function through the disassemblyview (yuck)
 					return m_cpu.disasm(bp->addr, true).c_str();
 				case BreakpointColumns::CONDITION:
 					return bp->hasCond ? QString::fromStdString(bp->cond.expressionString) : "";
@@ -103,7 +102,6 @@ QVariant BreakpointModel::data(const QModelIndex& index, int role) const
 					QString type("");
 					type += (mc->memCond & MEMCHECK_READ) ? tr("Read") : "";
 					type += ((mc->memCond & MEMCHECK_READWRITE) == MEMCHECK_READWRITE) ? ", " : " ";
-					//: (C) = changes, as in "look for changes".
 					type += (mc->memCond & MEMCHECK_WRITE) ? (mc->memCond & MEMCHECK_WRITE_ONCHANGE) ? tr("Write(C)") : tr("Write") : "";
 					return type;
 				}
@@ -114,7 +112,7 @@ QVariant BreakpointModel::data(const QModelIndex& index, int role) const
 				case BreakpointColumns::SIZE_LABEL:
 					return QString::number(mc->end - mc->start, 16);
 				case BreakpointColumns::OPCODE:
-					return tr("--"); // Our address is going to point to memory, no purpose in printing the op
+					return tr("--");
 				case BreakpointColumns::CONDITION:
 					return mc->hasCond ? QString::fromStdString(mc->cond.expressionString) : "";
 				case BreakpointColumns::HITS:
@@ -162,7 +160,6 @@ QVariant BreakpointModel::data(const QModelIndex& index, int role) const
 				case BreakpointColumns::SIZE_LABEL:
 					return QString::fromStdString(m_cpu.GetSymbolGuardian().FunctionStartingAtAddress(bp->addr).name);
 				case BreakpointColumns::OPCODE:
-					// Note: Fix up the disassemblymanager so we can use it here, instead of calling a function through the disassemblyview (yuck)
 					return m_cpu.disasm(bp->addr, false).c_str();
 				case BreakpointColumns::CONDITION:
 					return bp->hasCond ? QString::fromStdString(bp->cond.expressionString) : "";
@@ -210,7 +207,6 @@ QVariant BreakpointModel::data(const QModelIndex& index, int role) const
 				case BreakpointColumns::SIZE_LABEL:
 					return QString::fromStdString(m_cpu.GetSymbolGuardian().FunctionStartingAtAddress(bp->addr).name);
 				case BreakpointColumns::OPCODE:
-					// Note: Fix up the disassemblymanager so we can use it here, instead of calling a function through the disassemblyview (yuck)
 					return m_cpu.disasm(bp->addr, false).c_str();
 				case BreakpointColumns::CONDITION:
 					return bp->hasCond ? QString::fromStdString(bp->cond.expressionString) : "";
@@ -265,27 +261,20 @@ QVariant BreakpointModel::headerData(int section, Qt::Orientation orientation, i
 		switch (section)
 		{
 			case BreakpointColumns::TYPE:
-				//: Warning: limited space available. Abbreviate if needed.
 				return tr("TYPE");
 			case BreakpointColumns::OFFSET:
-				//: Warning: limited space available. Abbreviate if needed.
 				return tr("OFFSET");
 			case BreakpointColumns::DESCRIPTION:
 				return tr("DESCRIPTION");
 			case BreakpointColumns::SIZE_LABEL:
-				//: Warning: limited space available. Abbreviate if needed.
 				return tr("SIZE / LABEL");
 			case BreakpointColumns::OPCODE:
-				//: Warning: limited space available. Abbreviate if needed.
 				return tr("INSTRUCTION");
 			case BreakpointColumns::CONDITION:
-				//: Warning: limited space available. Abbreviate if needed.
 				return tr("CONDITION");
 			case BreakpointColumns::HITS:
-				//: Warning: limited space available. Abbreviate if needed.
 				return tr("HITS");
 			case BreakpointColumns::ENABLED:
-				//: Warning: limited space available. Abbreviate if needed.
 				return tr("X");
 			default:
 				return QVariant();
@@ -439,7 +428,6 @@ bool BreakpointModel::setData(const QModelIndex& index, const QVariant& value, i
 	}
 	else if (role == Qt::EditRole && index.column() == BreakpointColumns::DESCRIPTION)
 	{
-		// Update BreakPoint description
 		if (auto* bp = std::get_if<BreakPoint>(&bp_mc))
 		{
 			const QString descValue = value.toString();
@@ -447,7 +435,6 @@ bool BreakpointModel::setData(const QModelIndex& index, const QVariant& value, i
 				CBreakPoints::ChangeBreakPointDescription(cpu, bp->addr, descValue.toStdString());
 			});
 		}
-		// Update MemCheck description
 		else if (auto* mc = std::get_if<MemCheck>(&bp_mc))
 		{
 			const QString descValue = value.toString();
@@ -504,9 +491,6 @@ bool BreakpointModel::insertBreakpointRows(int row, int count, std::vector<Break
 
 	beginInsertRows(index, row, row + (count - 1));
 
-	// After endInsertRows, Qt will try and validate our new rows
-	// Because we add the breakpoints off of the UI thread, our new rows may not be visible yet
-	// To prevent the (seemingly harmless?) warning emitted by enderInsertRows, add the breakpoints manually here as well
 	m_breakpoints.insert(m_breakpoints.begin(), breakpoints.begin(), breakpoints.end());
 	for (const auto& bp_mc : breakpoints)
 	{
@@ -577,12 +561,10 @@ void BreakpointModel::loadBreakpointFromFieldList(QStringList fields)
 		return;
 	}
 
-	// This is how we differentiate between breakpoints and memchecks
 	if (type == MEMCHECK_INVALID)
 	{
 		BreakPoint bp;
 
-		// Address
 		bp.addr = fields[BreakpointColumns::OFFSET].toUInt(&ok, 16);
 		if (!ok)
 		{
@@ -591,7 +573,6 @@ void BreakpointModel::loadBreakpointFromFieldList(QStringList fields)
 			return;
 		}
 
-		// Condition
 		if (!fields[BreakpointColumns::CONDITION].isEmpty())
 		{
 			PostfixExpression expr;
@@ -608,7 +589,6 @@ void BreakpointModel::loadBreakpointFromFieldList(QStringList fields)
 			bp.cond.expressionString = fields[BreakpointColumns::CONDITION].toStdString();
 		}
 
-		// Enabled
 		bp.enabled = fields[BreakpointColumns::ENABLED].toUInt(&ok);
 		if (!ok)
 		{
@@ -617,7 +597,6 @@ void BreakpointModel::loadBreakpointFromFieldList(QStringList fields)
 			return;
 		}
 
-		// Description
 		if (!fields[BreakpointColumns::DESCRIPTION].isEmpty())
 		{
 			bp.description = fields[BreakpointColumns::DESCRIPTION].toStdString();
@@ -628,7 +607,6 @@ void BreakpointModel::loadBreakpointFromFieldList(QStringList fields)
 	else
 	{
 		MemCheck mc;
-		// Mode
 		if (type >= MEMCHECK_INVALID)
 		{
 			Console.WriteLn("Debugger Breakpoint Model: Failed to parse cond type '%s', skipping",
@@ -637,7 +615,6 @@ void BreakpointModel::loadBreakpointFromFieldList(QStringList fields)
 		}
 		mc.memCond = static_cast<MemCheckCondition>(type);
 
-		// Address
 		QString test = fields[BreakpointColumns::OFFSET];
 		mc.start = fields[BreakpointColumns::OFFSET].toUInt(&ok, 16);
 		if (!ok)
@@ -647,7 +624,6 @@ void BreakpointModel::loadBreakpointFromFieldList(QStringList fields)
 			return;
 		}
 
-		// Size
 		mc.end = fields[BreakpointColumns::SIZE_LABEL].toUInt(&ok) + mc.start;
 		if (!ok)
 		{
@@ -656,7 +632,6 @@ void BreakpointModel::loadBreakpointFromFieldList(QStringList fields)
 			return;
 		}
 
-		// Condition
 		if (!fields[BreakpointColumns::CONDITION].isEmpty())
 		{
 			PostfixExpression expr;
@@ -673,7 +648,6 @@ void BreakpointModel::loadBreakpointFromFieldList(QStringList fields)
 			mc.cond.expressionString = fields[BreakpointColumns::CONDITION].toStdString();
 		}
 
-		// Result
 		const int result = fields[BreakpointColumns::ENABLED].toUInt(&ok);
 		if (!ok)
 		{
@@ -683,7 +657,6 @@ void BreakpointModel::loadBreakpointFromFieldList(QStringList fields)
 		}
 		mc.result = static_cast<MemCheckResult>(result);
 
-		// Description
 		if (!fields[BreakpointColumns::DESCRIPTION].isEmpty())
 		{
 			mc.description = fields[BreakpointColumns::DESCRIPTION].toStdString();

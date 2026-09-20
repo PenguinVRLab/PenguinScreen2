@@ -69,7 +69,6 @@ static bool IsUNCPath(const T& path)
 static inline bool FileSystemCharacterIsSane(char32_t c, bool strip_slashes)
 {
 #ifdef _WIN32
-	// https://docs.microsoft.com/en-gb/windows/win32/fileio/naming-a-file?redirectedfrom=MSDN#naming-conventions
 	if ((c == U'/' || c == U'\\') && strip_slashes)
 		return false;
 
@@ -82,11 +81,9 @@ static inline bool FileSystemCharacterIsSane(char32_t c, bool strip_slashes)
 	if (c == '/' && strip_slashes)
 		return false;
 
-	// drop asterisks too, they make globbing annoying
 	if (c == '*')
 		return false;
 
-	// macos doesn't allow colons, apparently
 #ifdef __APPLE__
 	if (c == U':')
 		return false;
@@ -107,7 +104,6 @@ static inline void PathAppendString(std::string& dst, const T& src)
 	size_t index = 0;
 
 #ifdef _WIN32
-	// special case for UNC paths here
 	if (dst.empty() && src.length() >= 3 && src[0] == '\\' && src[1] == '\\' && src[2] != '\\')
 	{
 		dst.append("\\\\");
@@ -120,7 +116,6 @@ static inline void PathAppendString(std::string& dst, const T& src)
 		const char ch = src[index];
 
 #ifdef _WIN32
-		// convert forward slashes to backslashes
 		if (ch == '\\' || ch == '/')
 #else
 		if (ch == '/')
@@ -139,7 +134,7 @@ static inline void PathAppendString(std::string& dst, const T& src)
 	}
 }
 
-std::string Path::SanitizeFileName(const std::string_view str, bool strip_slashes /* = true */)
+std::string Path::SanitizeFileName(const std::string_view str, bool strip_slashes )
 {
 	std::string ret;
 	ret.reserve(str.length());
@@ -154,7 +149,6 @@ std::string Path::SanitizeFileName(const std::string_view str, bool strip_slashe
 	}
 
 #ifdef _WIN32
-	// Windows: Can't end filename with a period.
 	if (ret.length() > 0 && ret.back() == '.')
 		ret.back() = '_';
 #endif
@@ -162,7 +156,7 @@ std::string Path::SanitizeFileName(const std::string_view str, bool strip_slashe
 	return ret;
 }
 
-void Path::SanitizeFileName(std::string* str, bool strip_slashes /* = true */)
+void Path::SanitizeFileName(std::string* str, bool strip_slashes )
 {
 	const size_t len = str->length();
 
@@ -187,7 +181,6 @@ void Path::SanitizeFileName(std::string* str, bool strip_slashes /* = true */)
 	}
 
 #ifdef _WIN32
-	// Windows: Can't end filename with a period.
 	if (str->length() > 0 && str->back() == '.')
 		str->back() = '_';
 #endif
@@ -206,7 +199,6 @@ bool Path::IsValidFileName(const std::string_view str, bool allow_slashes)
 	}
 
 #ifdef _WIN32
-	// Windows: Can't end filename with a period.
 	if (len > 0 && str.back() == '.')
 		return false;
 #endif
@@ -218,17 +210,13 @@ bool Path::IsValidFileName(const std::string_view str, bool allow_slashes)
 
 bool FileSystem::GetWin32Path(std::wstring* dest, std::string_view str)
 {
-	// Just convert to wide if it's a relative path, MAX_PATH still applies.
 	if (!Path::IsAbsolute(str))
 		return StringUtil::UTF8StringToWideString(*dest, str);
 
-	// PathCchCanonicalizeEx() thankfully takes care of everything.
-	// But need to widen the string first, avoid the stack allocation.
 	int wlen = MultiByteToWideChar(CP_UTF8, 0, str.data(), static_cast<int>(str.length()), nullptr, 0);
 	if (wlen <= 0) [[unlikely]]
 		return false;
 
-	// So copy it to a temp wide buffer first.
 	wchar_t* wstr_buf = static_cast<wchar_t*>(_malloca(sizeof(wchar_t) * (static_cast<size_t>(wlen) + 1)));
 	wlen = MultiByteToWideChar(CP_UTF8, 0, str.data(), static_cast<int>(str.length()), wstr_buf, wlen);
 	if (wlen <= 0) [[unlikely]]
@@ -237,7 +225,6 @@ bool FileSystem::GetWin32Path(std::wstring* dest, std::string_view str)
 		return false;
 	}
 
-	// And use PathCchCanonicalizeEx() to fix up any non-direct elements.
 	wstr_buf[wlen] = '\0';
 	dest->resize(std::max<size_t>(static_cast<size_t>(wlen) + (IsUNCPath(str) ? 9 : 5), 16));
 	for (;;)
@@ -287,10 +274,7 @@ bool Path::IsAbsolute(const std::string_view path)
 
 std::string Path::RealPath(const std::string_view path)
 {
-	// Resolve non-absolute paths first.
 	std::vector<std::string_view> components;
-	// We need to keep the full combined path in scope
-	// as SplitNativePath() returns string_views to it.
 	std::string buf;
 	if (!IsAbsolute(path))
 	{
@@ -304,7 +288,6 @@ std::string Path::RealPath(const std::string_view path)
 	if (components.empty())
 		return realpath;
 
-	// Different to path because relative.
 	realpath.reserve(std::accumulate(components.begin(), components.end(), static_cast<size_t>(0),
 						 [](size_t l, const std::string_view& s) { return l + s.length(); }) +
 					 components.size() + 1);
@@ -315,7 +298,6 @@ std::string Path::RealPath(const std::string_view path)
 	wrealpath.reserve(realpath.size());
 	symlink_buf.resize(path.size() + 1);
 
-	// Check for any symbolic links throughout the path while adding components.
 	const bool skip_first = IsUNCPath(path);
 	bool test_symlink = true;
 	for (const std::string_view& comp : components)
@@ -340,7 +322,6 @@ std::string Path::RealPath(const std::string_view path)
 			if (FileSystem::GetWin32Path(&wrealpath, realpath) &&
 				(attribs = GetFileAttributesW(wrealpath.c_str())) != INVALID_FILE_ATTRIBUTES)
 			{
-				// if not a link, go to the next component
 				if (attribs & FILE_ATTRIBUTE_REPARSE_POINT)
 				{
 					const HANDLE hFile =
@@ -348,7 +329,6 @@ std::string Path::RealPath(const std::string_view path)
 							nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
 					if (hFile != INVALID_HANDLE_VALUE)
 					{
-						// is a link! resolve it.
 						DWORD ret = GetFinalPathNameByHandleW(hFile, symlink_buf.data(), static_cast<DWORD>(symlink_buf.size()),
 							FILE_NAME_NORMALIZED);
 						if (ret > symlink_buf.size())
@@ -368,13 +348,11 @@ std::string Path::RealPath(const std::string_view path)
 			}
 			else
 			{
-				// not a file or link
 				test_symlink = false;
 			}
 		}
 	}
 
-	// GetFinalPathNameByHandleW() adds a \\?\ prefix, so remove it.
 	if (realpath.starts_with("\\\\?\\") && IsAbsolute(std::string_view(realpath.data() + 4, realpath.size() - 4)))
 	{
 		realpath.erase(0, 4);
@@ -386,14 +364,12 @@ std::string Path::RealPath(const std::string_view path)
 	}
 
 #else
-	// Why this monstrosity instead of calling realpath()? realpath() only works on files that exist.
 	std::string basepath;
 	std::string symlink;
 
 	basepath.reserve(realpath.capacity());
 	symlink.resize(realpath.capacity());
 
-	// Check for any symbolic links throughout the path while adding components.
 	bool test_symlink = true;
 	for (const std::string_view& comp : components)
 	{
@@ -409,17 +385,14 @@ std::string Path::RealPath(const std::string_view path)
 			realpath.push_back(FS_OSPATH_SEPARATOR_CHARACTER);
 		realpath.append(comp);
 
-		// Check if the last component added is a symlink
 		struct stat sb;
 		if (lstat(realpath.c_str(), &sb) != 0)
 		{
-			// Don't bother checking any further components once we error out.
 			test_symlink = false;
 			continue;
 		}
 		else if (!S_ISLNK(sb.st_mode))
 		{
-			// Nope, keep going.
 			continue;
 		}
 
@@ -428,23 +401,19 @@ std::string Path::RealPath(const std::string_view path)
 			ssize_t sz = readlink(realpath.c_str(), symlink.data(), symlink.size());
 			if (sz < 0)
 			{
-				// shouldn't happen, due to the S_ISLNK check above.
 				test_symlink = false;
 				break;
 			}
 			else if (static_cast<size_t>(sz) == symlink.size())
 			{
-				// need a larger buffer
 				symlink.resize(symlink.size() * 2);
 				continue;
 			}
 			else
 			{
-				// is a link, and we resolved it. gotta check if the symlink itself is relative :(
 				symlink.resize(static_cast<size_t>(sz));
 				if (!Path::IsAbsolute(symlink))
 				{
-					// symlink is relative to the directory of the symlink
 					realpath = basepath;
 					if (realpath.empty() || realpath.back() != FS_OSPATH_SEPARATOR_CHARACTER)
 						realpath.push_back(FS_OSPATH_SEPARATOR_CHARACTER);
@@ -452,7 +421,6 @@ std::string Path::RealPath(const std::string_view path)
 				}
 				else
 				{
-					// Use the new, symlinked path.
 					realpath = symlink;
 				}
 
@@ -461,8 +429,6 @@ std::string Path::RealPath(const std::string_view path)
 		}
 	}
 
-	// If any relative symlinks were resolved, there may be '.' and '..'
-	// components in the resultant path, which must be removed.
 	realpath = Path::Canonicalize(realpath);
 
 #endif
@@ -475,7 +441,6 @@ std::string Path::ToNativePath(const std::string_view path)
 	std::string ret;
 	PathAppendString(ret, path);
 
-	// remove trailing slashes
 	if (ret.length() > 1)
 	{
 		while (ret.back() == FS_OSPATH_SEPARATOR_CHARACTER)
@@ -499,13 +464,11 @@ std::string Path::Canonicalize(const std::string_view path)
 	{
 		if (component == ".")
 		{
-			// current directory, so it can be skipped, unless it's the only component
 			if (components.size() == 1)
 				new_components.push_back(std::move(component));
 		}
 		else if (component == "..")
 		{
-			// parent directory, pop one off if we're not at the beginning, otherwise preserve.
 			if (!new_components.empty())
 				new_components.pop_back();
 			else
@@ -513,7 +476,6 @@ std::string Path::Canonicalize(const std::string_view path)
 		}
 		else
 		{
-			// anything else, preserve
 			new_components.push_back(std::move(component));
 		}
 	}
@@ -528,15 +490,12 @@ void Path::Canonicalize(std::string* path)
 
 std::string Path::MakeRelative(const std::string_view path, const std::string_view relative_to)
 {
-	// simple algorithm, we just work on the components. could probably be better, but it'll do for now.
 	std::vector<std::string_view> path_components(SplitNativePath(path));
 	std::vector<std::string_view> relative_components(SplitNativePath(relative_to));
 	std::vector<std::string_view> new_components;
 
-	// both must be absolute paths
 	if (Path::IsAbsolute(path) && Path::IsAbsolute(relative_to))
 	{
-		// find the number of same components
 		size_t num_same = 0;
 		for (size_t i = 0; i < path_components.size() && i < relative_components.size(); i++)
 		{
@@ -546,27 +505,22 @@ std::string Path::MakeRelative(const std::string_view path, const std::string_vi
 				break;
 		}
 
-		// we need at least one same component
 		if (num_same > 0)
 		{
-			// from the relative_to directory, back up to the start of the common components
 			const size_t num_ups = relative_components.size() - num_same;
 			for (size_t i = 0; i < num_ups; i++)
 				new_components.emplace_back("..");
 
-			// and add the remainder of the path components
 			for (size_t i = num_same; i < path_components.size(); i++)
 				new_components.push_back(std::move(path_components[i]));
 		}
 		else
 		{
-			// no similarity
 			new_components = std::move(path_components);
 		}
 	}
 	else
 	{
-		// not absolute
 		new_components = std::move(path_components);
 	}
 
@@ -736,7 +690,6 @@ std::vector<std::string_view> Path::SplitWindowsPath(const std::string_view path
 	std::string::size_type start = 0;
 	std::string::size_type pos = 0;
 
-	// preserve unc paths
 	if (path.size() > 2 && path[0] == '\\' && path[1] == '\\')
 		pos = 2;
 
@@ -748,7 +701,6 @@ std::vector<std::string_view> Path::SplitWindowsPath(const std::string_view path
 			continue;
 		}
 
-		// skip consecutive separators
 		if (pos != start)
 			parts.push_back(path.substr(start, pos - start));
 
@@ -784,9 +736,6 @@ std::vector<std::string_view> Path::SplitNativePath(const std::string_view path)
 			continue;
 		}
 
-		// skip consecutive separators
-		// for unix, we create an empty element at the beginning when it's an absolute path
-		// that way, when it's re-joined later, we preserve the starting slash.
 		if (pos != start || pos == 0)
 			parts.push_back(path.substr(start, pos - start));
 
@@ -946,20 +895,15 @@ std::string Path::CreateFileURL(std::string_view path)
 
 	const std::string_view& first = components.front();
 #ifdef _WIN32
-	// Windows doesn't urlencode the drive letter.
-	// UNC paths should be omit the leading slash.
 	if (first.starts_with("\\\\"))
 	{
-		// file://hostname/...
 		ret.append(first.substr(2));
 	}
 	else
 	{
-		// file:///c:/...
 		fmt::format_to(std::back_inserter(ret), "/{}", first);
 	}
 #else
-	// Don't append a leading slash for the first component.
 	ret.append(first);
 #endif
 
@@ -1201,7 +1145,6 @@ std::optional<std::string> FileSystem::ReadFileToString(std::FILE* fp)
 	std::fseek(fp, 0, SEEK_SET);
 	std::string res;
 	res.resize(static_cast<size_t>(size));
-	// NOTE - assumes mode 'rb', for example, this will fail over missing Windows carriage return bytes
 	if (size > 0 && std::fread(res.data(), 1u, static_cast<size_t>(size), fp) != static_cast<size_t>(size))
 		return std::nullopt;
 
@@ -1335,7 +1278,6 @@ bool FileSystem::EnsureDirectoryExists(const char* path, bool recursive, Error* 
 	if (FileSystem::DirectoryExists(path))
 		return true;
 
-	// if it fails to create, we're not going to be able to use it anyway
 	return FileSystem::CreateDirectoryPath(path, recursive, error);
 }
 
@@ -1370,8 +1312,6 @@ bool FileSystem::RecursiveDeleteDirectory(const char* path)
 bool FileSystem::CopyFilePath(const char* source, const char* destination, bool replace)
 {
 #ifndef _WIN32
-	// TODO: There's technically a race here between checking and opening the file..
-	// But fopen doesn't specify any way to say "don't create if it exists"...
 	if (!replace && FileExists(destination))
 		return false;
 
@@ -1444,7 +1384,6 @@ static u32 RecursiveFindFiles(const char* origin_path, const char* parent_path, 
 		search_dir = fmt::format("{}\\*", origin_path);
 	}
 
-	// holder for utf-8 conversion
 	WIN32_FIND_DATAW wfd;
 	std::string utf8_filename;
 	utf8_filename.reserve((sizeof(wfd.cFileName) / sizeof(wfd.cFileName[0])) * 2);
@@ -1453,7 +1392,6 @@ static u32 RecursiveFindFiles(const char* origin_path, const char* parent_path, 
 	if (hFind == INVALID_HANDLE_VALUE)
 		return 0;
 
-	// small speed optimization for '*' case
 	bool hasWildCards = false;
 	bool wildCardMatchAll = false;
 	u32 nFiles = 0;
@@ -1463,7 +1401,6 @@ static u32 RecursiveFindFiles(const char* origin_path, const char* parent_path, 
 		wildCardMatchAll = !(std::strcmp(pattern, "*"));
 	}
 
-	// iterate results
 	do
 	{
 		if (wfd.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN && !(flags & FILESYSTEM_FIND_HIDDEN_FILES))
@@ -1485,7 +1422,6 @@ static u32 RecursiveFindFiles(const char* origin_path, const char* parent_path, 
 		{
 			if (flags & FILESYSTEM_FIND_RECURSIVE)
 			{
-				// check that we're not following an infinite symbolic link loop
 				std::string real_recurse_dir;
 				if (parent_path)
 					real_recurse_dir = Path::RealPath(fmt::format("{}\\{}\\{}\\{}", origin_path, parent_path, path, utf8_filename));
@@ -1498,7 +1434,6 @@ static u32 RecursiveFindFiles(const char* origin_path, const char* parent_path, 
 					if (!real_recurse_dir.empty())
 						visited.push_back(std::move(real_recurse_dir));
 
-					// recurse into this directory
 					if (parent_path)
 					{
 						const std::string recurse_dir = fmt::format("{}\\{}", parent_path, path);
@@ -1525,7 +1460,6 @@ static u32 RecursiveFindFiles(const char* origin_path, const char* parent_path, 
 		if (wfd.dwFileAttributes & FILE_ATTRIBUTE_READONLY)
 			outData.Attributes |= FILESYSTEM_FILE_ATTRIBUTE_READ_ONLY;
 
-		// match the filename
 		if (hasWildCards)
 		{
 			if (!wildCardMatchAll && !StringUtil::WildcardMatch(utf8_filename.c_str(), pattern))
@@ -1537,7 +1471,6 @@ static u32 RecursiveFindFiles(const char* origin_path, const char* parent_path, 
 				continue;
 		}
 
-		// add file to list
 		if (!(flags & FILESYSTEM_FIND_RELATIVE_PATHS))
 		{
 			if (parent_path)
@@ -1571,15 +1504,12 @@ static u32 RecursiveFindFiles(const char* origin_path, const char* parent_path, 
 
 bool FileSystem::FindFiles(const char* path, const char* pattern, u32 flags, FindResultsArray* results, ProgressCallback* cancel)
 {
-	// has a path
 	if (path[0] == '\0')
 		return false;
 
-	// clear result array
 	if (!(flags & FILESYSTEM_FIND_KEEP_ARRAY))
 		results->clear();
 
-	// add self if recursive, we don't want to visit it twice
 	std::vector<std::string> visited;
 	if (flags & FILESYSTEM_FIND_RECURSIVE)
 	{
@@ -1588,14 +1518,12 @@ bool FileSystem::FindFiles(const char* path, const char* pattern, u32 flags, Fin
 			visited.push_back(std::move(real_path));
 	}
 
-	// enter the recursive function
 	if (RecursiveFindFiles(path, nullptr, nullptr, pattern, flags, results, visited, cancel) == 0)
 		return false;
 
 	if (flags & FILESYSTEM_FIND_SORT_BY_NAME)
 	{
 		std::sort(results->begin(), results->end(), [](const FILESYSTEM_FIND_DATA& lhs, const FILESYSTEM_FIND_DATA& rhs) {
-			// directories first
 			if ((lhs.Attributes & FILESYSTEM_FILE_ATTRIBUTE_DIRECTORY) !=
 				(rhs.Attributes & FILESYSTEM_FILE_ATTRIBUTE_DIRECTORY))
 			{
@@ -1626,11 +1554,9 @@ static void TranslateStat64(struct stat* st, const struct _stat64& st64)
 
 bool FileSystem::StatFile(const char* path, struct stat* st)
 {
-	// has a path
 	if (path[0] == '\0')
 		return false;
 
-	// convert to wide string
 	const std::wstring wpath = GetWin32Path(path);
 	if (wpath.empty())
 		return false;
@@ -1659,21 +1585,17 @@ bool FileSystem::StatFile(std::FILE* fp, struct stat* st)
 
 bool FileSystem::StatFile(const char* path, FILESYSTEM_STAT_DATA* sd)
 {
-	// has a path
 	if (path[0] == '\0')
 		return false;
 
-	// convert to wide string
 	const std::wstring wpath = GetWin32Path(path);
 	if (wpath.empty())
 		return false;
 
-	// determine attributes for the path. if it's a directory, things have to be handled differently..
 	DWORD fileAttributes = GetFileAttributesW(wpath.c_str());
 	if (fileAttributes == INVALID_FILE_ATTRIBUTES)
 		return false;
 
-	// test if it is a directory
 	HANDLE hFile;
 	if (fileAttributes & FILE_ATTRIBUTE_DIRECTORY)
 	{
@@ -1686,11 +1608,9 @@ bool FileSystem::StatFile(const char* path, FILESYSTEM_STAT_DATA* sd)
 			OPEN_EXISTING, 0, nullptr);
 	}
 
-	// createfile succeded?
 	if (hFile == INVALID_HANDLE_VALUE)
 		return false;
 
-	// use GetFileInformationByHandle
 	BY_HANDLE_FILE_INFORMATION bhfi;
 	if (GetFileInformationByHandle(hFile, &bhfi) == FALSE)
 	{
@@ -1698,10 +1618,8 @@ bool FileSystem::StatFile(const char* path, FILESYSTEM_STAT_DATA* sd)
 		return false;
 	}
 
-	// close handle
 	CloseHandle(hFile);
 
-	// fill in the stat data
 	sd->Attributes = TranslateWin32Attributes(bhfi.dwFileAttributes);
 	sd->CreationTime = ConvertFileTimeToUnixTime(bhfi.ftCreationTime);
 	sd->ModificationTime = ConvertFileTimeToUnixTime(bhfi.ftLastWriteTime);
@@ -1719,14 +1637,12 @@ bool FileSystem::StatFile(std::FILE* fp, FILESYSTEM_STAT_DATA* sd)
 	if (_fstat64(fd, &st) != 0)
 		return false;
 
-	// parse attributes
 	sd->CreationTime = st.st_ctime;
 	sd->ModificationTime = st.st_mtime;
 	sd->Attributes = 0;
 	if ((st.st_mode & _S_IFMT) == _S_IFDIR)
 		sd->Attributes |= FILESYSTEM_FILE_ATTRIBUTE_DIRECTORY;
 
-	// parse size
 	if ((st.st_mode & _S_IFMT) == _S_IFREG)
 		sd->Size = st.st_size;
 	else
@@ -1737,16 +1653,13 @@ bool FileSystem::StatFile(std::FILE* fp, FILESYSTEM_STAT_DATA* sd)
 
 bool FileSystem::FileExists(const char* path)
 {
-	// has a path
 	if (path[0] == '\0')
 		return false;
 
-	// convert to wide string
 	const std::wstring wpath = GetWin32Path(path);
 	if (wpath.empty())
 		return false;
 
-	// determine attributes for the path. if it's a directory, things have to be handled differently..
 	DWORD fileAttributes = GetFileAttributesW(wpath.c_str());
 	if (fileAttributes == INVALID_FILE_ATTRIBUTES)
 		return false;
@@ -1759,16 +1672,13 @@ bool FileSystem::FileExists(const char* path)
 
 bool FileSystem::DirectoryExists(const char* path)
 {
-	// has a path
 	if (path[0] == '\0')
 		return false;
 
-	// convert to wide string
 	const std::wstring wpath = GetWin32Path(path);
 	if (wpath.empty())
 		return false;
 
-	// determine attributes for the path. if it's a directory, things have to be handled differently..
 	DWORD fileAttributes = GetFileAttributesW(wpath.c_str());
 	if (fileAttributes == INVALID_FILE_ATTRIBUTES)
 		return false;
@@ -1810,22 +1720,18 @@ bool FileSystem::CreateDirectoryPath(const char* Path, bool Recursive, Error* er
 {
 	const std::wstring wpath = GetWin32Path(Path);
 
-	// has a path
 	if (wpath.empty()) [[unlikely]]
 	{
 		Error::SetStringView(error, "Path is empty.");
 		return false;
 	}
 
-	// try just flat-out, might work if there's no other segments that have to be made
 	if (CreateDirectoryW(wpath.c_str(), nullptr))
 		return true;
 
-	// check error
 	DWORD lastError = GetLastError();
 	if (lastError == ERROR_ALREADY_EXISTS)
 	{
-		// check the attributes
 		const u32 Attributes = GetFileAttributesW(wpath.c_str());
 		if (Attributes != INVALID_FILE_ATTRIBUTES && Attributes & FILE_ATTRIBUTE_DIRECTORY)
 			return true;
@@ -1837,16 +1743,12 @@ bool FileSystem::CreateDirectoryPath(const char* Path, bool Recursive, Error* er
 		return false;
 	}
 
-	// check error
 	if (lastError == ERROR_PATH_NOT_FOUND)
 	{
-		// part of the path does not exist, so we'll create the parent folders, then
-		// the full path again.
 		const size_t pathLength = wpath.size();
 		std::wstring tempPath;
 		tempPath.reserve(pathLength);
 
-		// for absolute paths, we need to skip over the path root
 		size_t rootLength = 0;
 		if (Path::IsAbsolute(Path))
 		{
@@ -1860,11 +1762,9 @@ bool FileSystem::CreateDirectoryPath(const char* Path, bool Recursive, Error* er
 			}
 			rootLength = static_cast<size_t>(root_end - root_start);
 
-			// copy path root
 			tempPath.append(wpath, 0, rootLength);
 		}
 
-		// create directories along the path
 		for (size_t i = rootLength; i < pathLength; i++)
 		{
 			if (wpath[i] == L'\\' || wpath[i] == L'/')
@@ -1873,14 +1773,13 @@ bool FileSystem::CreateDirectoryPath(const char* Path, bool Recursive, Error* er
 				if (!result)
 				{
 					lastError = GetLastError();
-					if (lastError != ERROR_ALREADY_EXISTS) // fine, continue to next path segment
+					if (lastError != ERROR_ALREADY_EXISTS)
 					{
 						Error::SetWin32(error, "CreateDirectoryW() failed: ", lastError);
 						return false;
 					}
 				}
 
-				// replace / with \.
 				tempPath.push_back('\\');
 			}
 			else
@@ -1889,7 +1788,6 @@ bool FileSystem::CreateDirectoryPath(const char* Path, bool Recursive, Error* er
 			}
 		}
 
-		// re-create the end if it's not a separator, check / as well because windows can interpret them
 		if (wpath[pathLength - 1] != L'\\' && wpath[pathLength - 1] != L'/')
 		{
 			const BOOL result = CreateDirectoryW(wpath.c_str(), nullptr);
@@ -1904,12 +1802,10 @@ bool FileSystem::CreateDirectoryPath(const char* Path, bool Recursive, Error* er
 			}
 		}
 
-		// ok
 		return true;
 	}
 	else
 	{
-		// unhandled error
 		Error::SetWin32(error, "CreateDirectoryW() failed: ", lastError);
 		return false;
 	}
@@ -1967,7 +1863,6 @@ std::string FileSystem::GetProgramPath()
 	std::wstring buffer;
 	buffer.resize(MAX_PATH);
 
-	// Fall back to the main module if this fails.
 	HMODULE module = nullptr;
 	GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
 		reinterpret_cast<LPCWSTR>(&GetProgramPath), &module);
@@ -1985,7 +1880,6 @@ std::string FileSystem::GetProgramPath()
 		break;
 	}
 
-	// Windows symlinks don't behave silly like Linux, so no need to RealPath() it.
 	return StringUtil::WideStringToUTF8String(buffer);
 }
 
@@ -2020,7 +1914,6 @@ bool FileSystem::SetPathCompression(const char* path, bool enable)
 	const bool isCompressed = (attrs & FILE_ATTRIBUTE_COMPRESSED) != 0;
 	if (enable == isCompressed)
 	{
-		// already compressed/not compressed
 		return true;
 	}
 
@@ -2051,7 +1944,6 @@ bool FileSystem::SetPathCompression(const char* path, bool enable)
 
 bool FileSystem::CreateSymLink(const char* link, const char* target)
 {
-	// convert to wide string
 	const std::wstring wlink = GetWin32Path(link);
 	if (wlink.empty())
 		return false;
@@ -2060,23 +1952,19 @@ bool FileSystem::CreateSymLink(const char* link, const char* target)
 	if (wtarget.empty())
 		return false;
 
-	// check if it's a directory
 	DWORD flags = 0;
 	if (DirectoryExists(target))
 		flags |= SYMBOLIC_LINK_FLAG_DIRECTORY;
 
-	// create the symbolic link
 	return CreateSymbolicLinkW(wlink.c_str(), wtarget.c_str(), flags) != 0;
 }
 
 bool FileSystem::IsSymbolicLink(const char* path)
 {
-	// convert to wide string
 	const std::wstring wpath = GetWin32Path(path);
 	if (wpath.empty())
 		return false;
 
-	// determine attributes for the path
 	const DWORD fileAttributes = GetFileAttributesW(wpath.c_str());
 	if (fileAttributes == INVALID_FILE_ATTRIBUTES)
 		return false;
@@ -2086,7 +1974,6 @@ bool FileSystem::IsSymbolicLink(const char* path)
 
 bool FileSystem::DeleteSymbolicLink(const char* path, Error* error)
 {
-	// convert to wide string
 	const std::wstring wpath = GetWin32Path(path);
 	if (wpath.empty())
 	{
@@ -2094,7 +1981,6 @@ bool FileSystem::DeleteSymbolicLink(const char* path, Error* error)
 		return false;
 	}
 
-	// delete the symbolic link
 	if (DirectoryExists(path))
 	{
 		if (!RemoveDirectoryW(wpath.c_str()))
@@ -2117,7 +2003,6 @@ bool FileSystem::DeleteSymbolicLink(const char* path, Error* error)
 
 #else
 
-// No 32-bit file offsets breaking stuff please.
 static_assert(sizeof(off_t) == sizeof(s64));
 
 static u32 RecursiveFindFiles(const char* OriginPath, const char* ParentPath, const char* Path, const char* Pattern,
@@ -2143,7 +2028,6 @@ static u32 RecursiveFindFiles(const char* OriginPath, const char* ParentPath, co
 	if (!pDir)
 		return 0;
 
-	// small speed optimization for '*' case
 	bool hasWildCards = false;
 	bool wildCardMatchAll = false;
 	u32 nFiles = 0;
@@ -2153,7 +2037,6 @@ static u32 RecursiveFindFiles(const char* OriginPath, const char* ParentPath, co
 		wildCardMatchAll = (std::strcmp(Pattern, "*") == 0);
 	}
 
-	// iterate results
 	struct dirent* pDirEnt;
 	while ((pDirEnt = readdir(pDir)) != nullptr)
 	{
@@ -2185,14 +2068,12 @@ static u32 RecursiveFindFiles(const char* OriginPath, const char* ParentPath, co
 		{
 			if (Flags & FILESYSTEM_FIND_RECURSIVE)
 			{
-				// check that we're not following an infinite symbolic link loop
 				if (std::string real_recurse_dir = Path::RealPath(full_path);
 					real_recurse_dir.empty() || std::find(visited.begin(), visited.end(), real_recurse_dir) == visited.end())
 				{
 					if (!real_recurse_dir.empty())
 						visited.push_back(std::move(real_recurse_dir));
 
-					// recurse into this directory
 					if (ParentPath)
 					{
 						const std::string recursive_dir = fmt::format("{}/{}", ParentPath, Path);
@@ -2220,7 +2101,6 @@ static u32 RecursiveFindFiles(const char* OriginPath, const char* ParentPath, co
 		outData.CreationTime = sDir.st_ctime;
 		outData.ModificationTime = sDir.st_mtime;
 
-		// match the filename
 		if (hasWildCards)
 		{
 			if (!wildCardMatchAll && !StringUtil::WildcardMatch(pDirEnt->d_name, Pattern))
@@ -2232,7 +2112,6 @@ static u32 RecursiveFindFiles(const char* OriginPath, const char* ParentPath, co
 				continue;
 		}
 
-		// add file to list
 		if (!(Flags & FILESYSTEM_FIND_RELATIVE_PATHS))
 		{
 			outData.FileName = std::move(full_path);
@@ -2257,15 +2136,12 @@ static u32 RecursiveFindFiles(const char* OriginPath, const char* ParentPath, co
 
 bool FileSystem::FindFiles(const char* path, const char* pattern, u32 flags, FindResultsArray* results, ProgressCallback* cancel)
 {
-	// has a path
 	if (path[0] == '\0')
 		return false;
 
-	// clear result array
 	if (!(flags & FILESYSTEM_FIND_KEEP_ARRAY))
 		results->clear();
 
-	// add self if recursive, we don't want to visit it twice
 	std::vector<std::string> visited;
 	if (flags & FILESYSTEM_FIND_RECURSIVE)
 	{
@@ -2274,14 +2150,12 @@ bool FileSystem::FindFiles(const char* path, const char* pattern, u32 flags, Fin
 			visited.push_back(std::move(real_path));
 	}
 
-	// enter the recursive function
 	if (RecursiveFindFiles(path, nullptr, nullptr, pattern, flags, results, visited, cancel) == 0)
 		return false;
 
 	if (flags & FILESYSTEM_FIND_SORT_BY_NAME)
 	{
 		std::sort(results->begin(), results->end(), [](const FILESYSTEM_FIND_DATA& lhs, const FILESYSTEM_FIND_DATA& rhs) {
-			// directories first
 			if ((lhs.Attributes & FILESYSTEM_FILE_ATTRIBUTE_DIRECTORY) !=
 				(rhs.Attributes & FILESYSTEM_FILE_ATTRIBUTE_DIRECTORY))
 			{
@@ -2311,29 +2185,24 @@ bool FileSystem::StatFile(std::FILE* fp, struct stat* st)
 
 bool FileSystem::StatFile(const char* path, FILESYSTEM_STAT_DATA* sd)
 {
-	// has a path
 	if (path[0] == '\0')
 		return false;
 
-	// stat file
 	struct stat sysStatData;
 	if (stat(path, &sysStatData) < 0)
 		return false;
 
-	// parse attributes
 	sd->CreationTime = sysStatData.st_ctime;
 	sd->ModificationTime = sysStatData.st_mtime;
 	sd->Attributes = 0;
 	if (S_ISDIR(sysStatData.st_mode))
 		sd->Attributes |= FILESYSTEM_FILE_ATTRIBUTE_DIRECTORY;
 
-	// parse size
 	if (S_ISREG(sysStatData.st_mode))
 		sd->Size = sysStatData.st_size;
 	else
 		sd->Size = 0;
 
-	// ok
 	return true;
 }
 
@@ -2343,35 +2212,29 @@ bool FileSystem::StatFile(std::FILE* fp, FILESYSTEM_STAT_DATA* sd)
 	if (fd < 0)
 		return false;
 
-	// stat file
 	struct stat sysStatData;
 	if (fstat(fd, &sysStatData) < 0)
 		return false;
 
-	// parse attributes
 	sd->CreationTime = sysStatData.st_ctime;
 	sd->ModificationTime = sysStatData.st_mtime;
 	sd->Attributes = 0;
 	if (S_ISDIR(sysStatData.st_mode))
 		sd->Attributes |= FILESYSTEM_FILE_ATTRIBUTE_DIRECTORY;
 
-	// parse size
 	if (S_ISREG(sysStatData.st_mode))
 		sd->Size = sysStatData.st_size;
 	else
 		sd->Size = 0;
 
-	// ok
 	return true;
 }
 
 bool FileSystem::FileExists(const char* path)
 {
-	// has a path
 	if (path[0] == '\0')
 		return false;
 
-	// stat file
 	struct stat sysStatData;
 	if (stat(path, &sysStatData) < 0)
 		return false;
@@ -2384,11 +2247,9 @@ bool FileSystem::FileExists(const char* path)
 
 bool FileSystem::DirectoryExists(const char* path)
 {
-	// has a path
 	if (path[0] == '\0')
 		return false;
 
-	// stat file
 	struct stat sysStatData;
 	if (stat(path, &sysStatData) < 0)
 		return false;
@@ -2405,7 +2266,6 @@ bool FileSystem::DirectoryIsEmpty(const char* path)
 	if (pDir == nullptr)
 		return true;
 
-	// iterate results
 	struct dirent* pDirEnt;
 	while ((pDirEnt = readdir(pDir)) != nullptr)
 	{
@@ -2425,20 +2285,16 @@ bool FileSystem::DirectoryIsEmpty(const char* path)
 
 bool FileSystem::CreateDirectoryPath(const char* path, bool recursive, Error* error)
 {
-	// has a path
 	const size_t pathLength = std::strlen(path);
 	if (pathLength == 0)
 		return false;
 
-	// try just flat-out, might work if there's no other segments that have to be made
 	if (mkdir(path, 0777) == 0)
 		return true;
 
-	// check error
 	int lastError = errno;
 	if (lastError == EEXIST)
 	{
-		// check the attributes
 		struct stat sysStatData;
 		if (stat(path, &sysStatData) == 0 && S_ISDIR(sysStatData.st_mode))
 			return true;
@@ -2452,12 +2308,9 @@ bool FileSystem::CreateDirectoryPath(const char* path, bool recursive, Error* er
 
 	if (lastError == ENOENT)
 	{
-		// part of the path does not exist, so we'll create the parent folders, then
-		// the full path again.
 		std::string tempPath;
 		tempPath.reserve(pathLength);
 
-		// create directories along the path
 		for (size_t i = 0; i < pathLength; i++)
 		{
 			if (i > 0 && path[i] == '/')
@@ -2465,7 +2318,7 @@ bool FileSystem::CreateDirectoryPath(const char* path, bool recursive, Error* er
 				if (mkdir(tempPath.c_str(), 0777) < 0)
 				{
 					lastError = errno;
-					if (lastError != EEXIST) // fine, continue to next path segment
+					if (lastError != EEXIST)
 					{
 						Error::SetErrno(error, "mkdir() failed: ", lastError);
 						return false;
@@ -2476,7 +2329,6 @@ bool FileSystem::CreateDirectoryPath(const char* path, bool recursive, Error* er
 			tempPath.push_back(path[i]);
 		}
 
-		// re-create the end if it's not a separator, check / as well because windows can interpret them
 		if (path[pathLength - 1] != '/')
 		{
 			if (mkdir(path, 0777) < 0)
@@ -2490,12 +2342,10 @@ bool FileSystem::CreateDirectoryPath(const char* path, bool recursive, Error* er
 			}
 		}
 
-		// ok
 		return true;
 	}
 	else
 	{
-		// unhandled error
 		Error::SetErrno(error, "mkdir() failed: ", lastError);
 		return false;
 	}
@@ -2558,16 +2408,10 @@ bool FileSystem::DeleteDirectory(const char* path)
 
 std::string FileSystem::GetPackagePath()
 {
-	// NOTE: The reason this function is separated from FileSystem::GetProgramPath() is because
-	// This path check breaks other usages of FileSystem::GetProgramPath for the AppImage.
-	// Notably the CI-generated AppImage fails to start because PCSX2 can't find its resources
-	// since it tries to look for them relative to the .AppImage file instead of relative to the actual executable.
 
-	// Check if we are running inside appimage. If so, return the path to the appimage instead.
 	if (const char* appimage_path = getenv("APPIMAGE"))
 		return std::string(appimage_path);
 
-	// Otherwise, find the executable file directly
 	return GetProgramPath();
 }
 
@@ -2653,7 +2497,7 @@ std::string FileSystem::GetWorkingDirectory()
 		buffer.resize(buffer.size() * 2);
 	}
 
-	buffer.resize(std::strlen(buffer.c_str())); // Remove excess nulls
+	buffer.resize(std::strlen(buffer.c_str()));
 	return buffer;
 }
 

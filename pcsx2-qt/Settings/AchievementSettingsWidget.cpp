@@ -29,9 +29,6 @@ AchievementSettingsWidget::AchievementSettingsWidget(SettingsWindow* settings_di
 
 	setupTab(m_ui);
 
-	// PCSX2-VR: RetroAchievements is force-disabled in this build (see
-	// AchievementsOptions::LoadSave) — the page stays visible but inert so
-	// the feature's existence (and its pending return) is communicated.
 	setEnabled(false);
 	setToolTip(tr("RetroAchievements is disabled in this build."));
 
@@ -91,18 +88,15 @@ AchievementSettingsWidget::AchievementSettingsWidget(SettingsWindow* settings_di
 		connect(g_emu_thread, &EmuThread::onAchievementsRefreshed, this, &AchievementSettingsWidget::onAchievementsRefreshed);
 		updateLoginState();
 
-		// force a refresh of game info
 		Host::RunOnCPUThread(Host::OnAchievementsRefreshed);
 	}
 	else
 	{
-		// hide login and game info, not relevant for per-game
 		m_ui.verticalLayout->removeWidget(m_ui.gameInfoBox);
 		m_ui.gameInfoBox->hide();
 		m_ui.verticalLayout->removeWidget(m_ui.loginBox);
 		m_ui.loginBox->hide();
 
-		// sound effects
 		m_ui.verticalLayout->removeWidget(m_ui.soundEffectsBox);
 		m_ui.soundEffectsBox->hide();
 		m_ui.soundEffectsBox = nullptr;
@@ -181,7 +175,6 @@ void AchievementSettingsWidget::onHardcoreModeStateChanged()
 	if (!enabled || !challenge)
 		return;
 
-	// don't bother prompting if the game doesn't have achievements
 	auto lock = Achievements::GetLock();
 	if (!Achievements::HasActiveGame() || !Achievements::HasAchievementsOrLeaderboards())
 		return;
@@ -251,7 +244,6 @@ void AchievementSettingsWidget::onLoginLogoutPressed()
 
 	updateLoginState();
 
-	// Login can enable achievements/hardcore.
 	if (!m_ui.enable->isChecked() && Host::GetBaseBoolSettingValue("Achievements", "Enabled", false))
 	{
 		QSignalBlocker sb(m_ui.enable);

@@ -10,7 +10,7 @@
 
 bool DMACh::transfer(const char *s, tDMA_TAG* ptag)
 {
-	if (ptag == NULL)  					 // Is ptag empty?
+	if (ptag == NULL)
 	{
 		throwBusError(s);
 		return false;
@@ -77,18 +77,14 @@ __fi void setDmacStat(u32 num)
 	dmacRegs.stat.set_flags(1 << num);
 }
 
-// Note: Dma addresses are guaranteed to be aligned to 16 bytes (128 bits)
 __fi tDMA_TAG* SPRdmaGetAddr(u32 addr, bool write)
 {
-	// if (addr & 0xf) { DMA_LOG("*PCSX2*: DMA address not 128bit aligned: %8.8x", addr); }
 
-	//For some reason Getaway references SPR Memory from itself using SPR0, oh well, let it i guess...
 	if((addr & 0x70000000) == 0x70000000)
 	{
 		return (tDMA_TAG*)&eeMem->Scratch[addr & 0x3ff0];
 	}
 
-	// FIXME: Why??? DMA uses physical addresses
 	addr &= 0x1ffffff0;
 
 	if (addr < Ps2MemSize::ExposedRam)
@@ -107,35 +103,27 @@ __fi tDMA_TAG* SPRdmaGetAddr(u32 addr, bool write)
 			vu1Thread.WaitVU();
 		}
 
-		//Access for VU Memory
-
 		if((addr >= 0x1100c000) && (addr < 0x11010000))
 		{
-			//DevCon.Warning("VU1 Mem %x", addr);
 			return (tDMA_TAG*)(VU1.Mem + (addr & 0x3ff0));
 		}
 
 		if((addr >= 0x11004000) && (addr < 0x11008000))
 		{
-			//DevCon.Warning("VU0 Mem %x", addr);
 			return (tDMA_TAG*)(VU0.Mem + (addr & 0xff0));
 		}
 
-		//Possibly not needed but the manual doesn't say SPR cannot access it.
 		if((addr >= 0x11000000) && (addr < 0x11004000))
 		{
-			//DevCon.Warning("VU0 Micro %x", addr);
 			return (tDMA_TAG*)(VU0.Micro + (addr & 0xff0));
 		}
 
 		if((addr >= 0x11008000) && (addr < 0x1100c000))
 		{
-			//DevCon.Warning("VU1 Micro %x", addr);
 			return (tDMA_TAG*)(VU1.Micro + (addr & 0x3ff0));
 		}
 
 
-		// Unreachable
 		return NULL;
 	}
 	else
@@ -145,13 +133,10 @@ __fi tDMA_TAG* SPRdmaGetAddr(u32 addr, bool write)
 	}
 }
 
-// Note: Dma addresses are guaranteed to be aligned to 16 bytes (128 bits)
 __ri tDMA_TAG *dmaGetAddr(u32 addr, bool write)
 {
-	// if (addr & 0xf) { DMA_LOG("*PCSX2*: DMA address not 128bit aligned: %8.8x", addr); }
 	if (DMA_TAG(addr).SPR) return (tDMA_TAG*)&eeMem->Scratch[addr & 0x3ff0];
 
-	// FIXME: Why??? DMA uses physical addresses
 	addr &= 0x1ffffff0;
 
 	if (addr < Ps2MemSize::ExposedRam)
@@ -164,8 +149,6 @@ __ri tDMA_TAG *dmaGetAddr(u32 addr, bool write)
 	}
 	else if (addr < 0x10004000)
 	{
-		// Secret scratchpad address for DMA = end of maximum main memory?
-		//Console.Warning("Writing to the scratchpad without the SPR flag set!");
 		return (tDMA_TAG*)&eeMem->Scratch[addr & 0x3ff0];
 	}
 	else
@@ -176,8 +159,6 @@ __ri tDMA_TAG *dmaGetAddr(u32 addr, bool write)
 }
 
 
-// Returns true if the DMA is enabled and executed successfully.  Returns false if execution
-// was blocked (DMAE or master DMA enabler).
 static bool QuickDmaExec( void (*func)(), u32 mem)
 {
 	bool ret = false;
@@ -215,48 +196,36 @@ static __ri void DmaExec( void (*func)(), u32 mem, u32 value )
 	DMACh& reg = (DMACh&)psHu32(mem);
     tDMA_CHCR chcr(value);
 
-	//It's invalid for the hardware to write a DMA while it is active, not without Suspending the DMAC
 	if (reg.chcr.STR)
 	{
 		const uint channel = ChannelNumber(mem);
 
-		//As the manual states "Fields other than STR can only be written to when the DMA is stopped"
-		//Also "The DMA may not stop properly just by writing 0 to STR"
-		//So the presumption is that STR can be written to (ala force stop the DMA) but nothing else
-		//If the developer wishes to alter any of the other fields, it must be done AFTER the STR has been written,
-		//it will not work before or during this event.
 		if(chcr.STR == 0)
 		{
-			//DevCon.Warning(L"32bit Force Stopping %s (Current CHCR %x) while DMA active", ChcrName(mem), reg.chcr._u32, chcr._u32);
 			reg.chcr.STR = 0;
-			//We need to clear any existing DMA loops that are in progress else they will continue!
 
 			if(channel == 1)
 			{
 				cpuClearInt( 10 );
-				QueuedDMA._u16 &= ~(1 << 10); //Clear any queued DMA requests for this channel
+				QueuedDMA._u16 &= ~(1 << 10);
 			}
 			else if (channel == 2)
 			{
 				cpuClearInt( 11 );
-				QueuedDMA._u16 &= ~(1 << 11); //Clear any queued DMA requests for this channel
+				QueuedDMA._u16 &= ~(1 << 11);
 			}
 
 			cpuClearInt( channel );
-			QueuedDMA._u16 &= ~(1 << channel); //Clear any queued DMA requests for this channel
+			QueuedDMA._u16 &= ~(1 << channel);
 		}
-		//else DevCon.Warning(L"32bit Attempted to change %s CHCR (Currently %x) with %x while DMA active, ignoring QWC = %x", ChcrName(mem), reg.chcr._u32, chcr._u32, reg.qwc);
 		return;
 	}
 
-	//if(reg.chcr.TAG != chcr.TAG && chcr.MOD == CHAIN_MODE) DevCon.Warning(L"32bit CHCR Tag on %s changed to %x from %x QWC = %x Channel Not Active", ChcrName(mem), chcr.TAG, reg.chcr.TAG, reg.qwc);
-
 	reg.chcr.set(value);
 
-	//Final Fantasy XII sets the DMA Mode to 3 which doesn't exist. On some channels (like SPR) this will break logic completely. so lets assume they mean chain.
 	if (reg.chcr.MOD == 0x3)
 	{
-		static bool warned; //Check if the warning has already been output to console, to prevent constant spam.
+		static bool warned;
 		if (!warned)
 		{
 			DevCon.Warning("%s CHCR.MOD set to 3, assuming 1 (chain)", ChcrName(mem));
@@ -265,8 +234,6 @@ static __ri void DmaExec( void (*func)(), u32 mem, u32 value )
 		reg.chcr.MOD = 0x1;
 	}
 
-	// As tested on hardware, if NORMAL mode is started with 0 QWC it will actually transfer 1 QWC then underflows and transfer another 0xFFFF QWC's
-	// The easiest way to handle this is to just say 0x10000 QWC
 	if (reg.chcr.STR && !reg.chcr.MOD && reg.qwc == 0)
 		reg.qwc = 0x10000;
 
@@ -276,53 +243,40 @@ static __ri void DmaExec( void (*func)(), u32 mem, u32 value )
 	}
 	else if (reg.chcr.STR)
 	{
-		//DevCon.Warning(L"32bit %s DMA Start while DMAC Disabled\n", ChcrName(mem));
-		QueuedDMA._u16 |= (1 << ChannelNumber(mem)); //Queue the DMA up to be started then the DMA's are Enabled and or the Suspend is lifted
-	} //else QueuedDMA._u16 &~= (1 << ChannelNumber(mem)); //
+		QueuedDMA._u16 |= (1 << ChannelNumber(mem));
+	}
 }
 
 template< uint page >
 __fi u32 dmacRead32( u32 mem )
 {
-	// Fixme: OPH hack. Toggle the flag on GIF_STAT access. (rama)
 	if ((CHECK_OPHFLAGHACK) && (page << 12) == (mem & (0xf << 12)) && (mem == GIF_STAT))
 	{
 		static unsigned counter = 1;
 		if (++counter == 8)
 			counter = 2;
-		// Set OPH and APATH from counter, cycling paths and alternating OPH
 		return (gifRegs.stat._u32 & ~(7 << 9)) | ((counter & 1) ? (counter << 9) : 0);
 	}
 
 	return psHu32(mem);
 }
 
-// Returns TRUE if the caller should do writeback of the register to eeHw; false if the
-// register has no writeback, or if the writeback is handled internally.
 template< uint page >
 __fi bool dmacWrite32( u32 mem, mem32_t& value )
 {
-	// DMA Writes are invalid to everything except the STR on CHCR when it is busy
-	// However this isn't completely confirmed and this might vary depending on if
-	// using chain or normal modes, DMA's may be handled internally.
-	// Metal Saga requires the QWC during IPU_FROM to be written but not MADR
-	// similar happens with Mana Khemia.
-	// In other cases such as Pilot Down Behind Enemy Lines, it seems to expect the DMA
-	// to have finished before it writes the new information, otherwise the game breaks.
 	if (CHECK_DMABUSYHACK && (mem & 0xf0) && mem >= 0x10008000 && mem <= 0x1000E000)
 	{
 		if ((psHu32(mem & ~0xff) & 0x100) && dmacRegs.ctrl.DMAE && !psHu8(DMAC_ENABLER + 2))
 		{
-			//DevCon.Warning("Gamefix: Write to DMA addr %x while STR is busy!", mem);
 			while (psHu32(mem & ~0xff) & 0x100)
 			{
 				switch ((mem >> 8) & 0xFF)
 				{
-					case 0x80: // VIF0
+					case 0x80:
 						vif0Interrupt();
 						cpuRegs.interrupt &= ~(1 << DMAC_VIF0);
 						break;
-					case 0x90: // VIF1
+					case 0x90:
 						if (vif1Regs.stat.VEW)
 						{
 							vu1Finish(false);
@@ -332,23 +286,23 @@ __fi bool dmacWrite32( u32 mem, mem32_t& value )
 							vif1Interrupt();
 						cpuRegs.interrupt &= ~(1 << DMAC_VIF1);
 						break;
-					case 0xA0: // GIF
+					case 0xA0:
 						gifInterrupt();
 						cpuRegs.interrupt &= ~(1 << DMAC_GIF);
 						break;
-					case 0xB0: // IPUFROM
+					case 0xB0:
 						[[fallthrough]];
-					case 0xB4: // IPUTO
+					case 0xB4:
 						if ((mem & 0xff) == 0x20)
-							goto allow_write; // I'm so sorry
+							goto allow_write;
 						else
 							return false;
 						break;
-					case 0xD0: // SPRFROM
+					case 0xD0:
 						SPRFROMinterrupt();
 						cpuRegs.interrupt &= ~(1 << DMAC_FROM_SPR);
 						break;
-					case 0xD4: // SPRTO
+					case 0xD4:
 						SPRTOinterrupt();
 						cpuRegs.interrupt &= ~(1 << DMAC_TO_SPR);
 						break;
@@ -362,85 +316,85 @@ __fi bool dmacWrite32( u32 mem, mem32_t& value )
 
 	switch(mem) {
 
-		case (D0_QWC): // dma0 - vif0
-		case (D1_QWC): // dma1 - vif1
-		case (D2_QWC): // dma2 - gif
-		case (D3_QWC): // dma3 - fromIPU
-		case (D4_QWC): // dma4 - toIPU
-		case (D5_QWC): // dma5 - sif0
-		case (D6_QWC): // dma6 - sif1
-		case (D7_QWC): // dma7 - sif2
-		case (D8_QWC): // dma8 - fromSPR
-		case (D9_QWC): // dma9 - toSPR
+		case (D0_QWC):
+		case (D1_QWC):
+		case (D2_QWC):
+		case (D3_QWC):
+		case (D4_QWC):
+		case (D5_QWC):
+		case (D6_QWC):
+		case (D7_QWC):
+		case (D8_QWC):
+		case (D9_QWC):
 		{
 			psHu32(mem) = (u16)value;
 			return false;
 		}
 
-		case (D0_CHCR): // dma0 - vif0
+		case (D0_CHCR):
 		{
 			DMA_LOG("VIF0dma EXECUTE, value=0x%x", value);
 			DmaExec(dmaVIF0, mem, value);
 			return false;
 		}
 
-		case (D1_CHCR): // dma1 - vif1 - chcr
+		case (D1_CHCR):
 		{
 			DMA_LOG("VIF1dma EXECUTE, value=0x%x", value);
 			DmaExec(dmaVIF1, mem, value);
 			return false;
 		}
 
-		case (D2_CHCR): // dma2 - gif
+		case (D2_CHCR):
 		{
 			DMA_LOG("GIFdma EXECUTE, value=0x%x", value);
 			DmaExec(dmaGIF, mem, value);
 			return false;
 		}
 
-		case (D3_CHCR): // dma3 - fromIPU
+		case (D3_CHCR):
 		{
 			DMA_LOG("IPU0dma EXECUTE, value=0x%x\n", value);
 			DmaExec(dmaIPU0, mem, value);
 			return false;
 		}
 
-		case (D4_CHCR): // dma4 - toIPU
+		case (D4_CHCR):
 		{
 			DMA_LOG("IPU1dma EXECUTE, value=0x%x\n", value);
 			DmaExec(dmaIPU1, mem, value);
 			return false;
 		}
 
-		case (D5_CHCR): // dma5 - sif0
+		case (D5_CHCR):
 		{
 			DMA_LOG("SIF0dma EXECUTE, value=0x%x", value);
 			DmaExec(dmaSIF0, mem, value);
 			return false;
 		}
 
-		case (D6_CHCR): // dma6 - sif1
+		case (D6_CHCR):
 		{
 			DMA_LOG("SIF1dma EXECUTE, value=0x%x", value);
 			DmaExec(dmaSIF1, mem, value);
 			return false;
 		}
 
-		case (D7_CHCR): // dma7 - sif2
+		case (D7_CHCR):
 		{
 			DMA_LOG("SIF2dma EXECUTE, value=0x%x", value);
 			DmaExec(dmaSIF2, mem, value);
 			return false;
 		}
 
-		case (D8_CHCR): // dma8 - fromSPR
+		case (D8_CHCR):
 		{
 			DMA_LOG("SPR0dma EXECUTE (fromSPR), value=0x%x", value);
 			DmaExec(dmaSPR0, mem, value);
 			return false;
 		}
 
-		case (D9_CHCR): // dma9 - toSPR
+		case (D9_CHCR):
 		{
 			DMA_LOG("SPR1dma EXECUTE (toSPR), value=0x%x", value);
 			DmaExec(dmaSPR1, mem, value);
@@ -450,7 +404,6 @@ __fi bool dmacWrite32( u32 mem, mem32_t& value )
 		case (fromSPR_MADR):
 		case (toSPR_MADR):
 		{
-			// SPR bit is fixed at 0 for this channel
 			psHu32(mem) = value & 0x7FFFFFFF;
 			return false;
 		}
@@ -458,7 +411,6 @@ __fi bool dmacWrite32( u32 mem, mem32_t& value )
 		case (fromSPR_SADR):
 		case (toSPR_SADR):
 		{
-			// Address must be QW aligned and fit in the 16K range of SPR
 			psHu32(mem) = value & 0x3FF0;
 			return false;
 		}
@@ -470,7 +422,6 @@ __fi bool dmacWrite32( u32 mem, mem32_t& value )
 			HW_LOG("DMAC_CTRL Write 32bit %x", value);
 
 			psHu32(mem) = value;
-			//Check for DMAS that were started while the DMAC was disabled
 			if (((oldvalue & 0x1) == 0) && ((value & 0x1) == 1))
 			{
 				if (!QueuedDMA.empty()) StartQueuedDMA();
@@ -495,7 +446,6 @@ __fi bool dmacWrite32( u32 mem, mem32_t& value )
 					new_source = "None";
 					break;
 				}
-				//DevCon.Warning("32bit Stall Source Changed to %s", new_source.c_str());
 			}
 			if ((oldvalue & 0xC0) != (value & 0xC0))
 			{
@@ -516,14 +466,11 @@ __fi bool dmacWrite32( u32 mem, mem32_t& value )
 					new_dest = "None";
 					break;
 				}
-				//DevCon.Warning("32bit Stall Destination Changed to %s", new_dest.c_str());
 			}
 #endif
 			return false;
 		}
 
-		//Midway are a bunch of idiots, writing to E100 (reserved) instead of E010
-		//Which causes a CPCOND0 to fail.
 		case (DMAC_FAKESTAT):
 		case (DMAC_STAT):
 		{
@@ -532,9 +479,6 @@ __fi bool dmacWrite32( u32 mem, mem32_t& value )
 				HW_LOG("Midways own DMAC_STAT Write 32bit %x", value);
 			}
 			else HW_LOG("DMAC_STAT Write 32bit %x", value);
-
-			// lower 16 bits: clear on 1
-			// upper 16 bits: reverse on 1
 
 			psHu16(0xe010) &= ~(value & 0xffff);
 			psHu16(0xe012) ^= (u16)(value >> 16);
@@ -559,7 +503,6 @@ __fi bool dmacWrite32( u32 mem, mem32_t& value )
 			return true;
 	}
 
-	// fall-through: use the default writeback provided by caller.
 	return true;
 }
 

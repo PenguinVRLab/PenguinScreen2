@@ -18,9 +18,6 @@ namespace x86Emitter
 		G1Type_CMP
 	};
 
-	// --------------------------------------------------------------------------------------
-	//  xImpl_Group1
-	// --------------------------------------------------------------------------------------
 	struct xImpl_Group1
 	{
 		G1Type InstType;
@@ -33,25 +30,18 @@ namespace x86Emitter
 		void operator()(const xIndirect64orLess& to, int imm) const;
 	};
 
-	// ------------------------------------------------------------------------
-	// This class combines x86 with SSE/SSE2 logic operations (ADD, OR, and NOT).
-	// Note: ANDN [AndNot] is handled below separately.
-	//
 	struct xImpl_G1Logic : public xImpl_Group1
 	{
-		xImplSimd_3Arg PS; // packed single precision
-		xImplSimd_3Arg PD; // packed double precision
+		xImplSimd_3Arg PS;
+		xImplSimd_3Arg PD;
 	};
 
-	// ------------------------------------------------------------------------
-	// This class combines x86 with SSE/SSE2 arithmetic operations (ADD/SUB).
-	//
 	struct xImpl_G1Arith : public xImpl_Group1
 	{
-		xImplSimd_3Arg PS; // packed single precision
-		xImplSimd_3Arg PD; // packed double precision
-		xImplSimd_3Arg SS; // scalar single precision
-		xImplSimd_3Arg SD; // scalar double precision
+		xImplSimd_3Arg PS;
+		xImplSimd_3Arg PD;
+		xImplSimd_3Arg SS;
+		xImplSimd_3Arg SD;
 	};
 
-} // End namespace x86Emitter
+}

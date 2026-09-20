@@ -12,12 +12,9 @@
 #endif
 
 #define UHQ_FXAA 1          //High Quality Fast Approximate Anti Aliasing. Adapted for GS from Timothy Lottes FXAA 3.11.
-#define FxaaSubpixMax 0.0   //[0.00 to 1.00] Amount of subpixel aliasing removal. 0.00: Edge only antialiasing (no blurring)
-#define FxaaEarlyExit 1     //[0 or 1] Use Fxaa early exit pathing. When disabled, the entire scene is antialiased(FSAA). 0 is off, 1 is on.
+#define FxaaSubpixMax 0.0
+#define FxaaEarlyExit 1
 
-/*------------------------------------------------------------------------------
-							 [GLOBALS|FUNCTIONS]
-------------------------------------------------------------------------------*/
 #if (FXAA_GLSL_130 == 1)
 
 in vec2 PSin_t;
@@ -55,10 +52,6 @@ struct PS_OUTPUT
 #elif defined(__METAL_VERSION__)
 static constexpr sampler MAIN_SAMPLER(coord::normalized, address::clamp_to_edge, filter::linear);
 #endif
-
-/*------------------------------------------------------------------------------
-                             [FXAA CODE SECTION]
-------------------------------------------------------------------------------*/
 
 #if (FXAA_HLSL == 1)
 struct FxaaTex { SamplerState smpl; Texture2D tex; };
@@ -102,9 +95,6 @@ struct FxaaTex { SamplerState smpl; Texture2D tex; };
 #define FXAA_QUALITY_P11 8.0
 #define FXAA_QUALITY_P12 8.0
 
-/*------------------------------------------------------------------------------
-                        [GAMMA PREPASS CODE SECTION]
-------------------------------------------------------------------------------*/
 float RGBLuminance(float3 color)
 {
 	const float3 lumCoeff = float3(0.2126729, 0.7151522, 0.0721750);
@@ -148,10 +138,6 @@ float4 PreGammaPass(float4 color)
 }
 
 
-/*------------------------------------------------------------------------------
-                        [FXAA CODE SECTION]
-------------------------------------------------------------------------------*/
-
 float FxaaLuma(float4 rgba)
 { 
 	rgba.w = RGBLuminance(rgba.xyz);
@@ -184,7 +170,6 @@ float4 FxaaPixelShader(float2 pos, FxaaTex tex, float2 fxaaRcpFrame, float fxaaS
 	float rangeMaxClamped = max(fxaaEdgeThresholdMin, rangeMaxScaled);
 
 	#if (FxaaEarlyExit == 1)
-	// Potential optimization, early exit.
 	if (range < rangeMaxClamped)
 		return rgbyM;
 	#endif
@@ -465,9 +450,6 @@ float4 FxaaPass(float4 FxaaColor, float2 uv0, texture2d<float> tex)
 	return FxaaColor;
 }
 
-/*------------------------------------------------------------------------------
-                      [MAIN() & COMBINE PASS CODE SECTION]
-------------------------------------------------------------------------------*/
 #if (FXAA_GLSL_130 == 1 || FXAA_GLSL_VK == 1)
 
 void main()
@@ -494,5 +476,4 @@ PS_OUTPUT main(VS_OUTPUT input)
 	return output;
 }
 
-// Metal main function in in fxaa.metal
 #endif

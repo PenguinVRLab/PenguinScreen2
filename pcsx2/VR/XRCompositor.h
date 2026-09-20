@@ -9,7 +9,6 @@ class GSTexture;
 
 namespace VR::XRCompositor
 {
-
 	bool Initialize();
 
 	void Shutdown();

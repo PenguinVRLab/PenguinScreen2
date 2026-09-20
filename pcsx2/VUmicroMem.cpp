@@ -27,10 +27,6 @@ void vuMemReset()
 	pxAssert( VU0.Mem );
 	pxAssert( VU1.Mem );
 
-	// Below memMap is already called by "void eeMemoryReserve::Reset()"
-	//memMapVUmicro();
-
-	// === VU0 Initialization ===
 	std::memset(&VU0.ACC, 0, sizeof(VU0.ACC));
 	std::memset(VU0.VF, 0, sizeof(VU0.VF));
 	std::memset(VU0.VI, 0, sizeof(VU0.VI));
@@ -40,7 +36,6 @@ void vuMemReset()
 	VU0.VF[0].f.w = 1.0f;
 	VU0.VI[0].UL = 0;
 
-	// === VU1 Initialization ===
 	std::memset(&VU1.ACC, 0, sizeof(VU1.ACC));
 	std::memset(VU1.VF, 0, sizeof(VU1.VF));
 	std::memset(VU1.VI, 0, sizeof(VU1.VI));
@@ -58,8 +53,6 @@ bool SaveStateBase::vuMicroFreeze()
 
 	if (!FreezeTag("vuMicroRegs"))
 		return false;
-
-	// VU0 state information
 
 	Freeze(VU0.ACC);
 	Freeze(VU0.VF);
@@ -98,7 +91,6 @@ bool SaveStateBase::vuMicroFreeze()
 	Freeze(VU0.ialuwritepos);
 	Freeze(VU0.ialucount);
 
-	// VU1 state information
 	Freeze(VU1.ACC);
 	Freeze(VU1.VF);
 	Freeze(VU1.VI);

@@ -29,23 +29,17 @@ public:
 	GSDrawScanline();
 	~GSDrawScanline() override;
 
-	/// Debug override for disabling scanline JIT on a key basis.
 	static bool ShouldUseCDrawScanline(u64 key);
 
-	/// Function pointer types which we call back into.
 	using SetupPrimPtr = void(*)(const GSVertexSW* vertex, const u16* index, const GSVertexSW& dscan, GSScanlineLocalData& local);
 	using DrawScanlinePtr = void(*)(int pixels, int left, int top, const GSVertexSW& scan, GSScanlineLocalData& local);
 
-	/// Flushes the code cache, forcing everything to be recompiled.
 	void ResetCodeCache();
 
-	/// Populates function pointers. If this returns false, we ran out of code space.
 	bool SetupDraw(GSRasterizerData& data);
 
-	/// Draw pre-calculations, computed per-thread.
 	static void BeginDraw(const GSRasterizerData& data, GSScanlineLocalData& local);
 
-	/// Not currently jitted.
 	static void DrawRect(const GSVector4i& r, const GSVertexSW& v, GSScanlineLocalData& local);
 
 	void UpdateDrawStats(u64 frame, u64 ticks, int actual, int total, int prims);

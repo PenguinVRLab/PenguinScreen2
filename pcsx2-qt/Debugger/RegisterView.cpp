@@ -87,13 +87,12 @@ void RegisterView::paintEvent(QPaintEvent* event)
 	const QSize renderSize = QSize(this->size().width(), this->size().height() - ui.registerTabs->size().height());
 
 	m_rowHeight = painter.fontMetrics().height() + 2;
-	m_rowEnd = m_rowStart + (renderSize.height() / m_rowHeight) - 1; // Maybe move this to a onsize event
+	m_rowEnd = m_rowStart + (renderSize.height() / m_rowHeight) - 1;
 
 	bool alternate = m_rowStart % 2;
 
 	const int categoryIndex = ui.registerTabs->currentIndex();
 
-	// Used for 128 bit and VU0f registers
 	const int titleStartX = m_renderStart.x() + (painter.fontMetrics().averageCharWidth() * 6);
 	m_fieldWidth = ((renderSize.width() - (painter.fontMetrics().averageCharWidth() * 6)) / 4);
 
@@ -111,12 +110,9 @@ void RegisterView::paintEvent(QPaintEvent* event)
 		painter.drawText(m_fieldStartX[2], m_renderStart.y(), m_fieldWidth, m_rowHeight, Qt::AlignLeft, "Y");
 		painter.drawText(m_fieldStartX[3], m_renderStart.y(), m_fieldWidth, m_rowHeight, Qt::AlignLeft, "X");
 
-		m_renderStart += QPoint(0, m_rowHeight); // Make room for VU0f titles
+		m_renderStart += QPoint(0, m_rowHeight);
 	}
 
-	// Find the longest register name and calculate where to place our values
-	// off of that.
-	// Can probably constexpr the loop out as register names are known during runtime
 	int safeValueStartX = 0;
 	for (int i = 0; i < cpu().getRegisterCount(categoryIndex); i++)
 	{
@@ -127,11 +123,8 @@ void RegisterView::paintEvent(QPaintEvent* event)
 		}
 	}
 
-	// Add a space between the value and name
 	safeValueStartX += 2;
-	// Convert to width in pixels
 	safeValueStartX *= painter.fontMetrics().averageCharWidth();
-	// Make it relative to where we start rendering
 	safeValueStartX += m_renderStart.x();
 
 	for (s32 i = 0; i < cpu().getRegisterCount(categoryIndex) - m_rowStart; i++)
@@ -142,7 +135,6 @@ void RegisterView::paintEvent(QPaintEvent* event)
 		painter.fillRect(m_renderStart.x(), yStart, renderSize.width(), m_rowHeight, alternate ? this->palette().base() : this->palette().alternateBase());
 		alternate = !alternate;
 
-		// Draw register name
 		painter.setPen(this->palette().text().color());
 		painter.drawText(m_renderStart.x() + painter.fontMetrics().averageCharWidth(), yStart, renderSize.width(), m_rowHeight, Qt::AlignLeft, cpu().getRegisterName(categoryIndex, registerIndex));
 
@@ -194,7 +186,6 @@ void RegisterView::mousePressEvent(QMouseEvent* event)
 	const int categoryIndex = ui.registerTabs->currentIndex();
 	m_selectedRow = static_cast<int>(((event->position().y() - m_renderStart.y()) / m_rowHeight)) + m_rowStart;
 
-	// For 128 bit types, support selecting segments
 	if (cpu().getRegisterSize(categoryIndex) == 128)
 	{
 		constexpr auto inRange = [](u32 low, u32 high, u32 val) {
@@ -231,7 +222,7 @@ void RegisterView::mouseDoubleClickEvent(QMouseEvent* event)
 {
 	if (!cpu().isAlive())
 		return;
-	if (m_selectedRow > m_rowEnd) // Unsigned underflow; selectedRow will be > m_rowEnd (technically negative)
+	if (m_selectedRow > m_rowEnd)
 		return;
 	const int categoryIndex = ui.registerTabs->currentIndex();
 	if (cpu().getRegisterSize(categoryIndex) == 128)
@@ -245,7 +236,7 @@ void RegisterView::customMenuRequested(QPoint pos)
 	if (!cpu().isAlive())
 		return;
 
-	if (m_selectedRow > m_rowEnd) // Unsigned underflow; selectedRow will be > m_rowEnd (technically negative)
+	if (m_selectedRow > m_rowEnd)
 		return;
 
 	QMenu* menu = new QMenu(this);
@@ -364,12 +355,11 @@ void RegisterView::fetchNewValue(u64 currentValue, bool segment, std::function<v
 	else
 		existingValue = existingValue.arg(std::bit_cast<float>((u32)currentValue));
 
-	//: Changing the value in a CPU register (e.g. "Change t0")
 	const QString title = tr("Change %1").arg(cpu().getRegisterName(categoryIndex, m_selectedRow));
 
 	AsyncDialogs::getText(this, title, "", existingValue, [this, callback, floatingPoint](QString input) {
 		u64 value;
-		if (!floatingPoint) // Get input as hexadecimal
+		if (!floatingPoint)
 		{
 			bool ok;
 			value = input.toULongLong(&ok, 16);

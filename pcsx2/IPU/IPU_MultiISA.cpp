@@ -14,7 +14,6 @@
 #include "IPU/yuv2rgb.h"
 #include "IPU/IPU_MultiISA.h"
 
-// the IPU is fixed to 16 byte strides (128-bit / QWC resolution):
 static const uint decoder_stride = 16;
 
 #if MULTI_ISA_COMPILE_ONCE
@@ -30,7 +29,6 @@ static constexpr std::array<u8, 1024> make_clip_lut()
 static constexpr mpeg2_scan_pack make_scan_pack()
 {
 	constexpr u8 mpeg2_scan_norm[64] = {
-		/* Zig-Zag scan pattern */
 		0,  1,  8,  16,  9,  2,  3, 10, 17, 24, 32, 25, 18, 11,  4,  5,
 		12, 19, 26, 33, 40, 48, 41, 34, 27, 20, 13,  6,  7, 14, 21, 28,
 		35, 42, 49, 56, 57, 50, 43, 36, 29, 22, 15, 23, 30, 37, 44, 51,
@@ -38,7 +36,6 @@ static constexpr mpeg2_scan_pack make_scan_pack()
 	};
 
 	constexpr u8 mpeg2_scan_alt[64] = {
-		/* Alternate scan pattern */
 		0,  8,  16, 24,  1,  9,  2, 10, 17, 25, 32, 40, 48, 56, 57, 49,
 		41, 33, 26, 18,  3, 11,  4, 12, 19, 27, 34, 42, 50, 58, 35, 43,
 		51, 59, 20, 28,  5, 13,  6, 14, 21, 29, 36, 44, 52, 60, 37, 45,
@@ -67,10 +64,6 @@ MULTI_ISA_UNSHARED_START
 static void ipu_csc(macroblock_8& mb8, macroblock_rgb32& rgb32, int sgn);
 static void ipu_vq(macroblock_rgb16& rgb16, u8* indx4);
 
-// --------------------------------------------------------------------------------------
-//  Buffer reader
-// --------------------------------------------------------------------------------------
-
 __ri static u32 UBITS(uint bits)
 {
 	uint readpos8 = g_BP.BP/8;
@@ -85,7 +78,6 @@ __ri static u32 UBITS(uint bits)
 
 __ri static s32 SBITS(uint bits)
 {
-	// Read an unaligned 32 bit value and then shift the bits up and then back down.
 
 	uint readpos8 = g_BP.BP/8;
 
@@ -102,13 +94,9 @@ __fi static int GETWORD()
 	return g_BP.FillBuffer(16);
 }
 
-// Removes bits from the bitstream.  This is done independently of UBITS/SBITS because a
-// lot of mpeg streams have to read ahead and rewind bits and re-read them at different
-// bit depths or sign'age.
 __fi static void DUMPBITS(uint num)
 {
 	g_BP.Advance(num);
-	//pxAssume(g_BP.FP != 0);
 }
 
 __fi static u32 GETBITS(uint num)
@@ -119,8 +107,6 @@ __fi static u32 GETBITS(uint num)
 	return retVal;
 }
 
-// whenever reading fractions of bytes. The low bits always come from the next byte
-// while the high bits come from the current byte
 __ri static u8 getBits64(u8 *address, bool advance)
 {
 	if (!g_BP.FillBuffer(64)) return 0;
@@ -144,8 +130,6 @@ __ri static u8 getBits64(u8 *address, bool advance)
 	return 1;
 }
 
-// whenever reading fractions of bytes. The low bits always come from the next byte
-// while the high bits come from the current byte
 __ri static u8 getBits32(u8 *address, bool advance)
 {
 	if (!g_BP.FillBuffer(32)) return 0;
@@ -161,7 +145,6 @@ __ri static u8 getBits32(u8 *address, bool advance)
 	}
 	else
 	{
-		// Bit position-aligned -- no masking/shifting necessary
 		*(u32*)address = *(u32*)readpos;
 	}
 
@@ -192,19 +175,12 @@ __ri static u8 getBits8(u8 *address, bool advance)
 }
 
 
-#define W1 2841 /* 2048*sqrt (2)*cos (1*pi/16) */
-#define W2 2676 /* 2048*sqrt (2)*cos (2*pi/16) */
-#define W3 2408 /* 2048*sqrt (2)*cos (3*pi/16) */
-#define W5 1609 /* 2048*sqrt (2)*cos (5*pi/16) */
-#define W6 1108 /* 2048*sqrt (2)*cos (6*pi/16) */
-#define W7 565  /* 2048*sqrt (2)*cos (7*pi/16) */
-
-/*
- * In legal streams, the IDCT output should be between -384 and +384.
- * In corrupted streams, it is possible to force the IDCT output to go
- * to +-3826 - this is the worst case for a column IDCT where the
- * column inputs are 16-bit values.
- */
+#define W1 2841
+#define W2 2676
+#define W3 2408
+#define W5 1609
+#define W6 1108
+#define W7 565
 
 __fi static void BUTTERFLY(int& t0, int& t1, int w0, int w1, int d0, int d1)
 {
@@ -345,10 +321,8 @@ __ri static void IDCT_Copy(s16* block, u8* dest, const int stride)
 }
 
 
-// stride = increment for dest in 16-bit units (typically either 8 [128 bits] or 16 [256 bits]).
 __ri static void IDCT_Add(const int last, s16* block, s16* dest, const int stride)
 {
-	// on the IPU, stride is always assured to be multiples of QWC (bottom 3 bits are 0).
 
 	if (last != 129 || (block[0] & 7) == 4)
 	{
@@ -375,12 +349,6 @@ __ri static void IDCT_Add(const int last, s16* block, s16* dest, const int strid
 	}
 }
 
-/* Bitstream and buffer needs to be reallocated in order for successful
-	reading of the old data. Here the old data stored in the 2nd slot
-	of the internal buffer is copied to 1st slot, and the new data read
-	into 1st slot is copied to the 2nd slot. Which will later be copied
-	back to the 1st slot when 128bits have been read.
-*/
 static const DCTtab * tab;
 static int mbaCount = 0;
 
@@ -399,7 +367,7 @@ static int GetMacroblockModes()
 		case I_TYPE:
 			macroblock_modes = UBITS(2);
 
-			if (macroblock_modes == 0) return 0;   // error
+			if (macroblock_modes == 0) return 0;
 
 			tab = MB_I + (macroblock_modes >> 1);
 			DUMPBITS(tab->len);
@@ -415,7 +383,7 @@ static int GetMacroblockModes()
 		case P_TYPE:
 			macroblock_modes = UBITS(6);
 
-			if (macroblock_modes == 0) return 0;   // error
+			if (macroblock_modes == 0) return 0;
 
 			tab = MB_P + (macroblock_modes >> 1);
 			DUMPBITS(tab->len);
@@ -455,7 +423,7 @@ static int GetMacroblockModes()
 		case B_TYPE:
 			macroblock_modes = UBITS(6);
 
-			if (macroblock_modes == 0) return 0;   // error
+			if (macroblock_modes == 0) return 0;
 
 			tab = MB_B + macroblock_modes;
 			DUMPBITS(tab->len);
@@ -471,7 +439,6 @@ static int GetMacroblockModes()
 			}
 			else if (decoder.frame_pred_frame_dct)
 			{
-				/* if (! (macroblock_modes & MACROBLOCK_INTRA)) */
 				macroblock_modes |= MC_FRAME;
 				return (macroblock_modes | (tab->len << 16));
 			}
@@ -491,10 +458,8 @@ intra:
 
 		case D_TYPE:
 			macroblock_modes = GETBITS(1);
-			//I suspect (as this is actually a 2 bit command) that this should be getbits(2)
-			//additionally, we arent dumping any bits here when i think we should be, need a game to test. (Refraction)
 			DevCon.Warning(" Rare MPEG command! ");
-			if (macroblock_modes == 0) return 0;   // error
+			if (macroblock_modes == 0) return 0;
 			return (MACROBLOCK_INTRA | (1 << 16));
 
 		default:
@@ -514,11 +479,11 @@ __ri static int get_macroblock_address_increment()
 		mba = MBA.mba11 + (UBITS(11) - 24);
 	else switch (UBITS(11))
 	{
-		case 8:		/* macroblock_escape */
+		case 8:
 			DUMPBITS(11);
 			return 0xb0023;
 
-		case 15:	/* macroblock_stuffing (MPEG1 only) */
+		case 15:
 			if (decoder.mpeg1)
 			{
 				DUMPBITS(11);
@@ -527,7 +492,7 @@ __ri static int get_macroblock_address_increment()
 			[[fallthrough]];
 
 		default:
-			return 0;//error
+			return 0;
 	}
 
 	DUMPBITS(mba->len);
@@ -546,7 +511,6 @@ __fi static int get_luma_dc_dct_diff()
 		size = DCtable.lum0[code].size;
 		DUMPBITS(DCtable.lum0[code].len);
 
-		// 5 bits max
 	}
 	else
 	{
@@ -554,7 +518,6 @@ __fi static int get_luma_dc_dct_diff()
 		size = DCtable.lum1[code].size;
 		DUMPBITS(DCtable.lum1[code].len);
 
-		// 9 bits max
 	}
 
 	if (size==0)
@@ -563,7 +526,6 @@ __fi static int get_luma_dc_dct_diff()
 	{
 		dc_diff = GETBITS(size);
 
-		// 6 for tab0 and 11 for tab1
 		if ((dc_diff & (1<<(size-1)))==0)
 		  dc_diff-= (1<<size) - 1;
 	}
@@ -618,7 +580,6 @@ __ri static bool get_intra_block()
 	s16 * dest = decoder.DCTblock;
 	u16 code;
 
-	/* decode AC coefficients */
   for (int i=1 + ipu_cmd.pos[4]; ; i++)
   {
 	  switch (ipu_cmd.pos[5])
@@ -659,11 +620,6 @@ __ri static bool get_intra_block()
 			}
 		}
 
-		// [TODO] Optimization: Following codes can all be done by a single "expedited" lookup
-		// that should use a single unrolled DCT table instead of five separate tables used
-		// here.  Multiple conditional statements are very slow, while modern CPU data caches
-		// have lots of room to spare.
-
 		else if (code >= 256)
 		{
 			tab = &DCT.tab2[(code >> 4) - 16];
@@ -692,7 +648,7 @@ __ri static bool get_intra_block()
 
 		DUMPBITS(tab->len);
 
-		if (tab->run==64) /* end_of_block */
+		if (tab->run==64)
 		{
 			ipu_cmd.pos[4] = 0;
 			return true;
@@ -718,7 +674,7 @@ __ri static bool get_intra_block()
 			uint j = scan[i];
 			int val;
 
-			if (tab->run==65) /* escape */
+			if (tab->run==65)
 			{
 				if(!decoder.mpeg1)
 				{
@@ -744,11 +700,9 @@ __ri static bool get_intra_block()
 				val = (tab->level * quantizer_scale * quant_matrix[i]) >> 4;
 				if(decoder.mpeg1)
 				{
-					/* oddification */
 					val = (val - 1) | 1;
 				}
 
-				/* if (bitstream_get (1)) val = -val; */
 				int bit1 = SBITS(1);
 				val = (val ^ bit1) - bit1;
 				DUMPBITS(1);
@@ -776,7 +730,6 @@ __ri static bool get_non_intra_block(int * last)
 	s16 * dest = decoder.DCTblock;
 	u16 code;
 
-	/* decode AC coefficients */
 	for (i= ipu_cmd.pos[4] ; ; i++)
 	{
 		switch (ipu_cmd.pos[5])
@@ -810,11 +763,6 @@ __ri static bool get_non_intra_block(int * last)
 				tab = &DCT.tab1[(code >> 6) - 8];
 			}
 
-			// [TODO] Optimization: Following codes can all be done by a single "expedited" lookup
-			// that should use a single unrolled DCT table instead of five separate tables used
-			// here.  Multiple conditional statements are very slow, while modern CPU data caches
-			// have lots of room to spare.
-
 			else if (code >= 256)
 			{
 				tab = &DCT.tab2[(code >> 4) - 16];
@@ -843,7 +791,7 @@ __ri static bool get_non_intra_block(int * last)
 
 			DUMPBITS(tab->len);
 
-			if (tab->run==64) /* end_of_block */
+			if (tab->run==64)
 			{
 				*last = i;
 				ipu_cmd.pos[4] = 0;
@@ -869,7 +817,7 @@ __ri static bool get_non_intra_block(int * last)
 
 			j = scan[i];
 
-			if (tab->run==65) /* escape */
+			if (tab->run==65)
 			{
 				if (!decoder.mpeg1)
 				{
@@ -919,7 +867,6 @@ __ri static bool slice_intra_DCT(const int cc, u8 * const dest, const int stride
 			return false;
 		}
 
-		/* Get the intra DC coefficient and inverse quantize it */
 		if (cc == 0)
 			decoder.dc_dct_pred[0] += get_luma_dc_dct_diff();
 		else
@@ -984,7 +931,6 @@ __ri static bool mpeg2sliceIDEC()
 		ipu_cmd.pos[0] = 2;
 		while (1)
 		{
-			// IPU0 isn't ready for data, so let's wait for it to be
 			if ((!ipu0ch.chcr.STR || ipuRegs.ctrl.OFC || ipu0ch.qwc == 0) && ipu_cmd.pos[1] <= 2)
 			{
 				IPUCoreStatus.WaitingOnIPUFrom = true;
@@ -1002,7 +948,7 @@ __ri static bool mpeg2sliceIDEC()
 			case 0:
 				decoder.macroblock_modes = GetMacroblockModes();
 
-				if (decoder.macroblock_modes & MACROBLOCK_QUANT) //only IDEC
+				if (decoder.macroblock_modes & MACROBLOCK_QUANT)
 				{
 					const int quantizer_scale_code = GETBITS(5);
 					if (decoder.q_scale_type)
@@ -1011,7 +957,7 @@ __ri static bool mpeg2sliceIDEC()
 						decoder.quantizer_scale = quantizer_scale_code << 1;
 				}
 
-				decoder.coded_block_pattern = 0x3F;//all 6 blocks
+				decoder.coded_block_pattern = 0x3F;
 				std::memset(&mb8, 0, sizeof(mb8));
 				std::memset(&rgb32, 0, sizeof(rgb32));
 				[[fallthrough]];
@@ -1084,7 +1030,6 @@ __ri static bool mpeg2sliceIDEC()
 				jNO_DEFAULT;
 				}
 
-				// Send The MacroBlock via DmaIpuFrom
 				ipu_csc(mb8, rgb32, decoder.sgn);
 
 				if (decoder.ofm == 0)
@@ -1103,7 +1048,7 @@ __ri static bool mpeg2sliceIDEC()
 					ready_to_decode = false;
 					IPUCoreStatus.WaitingOnIPUFrom = false;
 					IPUCoreStatus.WaitingOnIPUTo = false;
-					IPU_INT_PROCESS( 64); // Should probably be much higher, but myst 3 doesn't like it right now.
+					IPU_INT_PROCESS( 64);
 					ipu_cmd.pos[1] = 2;
 					return false;
 				}
@@ -1113,7 +1058,6 @@ __ri static bool mpeg2sliceIDEC()
 
 				if (decoder.ipu0_data != 0)
 				{
-					// IPU FIFO filled up -- Will have to finish transferring later.
 					IPUCoreStatus.WaitingOnIPUFrom = true;
 					ipu_cmd.pos[1] = 2;
 					return false;
@@ -1152,15 +1096,15 @@ __ri static bool mpeg2sliceIDEC()
 					}
 					else switch (UBITS(11))
 					{
-						case 8:		/* macroblock_escape */
+						case 8:
 							mbaCount += 33;
 							[[fallthrough]];
 
-						case 15:	/* macroblock_stuffing (MPEG1 only) */
+						case 15:
 							DUMPBITS(11);
 							continue;
 
-						default:	/* end of slice/frame, or error? */
+						default:
 						{
 							goto finish_idec;
 						}
@@ -1287,7 +1231,6 @@ __fi static bool mpeg2_slice()
 	case 2:
 		ipu_cmd.pos[0] = 2;
 
-		// IPU0 isn't ready for data, so let's wait for it to be
 		if ((!ipu0ch.chcr.STR || ipuRegs.ctrl.OFC || ipu0ch.qwc == 0) && ipu_cmd.pos[0] <= 3)
 		{
 			IPUCoreStatus.WaitingOnIPUFrom = true;
@@ -1364,22 +1307,15 @@ __fi static bool mpeg2_slice()
 			jNO_DEFAULT;
 			}
 
-			// Copy macroblock8 to macroblock16 - without sign extension.
-			// Manually inlined due to MSVC refusing to inline the SSE-optimized version.
 			{
 				const u8	*s = (const u8*)&mb8;
 				u16			*d = (u16*)&mb16;
-
-				//Y  bias	- 16 * 16
-				//Cr bias	- 8 * 8
-				//Cb bias	- 8 * 8
 
 #if defined(ARCH_X86)
 				__m128i zeroreg = _mm_setzero_si128();
 
 				for (uint i = 0; i < (256+64+64) / 32; ++i)
 				{
-					//*d++ = *s++;
 					__m128i woot1 = _mm_load_si128((__m128i*)s);
 					__m128i woot2 = _mm_load_si128((__m128i*)s+1);
 					_mm_store_si128((__m128i*)d,	_mm_unpacklo_epi8(woot1, zeroreg));
@@ -1394,7 +1330,6 @@ __fi static bool mpeg2_slice()
 
 				for (uint i = 0; i < (256 + 64 + 64) / 32; ++i)
 				{
-					//*d++ = *s++;
 					uint8x16_t woot1 = vld1q_u8((uint8_t*)s);
 					uint8x16_t woot2 = vld1q_u8((uint8_t*)s + 16);
 					vst1q_u8((uint8_t*)d, vzip1q_u8(woot1, zeroreg));
@@ -1417,7 +1352,6 @@ __fi static bool mpeg2_slice()
 				{
 				case 0:
 				{
-					// Get coded block pattern
 					const CBPtab* tab;
 					u16 code = UBITS(16);
 
@@ -1504,7 +1438,6 @@ __fi static bool mpeg2_slice()
 				DevCon.Warning("No macroblock mode");
 		}
 
-		// Send The MacroBlock via DmaIpuFrom
 		ipuRegs.ctrl.SCD = 0;
 		coded_block_pattern = decoder.coded_block_pattern;
 
@@ -1518,7 +1451,7 @@ __fi static bool mpeg2_slice()
 			ready_to_decode = false;
 			IPUCoreStatus.WaitingOnIPUFrom = false;
 			IPUCoreStatus.WaitingOnIPUTo = false;
-			IPU_INT_PROCESS( 64); // Should probably be much higher, but myst 3 doesn't like it right now.
+			IPU_INT_PROCESS( 64);
 			return false;
 		}
 
@@ -1528,7 +1461,6 @@ __fi static bool mpeg2_slice()
 
 		if (decoder.ipu0_data != 0)
 		{
-			// IPU FIFO filled up -- Will have to finish transferring later.
 			IPUCoreStatus.WaitingOnIPUFrom = true;
 			ipu_cmd.pos[0] = 3;
 			return false;
@@ -1599,9 +1531,6 @@ __fi static bool mpeg2_slice()
 }
 
 
-//////////////////////////////////////////////////////
-// IPU Commands (exec on worker thread only)
-
 __fi static bool ipuVDEC(u32 val)
 {
 	static int count = 0;
@@ -1621,18 +1550,18 @@ __fi static bool ipuVDEC(u32 val)
 
 			switch ((val >> 26) & 3)
 			{
-				case 0://Macroblock Address Increment
+				case 0:
 					decoder.mpeg1 = ipuRegs.ctrl.MP1;
 					ipuRegs.cmd.DATA = get_macroblock_address_increment();
 					break;
 
-				case 1://Macroblock Type
+				case 1:
 					decoder.frame_pred_frame_dct = 1;
-					decoder.coding_type = ipuRegs.ctrl.PCT > 0 ? ipuRegs.ctrl.PCT : 1; // Kaiketsu Zorro Mezase doesn't set a Picture type, seems happy with I
+					decoder.coding_type = ipuRegs.ctrl.PCT > 0 ? ipuRegs.ctrl.PCT : 1;
 					ipuRegs.cmd.DATA = GetMacroblockModes();
 					break;
 
-				case 2://Motion Code
+				case 2:
 					{
 						const u16 code = UBITS(16);
 						if ((code & 0x8000))
@@ -1659,7 +1588,7 @@ __fi static bool ipuVDEC(u32 val)
 					}
 					break;
 
-				case 3://DMVector
+				case 3:
 					{
 						const DMVtab* tab = DMV_2 + UBITS(2);
 						DUMPBITS(tab->len);
@@ -1669,17 +1598,6 @@ __fi static bool ipuVDEC(u32 val)
 
 				jNO_DEFAULT
 			}
-
-			// HACK ATTACK!  This code OR's the MPEG decoder's bitstream position into the upper
-			// 16 bits of DATA; which really doesn't make sense since (a) we already rewound the bits
-			// back into the IPU internal buffer above, and (b) the IPU doesn't have an MPEG internal
-			// 32-bit decoder buffer of its own anyway.  Furthermore, setting the upper 16 bits to
-			// any value other than zero appears to work fine.  When set to zero, however, FMVs run
-			// very choppy (basically only decoding/updating every 30th frame or so). So yeah,
-			// someone with knowledge on the subject please feel free to explain this one. :) --air
-
-			// The upper bits are the "length" of the decoded command, where the lower is the address.
-			// This is due to differences with IPU and the MPEG standard. See get_macroblock_address_increment().
 
 			ipuRegs.ctrl.ECD = (ipuRegs.cmd.DATA == 0);
 			[[fallthrough]];
@@ -1789,7 +1707,6 @@ static bool ipuSETVQ(u32 val)
 	return true;
 }
 
-// IPU Transfers are split into 8Qwords so we need to send ALL the data
 __ri static bool ipuCSC(tIPU_CMD_CSC csc)
 {
 	csc.log_from_YCbCr();
@@ -1871,10 +1788,6 @@ __ri static bool ipuPACK(tIPU_CMD_CSC csc)
 	return true;
 }
 
-// --------------------------------------------------------------------------------------
-//  CORE Functions (referenced from MPEG library)
-// --------------------------------------------------------------------------------------
-
 __fi static void ipu_csc(macroblock_8& mb8, macroblock_rgb32& rgb32, int sgn)
 {
 	int i;
@@ -1921,7 +1834,6 @@ __fi static void ipu_vq(macroblock_rgb16& rgb16, u8* indx4)
 			const int db = rgb16.c[i][j].b - g_ipu_vqclut[k].b;
 			const int distance = dr * dr + dg * dg + db * db;
 
-			// XXX: If two distances are the same which index is used?
 			if (min_distance > distance)
 			{
 				index = k;
@@ -1943,15 +1855,10 @@ __noinline void IPUWorker()
 
 	switch (ipu_cmd.CMD)
 	{
-		// These are unreachable (BUSY will always be 0 for them)
-		//case SCE_IPU_BCLR:
-		//case SCE_IPU_SETTH:
-			//break;
 
 		case SCE_IPU_IDEC:
 			if (!mpeg2sliceIDEC()) return;
 
-			//ipuRegs.ctrl.OFC = 0;
 			ipuRegs.topbusy = 0;
 			ipuRegs.cmd.BUSY = 0;
 			break;
@@ -1962,7 +1869,6 @@ __noinline void IPUWorker()
 			ipuRegs.topbusy = 0;
 			ipuRegs.cmd.BUSY = 0;
 
-			//if (ipuRegs.ctrl.SCD || ipuRegs.ctrl.ECD) hwIntcIrq(INTC_IPU);
 			break;
 
 		case SCE_IPU_VDEC:
@@ -1998,10 +1904,8 @@ __noinline void IPUWorker()
 		jNO_DEFAULT
 	}
 
-	// success
 	IPU_LOG("IPU Command finished");
 	ipuRegs.ctrl.BUSY = 0;
-	//ipu_cmd.current = 0xffffffff;
 	hwIntcIrq(INTC_IPU);
 }
 

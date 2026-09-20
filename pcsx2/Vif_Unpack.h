@@ -20,7 +20,6 @@ create_some_unpacks(8);
 
 alignas(16) extern const u8 nVifT[16];
 
-// Array sub-dimension order: [vifidx] [mode] (VN * VL * USN * doMask)
 alignas(16) extern const UNPACKFUNCTYPE VIFfuncTable[2][4][(4 * 4 * 2 * 2)];
 
 _vifT extern int  nVifUnpack (const u8* data);

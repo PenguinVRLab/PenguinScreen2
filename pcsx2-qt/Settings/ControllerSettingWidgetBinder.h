@@ -20,11 +20,8 @@
 #include <QtWidgets/QSlider>
 #include <QtWidgets/QSpinBox>
 
-/// This nastyness is required because input profiles aren't overlaid settings like the rest of them, it's
-/// input profile *or* global, not both.
 namespace ControllerSettingWidgetBinder
 {
-	/// Interface specific method of BindWidgetToBoolSetting().
 	template <typename WidgetType>
 	static inline void BindWidgetToInputProfileBool(
 		SettingsInterface* sif, WidgetType* widget, std::string section, std::string key, bool default_value)
@@ -57,7 +54,6 @@ namespace ControllerSettingWidgetBinder
 		}
 	}
 
-	/// Interface specific method of BindWidgetToIntSetting().
 	template <typename WidgetType>
 	static inline void BindWidgetToInputProfileInt(
 		SettingsInterface* sif, WidgetType* widget, std::string section, std::string key, s32 default_value, s32 option_offset = 0)
@@ -90,7 +86,6 @@ namespace ControllerSettingWidgetBinder
 		}
 	}
 
-	/// Interface specific method of BindWidgetToFloatSetting().
 	template <typename WidgetType>
 	static inline void BindWidgetToInputProfileFloat(
 		SettingsInterface* sif, WidgetType* widget, std::string section, std::string key, float default_value, float multiplier = 1.0f)
@@ -123,7 +118,6 @@ namespace ControllerSettingWidgetBinder
 		}
 	}
 
-	/// Interface specific method of BindWidgetToNormalizedSetting().
 	template <typename WidgetType>
 	static inline void BindWidgetToInputProfileNormalized(
 		SettingsInterface* sif, WidgetType* widget, std::string section, std::string key, float range, float default_value)
@@ -156,7 +150,6 @@ namespace ControllerSettingWidgetBinder
 		}
 	}
 
-	/// Interface specific method of BindWidgetToStringSetting().
 	template <typename WidgetType>
 	static inline void BindWidgetToInputProfileString(
 		SettingsInterface* sif, WidgetType* widget, std::string section, std::string key, std::string default_value = std::string())
@@ -199,4 +192,4 @@ namespace ControllerSettingWidgetBinder
 			});
 		}
 	}
-} // namespace ControllerSettingWidgetBinder
+}

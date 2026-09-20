@@ -13,7 +13,7 @@
 
 #include "pcsx2/SIO/Memcard/MemoryCardFile.h"
 
-MemoryCardCreateDialog::MemoryCardCreateDialog(QWidget* parent /* = nullptr */)
+MemoryCardCreateDialog::MemoryCardCreateDialog(QWidget* parent )
 	: QDialog(parent)
 {
 	m_ui.setupUi(this);

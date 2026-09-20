@@ -9,10 +9,6 @@ using namespace x86Emitter;
 
 namespace R5900::Dynarec::OpcodeImpl
 {
-/*********************************************************
-* Arithmetic with immediate operand                      *
-* Format:  OP rt, rs, immediate                          *
-*********************************************************/
 
 #ifndef ARITHMETICIMM_RECOMPILE
 
@@ -47,7 +43,6 @@ static void recMoveStoT64(int info)
 		xMOV(xRegister64(EEREC_T), ptr64[&cpuRegs.GPR.r[_Rs_].UD[0]]);
 }
 
-//// ADDI
 static void recADDI_const(void)
 {
 	g_cpuConstRegs[_Rt_].SD[0] = s64(s32(g_cpuConstRegs[_Rs_].UL[0] + u32(s32(_Imm_))));
@@ -63,13 +58,11 @@ static void recADDI_(int info)
 
 EERECOMPILE_CODEX(eeRecompileCodeRC1, ADDI, XMMINFO_WRITET | XMMINFO_READS);
 
-////////////////////////////////////////////////////
 void recADDIU()
 {
 	recADDI();
 }
 
-////////////////////////////////////////////////////
 static void recDADDI_const()
 {
 	g_cpuConstRegs[_Rt_].UD[0] = g_cpuConstRegs[_Rs_].UD[0] + u64(s64(_Imm_));
@@ -84,13 +77,11 @@ static void recDADDI_(int info)
 
 EERECOMPILE_CODEX(eeRecompileCodeRC1, DADDI, XMMINFO_WRITET | XMMINFO_READS | XMMINFO_64BITOP);
 
-//// DADDIU
 void recDADDIU()
 {
 	recDADDI();
 }
 
-//// SLTIU
 static void recSLTIU_const()
 {
 	g_cpuConstRegs[_Rt_].UD[0] = g_cpuConstRegs[_Rs_].UD[0] < (u64)(_Imm_);
@@ -100,7 +91,6 @@ static void recSLTIU_(int info)
 {
 	pxAssert(!(info & PROCESS_EE_XMM));
 
-	// TODO(Stenzek): this can be made to suck less by turning Rs into a temp and reallocating Rt.
 	const xRegister32 dreg((_Rt_ == _Rs_) ? _allocX86reg(X86TYPE_TEMP, 0, 0) : EEREC_T);
 	xXOR(dreg, dreg);
 
@@ -120,7 +110,6 @@ static void recSLTIU_(int info)
 
 EERECOMPILE_CODEX(eeRecompileCodeRC1, SLTIU, XMMINFO_WRITET | XMMINFO_READS | XMMINFO_64BITOP | XMMINFO_NORENAME);
 
-//// SLTI
 static void recSLTI_const()
 {
 	g_cpuConstRegs[_Rt_].UD[0] = g_cpuConstRegs[_Rs_].SD[0] < (s64)(_Imm_);
@@ -147,10 +136,9 @@ static void recSLTI_(int info)
 
 EERECOMPILE_CODEX(eeRecompileCodeRC1, SLTI, XMMINFO_WRITET | XMMINFO_READS | XMMINFO_64BITOP | XMMINFO_NORENAME);
 
-//// ANDI
 static void recANDI_const()
 {
-	g_cpuConstRegs[_Rt_].UD[0] = g_cpuConstRegs[_Rs_].UD[0] & (u64)_ImmU_; // Zero-extended Immediate
+	g_cpuConstRegs[_Rt_].UD[0] = g_cpuConstRegs[_Rs_].UD[0] & (u64)_ImmU_;
 }
 
 namespace
@@ -161,7 +149,7 @@ enum class LogicalOp
 	OR,
 	XOR
 };
-} // namespace
+}
 
 static void recLogicalOpI(int info, LogicalOp op)
 {
@@ -197,10 +185,9 @@ static void recANDI_(int info)
 
 EERECOMPILE_CODEX(eeRecompileCodeRC1, ANDI, XMMINFO_WRITET | XMMINFO_READS | XMMINFO_64BITOP);
 
-////////////////////////////////////////////////////
 static void recORI_const()
 {
-	g_cpuConstRegs[_Rt_].UD[0] = g_cpuConstRegs[_Rs_].UD[0] | (u64)_ImmU_; // Zero-extended Immediate
+	g_cpuConstRegs[_Rt_].UD[0] = g_cpuConstRegs[_Rs_].UD[0] | (u64)_ImmU_;
 }
 
 static void recORI_(int info)
@@ -210,10 +197,9 @@ static void recORI_(int info)
 
 EERECOMPILE_CODEX(eeRecompileCodeRC1, ORI, XMMINFO_WRITET | XMMINFO_READS | XMMINFO_64BITOP);
 
-////////////////////////////////////////////////////
 static void recXORI_const()
 {
-	g_cpuConstRegs[_Rt_].UD[0] = g_cpuConstRegs[_Rs_].UD[0] ^ (u64)_ImmU_; // Zero-extended Immediate
+	g_cpuConstRegs[_Rt_].UD[0] = g_cpuConstRegs[_Rs_].UD[0] ^ (u64)_ImmU_;
 }
 
 static void recXORI_(int info)
@@ -225,4 +211,4 @@ EERECOMPILE_CODEX(eeRecompileCodeRC1, XORI, XMMINFO_WRITET | XMMINFO_READS | XMM
 
 #endif
 
-} // namespace R5900::Dynarec::OpcodeImpl
+}

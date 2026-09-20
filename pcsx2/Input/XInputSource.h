@@ -13,7 +13,6 @@
 #include <mutex>
 #include <vector>
 
-// SCP XInput extension
 typedef struct
 {
 	float SCP_UP;
@@ -53,7 +52,7 @@ class XInputSource final : public InputSource
 public:
 	enum : u32
 	{
-		NUM_CONTROLLERS = XUSER_MAX_COUNT, // 4
+		NUM_CONTROLLERS = XUSER_MAX_COUNT,
 		NUM_BUTTONS = 15,
 	};
 

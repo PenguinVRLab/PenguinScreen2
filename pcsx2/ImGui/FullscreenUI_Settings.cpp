@@ -74,10 +74,8 @@ namespace FullscreenUI
 
 			std::shared_ptr<HddCreateInProgress> instance = std::make_shared<HddCreateInProgress>(dialogId);
 
-			// Convert GB to bytes
 			const u64 sizeBytes = static_cast<u64>(sizeInGB) * static_cast<u64>(_1gb);
 
-			// Make sure the file doesn't already exist (or delete it if it does)
 			if (FileSystem::FileExists(filePath.c_str()))
 			{
 				if (!FileSystem::DeleteFilePath(filePath.c_str()))
@@ -90,17 +88,14 @@ namespace FullscreenUI
 				}
 			}
 
-			// Setup the creation parameters
 			instance->filePath = filePath;
 			instance->neededSize = sizeBytes;
 
-			// Register the operation
 			{
 				std::lock_guard<std::mutex> lock(s_operationsMutex);
 				s_activeOperations.push_back(instance);
 			}
 
-			// Start the HDD creation
 			std::thread([instance = std::move(instance)]() {
 				instance->Start();
 
@@ -168,7 +163,6 @@ namespace FullscreenUI
 
 	bool CreateHardDriveWithProgress(const std::string& filePath, int sizeInGB, bool use48BitLBA)
 	{
-		// Validate size limits based on the LBA mode set
 		const int min_size = use48BitLBA ? 100 : 40;
 		const int max_size = use48BitLBA ? 2000 : 120;
 
@@ -185,7 +179,7 @@ namespace FullscreenUI
 	{
 		HddCreateInProgress::CancelAllOperations();
 	}
-} // namespace FullscreenUI
+}
 
 bool FullscreenUI::IsEditingGameSettings(SettingsInterface* bsi)
 {
@@ -389,7 +383,6 @@ void FullscreenUI::BeginInputBinding(SettingsInterface* bsi, InputBindingInfo::T
 		if (s_input_binding_type == InputBindingInfo::Type::Unknown)
 			return InputInterceptHook::CallbackResult::StopProcessingEvent;
 
-		// holding the settings lock here will protect the input binding list
 		auto lock = Host::GetSettingsLock();
 
 		float initial_value = value;
@@ -411,13 +404,10 @@ void FullscreenUI::BeginInputBinding(SettingsInterface* bsi, InputBindingInfo::T
 
 		for (InputBindingKey& other_key : s_input_binding_new_bindings)
 		{
-			// if this key is in our new binding list, it's a "release", and we're done
 			if (other_key.MaskDirection() == key.MaskDirection())
 			{
-				// for pedals, we wait for it to go back to near its starting point to commit the binding
 				if ((reverse_threshold ? ((initial_value - value) <= 0.25f) : (abs_value < 0.5f)))
 				{
-					// did we go the full range?
 					if (reverse_threshold && initial_value > 0.5f && min_value <= -0.5f)
 						other_key.modifier = InputModifier::FullAxis;
 
@@ -430,12 +420,10 @@ void FullscreenUI::BeginInputBinding(SettingsInterface* bsi, InputBindingInfo::T
 					return InputInterceptHook::CallbackResult::RemoveHookAndStopProcessingEvent;
 				}
 
-				// otherwise, keep waiting
 				return InputInterceptHook::CallbackResult::StopProcessingEvent;
 			}
 		}
 
-		// new binding, add it to the list, but wait for a decent distance first, and then wait for release
 		if ((reverse_threshold ? (abs_value < 0.5f) : (abs_value >= 0.5f)))
 		{
 			InputBindingKey key_to_add = key;
@@ -710,7 +698,6 @@ void FullscreenUI::DrawIntSpinBoxSetting(SettingsInterface* bsi, const char* tit
 			const ImVec2& padding(ImGui::GetStyle().FramePadding);
 			ImVec2 button_pos(ImGui::GetCursorPos());
 
-			// Align value text in middle.
 			ImGui::SetCursorPosY(
 				button_pos.y + ((LayoutScale(LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY) + padding.y * 2.0f) - g_large_font.second) * 0.5f);
 			ImGui::TextUnformatted(str_value);
@@ -887,7 +874,6 @@ void FullscreenUI::DrawFloatSpinBoxSetting(SettingsInterface* bsi, const char* t
 			const float end = ImGui::GetCurrentWindow()->WorkRect.GetWidth();
 			ImGui::SetNextItemWidth(end);
 
-			// round trip to drop any suffixes (e.g. percent)
 			if (auto tmp_value = StringUtil::FromChars<float>(str_value); tmp_value.has_value())
 			{
 				std::snprintf(str_value, std::size(str_value),
@@ -918,7 +904,6 @@ void FullscreenUI::DrawFloatSpinBoxSetting(SettingsInterface* bsi, const char* t
 			const ImVec2& padding(ImGui::GetStyle().FramePadding);
 			ImVec2 button_pos(ImGui::GetCursorPos());
 
-			// Align value text in middle.
 			ImGui::SetCursorPosY(
 				button_pos.y + ((LayoutScale(LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY) + padding.y * 2.0f) - g_large_font.second) * 0.5f);
 			ImGui::TextUnformatted(str_value);
@@ -1063,7 +1048,6 @@ void FullscreenUI::DrawIntRectSetting(SettingsInterface* bsi, const char* title,
 			const float end = (ImGui::GetCurrentWindow()->WorkRect.GetWidth() - midpoint) + ImGui::GetStyle().WindowPadding.x;
 			ImVec2 button_pos(ImGui::GetCursorPos());
 
-			// Align value text in middle.
 			ImGui::SetCursorPosY(ImGui::GetCursorPosY() +
 								 ((LayoutScale(LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY) + padding.y * 2.0f) - g_large_font.second) * 0.5f);
 			ImGui::TextUnformatted(Host::TranslateToCString(TR_CONTEXT, labels[i]));
@@ -1170,7 +1154,6 @@ void FullscreenUI::DrawStringListSetting(SettingsInterface* bsi, const char* tit
 
 	if (option_count == 0)
 	{
-		// select from null entry
 		while (options && options[option_count] != nullptr)
 			option_count++;
 	}
@@ -1289,7 +1272,6 @@ void FullscreenUI::DrawFloatListSetting(SettingsInterface* bsi, const char* titl
 
 	if (option_count == 0)
 	{
-		// select from null entry
 		while (options && options[option_count] != nullptr)
 			option_count++;
 	}
@@ -1401,8 +1383,8 @@ void FullscreenUI::DrawEnumSetting(SettingsInterface* bsi, const char* title, co
 }
 
 void FullscreenUI::DrawFolderSetting(SettingsInterface* bsi, const char* title, const char* section, const char* key,
-	const std::string& runtime_var, float height /* = ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT */, std::pair<ImFont*, float> font /* = g_large_font */,
-	std::pair<ImFont*, float> summary_font /* = g_medium_font */)
+	const std::string& runtime_var, float height , std::pair<ImFont*, float> font ,
+	std::pair<ImFont*, float> summary_font )
 {
 	if (MenuButton(title, runtime_var.c_str()))
 	{
@@ -1426,8 +1408,8 @@ void FullscreenUI::DrawFolderSetting(SettingsInterface* bsi, const char* title, 
 }
 
 void FullscreenUI::DrawPathSetting(SettingsInterface* bsi, const char* title, const char* section, const char* key,
-	const char* default_value, bool enabled /* = true */, float height /* = ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT */,
-	std::pair<ImFont*, float> font /* = g_large_font */, std::pair<ImFont*, float> summary_font /* = g_medium_font */)
+	const char* default_value, bool enabled , float height ,
+	std::pair<ImFont*, float> font , std::pair<ImFont*, float> summary_font )
 {
 	const bool game_settings = IsEditingGameSettings(bsi);
 	const std::optional<SmallString> value(
@@ -1520,7 +1502,6 @@ void FullscreenUI::DrawIPAddressSetting(SettingsInterface* bsi, const char* titl
 			"",
 			std::string(FSUI_ICONSTR(ICON_FA_CHECK, "OK")),
 			[bsi, section, key, default_value](std::string text) {
-				// Validate and clean up the IP address
 				std::array<int, 4> new_octets = {0, 0, 0, 0};
 				std::istringstream iss(text);
 				std::string segment;
@@ -1547,7 +1528,6 @@ void FullscreenUI::DrawIPAddressSetting(SettingsInterface* bsi, const char* titl
 
 void FullscreenUI::StartAutomaticBinding(u32 port)
 {
-	// messy because the enumeration has to happen on the input thread
 	Host::RunOnCPUThread([port]() {
 		std::vector<std::pair<std::string, std::string>> devices(InputManager::EnumerateDevices());
 		MTGS::RunOnGSThread([port, devices = std::move(devices)]() {
@@ -1574,7 +1554,6 @@ void FullscreenUI::StartAutomaticBinding(u32 port)
 					if (index < 0)
 						return;
 
-					// since this is working with the device, it has to happen on the input thread too
 					Host::RunOnCPUThread([port, name = std::move(names[index])]() {
 						auto lock = Host::GetSettingsLock();
 						SettingsInterface* bsi = GetEditingSettingsInterface();
@@ -1582,7 +1561,6 @@ void FullscreenUI::StartAutomaticBinding(u32 port)
 						SetSettingsChanged(bsi);
 
 
-						// and the toast needs to happen on the UI thread.
 						MTGS::RunOnGSThread([result, name = std::move(name)]() {
 							ShowToast({}, result ? fmt::format(FSUI_FSTR("Automatic mapping completed for {}."), name) :
 												   fmt::format(FSUI_FSTR("Automatic mapping failed for {}."), name));
@@ -1809,10 +1787,6 @@ void FullscreenUI::DrawSettingsWindow()
 			SettingsPage::MemoryCard,
 			SettingsPage::NetworkHDD,
 			SettingsPage::Folders,
-			// SettingsPage::Achievements intentionally absent: RetroAchievements
-			// is force-disabled fork-wide until this fork is registered with RA
-			// as its own client (strict-review #10) — the page's Login posted
-			// real credentials to RA presenting as upstream PCSX2.
 			SettingsPage::Controller,
 			SettingsPage::Hotkey,
 			SettingsPage::Advanced,
@@ -1916,7 +1890,6 @@ void FullscreenUI::DrawSettingsWindow()
 
 	EndFullscreenWindow();
 
-	// we have to do this here, because otherwise it uses target, and jumps a frame later.
 	if (IsFocusResetQueued())
 		if (FocusResetType focus_reset = GetQueuedFocusResetType(); focus_reset != FocusResetType::None &&
 																	focus_reset != FocusResetType::PopupOpened &&
@@ -2086,7 +2059,6 @@ void FullscreenUI::DrawSummarySettingsPage()
 
 						if (s_game_settings_entry)
 						{
-							// re-scan the entry to update its serial.
 							if (GameList::RescanPath(s_game_settings_entry->path))
 							{
 								auto lock = GameList::GetLock();
@@ -2333,7 +2305,6 @@ void FullscreenUI::DrawInterfaceSettingsPage()
 		});
 	}
 
-	// DrawStringListSetting dosn't have a callback for applying settings
 	const SmallString swap_mode = bsi->GetSmallStringValue("UI", "SwapOKFullscreenUI", "auto");
 	static constexpr const char* swap_names[] = {
 		FSUI_NSTR("Automatic"),
@@ -2631,7 +2602,6 @@ void FullscreenUI::DrawEmulationSettingsPage()
 
 void FullscreenUI::DrawClampingModeSetting(SettingsInterface* bsi, const char* title, const char* summary, int vunum)
 {
-	// This is so messy... maybe we should just make the mode an int in the settings too...
 	const bool base = IsEditingGameSettings(bsi) ? 1 : 0;
 	std::optional<bool> default_false = IsEditingGameSettings(bsi) ? std::nullopt : std::optional<bool>(false);
 	std::optional<bool> default_true = IsEditingGameSettings(bsi) ? std::nullopt : std::optional<bool>(true);
@@ -2651,9 +2621,9 @@ void FullscreenUI::DrawClampingModeSetting(SettingsInterface* bsi, const char* t
 	else if (first.has_value() && first.value())
 		index = base + 1;
 	else if (first.has_value())
-		index = base + 0; // none
+		index = base + 0;
 	else
-		index = 0; // no per game override
+		index = 0;
 
 	static constexpr const char* ee_clamping_mode_settings[] = {
 		FSUI_NSTR("Use Global Setting"),
@@ -2730,22 +2700,22 @@ void FullscreenUI::DrawGraphicsSettingsPage(SettingsInterface* bsi, bool show_ad
 		FSUI_NSTR("Null"),
 	};
 	static constexpr const char* s_renderer_values[] = {
-		"-1", //GSRendererType::Auto,
+		"-1",
 #ifdef _WIN32
-		"3", //GSRendererType::DX11,
-		"15", //GSRendererType::DX12,
+		"3",
+		"15",
 #endif
 #ifdef ENABLE_OPENGL
-		"12", //GSRendererType::OGL,
+		"12",
 #endif
 #ifdef ENABLE_VULKAN
-		"14", //GSRendererType::VK,
+		"14",
 #endif
 #ifdef __APPLE__
-		"17", //GSRendererType::Metal,
+		"17",
 #endif
-		"13", //GSRendererType::SW,
-		"11", //GSRendererType::Null
+		"13",
+		"11",
 	};
 	static constexpr const char* s_bilinear_present_options[] = {
 		FSUI_NSTR("Off"),
@@ -2892,7 +2862,6 @@ void FullscreenUI::DrawGraphicsSettingsPage(SettingsInterface* bsi, bool show_ad
 		(renderer == GSRendererType::Auto) ? GSUtil::GetPreferredRenderer() : renderer;
 	const bool is_hardware = (renderer == GSRendererType::Auto || renderer == GSRendererType::DX11 || renderer == GSRendererType::DX12 ||
 							  renderer == GSRendererType::OGL || renderer == GSRendererType::VK || renderer == GSRendererType::Metal);
-	//const bool is_software = (renderer == GSRendererType::SW);
 
 	static std::optional<GSRendererType> s_last_adapter_list_renderer;
 	if (!s_last_adapter_list_renderer.has_value() || s_last_adapter_list_renderer.value() != effective_renderer)
@@ -2949,7 +2918,6 @@ void FullscreenUI::DrawGraphicsSettingsPage(SettingsInterface* bsi, bool show_ad
 
 	if (saved_multiplier)
 	{
-		// if saved multiplier goes above the current UI cap, expose it temporarily.
 		const size_t saved_count = static_cast<size_t>(saved_multiplier.value());
 		if (saved_count > max_shown_multiplier && saved_count <= std::size(s_resolution_options) && static_cast<float>(saved_count) == *saved_multiplier)
 		{
@@ -3366,7 +3334,6 @@ void FullscreenUI::DrawOSDSettingsPage()
 	DrawIntSpinBoxSetting(bsi, FSUI_ICONSTR(ICON_FA_BORDER_ALL, "OSD Margin"),
 		FSUI_CSTR("Determines the distance in pixels from the edges of the screen for OSD elements."), "EmuCore/GS", "OsdMargin", 10, 0, 100, 1, FSUI_CSTR("%dpx"));
 
-	// OSD Positioning Options
 	static constexpr const char* s_osd_position_options[] = {
 		FSUI_NSTR("None"),
 		FSUI_NSTR("Top Left"),
@@ -3454,7 +3421,6 @@ void FullscreenUI::DrawOSDSettingsPage()
 		"EmuCore/GS", "OsdShowGSStats", false);
 	DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_PF_MICROCHIP_ALT, "Show CPU Usage"),
 		FSUI_CSTR("Shows the host's CPU utilization based on threads."), "EmuCore/GS", "OsdShowCPU", false);
-	// TODO: Change this to a GPU icon when FA gets one or PromptFont fixes their codepoints.
 	DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_IMAGE, "Show GPU Usage"),
 		FSUI_CSTR("Shows the host's GPU utilization."), "EmuCore/GS", "OsdShowGPU", false);
 	DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_PLAY, "Show Status Indicators"),
@@ -3743,7 +3709,6 @@ void FullscreenUI::DrawNetworkHDDSettingsPage()
 				}
 			}
 
-			// Sort adapters alphabetically by name
 			std::sort(pcap_bridged_adapters.begin(), pcap_bridged_adapters.end(),
 				[](const AdapterEntry& a, const AdapterEntry& b) { return a.name < b.name; });
 			std::sort(pcap_switched_adapters.begin(), pcap_switched_adapters.end(),
@@ -3768,7 +3733,6 @@ void FullscreenUI::DrawNetworkHDDSettingsPage()
 		std::vector<AdapterEntry> tap_adapters = TAPAdapter::GetAdapters();
 		if (!tap_adapters.empty())
 		{
-			// Sort adapters alphabetically by name
 			std::sort(tap_adapters.begin(), tap_adapters.end(),
 				[](const AdapterEntry& a, const AdapterEntry& b) { return a.name < b.name; });
 
@@ -3781,7 +3745,6 @@ void FullscreenUI::DrawNetworkHDDSettingsPage()
 		std::vector<AdapterEntry> socket_adapters = SocketAdapter::GetAdapters();
 		if (!socket_adapters.empty())
 		{
-			// Sort adapters alphabetically by name
 			std::sort(socket_adapters.begin(), socket_adapters.end(),
 				[](const AdapterEntry& a, const AdapterEntry& b) { return a.name < b.name; });
 
@@ -3835,7 +3798,6 @@ void FullscreenUI::DrawNetworkHDDSettingsPage()
 				{
 					const auto& new_adapter_list = current_adapter_lists[index];
 
-					// Try to find the same GUID in the new adapter list
 					if (!previous_device.empty())
 					{
 						for (const auto& adapter : new_adapter_list)
@@ -3848,7 +3810,6 @@ void FullscreenUI::DrawNetworkHDDSettingsPage()
 						}
 					}
 
-					// If no matching device found, use the first available device
 					if (new_device.empty() && !new_adapter_list.empty())
 					{
 						new_device = new_adapter_list[0].guid;
@@ -3984,7 +3945,6 @@ void FullscreenUI::DrawNetworkHDDSettingsPage()
 		FSUI_CSTR("Gateway address for the PS2 virtual network adapter."), "DEV9/Eth", "Gateway", "0.0.0.0",
 		ip_settings_enabled && gateway_can_be_edited && !gateway_auto, LAYOUT_MENU_BUTTON_HEIGHT, g_large_font, g_medium_font, IPAddressType::Gateway);
 
-	// DNS Configuration
 	const std::string dns1_mode = bsi->GetStringValue("DEV9/Eth", "ModeDNS1", "Auto");
 	const std::string dns2_mode = bsi->GetStringValue("DEV9/Eth", "ModeDNS2", "Auto");
 	const bool dns1_editable = dns1_mode == "Manual" && ip_settings_enabled;
@@ -4032,7 +3992,6 @@ void FullscreenUI::DrawNetworkHDDSettingsPage()
 			const std::string full_path = fd.FileName;
 			const std::string filename = std::string(Path::GetFileName(full_path));
 
-			// Get file size and determine LBA mode
 			const s64 file_size = FileSystem::GetPathFileSize(full_path.c_str());
 			if (file_size > 0)
 			{
@@ -4219,7 +4178,6 @@ void FullscreenUI::OpenMemoryCardCreateDialog()
 				return;
 			}
 
-			// Show memory card selection dialog
 			ImGuiFullscreen::ChoiceDialogOptions options;
 			options.emplace_back(FSUI_STR("PS2 (8MB)"), true);
 			options.emplace_back(FSUI_STR("PS2 (16MB)"), false);
@@ -4238,27 +4196,27 @@ void FullscreenUI::OpenMemoryCardCreateDialog()
 
 					switch (index)
 					{
-						case 0: // PS2 (8MB)
+						case 0:
 							type = MemoryCardType::File;
 							file_type = MemoryCardFileType::PS2_8MB;
 							break;
-						case 1: // PS2 (16MB)
+						case 1:
 							type = MemoryCardType::File;
 							file_type = MemoryCardFileType::PS2_16MB;
 							break;
-						case 2: // PS2 (32MB)
+						case 2:
 							type = MemoryCardType::File;
 							file_type = MemoryCardFileType::PS2_32MB;
 							break;
-						case 3: // PS2 (64MB)
+						case 3:
 							type = MemoryCardType::File;
 							file_type = MemoryCardFileType::PS2_64MB;
 							break;
-						case 4: // PS1 (128KB)
+						case 4:
 							type = MemoryCardType::File;
 							file_type = MemoryCardFileType::PS1;
 							break;
-						case 5: // Folder
+						case 5:
 							type = MemoryCardType::Folder;
 							file_type = MemoryCardFileType::Unknown;
 							break;
@@ -4267,7 +4225,6 @@ void FullscreenUI::OpenMemoryCardCreateDialog()
 					}
 
 #ifdef _WIN32
-					// On Windows, show NTFS compression option for only file options (not folder)
 					if (type == MemoryCardType::File)
 					{
 						ImGuiFullscreen::ChoiceDialogOptions compression_options;
@@ -4280,7 +4237,7 @@ void FullscreenUI::OpenMemoryCardCreateDialog()
 								if (compression_index < 0)
 									return;
 
-								const bool use_compression = (compression_index == 0); // 0 = Yes, 1 = No
+								const bool use_compression = (compression_index == 0);
 								DoCreateMemoryCard(name, type, file_type, use_compression);
 								CloseChoiceDialog();
 							});
@@ -4301,25 +4258,21 @@ void FullscreenUI::OpenMemoryCardCreateDialog()
 
 void FullscreenUI::DoCreateMemoryCard(std::string name, MemoryCardType type, MemoryCardFileType file_type, bool use_ntfs_compression)
 {
-	// Build the filename with the extension
 	const std::string name_str = fmt::format("{}.{}", name,
 		(file_type == MemoryCardFileType::PS1) ? "mcr" : "ps2");
 
-	// check the filename
 	if (!Path::IsValidFileName(name_str, false))
 	{
 		ShowToast(std::string(), fmt::format(FSUI_FSTR("Failed to create the Memory Card, because the name '{}' contains one or more invalid characters."), name));
 		return;
 	}
 
-	// Check if a memory card with this name already exists
 	if (FileMcd_GetCardInfo(name_str).has_value())
 	{
 		ShowToast(std::string(), fmt::format(FSUI_FSTR("Failed to create the Memory Card, because another card with the name '{}' already exists."), name));
 		return;
 	}
 
-	// Create the memory card
 	if (!FileMcd_CreateNewCard(name_str, type, file_type))
 	{
 		ShowToast(std::string(), FSUI_STR("Failed to create the Memory Card, the log may contain more information."));
@@ -4461,7 +4414,6 @@ void FullscreenUI::DrawAchievementsLoginWindow()
 
 		if (s_achievements_login_show_dismiss)
 		{
-			// keep dialog open and let user explicitly dismiss.
 			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.9f, 1.0f));
 			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.6f, 1.0f, 1.0f));
 			ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.4f, 0.8f, 1.0f));
@@ -4695,10 +4647,8 @@ void FullscreenUI::DrawAchievementsSettingsPage(std::unique_lock<std::mutex>& se
 			"When enabled, PenguinScreen2 will list achievements from unofficial sets. These achievements are not tracked by RetroAchievements."),
 		"Achievements", "UnofficialTestMode", false, enabled);
 
-	// Check for challenge mode just being enabled.
 	if (check_challenge_state && enabled && bsi->GetBoolValue("Achievements", "ChallengeMode", false) && VMManager::HasValidVM())
 	{
-		// don't bother prompting if the game doesn't have achievements
 		auto lock = Achievements::GetLock();
 		if (Achievements::HasActiveGame() && Achievements::HasAchievementsOrLeaderboards())
 		{
@@ -5010,13 +4960,11 @@ void FullscreenUI::DrawControllerSettingsPage()
 	const std::array<bool, 2> mtap_enabled = {
 		{bsi->GetBoolValue("Pad", "MultitapPort1", false), bsi->GetBoolValue("Pad", "MultitapPort2", false)}};
 
-	// we reorder things a little to make it look less silly for mtap
 	static constexpr const std::array<char, 4> mtap_slot_names = {{'A', 'B', 'C', 'D'}};
 	static constexpr const std::array<u32, Pad::NUM_CONTROLLER_PORTS> mtap_port_order = {{0, 2, 3, 4, 1, 5, 6, 7}};
 	static constexpr const std::array<const char*, Pad::NUM_CONTROLLER_PORTS> sections = {
 		{"Pad1", "Pad2", "Pad3", "Pad4", "Pad5", "Pad6", "Pad7", "Pad8"}};
 
-	// create the ports
 	for (u32 global_slot : mtap_port_order)
 	{
 		const bool is_mtap_port = sioPadIsMultitapSlot(global_slot);
@@ -5135,7 +5083,6 @@ void FullscreenUI::DrawControllerSettingsPage()
 
 				OpenChoiceDialog(fmt::format(FSUI_FSTR("Select Macro {} Binds"), macro_index + 1).c_str(), true, std::move(options),
 					[section, macro_index, ci](s32 index, const std::string& title, bool checked) {
-						// convert display name back to bind name
 						std::string_view to_modify;
 						for (const InputBindingInfo& bi : ci->bindings)
 						{
@@ -5147,7 +5094,6 @@ void FullscreenUI::DrawControllerSettingsPage()
 						}
 						if (to_modify.empty())
 						{
-							// wtf?
 							return;
 						}
 
@@ -5709,15 +5655,7 @@ void FullscreenUI::DrawGameFixesSettingsPage()
 	EndMenuButtons();
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Translation String Area
-// To avoid having to type T_RANSLATE("FullscreenUI", ...) everywhere, we use the shorter macros in the internal
-// header file, then preprocess and generate a bunch of noops here to define the strings. Sadly that means
-// the view in Linguist is gonna suck, but you can search the file for the string for more context.
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 #if 0
-// TRANSLATION-STRING-AREA-BEGIN
 TRANSLATE_NOOP("FullscreenUI", "Use Global Setting");
 TRANSLATE_NOOP("FullscreenUI", "Automatic binding failed, no devices are available.");
 TRANSLATE_NOOP("FullscreenUI", "Game title copied to clipboard.");
@@ -6705,5 +6643,4 @@ TRANSLATE_NOOP("FullscreenUI", "Force Blit Internal FPS Detection");
 TRANSLATE_NOOP("FullscreenUI", "Memory Card Enabled");
 TRANSLATE_NOOP("FullscreenUI", "Card Name");
 TRANSLATE_NOOP("FullscreenUI", "Eject Card");
-// TRANSLATION-STRING-AREA-END
 #endif

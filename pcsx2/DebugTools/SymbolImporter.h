@@ -15,31 +15,21 @@ class SymbolImporter
 public:
 	SymbolImporter(SymbolGuardian& guardian);
 
-	// These functions are used to receive events from the rest of the emulator
-	// that are used to determine when symbol tables should be loaded, and
-	// should be called from the CPU thread.
 	void OnElfChanged(std::vector<u8> elf, const std::string& elf_file_name);
 	void OnElfLoadedInMemory();
 	void OnDebuggerOpened();
 	void OnDebuggerClosed();
 
-	// Delete all stored symbols and create some default built-ins. Should be
-	// called from the CPU thread.
 	void Reset();
 
-	// Load the current ELF file and call AnalyseElf on it. Should be called
-	// from the CPU thread.
 	void LoadAndAnalyseElf(Pcsx2Config::DebugAnalysisOptions options);
 
-	// Import symbols from the ELF file, nocash symbols, and scan for functions.
-	// Should be called from the CPU thread.
 	void AnalyseElf(
 		std::vector<u8> elf,
 		const std::string& elf_file_name,
 		Pcsx2Config::DebugAnalysisOptions options,
 		bool wait_until_elf_is_loaded);
 
-	// Interrupt the import thread. Should be called from the CPU thread.
 	void ShutdownWorkerThread();
 
 	static void ClearExistingSymbols(ccc::SymbolDatabase& database, const Pcsx2Config::DebugAnalysisOptions& options);

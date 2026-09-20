@@ -43,4 +43,4 @@ namespace InputRec
 			recordingConLog(log);
 		}
 	}
-} // namespace InputRecording
+}

@@ -50,138 +50,138 @@ namespace usb_msd
 	};
 
 	static const uint8_t zip100_dev_descriptor[] = {
-		0x12,        // bLength
-		0x01,        // bDescriptorType (Device)
-		0x10, 0x01,  // bcdUSB 1.10
-		0x00,        // bDeviceClass (Use class information in the Interface Descriptors)
-		0x00,        // bDeviceSubClass
-		0x00,        // bDeviceProtocol
-		0x40,        // bMaxPacketSize0 8
-		0x9B, 0x05,  // idVendor 0x059B
-		0x34, 0x00,  // idProduct 0x0034
-		0x00, 0x01,  // bcdDevice 1.00
-		0x01,        // iManufacturer (String Index)
-		0x02,        // iProduct (String Index)
-		0x03,        // iSerialNumber (String Index)
-		0x01,        // bNumConfigurations 1
+		0x12,
+		0x01,
+		0x10, 0x01,
+		0x00,
+		0x00,
+		0x00,
+		0x40,
+		0x9B, 0x05,
+		0x34, 0x00,
+		0x00, 0x01,
+		0x01,
+		0x02,
+		0x03,
+		0x01,
 	};
 
 	static const uint8_t zip100_config_descriptor[] = {
-		0x09,        // bLength
-		0x02,        // bDescriptorType (Configuration)
-		0x27, 0x00,  // wTotalLength 39
-		0x01,        // bNumInterfaces 1
-		0x01,        // bConfigurationValue
-		0x00,        // iConfiguration (String Index)
-		0xC0,        // bmAttributes Self Powered
-		0x00,        // bMaxPower 0mA
+		0x09,
+		0x02,
+		0x27, 0x00,
+		0x01,
+		0x01,
+		0x00,
+		0xC0,
+		0x00,
 
-		0x09,        // bLength
-		0x04,        // bDescriptorType (Interface)
-		0x00,        // bInterfaceNumber 0
-		0x00,        // bAlternateSetting
-		0x03,        // bNumEndpoints 3
-		0x08,        // bInterfaceClass
-		0x06,        // bInterfaceSubClass
-		0x50,        // bInterfaceProtocol
-		0x00,        // iInterface (String Index)
+		0x09,
+		0x04,
+		0x00,
+		0x00,
+		0x03,
+		0x08,
+		0x06,
+		0x50,
+		0x00,
 
-		0x07,        // bLength
-		0x05,        // bDescriptorType (Endpoint)
-		0x01,        // bEndpointAddress (OUT/H2D)
-		0x02,        // bmAttributes (Bulk)
-		0x40, 0x00,  // wMaxPacketSize 64
-		0x00,        // bInterval 0 (unit depends on device speed)
+		0x07,
+		0x05,
+		0x01,
+		0x02,
+		0x40, 0x00,
+		0x00,
 
-		0x07,        // bLength
-		0x05,        // bDescriptorType (Endpoint)
-		0x82,        // bEndpointAddress (IN/D2H)
-		0x02,        // bmAttributes (Bulk)
-		0x40, 0x00,  // wMaxPacketSize 64
-		0x00,        // bInterval 0 (unit depends on device speed)
+		0x07,
+		0x05,
+		0x82,
+		0x02,
+		0x40, 0x00,
+		0x00,
 
-		0x07,        // bLength
-		0x05,        // bDescriptorType (Endpoint)
-		0x83,        // bEndpointAddress (IN/D2H)
-		0x03,        // bmAttributes (Interrupt)
-		0x02, 0x00,  // wMaxPacketSize 8
-		0x20,        // bInterval 32 (unit depends on device speed)
+		0x07,
+		0x05,
+		0x83,
+		0x03,
+		0x02, 0x00,
+		0x20,
 	};
 
 	static const uint8_t olympus_dev_descriptor[] = {
-		0x12,        // bLength
-		0x01,        // bDescriptorType (Device)
-		0x10, 0x01,  // bcdUSB 1.10
-		0x00,        // bDeviceClass (Use class information in the Interface Descriptors)
-		0x00,        // bDeviceSubClass
-		0x00,        // bDeviceProtocol
-		0x40,        // bMaxPacketSize0 8
-		0xb4, 0x07,  // idVendor 0x07b4
-		0x02, 0x01,  // idProduct 0x0102
-		0x00, 0x01,  // bcdDevice 1.00
-		0x01,        // iManufacturer (String Index)
-		0x02,        // iProduct (String Index)
-		0x03,        // iSerialNumber (String Index)
-		0x01,        // bNumConfigurations 1
+		0x12,
+		0x01,
+		0x10, 0x01,
+		0x00,
+		0x00,
+		0x00,
+		0x40,
+		0xb4, 0x07,
+		0x02, 0x01,
+		0x00, 0x01,
+		0x01,
+		0x02,
+		0x03,
+		0x01,
 	};
 
 	static const uint8_t sony_msac_dev_descriptor[] = {
-		0x12,        // bLength
-		0x01,        // bDescriptorType (Device)
-		0x10, 0x01,  // bcdUSB 1.10
-		0x00,        // bDeviceClass (Use class information in the Interface Descriptors)
-		0x00,        // bDeviceSubClass
-		0x00,        // bDeviceProtocol
-		0x08,        // bMaxPacketSize0 8
-		0x4C, 0x05,  // idVendor 0x054C
-		0x2d, 0x00,  // idProduct 0x002D
-		0x00, 0x01,  // bcdDevice 1.00
-		0x01,        // iManufacturer (String Index)
-		0x02,        // iProduct (String Index)
-		0x00,        // iSerialNumber (String Index)
-		0x01,        // bNumConfigurations 1
+		0x12,
+		0x01,
+		0x10, 0x01,
+		0x00,
+		0x00,
+		0x00,
+		0x08,
+		0x4C, 0x05,
+		0x2d, 0x00,
+		0x00, 0x01,
+		0x01,
+		0x02,
+		0x00,
+		0x01,
 	};
 
 	static const uint8_t sony_msac_config_descriptor[] = {
-		0x09,        // bLength
-		0x02,        // bDescriptorType (Configuration)
-		0x27, 0x00,  // wTotalLength 39
-		0x01,        // bNumInterfaces 1
-		0x01,        // bConfigurationValue
-		0x00,        // iConfiguration (String Index)
-		0x80,        // bmAttributes
-		0x32,        // bMaxPower 100mA
+		0x09,
+		0x02,
+		0x27, 0x00,
+		0x01,
+		0x01,
+		0x00,
+		0x80,
+		0x32,
 
-		0x09,        // bLength
-		0x04,        // bDescriptorType (Interface)
-		0x00,        // bInterfaceNumber 0
-		0x00,        // bAlternateSetting
-		0x03,        // bNumEndpoints 3
-		0x08,        // bInterfaceClass
-		0x04,        // bInterfaceSubClass
-		0x01,        // bInterfaceProtocol
-		0x00,        // iInterface (String Index)
+		0x09,
+		0x04,
+		0x00,
+		0x00,
+		0x03,
+		0x08,
+		0x04,
+		0x01,
+		0x00,
 
-		0x07,        // bLength
-		0x05,        // bDescriptorType (Endpoint)
-		0x01,        // bEndpointAddress (OUT/H2D)
-		0x02,        // bmAttributes (Bulk)
-		0x40, 0x00,  // wMaxPacketSize 64
-		0x00,        // bInterval 0 (unit depends on device speed)
+		0x07,
+		0x05,
+		0x01,
+		0x02,
+		0x40, 0x00,
+		0x00,
 
-		0x07,        // bLength
-		0x05,        // bDescriptorType (Endpoint)
-		0x82,        // bEndpointAddress (IN/D2H)
-		0x02,        // bmAttributes (Bulk)
-		0x40, 0x00,  // wMaxPacketSize 64
-		0x00,        // bInterval 0 (unit depends on device speed)
+		0x07,
+		0x05,
+		0x82,
+		0x02,
+		0x40, 0x00,
+		0x00,
 
-		0x07,        // bLength
-		0x05,        // bDescriptorType (Endpoint)
-		0x83,        // bEndpointAddress (IN/D2H)
-		0x03,        // bmAttributes (Interrupt)
-		0x00, 0x00,  // wMaxPacketSize 0
-		0xFF,        // bInterval 255 (unit depends on device speed)
+		0x07,
+		0x05,
+		0x83,
+		0x03,
+		0x00, 0x00,
+		0xFF,
 	};
 
 	struct usb_msd_cbw
@@ -205,22 +205,20 @@ namespace usb_msd
 
 #define LBA_BLOCK_SIZE 512
 
-/* USB requests.  */
 #define MassStorageReset 0xff
 #define GetMaxLun 0xfe
 
 	enum USBMSDMode : int8_t
 	{
-		USB_MSDM_CBW, /* Command Block.  */
-		USB_MSDM_DATAOUT, /* Tranfer data to device.  */
-		USB_MSDM_DATAIN, /* Transfer data from device.  */
-		USB_MSDM_CSW /* Command Status.  */
+		USB_MSDM_CBW,
+		USB_MSDM_DATAOUT,
+		USB_MSDM_DATAIN,
+		USB_MSDM_CSW
 	};
 
 	typedef struct ReqState
 	{
 		uint32_t tag;
-		//
 		bool valid;
 	} ReqState;
 
@@ -234,32 +232,26 @@ namespace usb_msd
 			enum USBMSDMode mode;
 			uint32_t data_len;
 			uint32_t tag;
-			uint32_t file_op_tag; // read from file or buf
+			uint32_t file_op_tag;
 			int32_t result;
 
-			uint32_t off; //buffer offset
-			uint8_t buf[4096]; //random length right now
+			uint32_t off;
+			uint8_t buf[4096];
 			uint8_t sense_buf[18];
 			uint8_t last_cmd;
 			ReqState req;
 
-			//TODO how to detect if image is different
 			uint64_t mtime;
-		} f = {}; //freezable
+		} f = {};
 
 		FILE* file = 0;
 		int64_t file_size = 0;
-		//char fn[MAX_PATH+1]; //TODO Could use with open/close,
-		//but error recovery currently can't deal with file suddenly
-		//becoming not accessible
-		/* For async completion.  */
 		USBPacket* packet;
 
 		USBDesc desc;
 		USBDescDevice desc_dev;
 	} MSDState;
 
-// SCSI opcodes
 #define TEST_UNIT_READY 0x00
 #define REZERO_UNIT 0x01
 #define REQUEST_SENSE 0x03
@@ -334,7 +326,6 @@ namespace usb_msd
 #define SEND_VOLUME_TAG 0xb6
 #define WRITE_LONG_2 0xea
 
-/* from hw/scsi-generic.c */
 #define REWIND 0x01
 #define REPORT_DENSITY_SUPPORT 0x44
 #define GET_CONFIGURATION 0x46
@@ -347,10 +338,6 @@ namespace usb_msd
 #define SET_CD_SPEED 0xbb
 #define BLANK 0xa1
 
-	/*
- *  Status codes
- */
-
 #define GOOD 0x00
 #define CHECK_CONDITION 0x01
 #define CONDITION_GOOD 0x02
@@ -362,10 +349,6 @@ namespace usb_msd
 #define QUEUE_FULL 0x14
 
 #define STATUS_MASK 0x3e
-
-	/*
- *  SENSE KEYS
- */
 
 #define NO_SENSE 0x00
 #define RECOVERED_ERROR 0x01
@@ -380,11 +363,9 @@ namespace usb_msd
 #define ABORTED_COMMAND 0x0b
 #define VOLUME_OVERFLOW 0x0d
 #define MISCOMPARE 0x0e
-/* Additional sense codes */
 #define INVALID_COMMAND_OPERATION 0x20
 
-/* CSW status codes */
-#define COMMAND_PASSED 0x00 // GOOD
+#define COMMAND_PASSED 0x00
 #define COMMAND_FAILED 0x01
 #define PHASE_ERROR 0x02
 
@@ -397,19 +378,12 @@ namespace usb_msd
 
 #define SENSE_CODE(x) sense_code_##x
 
-	/*
- * Predefined sense codes
- */
-
-	/* No sense data available */
 	const struct SCSISense sense_code_NO_SENSE = {
 		NO_SENSE, 0x00, 0x00};
 
-	/* LUN not ready, Manual intervention required */
 	[[maybe_unused]] const struct SCSISense sense_code_LUN_NOT_READY = {
 		NOT_READY, 0x04, 0x03};
 
-	/* LUN not ready, Medium not present */
 	[[maybe_unused]] const struct SCSISense sense_code_NO_MEDIUM = {
 		NOT_READY, 0x3a, 0x00};
 
@@ -434,11 +408,6 @@ namespace usb_msd
 	const struct SCSISense sense_code_UNIT_ATTENTION = {
 		UNIT_ATTENTION, 0x28, 0x00};
 
-	/* Illegal request, Invalid Transfer Tag */
-	//const struct SCSISense sense_code_INVALID_TAG = {
-	//    .key = ILLEGAL_REQUEST, .asc = 0x4b, .ascq = 0x01
-	//};
-
 	static void usb_msd_handle_reset(USBDevice* dev)
 	{
 		MSDState* s = USB_CONTAINER_OF(dev, MSDState, dev);
@@ -459,18 +428,11 @@ namespace usb_msd
 	static void set_sense(MSDState* s, SCSISense sense)
 	{
 		memset(s->f.sense_buf, 0, sizeof(s->f.sense_buf));
-		//SENSE request
-		s->f.sense_buf[0] = 0x70 | 0x80; //0x70 - current sense, 0x80 - set Valid bit
-		//s->f.sense_buf[1] = 0x00;
-		s->f.sense_buf[2] = sense.key & 0x0F; //ILLEGAL_REQUEST;
-		//sense information, like LBA where error occured
-		//s->f.sense_buf[3] = 0x00; //MSB
-		//s->f.sense_buf[4] = 0x00;
-		//s->f.sense_buf[5] = 0x00;
-		//s->f.sense_buf[6] = 0x00; //LSB
-		s->f.sense_buf[7] = sense.asc ? 0x0a : 0x00; //Additional sense length (10 bytes if any)
-		s->f.sense_buf[12] = sense.asc; //Additional sense code
-		s->f.sense_buf[13] = sense.ascq; //Additional sense code qualifier
+		s->f.sense_buf[0] = 0x70 | 0x80;
+		s->f.sense_buf[2] = sense.key & 0x0F;
+		s->f.sense_buf[7] = sense.asc ? 0x0a : 0x00;
+		s->f.sense_buf[12] = sense.asc;
+		s->f.sense_buf[13] = sense.ascq;
 	}
 
 	static void usb_msd_send_status(MSDState* s, USBPacket* p)
@@ -487,30 +449,9 @@ namespace usb_msd
 	{
 		USBPacket* p = s->packet;
 
-		/* Set s->packet to NULL before calling usb_packet_complete
-       because another request may be issued before
-       usb_packet_complete returns.  */
 		s->packet = NULL;
 		usb_packet_complete(&s->dev, p);
 	}
-
-	//static void usb_msd_transfer_data(SCSIRequest *req, uint32_t len)
-	//{
-	//MSDState *s = DO_UPCAST(MSDState, dev.qdev, req->bus->qbus.parent);
-	//USBPacket *p = s->packet;
-
-	//assert((s->mode == USB_MSDM_DATAOUT) == (req->cmd.mode == SCSI_XFER_TO_DEV));
-	//s->scsi_len = len;
-	//s->scsi_off = 0;
-	//if (p) {
-	//usb_msd_copy_data(s, p);
-	//p = s->packet;
-	//if (p && p->actual_length == p->iov.size) {
-	//p->status = USB_RET_SUCCESS; /* Clear previous ASYNC status */
-	//usb_msd_packet_complete(s);
-	//}
-	//}
-	//}
 
 	static void usb_msd_command_complete(MSDState* req, uint32_t status)
 	{
@@ -526,8 +467,6 @@ namespace usb_msd
 		{
 			if (s->f.data_len == 0 && s->f.mode == USB_MSDM_DATAOUT)
 			{
-				/* A deferred packet with no write data remaining must be
-               the status read packet.  */
 				usb_msd_send_status(s, p);
 				s->f.mode = USB_MSDM_CBW;
 			}
@@ -549,7 +488,7 @@ namespace usb_msd
 					s->f.mode = USB_MSDM_CSW;
 				}
 			}
-			p->status = USB_RET_SUCCESS; /* Clear previous ASYNC status */
+			p->status = USB_RET_SUCCESS;
 			usb_msd_packet_complete(s);
 		}
 		else if (s->f.data_len == 0)
@@ -565,7 +504,6 @@ namespace usb_msd
 		len = std::min<size_t>(p->buffer_size - p->actual_length, sizeof(s->f.buf));
 		len = std::min<size_t>(len, s->f.data_len);
 
-		//TODO No async reader/writer so do it right here
 		if (s->f.file_op_tag)
 		{
 			switch (s->f.mode)
@@ -574,7 +512,7 @@ namespace usb_msd
 					usb_packet_copy(p, s->f.buf, len);
 					if (len > 0 && (file_ret = fwrite(s->f.buf, 1, len, s->file)) < len)
 					{
-						s->f.result = COMMAND_FAILED; //PHASE_ERROR;
+						s->f.result = COMMAND_FAILED;
 						set_sense(s, SENSE_CODE(WRITE_FAULT));
 						goto fail;
 					}
@@ -588,7 +526,7 @@ namespace usb_msd
 					}
 					usb_packet_copy(p, s->f.buf, len);
 					break;
-				default: //TODO
+				default:
 				fail:
 					p->actual_length = 0;
 					p->status = USB_RET_STALL;
@@ -601,8 +539,6 @@ namespace usb_msd
 		s->f.off += len;
 		s->f.data_len -= len;
 
-		//XXX Now continue async activity or...
-		// Force complete, no async support right now
 		usb_msd_command_complete(s, s->f.result);
 	}
 
@@ -624,26 +560,21 @@ namespace usb_msd
 		switch (cbw->cmd[0])
 		{
 			case TEST_UNIT_READY:
-				//Do something?
-				/* If error */
-				//s->f.result = COMMAND_FAILED;
-				//set_sense(s, SENSE_CODE(LUN_NOT_READY));
 				break;
 
-			case REQUEST_SENSE: //device shall keep old sense data
+			case REQUEST_SENSE:
 				memcpy(s->f.buf, s->f.sense_buf, std::min<size_t>(cbw->cmd[4], sizeof(s->f.sense_buf)));
 				break;
 
 			case INQUIRY:
 				memset(s->f.buf, 0, sizeof(s->f.buf));
-				s->f.buf[0] = 0; // SCSI Peripheral Device Type: 0x0 - direct access device, 0x1f - unknown/no device
-				s->f.buf[1] = 1 << 7; // Removable
-				s->f.buf[2] = 0x02; // Version
-				s->f.buf[3] = 0x02; // UFI response data format
-				//inq data len can be zero
-				strncpy((char*)&s->f.buf[8], "IOMEGA  ", 8);        //8 bytes vendor
-				strncpy((char*)&s->f.buf[16], "ZIP 100         ", 16); //16 bytes product
-				strncpy((char*)&s->f.buf[32], "E.08", 4);       //4 bytes product revision
+				s->f.buf[0] = 0;
+				s->f.buf[1] = 1 << 7;
+				s->f.buf[2] = 0x02;
+				s->f.buf[3] = 0x02;
+				strncpy((char*)&s->f.buf[8], "IOMEGA  ", 8);
+				strncpy((char*)&s->f.buf[16], "ZIP 100         ", 16);
+				strncpy((char*)&s->f.buf[32], "E.08", 4);
 				set_sense(s, SENSE_CODE(UNIT_ATTENTION));
 				break;
 
@@ -694,7 +625,7 @@ namespace usb_msd
 			case READ_CAPACITY_10:
 				memset(s->f.buf, 0, sizeof(s->f.buf));
 
-				if (s->file_size == 0) //TODO
+				if (s->file_size == 0)
 				{
 					s->f.result = COMMAND_FAILED;
 					set_sense(s, SENSE_CODE(UNKNOWN_ERROR));
@@ -702,9 +633,8 @@ namespace usb_msd
 				}
 
 				last_lba = (uint32_t*)&s->f.buf[0];
-				blk_len = (uint32_t*)&s->f.buf[4]; //in bytes
-				//right?
-				*blk_len = LBA_BLOCK_SIZE; //descriptor is currently max 64 bytes for bulk though
+				blk_len = (uint32_t*)&s->f.buf[4];
+				*blk_len = LBA_BLOCK_SIZE;
 
 				lbas = s->file_size / LBA_BLOCK_SIZE;
 				if (lbas > 0xFFFFFFFF)
@@ -733,13 +663,12 @@ namespace usb_msd
 				s->f.file_op_tag = true;
 
 
-				if (xfer_len == 0) // nothing to do
+				if (xfer_len == 0)
 					break;
 
 				if (FileSystem::FSeek64(s->file, lba * LBA_BLOCK_SIZE, SEEK_SET) != 0)
 				{
 					s->f.result = COMMAND_FAILED;
-					//TODO use errno
 					if ((lba + xfer_len) * LBA_BLOCK_SIZE > s->file_size)
 						set_sense(s, SENSE_CODE(OUT_OF_RANGE));
 					else
@@ -747,13 +676,6 @@ namespace usb_msd
 					return;
 				}
 
-				//memset(s->f.buf, 0, sizeof(s->f.buf));
-				//Or do actual reading in USB_MSDM_DATAIN?
-				//TODO probably dont set data_len to read length
-				//if(!(s->f.data_len = fread(s->f.buf, 1, /*s->f.data_len*/ xfer_len * LBA_BLOCK_SIZE, s->file))) {
-				//  s->f.result = PHASE_ERROR;
-				//  set_sense(s, SENSE_CODE(UNRECOVERED_READ_ERROR));
-				//}
 				break;
 
 			case WRITE_12:
@@ -767,12 +689,11 @@ namespace usb_msd
 				s->f.data_len = xfer_len * LBA_BLOCK_SIZE;
 				s->f.file_op_tag = true;
 
-				if (xfer_len == 0) //nothing to do
+				if (xfer_len == 0)
 					break;
 				if (FileSystem::FSeek64(s->file, lba * LBA_BLOCK_SIZE, SEEK_SET) != 0)
 				{
 					s->f.result = COMMAND_FAILED;
-					//TODO use errno
 					if ((lba + xfer_len) * LBA_BLOCK_SIZE > s->file_size)
 						set_sense(s, SENSE_CODE(OUT_OF_RANGE));
 					else
@@ -780,12 +701,11 @@ namespace usb_msd
 					return;
 				}
 
-				//Actual write comes with next command in USB_MSDM_DATAOUT
 				break;
 			default:
 				s->f.result = COMMAND_FAILED;
 				set_sense(s, SENSE_CODE(INVALID_OPCODE));
-				s->f.mode = USB_MSDM_CSW; //TODO
+				s->f.mode = USB_MSDM_CSW;
 				break;
 		}
 	}
@@ -803,9 +723,7 @@ namespace usb_msd
 
 		switch (request)
 		{
-				/* Class specific requests.  */
 			case ClassInterfaceOutRequest | MassStorageReset:
-				/* Reset state ready for the next CBW.  */
 				s->f.mode = USB_MSDM_CBW;
 				break;
 			case ClassInterfaceRequest | GetMaxLun:
@@ -829,7 +747,6 @@ namespace usb_msd
 
 		if (s->f.req.valid)
 		{
-			//scsi_req_cancel(s->req);
 		}
 	}
 
@@ -838,12 +755,6 @@ namespace usb_msd
 		MSDState* s = USB_CONTAINER_OF(dev, MSDState, dev);
 		struct usb_msd_cbw cbw;
 		uint8_t devep = p->ep->nr;
-
-		//XXX Note for self if using async td: see qemu dev-storage.c
-		// 1.) USB_MSDM_CBW: set requested mode USB_MSDM_DATAOUT/IN and enqueue command,
-		// 2.) USB_MSDM_DATAOUT: return USB_RET_ASYNC status if command is in progress,
-		// 3.) USB_MSDM_CSW: return USB_RET_ASYNC status if command is still in progress
-		//     or complete and set mode to USB_MSDM_CBW.
 
 		switch (p->pid)
 		{
@@ -886,23 +797,20 @@ namespace usb_msd
 							s->f.mode = USB_MSDM_DATAOUT;
 						}
 
-						//async fread/fwrite handle or something
 						s->f.req.valid = true;
 						s->f.req.tag = le32_to_cpu(cbw.tag);
 						send_command(s, &cbw);
 						break;
 
 					case USB_MSDM_DATAOUT:
-						//TODO check if CBW still falls into here on write error a.k.a s->f.mode is set wrong
 						if (p->buffer_size > s->f.data_len)
 						{
 							goto fail;
 						}
 
-						if (p->buffer_size == 0) //TODO send status?
+						if (p->buffer_size == 0)
 							goto send_csw;
 
-						//if (s->scsi_len)
 						{
 							usb_msd_copy_data(s, p);
 						}
@@ -925,8 +833,6 @@ namespace usb_msd
 							p->status = USB_RET_ASYNC;
 						}
 
-						//if (s->f.data_len == 0)
-						//    s->f.mode = USB_MSDM_CSW;
 						break;
 
 					default:
@@ -945,7 +851,6 @@ namespace usb_msd
 						{
 							goto fail;
 						}
-						/* Waiting for SCSI write to complete.  */
 						s->packet = p;
 						p->status = USB_RET_ASYNC;
 						break;
@@ -958,14 +863,12 @@ namespace usb_msd
 						}
 
 						if (false && s->f.req.valid)
-						{ // If reading/writing using something asynchronous
-							/* still in flight */
+						{
 							s->packet = p;
 							p->status = USB_RET_ASYNC;
 						}
 						else
 						{
-							//TODO primarily for setting csw.sig with correct value
 							usb_msd_command_complete(s, s->f.result);
 
 							usb_msd_send_status(s, p);
@@ -974,7 +877,6 @@ namespace usb_msd
 						break;
 
 					case USB_MSDM_DATAIN:
-						//if (s->scsi_len)
 						{
 							usb_msd_copy_data(s, p);
 						}
@@ -1001,7 +903,6 @@ namespace usb_msd
 			default:
 			fail:
 				p->status = USB_RET_STALL;
-				//s->f.mode = USB_MSDM_CSW;
 				break;
 		}
 	}
@@ -1017,7 +918,6 @@ namespace usb_msd
 		delete s;
 	}
 
-	// Sony MSAC-US1
 	static void usb_msac_handle_control(USBDevice* dev, USBPacket* p, int request, int value,
 		int index, int length, uint8_t* data)
 	{
@@ -1261,9 +1161,6 @@ namespace usb_msd
 	{
 		MSDState* s = USB_CONTAINER_OF(dev, MSDState, dev);
 
-		// use mtime to check when the image has been changed... definitely far from ideal,
-		// but hashing the file every time we save state is kinda slow. and this isn't a
-		// heavily used feature...
 		FILESYSTEM_STAT_DATA sd;
 		if (s->file && FileSystem::StatFile(s->file, &sd))
 			s->f.mtime = static_cast<u64>(sd.ModificationTime);
@@ -1271,7 +1168,6 @@ namespace usb_msd
 		const u64 old_mtime = s->f.mtime;
 		sw.DoPOD(&s->f);
 
-		// resetting port to try to avoid possible data corruption
 		if (sw.IsReading() && old_mtime != s->f.mtime)
 		{
 			Host::AddOSDMessage(
@@ -1285,7 +1181,6 @@ namespace usb_msd
 
 	void MsdDevice::UpdateSettings(USBDevice* dev, SettingsInterface& si) const
 	{
-		// TODO: Handle changes to path.
 	}
 
 	std::span<const char*> MsdDevice::SubTypes() const
@@ -1347,4 +1242,4 @@ namespace usb_msd
 				return {};
 		}
 	}
-} // namespace usb_msd
+}

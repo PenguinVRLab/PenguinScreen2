@@ -5,7 +5,6 @@
 
 namespace VR::CameraDriver
 {
-
 	void Apply();
 
 	void RequestRecenter();

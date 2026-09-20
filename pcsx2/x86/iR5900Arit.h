@@ -3,11 +3,6 @@
 
 #pragma once
 
-/*********************************************************
-* Register arithmetic                                    *
-* Format:  OP rd, rs, rt                                 *
-*********************************************************/
-
 namespace R5900 {
 namespace Dynarec {
 namespace OpcodeImpl {
@@ -27,6 +22,6 @@ namespace OpcodeImpl {
 	void recSLT();
 	void recSLTU();
 
-} // namespace OpcodeImpl
-} // namespace Dynarec
-} // namespace R5900
+}
+}
+}

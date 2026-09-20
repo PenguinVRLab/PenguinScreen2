@@ -20,7 +20,6 @@
 
 class StateWrapper;
 
-// also map key/array index
 enum DeviceType : s32
 {
 	DEVTYPE_NONE = -1,

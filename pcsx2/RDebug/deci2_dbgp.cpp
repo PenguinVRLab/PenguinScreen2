@@ -11,73 +11,71 @@ using namespace R5900;
 std::atomic<int> runStatus;
 
 struct DECI2_DBGP_HEADER{
-    DECI2_HEADER	h;		//+00
-	u16				id;		//+08
-	u8				type,	//+0A
-					code,	//+0B
-					result,	//+0C
-					count;	//+0D
-	u16				_pad;	//+0E
-};		//=10
+    DECI2_HEADER	h;
+	u16				id;
+	u8				type,
+					code,
+					result,
+					count;
+	u16				_pad;
+};
 
 struct DECI2_DBGP_CONF{
-	u32	major_ver,			//+00
-		minor_ver,			//+04
-		target_id,			//+08
-		_pad,				//+0C
-		mem_align,			//+10
-		_pad2,				//+14
-		reg_size,			//+18
-		nreg,				//+1C
-		nbrkpt,				//+20
-		ncont,				//+24
-		nstep,				//+28
-		nnext,				//+2C
-		mem_limit_align,	//+30
-		mem_limit_size,		//+34
-		run_stop_state,		//+38
-		hdbg_area_addr,		//+3C
-		hdbg_area_size;		//+40
-};			//=44
+	u32	major_ver,
+		minor_ver,
+		target_id,
+		_pad,
+		mem_align,
+		_pad2,
+		reg_size,
+		nreg,
+		nbrkpt,
+		ncont,
+		nstep,
+		nnext,
+		mem_limit_align,
+		mem_limit_size,
+		run_stop_state,
+		hdbg_area_addr,
+		hdbg_area_size;
+};
 
 DECI2_DBGP_CONF
 cpu={3, 0, PROTO_EDBGP, 0, 0x41F, 1, 7, 32, 32, 1, 0xFF, 0xFF, 0x1F, 0x400, 2, 0x80020c70, 0x100},
 vu0={3, 0, PROTO_EDBGP, 0, 0x41F, 1, 7, 32, 32, 1, 0xFF, 0xFF, 0x1F, 0x400, 2, 0x80020c70, 0x100},
 vu1={3, 0, PROTO_EDBGP, 0, 0x41F, 1, 7, 32, 32, 1, 0xFF, 0xFF, 0x1F, 0x400, 2, 0x80020c70, 0x100},
 iop={3, 0, PROTO_IDBGP, 0, 0x00F, 1, 5, 62, 32, 1, 0x00, 0x00, 0x07, 0x200, 1, 0x0001E670, 0x100};
-//iop={3, 0, PROTO_IDBGP, 0, 0x00F, 1, 5, 62, 0, 1, 0x00, 0x00, 0x07, 0x200, 0, 0x00006940, 0x100};
 
 #pragma pack(2)
 struct DECI2_DBGP_EREG{
-	u8	kind,				//+00
-		number;				//+01
-	u16	_pad;				//+02
-	u64	value[2];			//+04
-};			//=14
+	u8	kind,
+		number;
+	u16	_pad;
+	u64	value[2];
+};
 
 struct DECI2_DBGP_IREG{
-	u8	kind,				//+00
-		number;				//+01
-	u16	_pad;				//+02
-	u32	value;				//+04
-};			//=08
+	u8	kind,
+		number;
+	u16	_pad;
+	u32	value;
+};
 
 struct DECI2_DBGP_MEM{
-	u8	space,				//+00
-		align;				//+01
-	u16	_pad;				//+02
-	u32	address;			//+04
-	u32	length;				//+08
-};			//=0C
+	u8	space,
+		align;
+	u16	_pad;
+	u32	address;
+	u32	length;
+};
 
 struct DECI2_DBGP_RUN{
-	u32	entry,				//+00
-		gp,					//+04
-		_pad,				//+08
-		_pad1,				//+0C
-		argc;				//+10
-	//u32	argv;				//+14
-};			//=18
+	u32	entry,
+		gp,
+		_pad,
+		_pad1,
+		argc;
+};
 #pragma pack()
 
 void D2_DBGP(const u8 *inbuffer, u8 *outbuffer, char *message, char *eepc, char *ioppc, char *eecy, char *iopcy){
@@ -91,13 +89,12 @@ void D2_DBGP(const u8 *inbuffer, u8 *outbuffer, char *message, char *eepc, char 
 
 	static char line[1024];
 
-	memcpy(outbuffer, inbuffer, 128*1024);//BUFFERSIZE
-	//out->h.length=sizeof(DECI2_DBGP_HEADER);
+	memcpy(outbuffer, inbuffer, 128*1024);
 	out->type++;
-	out->result=0;	//ok
+	out->result=0;
 	exchangeSD((DECI2_HEADER*)out);
 	switch(in->type){
-		case 0x00://ok
+		case 0x00:
 			sprintf(line, "%s/GETCONF",	in->id==0?"CPU":in->id==1?"VU0":"VU1");
 
 			if (in->h.destination=='I'){
@@ -109,10 +106,10 @@ void D2_DBGP(const u8 *inbuffer, u8 *outbuffer, char *message, char *eepc, char 
 				case 2:memcpy(&out[1], &vu1, sizeof(DECI2_DBGP_CONF));break;
 				}
 			break;
-		case 0x02://ok
+		case 0x02:
             sprintf(line, "%s/2", in->id==0?"CPU":in->id==1?"VU0":"VU1");
 			break;
-		case 0x04://ok
+		case 0x04:
             sprintf(line, "%s/GETREG count=%d kind[0]=%d number[0]=%d",
 				in->id==0?"CPU":in->id==1?"VU0":"VU1", in->count, eregs[0].kind, eregs[0].number);
 			if (in->h.destination=='I'){
@@ -131,7 +128,7 @@ void D2_DBGP(const u8 *inbuffer, u8 *outbuffer, char *message, char *eepc, char 
 					case 6:iregs[i].value=psxRegs.CP2D.r[iregs[i].number]; break;
 					case 7:iregs[i].value=psxRegs.CP2C.r[iregs[i].number]; break;
 					default:
-						iregs[0].value++;//dummy; might be assert(0)
+						iregs[0].value++;
 					}
 			}else
 				for (int i=0; i<in->count; i++)
@@ -149,8 +146,8 @@ void D2_DBGP(const u8 *inbuffer, u8 *outbuffer, char *message, char *eepc, char 
 						if (eregs[i].number==14) cpuRegs.CP0.n.EPC=cpuRegs.pc;
 						memcpy(eregs[i].value, &cpuRegs.CP0.r[eregs[i].number], 4);
 						break;
-					case  3:break;//performance counter 32x3
-					case  4:break;//hw debug reg 32x8
+					case  3:break;
+					case  4:break;
 					case  5:memcpy(eregs[i].value, &fpuRegs.fpr[eregs[i].number], 4);break;
 					case  6:memcpy(eregs[i].value, &fpuRegs.fprc[eregs[i].number], 4);break;
 					case  7:memcpy(eregs[i].value, &VU0.VF[eregs[i].number], 16);break;
@@ -158,10 +155,10 @@ void D2_DBGP(const u8 *inbuffer, u8 *outbuffer, char *message, char *eepc, char 
 					case  9:memcpy(eregs[i].value, &VU1.VF[eregs[i].number], 16);break;
 					case 10:memcpy(eregs[i].value, &VU1.VI[eregs[i].number], 4);break;
 					default:
-						eregs[0].value[0]++;//dummy; might be assert(0)
+						eregs[0].value[0]++;
 					}
 			break;
-		case 0x06://ok
+		case 0x06:
             sprintf(line, "%s/PUTREG count=%d kind[0]=%d number[0]=%d value=%016I64X_%016I64X",
 				in->id==0?"CPU":in->id==1?"VU0":"VU1", in->count, eregs[0].kind, eregs[0].number, eregs[0].value[1], eregs[0].value[0]);
 			if (in->h.destination=='I'){
@@ -180,7 +177,7 @@ void D2_DBGP(const u8 *inbuffer, u8 *outbuffer, char *message, char *eepc, char 
 					case 6:psxRegs.CP2D.r[iregs[i].number]=iregs[i].value; break;
 					case 7:psxRegs.CP2C.r[iregs[i].number]=iregs[i].value; break;
 					default:
-						;//dummy; might be assert(0)
+						;
 					}
 			}else
 				for (int i=0; i<in->count; i++)
@@ -199,8 +196,8 @@ void D2_DBGP(const u8 *inbuffer, u8 *outbuffer, char *message, char *eepc, char 
 						memcpy(&cpuRegs.CP0.r[eregs[i].number], eregs[i].value, 4);
 						if (eregs[i].number==14) cpuRegs.pc=cpuRegs.CP0.n.EPC;
 						break;
-					case  3:break;//performance counter 32x3
-					case  4:break;//hw debug reg 32x8
+					case  3:break;
+					case  4:break;
 					case  5:memcpy(&fpuRegs.fpr[eregs[i].number], eregs[i].value, 4);break;
 					case  6:memcpy(&fpuRegs.fprc[eregs[i].number], eregs[i].value, 4);break;
 					case  7:memcpy(&VU0.VF[eregs[i].number], eregs[i].value, 16);break;
@@ -208,14 +205,14 @@ void D2_DBGP(const u8 *inbuffer, u8 *outbuffer, char *message, char *eepc, char 
 					case  9:memcpy(&VU1.VF[eregs[i].number], eregs[i].value, 16);break;
 					case 10:memcpy(&VU1.VI[eregs[i].number], eregs[i].value, 4);break;
 					default:
-						;//dummy; might be assert(0)
+						;
 					}
 			break;
-		case 0x08://ok
+		case 0x08:
 		{
 			sprintf(line, "%s/RDMEM %08X/%X",
 				in->id==0?"CPU":in->id==1?"VU0":"VU1", mem->address, mem->length);
-			u8* data =(u8*)out+	//kids: don't try this at home! :D
+			u8* data =(u8*)out+
 				((sizeof(DECI2_DBGP_HEADER)+sizeof(DECI2_DBGP_MEM)+(1 << mem->align) - 1) & (0xFFFFFFFF << mem->align));
 
 			if ((mem->address & ((1 << mem->align)-1)) ||
@@ -264,11 +261,11 @@ void D2_DBGP(const u8 *inbuffer, u8 *outbuffer, char *message, char *eepc, char 
 			break;
 		}
 
-		case 0x0a://ok
+		case 0x0a:
 		{
 			sprintf(line, "%s/WRMEM %08X/%X",
 				in->id==0?"CPU":in->id==1?"VU0":"VU1", mem->address, mem->length);
-			const u8* data=(u8*)in+	//kids: don't try this at home! :D
+			const u8* data=(u8*)in+
 				((sizeof(DECI2_DBGP_HEADER)+sizeof(DECI2_DBGP_MEM)+(1 << mem->align) - 1) & (0xFFFFFFFF << mem->align));
 			if (mem->length==4 && *(int*)data==0x0000000D)
 				strcat(line, " BREAKPOINT");
@@ -315,7 +312,7 @@ void D2_DBGP(const u8 *inbuffer, u8 *outbuffer, char *message, char *eepc, char 
 			out->h.length=sizeof(DECI2_DBGP_HEADER)+sizeof(DECI2_DBGP_MEM);
 			break;
 		}
-		case 0x10://ok
+		case 0x10:
 		{
 			sprintf(line, "%s/GETBRKPT count=%d",
 				in->id==0?"CPU":in->id==1?"VU0":"VU1", in->count);
@@ -324,7 +321,7 @@ void D2_DBGP(const u8 *inbuffer, u8 *outbuffer, char *message, char *eepc, char 
 			out->h.length=sizeof(DECI2_DBGP_HEADER)+out->count*sizeof(DECI2_DBGP_BRK);
 			break;
 		}
-		case 0x12://ok [does not break on iop brkpts]
+		case 0x12:
 			sprintf(line, "%s/PUTBRKPT count=%d",
 				in->id==0?"CPU":in->id==1?"VU0":"VU1", in->count);
 			out->h.length=sizeof(DECI2_DBGP_HEADER);
@@ -337,7 +334,7 @@ void D2_DBGP(const u8 *inbuffer, u8 *outbuffer, char *message, char *eepc, char 
 			else						memcpy(ebrk, &out[1], ebrk_count=in->count);
 			out->count=0;
 			break;
-		case 0x14://ok, [w/o iop]
+		case 0x14:
 			sprintf(line, "%s/BREAK count=%d",
 				in->id==0?"CPU":in->id==1?"VU0":"VU1", in->count);
 			if (in->h.destination=='I')
@@ -349,7 +346,7 @@ void D2_DBGP(const u8 *inbuffer, u8 *outbuffer, char *message, char *eepc, char 
 				Sleep(50);
 			}
 			break;
-		case 0x16://ok, [w/o iop]
+		case 0x16:
 			sprintf(line, "%s/CONTINUE code=%s count=%d",
 				in->id==0?"CPU":in->id==1?"VU0":"VU1",
 				in->code==0?"CONT":in->code==1?"STEP":"NEXT", in->count);
@@ -357,27 +354,25 @@ void D2_DBGP(const u8 *inbuffer, u8 *outbuffer, char *message, char *eepc, char 
 				;
 			else{
 				runStatus = STOP;
-				Sleep(100);//first get the run thread to Wait state
+				Sleep(100);
 				runCount=in->count;
 				runCode=in->code;
-				runEvent->Post();//kick it
+				runEvent->Post();
 			}
 			break;
-		case 0x18://ok [without argc/argv stuff]
+		case 0x18:
 		{
 			sprintf(line, "%s/RUN code=%d count=%d entry=0x%08X gp=0x%08X argc=%d",
 				in->id==0?"CPU":in->id==1?"VU0":"VU1", in->code, in->count,
 				run->entry, run->gp, run->argc);
 			cpuRegs.CP0.n.EPC=cpuRegs.pc=run->entry;
 			cpuRegs.GPR.n.gp.UL[0]=run->gp;
-//			threads_array[0].argc = run->argc;
 			u32* argv = (u32*)&run[1];
 			int s = 0;
 			for (int i=0; i<(int)run->argc; i++, argv++)	s+=argv[i];
 			memcpy(PSM(0), argv, s);
-//			threads_array[0].argstring = 0;
 			runStatus = STOP;
-			Sleep(1000);//first get the run thread to Wait state
+			Sleep(1000);
 			runCount=0;
 			runCode=0xFF;
 			runEvent->Post();

@@ -28,9 +28,7 @@ namespace VR::StereoState
 			s32 max_w = 0;
 			s32 min_h = 0;
 			s32 max_h = 0;
-
 			float rx0 = 0.0f, ry0 = 0.0f, rx1 = 0.0f, ry1 = 0.0f;
-
 			float tu0 = 0.0f, tv0 = 0.0f, tu1 = 0.0f, tv1 = 0.0f;
 			char label[16] = {};
 		};

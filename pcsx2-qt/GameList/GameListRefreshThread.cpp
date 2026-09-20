@@ -20,7 +20,6 @@ AsyncRefreshProgressCallback::AsyncRefreshProgressCallback(bool popup_on_error, 
 
 void AsyncRefreshProgressCallback::Cancel()
 {
-	// Not atomic, but we don't need to cancel immediately.
 	m_cancelled = true;
 }
 

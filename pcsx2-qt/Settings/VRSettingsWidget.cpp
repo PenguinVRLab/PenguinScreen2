@@ -20,13 +20,6 @@ VRSettingsWidget::VRSettingsWidget(SettingsWindow* settings_dialog, QWidget* par
 
 	setupTab(m_ui, tr("Virtual Reality"));
 
-	//////////////////////////////////////////////////////////////////////////
-	// VR Settings
-	//////////////////////////////////////////////////////////////////////////
-	// Binder defaults MUST equal the Config.h ship defaults (Enable/StereoMode/
-	// HeadCamera true, ScreenArcDeg 100): with no [VR] key yet written, the
-	// widget displays its binder default while the engine runs the struct
-	// default — a mismatch makes this page lie on a clean install.
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.enable, "VR", "Enable", true);
 	SettingWidgetBinder::BindWidgetToFloatSetting(sif, m_ui.screenDistance, "VR", "ScreenDistance", 2.0f);
 	SettingWidgetBinder::BindWidgetToFloatSetting(sif, m_ui.screenHeight, "VR", "ScreenHeight", 1.4f);
@@ -80,19 +73,9 @@ VRSettingsWidget::VRSettingsWidget(SettingsWindow* settings_dialog, QWidget* par
 	connect(m_ui.profileBrowser, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
 		&VRSettingsWidget::updateProfileDetails);
 
-	// Separation/convergence only take effect while the per-game profile is NOT
-	// in charge — gray them out whenever the profile checkbox is on, and show
-	// the values ACTUALLY in effect inside the grayed boxes (the running game's
-	// profile values when one matched, the config values otherwise).
 	updateTuningFields();
 	connect(m_ui.stereoUseProfile, &QCheckBox::toggled, this, [this](bool) { updateTuningFields(); });
 
-	// VR is chosen at renderer init, so this page only takes effect on a session
-	// actually launched for VR. A banner at the top says plainly when this
-	// session is flat (and how to get VR) instead of the menu silently pretending
-	// VR is live. Inserted above the settings group; controls stay editable —
-	// their values still apply to the NEXT VR launch, so graying them would be
-	// wrong.
 	m_status_banner = new QLabel(this);
 	m_status_banner->setWordWrap(true);
 	m_status_banner->setTextInteractionFlags(Qt::TextSelectableByMouse);
@@ -111,7 +94,6 @@ void VRSettingsWidget::updateVRStatusBanner()
 	switch (VR::GetSessionStatus())
 	{
 		case VR::SessionStatus::Active:
-			// VR is live — no need to nag; keep the page clean.
 			m_status_banner->hide();
 			return;
 
@@ -152,8 +134,6 @@ void VRSettingsWidget::updateTuningFields()
 	m_ui.stereoSeparationLabel->setEnabled(!use_profile);
 	m_ui.stereoConvergenceLabel->setEnabled(!use_profile);
 
-	// The spinboxes are two-way bound to the config: block their signals while
-	// repainting them so a display-only update never writes back to the INI.
 	const QSignalBlocker sep_blocker(m_ui.stereoSeparation);
 	const QSignalBlocker conv_blocker(m_ui.stereoConvergence);
 	if (profile_in_charge)
@@ -172,8 +152,6 @@ void VRSettingsWidget::updateTuningFields()
 
 void VRSettingsWidget::populateProfileBrowser()
 {
-	// The DB is load-once and immutable afterwards; safe to browse from the UI
-	// thread (see VRProfileDB.h threading notes).
 	m_profiles = VR::ProfileDB::ListProfiles();
 
 	QSignalBlocker blocker(m_ui.profileBrowser);

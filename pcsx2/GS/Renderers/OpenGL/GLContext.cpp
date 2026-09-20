@@ -5,7 +5,7 @@
 
 #if defined(_WIN32)
 #include "GS/Renderers/OpenGL/GLContextWGL.h"
-#else // Linux
+#else
 #ifdef X11_API
 #include "GS/Renderers/OpenGL/GLContextEGLX11.h"
 #endif
@@ -28,7 +28,6 @@ GLContext::~GLContext() = default;
 
 std::unique_ptr<GLContext> GLContext::Create(const WindowInfo& wi, Error* error)
 {
-	// We need at least GL3.3.
 	static constexpr Version vlist[] = {
 		{4, 6},
 		{4, 5},
@@ -44,7 +43,7 @@ std::unique_ptr<GLContext> GLContext::Create(const WindowInfo& wi, Error* error)
 	Error local_error;
 #if defined(_WIN32)
 	context = GLContextWGL::Create(wi, vlist, error);
-#else // Linux
+#else
 #if defined(X11_API)
 	if (wi.type == WindowInfo::Type::X11)
 		context = GLContextEGLX11::Create(wi, vlist, error);
@@ -59,11 +58,9 @@ std::unique_ptr<GLContext> GLContext::Create(const WindowInfo& wi, Error* error)
 	if (!context)
 		return nullptr;
 
-	// NOTE: Not thread-safe. But this is okay, since we're not going to be creating more than one context at a time.
 	static GLContext* context_being_created;
 	context_being_created = context.get();
 
-	// load up glad
 	if (!gladLoadGL([](const char* name) { return reinterpret_cast<GLADapiproc>(context_being_created->GetProcAddress(name)); }))
 	{
 		Error::SetStringView(error, "Failed to load GL functions for GLAD");

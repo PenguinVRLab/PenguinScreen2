@@ -22,7 +22,7 @@ DEPS_OK=1
 
 # ---------------------------------------------------------------------------
 # 1. The two drop folders — FIRST, so a network/flatpak failure below can
-#    never leave the machine without them (strict-review #16)
+#    never leave the machine without them
 # ---------------------------------------------------------------------------
 mkdir -p "$BIOS_DIR" "$GAMES_DIR"
 
@@ -46,7 +46,7 @@ fi
 # ---------------------------------------------------------------------------
 # 2. Dependencies (the only step that touches packages) — user scope
 #    throughout: no polkit prompts, and it matches the --user app install
-#    the INSTALL steps use (strict-review #16 + G7)
+#    the INSTALL steps use
 # ---------------------------------------------------------------------------
 if command -v flatpak >/dev/null; then
 	flatpak remote-add --user --if-not-exists flathub \

@@ -29,8 +29,6 @@ public:
 	DockManager(DockManager&& rhs) = delete;
 	DockManager& operator=(DockManager&&) = delete;
 
-	// This needs to be called before any KDDockWidgets objects are created
-	// including the debugger window itself.
 	static void configureDockingSystem();
 
 	template <typename... Args>
@@ -40,7 +38,6 @@ public:
 
 		if (m_layouts.empty())
 		{
-			// Delete the placeholder created in DockManager::deleteLayout.
 			for (KDDockWidgets::Core::DockWidget* dock : KDDockWidgets::DockRegistry::self()->dockwidgets())
 				delete dock;
 		}

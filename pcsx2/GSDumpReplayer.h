@@ -12,7 +12,6 @@ namespace GSDumpReplayer
 {
 	bool IsReplayingDump();
 
-	/// If set, playback will repeat once it reaches the last frame.
 	void SetLoopCount(s32 loop_count = 0);
 	int GetLoopCount();
 	bool IsRunner();
@@ -28,4 +27,4 @@ namespace GSDumpReplayer
 	u32 GetFrameNumber();
 
 	void RenderUI();
-} // namespace GSDumpReplayer
+}

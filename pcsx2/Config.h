@@ -13,8 +13,6 @@
 #include <optional>
 #include <vector>
 
-// Macro used for removing some of the redtape involved in defining bitfield/union helpers.
-//
 #define BITFIELD32() \
 	union \
 	{ \
@@ -38,7 +36,6 @@ namespace Pad
 	enum class ControllerType : u8;
 }
 
-/// Generic setting information which can be reused in multiple components.
 struct SettingInfo
 {
 	using GetOptionsCallback = std::vector<std::pair<std::string, std::string>> (*)();
@@ -63,8 +60,8 @@ struct SettingInfo
 	const char* max_value;
 	const char* step_value;
 	const char* format;
-	const char* const* options; // For integer lists.
-	GetOptionsCallback get_options; // For string lists.
+	const char* const* options;
+	GetOptionsCallback get_options;
 	float multiplier;
 
 	const char* StringDefaultValue() const;
@@ -85,7 +82,6 @@ struct SettingInfo
 
 enum class GenericInputBinding : u8;
 
-// TODO(Stenzek): Move to InputCommon.h or something?
 struct InputBindingInfo
 {
 	enum class Type : u8
@@ -95,9 +91,9 @@ struct InputBindingInfo
 		Axis,
 		HalfAxis,
 		Motor,
-		Pointer, // Receive relative mouse movement events, bind_index is offset by the axis.
-		Keyboard, // Receive host key events, bind_index is offset by the key code.
-		Device, // Used for special-purpose device selection, e.g. force feedback.
+		Pointer,
+		Keyboard,
+		Device,
 		Macro,
 	};
 
@@ -109,8 +105,6 @@ struct InputBindingInfo
 	GenericInputBinding generic_mapping;
 };
 
-/// Generic input bindings. These roughly match a DualShock 4 or XBox One controller.
-/// They are used for automatic binding to PS2 controller types, and for big picture mode navigation.
 enum class GenericInputBinding : u8
 {
 	Unknown,
@@ -132,22 +126,22 @@ enum class GenericInputBinding : u8
 	RightStickLeft,
 	R3,
 
-	Triangle, // Y on XBox pads.
-	Circle, // B on XBox pads.
-	Cross, // A on XBox pads.
-	Square, // X on XBox pads.
+	Triangle,
+	Circle,
+	Cross,
+	Square,
 
-	Select, // Share on DS4, View on XBox pads.
-	Start, // Options on DS4, Menu on XBox pads.
-	System, // PS button on DS4, Guide button on XBox pads.
+	Select,
+	Start,
+	System,
 
-	L1, // LB on Xbox pads.
-	L2, // Left trigger on XBox pads.
-	R1, // RB on XBox pads.
-	R2, // Right trigger on Xbox pads.
+	L1,
+	L2,
+	R1,
+	R2,
 
-	SmallMotor, // High frequency vibration.
-	LargeMotor, // Low frequency vibration.
+	SmallMotor,
+	LargeMotor,
 
 	Count,
 };
@@ -177,9 +171,6 @@ enum GamefixId
 
 	GamefixId_COUNT
 };
-
-// TODO - config - not a fan of the excessive use of enums and macros to make them work
-// a proper object would likely make more sense (if possible).
 
 enum class SpeedHack
 {
@@ -223,8 +214,8 @@ enum class DebugFunctionScanMode
 
 enum class AspectRatioType : u8
 {
-	Stretch, // Stretches to the whole window/display size
-	RAuto4_3_3_2, // Automatically scales to the target aspect ratio if there's a widescreen patch
+	Stretch,
+	RAuto4_3_3_2,
 	R4_3,
 	R16_9,
 	R10_7,
@@ -233,7 +224,7 @@ enum class AspectRatioType : u8
 
 enum class FMVAspectRatioSwitchType : u8
 {
-	Off, // Falls back on the selected generic aspect ratio type
+	Off,
 	RAuto4_3_3_2,
 	R4_3,
 	R16_9,
@@ -310,7 +301,6 @@ enum class GSPostBilinearMode : u8
 	BilinearSharp,
 };
 
-// Ordering was done to keep compatibility with older ini file.
 enum class BiFiltering : u8
 {
 	Nearest,
@@ -491,12 +481,8 @@ enum class AchievementOverlayPosition : u8
 	MaxCount
 };
 
-// --------------------------------------------------------------------------------------
-//  TraceLogsEE
-// --------------------------------------------------------------------------------------
 struct TraceLogsEE
 {
-	// EE
 	BITFIELD32()
 	bool
 		bios : 1,
@@ -526,9 +512,6 @@ struct TraceLogsEE
 	bool operator!=(const TraceLogsEE& right) const;
 };
 
-// --------------------------------------------------------------------------------------
-//  TraceLogsIOP
-// --------------------------------------------------------------------------------------
 struct TraceLogsIOP
 {
 	BITFIELD32()
@@ -554,9 +537,6 @@ struct TraceLogsIOP
 	bool operator!=(const TraceLogsIOP& right) const;
 };
 
-// --------------------------------------------------------------------------------------
-//  TraceLogsMISC
-// --------------------------------------------------------------------------------------
 struct TraceLogsMISC
 {
 	BITFIELD32()
@@ -570,9 +550,6 @@ struct TraceLogsMISC
 	bool operator!=(const TraceLogsMISC& right) const;
 };
 
-// --------------------------------------------------------------------------------------
-//  TraceLogFilters
-// --------------------------------------------------------------------------------------
 struct TraceLogFilters
 {
 	bool Enabled;
@@ -584,38 +561,24 @@ struct TraceLogFilters
 	TraceLogFilters();
 
 	void LoadSave(SettingsWrapper& ini);
-	// When logging, the tracelogpack is checked, not was in the config.
-	// Call this to sync the tracelogpack values with the config values.
 	void SyncToConfig() const;
 	bool operator==(const TraceLogFilters& right) const;
 	bool operator!=(const TraceLogFilters& right) const;
 };
 
-// --------------------------------------------------------------------------------------
-//  Pcsx2Config class
-// --------------------------------------------------------------------------------------
-// This is intended to be a public class library between the core emulator and GUI only.
-//
-// When GUI code performs modifications of this class, it must be done with strict thread
-// safety, since the emu runs on a separate thread.  Additionally many components of the
-// class require special emu-side resets or state save/recovery to be applied.  Please
-// use the provided functions to lock the emulation into a safe state and then apply
-// chances on the necessary scope (see Core_Pause, Core_ApplySettings, and Core_Resume).
-//
 struct Pcsx2Config
 {
 	struct ProfilerOptions
 	{
 		BITFIELD32()
 		bool
-			Enabled : 1, // universal toggle for the profiler.
-			RecBlocks_EE : 1, // Enables per-block profiling for the EE recompiler [unimplemented]
-			RecBlocks_IOP : 1, // Enables per-block profiling for the IOP recompiler [unimplemented]
-			RecBlocks_VU0 : 1, // Enables per-block profiling for the VU0 recompiler [unimplemented]
-			RecBlocks_VU1 : 1; // Enables per-block profiling for the VU1 recompiler [unimplemented]
+			Enabled : 1,
+			RecBlocks_EE : 1,
+			RecBlocks_IOP : 1,
+			RecBlocks_VU0 : 1,
+			RecBlocks_VU1 : 1;
 		BITFIELD_END
 
-		// Default is Disabled, with all recs enabled underneath.
 		ProfilerOptions();
 		void LoadSave(SettingsWrapper& wrap);
 
@@ -623,7 +586,6 @@ struct Pcsx2Config
 		bool operator!=(const ProfilerOptions& right) const;
 	};
 
-	// ------------------------------------------------------------------------
 	struct RecompilerOptions
 	{
 		BITFIELD32()
@@ -672,7 +634,6 @@ struct Pcsx2Config
 		u32 GetVUClampMode() const;
 	};
 
-	// ------------------------------------------------------------------------
 	struct CpuOptions
 	{
 		BITFIELD32()
@@ -697,7 +658,6 @@ struct Pcsx2Config
 		bool operator!=(const CpuOptions& right) const;
 	};
 
-	// ------------------------------------------------------------------------
 	struct GSOptions
 	{
 		static const char* AspectRatioNames[];
@@ -707,10 +667,8 @@ struct Pcsx2Config
 
 		static const char* GetRendererName(GSRendererType type);
 
-		/// Converts a tri-state option to an optional boolean value.
 		static std::optional<bool> TriStateToOptionalBoolean(int value);
 
-		/// Constants for determining default values.
 		static constexpr float DEFAULT_FRAME_RATE_NTSC = 59.94f;
 		static constexpr float DEFAULT_FRAME_RATE_PAL = 50.00f;
 
@@ -937,26 +895,19 @@ struct Pcsx2Config
 
 		void LoadSave(SettingsWrapper& wrap);
 
-		/// Sets user hack values to defaults when user hacks are not enabled.
 		void MaskUserHacks();
 
-		/// Sets user hack values to defaults when upscaling is not enabled.
 		void MaskUpscalingHacks();
 
-		/// Returns true if any of the hardware renderers are selected.
 		bool UseHardwareRenderer() const;
 
-		/// Returns false if the compared to the old settings, we need to reopen GS.
-		/// (i.e. renderer change, swap chain mode change, etc.)
 		bool RestartOptionsAreEqual(const GSOptions& right) const;
 
-		/// Returns false if any options need to be applied to the MTGS.
 		bool OptionsAreEqual(const GSOptions& right) const;
 
 		bool operator==(const GSOptions& right) const;
 		bool operator!=(const GSOptions& right) const;
 
-		// Should we dump this draw/frame?
 		bool ShouldDump(u64 draw, int frame) const;
 	};
 
@@ -1081,30 +1032,28 @@ struct Pcsx2Config
 		static std::string SaveIPHelper(u8* field);
 	};
 
-	// ------------------------------------------------------------------------
-	// NOTE: The GUI's GameFixes panel is dependent on the order of bits in this structure.
 	struct GamefixOptions
 	{
 		BITFIELD32()
 		bool
-			FpuMulHack : 1, // Tales of Destiny hangs.
-			GoemonTlbHack : 1, // Gomeon tlb miss hack. The game need to access unmapped virtual address. Instead to handle it as exception, tlb are preloaded at startup
-			SoftwareRendererFMVHack : 1, // Switches to software renderer for FMVs
-			SkipMPEGHack : 1, // Skips MPEG videos (Katamari and other games need this)
-			OPHFlagHack : 1, // Bleach Blade Battlers
-			EETimingHack : 1, // General purpose timing hack.
-			InstantDMAHack : 1, // Instantly complete DMA's if possible, good for cache emulation problems.
-			DMABusyHack : 1, // Denies writes to the DMAC when it's busy. This is correct behaviour but bad timing can cause problems.
-			GIFFIFOHack : 1, // Enabled the GIF FIFO (more correct but slower)
-			VIFFIFOHack : 1, // Pretends to fill the non-existant VIF FIFO Buffer.
-			VIF1StallHack : 1, // Like above, processes FIFO data before the stall is allowed (to make sure data goes over).
-			VuAddSubHack : 1, // Tri-ace games, they use an encryption algorithm that requires VU ADDI opcode to be bit-accurate.
-			IbitHack : 1, // I bit hack. Needed to stop constant VU recompilation in some games
-			VUSyncHack : 1, // Makes microVU run behind the EE to avoid VU register reading/writing sync issues. Useful for M-Bit games
-			VUOverflowHack : 1, // Tries to simulate overflow flag checks (not really possible on x86 without soft floats)
-			XgKickHack : 1, // Erementar Gerad, adds more delay to VU XGkick instructions. Corrects the color of some graphics, but breaks Tri-ace games and others.
-			BlitInternalFPSHack : 1, // Disables privileged register write-based FPS detection.
-			FullVU0SyncHack : 1; // Forces tight VU0 sync on every COP2 instruction.
+			FpuMulHack : 1,
+			GoemonTlbHack : 1,
+			SoftwareRendererFMVHack : 1,
+			SkipMPEGHack : 1,
+			OPHFlagHack : 1,
+			EETimingHack : 1,
+			InstantDMAHack : 1,
+			DMABusyHack : 1,
+			GIFFIFOHack : 1,
+			VIFFIFOHack : 1,
+			VIF1StallHack : 1,
+			VuAddSubHack : 1,
+			IbitHack : 1,
+			VUSyncHack : 1,
+			VUOverflowHack : 1,
+			XgKickHack : 1,
+			BlitInternalFPSHack : 1,
+			FullVU0SyncHack : 1;
 		BITFIELD_END
 
 		GamefixOptions();
@@ -1121,7 +1070,6 @@ struct Pcsx2Config
 		bool operator!=(const GamefixOptions& right) const;
 	};
 
-	// ------------------------------------------------------------------------
 	struct SpeedhackOptions
 	{
 		static constexpr s8 MIN_EE_CYCLE_RATE = -3;
@@ -1130,16 +1078,16 @@ struct Pcsx2Config
 
 		BITFIELD32()
 		bool
-			fastCDVD : 1, // enables fast CDVD access
-			IntcStat : 1, // tells Pcsx2 to fast-forward through intc_stat waits.
-			WaitLoop : 1, // enables constant loop detection and fast-forwarding
-			vuFlagHack : 1, // microVU specific flag hack
-			vuThread : 1, // Enable Threaded VU1
-			vu1Instant : 1; // Enable Instant VU1 (Without MTVU only)
+			fastCDVD : 1,
+			IntcStat : 1,
+			WaitLoop : 1,
+			vuFlagHack : 1,
+			vuThread : 1,
+			vu1Instant : 1;
 		BITFIELD_END
 
-		s8 EECycleRate; // EE cycle rate selector (1.0, 1.5, 2.0)
-		u8 EECycleSkip; // EE Cycle skip factor (0, 1, 2, or 3)
+		s8 EECycleRate;
+		u8 EECycleSkip;
 
 		SpeedhackOptions();
 		void LoadSave(SettingsWrapper& conf);
@@ -1154,7 +1102,6 @@ struct Pcsx2Config
 		static std::optional<SpeedHack> ParseSpeedHackName(const std::string_view name);
 	};
 
-	// ------------------------------------------------------------------------
 	struct DebugAnalysisOptions
 	{
 
@@ -1185,7 +1132,6 @@ struct Pcsx2Config
 		friend auto operator<=>(const DebugAnalysisOptions& lhs, const DebugAnalysisOptions& rhs) = default;
 	};
 
-	// ------------------------------------------------------------------------
 	struct EmulationSpeedOptions
 	{
 		BITFIELD32()
@@ -1206,7 +1152,6 @@ struct Pcsx2Config
 		bool operator!=(const EmulationSpeedOptions& right) const;
 	};
 
-	// ------------------------------------------------------------------------
 	struct FilenameOptions
 	{
 		std::string Bios;
@@ -1218,7 +1163,6 @@ struct Pcsx2Config
 		bool operator!=(const FilenameOptions& right) const;
 	};
 
-	// ------------------------------------------------------------------------
 	struct USBOptions
 	{
 		static constexpr u32 NUM_PORTS = 2;
@@ -1241,7 +1185,6 @@ struct Pcsx2Config
 		bool operator!=(const USBOptions& right) const;
 	};
 
-	// ------------------------------------------------------------------------
 	struct PadOptions
 	{
 		static constexpr u32 NUM_PORTS = 8;
@@ -1274,17 +1217,12 @@ struct Pcsx2Config
 		bool operator!=(const PadOptions& right) const;
 	};
 
-	// ------------------------------------------------------------------------
-	// Options struct for each memory card.
-	//
 	struct McdOptions
 	{
-		std::string Filename; // user-configured location of this memory card
-		bool Enabled; // memory card enabled (if false, memcard will not show up in-game)
-		MemoryCardType Type; // the memory card implementation that should be used
+		std::string Filename;
+		bool Enabled;
+		MemoryCardType Type;
 	};
-
-	// ------------------------------------------------------------------------
 
 	struct AchievementsOptions
 	{
@@ -1340,70 +1278,22 @@ struct Pcsx2Config
 		bool operator!=(const SavestateOptions& right) const;
 	};
 
-	// PCSX2-VR: OpenXR options. The struct is
-	// declared unconditionally so config code stays portable, but it is only
-	// loaded/saved and acted upon in ENABLE_VR builds.
 	struct VROptions
 	{
-		// SHIP DEFAULT true (2026-07-20): PenguinScreen2 is a VR-first product —
-		// a clean install must boot into VR, not flat. Every VR tier (screen arc,
-		// stereo, head camera) gates on Enable, so shipping it false left a fresh
-		// install with all of them inert (the SteamOS clean-install trap). When no
-		// OpenXR runtime is active (no headset / WiVRn down) VR init fails and the
-		// app falls back to a flat window gracefully, so this is safe headless.
 		bool Enable = true;
 
-		// Tier 1 virtual screen placement, in metres, in the runtime's LOCAL
-		// (seated) reference space. Height is the physical height of the screen;
-		// width follows from the content's aspect ratio.
 		float ScreenDistance = 2.0f;
 		float ScreenHeight = 1.4f;
 
-		// Vertical offset of the screen centre vs the recenter eye-height
-		// anchor, metres (+up/-down). USER-OWNED ergonomics (seated setups,
-		// look-down-heavy games — the KF4 staircase): deliberately NOT a
-		// profile field (per the framework precedence decision: profiles must
-		// not stomp a user's personal seated offset). Applied as a plain
-		// world-up translation to both the flat quad and the cylinder.
 		float ScreenVerticalOffset = 0.0f;
 
-		// Curved screen: degrees of cylinder arc wrapping around the viewer.
-		// 0 = flat quad. When set, the arc governs the screen's width (height
-		// follows aspect) and ScreenDistance is the cylinder radius. Requires
-		// XR_KHR_composition_layer_cylinder; falls back to the flat quad.
-		// SHIP DEFAULT 100 (owner-tuned, 2026-07-19): the tested immersive
-		// wrap-around screen. A clean install must render like the demo, not a
-		// small flat quad — the tuning cannot live only in a dev's local config.
 		float ScreenArcDeg = 100.0f;
 
-		// PCSX2-VR Tier-2 stereo (M4.1). Inert unless StereoMode is on AND Enable is set; with
-		// StereoMode off the render path is byte-identical to a non-stereo build
-		// (a hard design invariant). Separation is the per-eye horizontal NDC
-		// displacement magnitude; convergence is the zero-parallax depth in Q (≈1/w)
-		// units. A per-game VR profile (VR::ProfileDB) overrides these when present
-		// and StereoUseProfile is set; clear it to tune with the config values live
-		// (the values a profile should then record).
-		// SHIP DEFAULT true (2026-07-19): the master must be ON so the shipped
-		// per-game stereo profiles actually engage on a clean install — shipping
-		// tuned profiles with StereoMode=false renders them all inert, which was
-		// the ship bug. Non-profiled games stay flat regardless: VRManager gates
-		// stereo.enabled on (profile-has-stereo || !StereoUseProfile), so the
-		// "Screen tier is universal / Stereo needs a profile" invariant holds and
-		// no untuned game is forced into stereo.
 		bool StereoMode = true;
 		bool StereoUseProfile = true;
 		float StereoSeparation = 0.02f;
 		float StereoConvergence = 20.0f;
 
-		// PCSX2-VR Tier-3 head camera (M5). Master switch for VR::CameraDriver: when off the
-		// camera driver performs ZERO EE-memory writes, so the build is
-		// byte-identical to a non-camera build. When on (and Enable is set, the VM is
-		// running, a valid head pose exists, and a CRC-matched profile with a
-		// `camera:` block exists for the running game), the guest camera follows the
-		// player's head each vsync. Requires the immersive-tier per-game profile
-		// data; inert without it — so it is SAFE as a ship default: non-immersive
-		// games (no camera profile) are unaffected, immersive games get head-look
-		// out of the box. SHIP DEFAULT true (2026-07-19, matches the tested build).
 		bool HeadCamera = true;
 
 		VROptions();
@@ -1413,31 +1303,28 @@ struct Pcsx2Config
 		bool operator!=(const VROptions& right) const;
 	};
 
-	// ------------------------------------------------------------------------
-
 	BITFIELD32()
 	bool
-		CdvdVerboseReads : 1, // enables cdvd read activity verbosely dumped to the console
-		CdvdDumpBlocks : 1, // enables cdvd block dumping
-		CdvdPrecache : 1, // enables cdvd precaching of compressed images
-		EnablePatches : 1, // enables patch detection and application
-		EnableCheats : 1, // enables cheat detection and application
-		EnablePINE : 1, // enables inter-process communication
+		CdvdVerboseReads : 1,
+		CdvdDumpBlocks : 1,
+		CdvdPrecache : 1,
+		EnablePatches : 1,
+		EnableCheats : 1,
+		EnablePINE : 1,
 		EnableWideScreenPatches : 1,
 		EnableNoInterlacingPatches : 1,
 		EnableFastBoot : 1,
 		EnableFastBootFastForward : 1,
 		EnableThreadPinning : 1,
-		// TODO - Vaser - where are these settings exposed in the Qt UI?
 		EnableRecordingTools : 1,
-		EnableGameFixes : 1, // enables automatic game fixes
-		SaveStateOnShutdown : 1, // default value for saving state on shutdown
-		EnableDiscordPresence : 1, // enables discord rich presence integration
+		EnableGameFixes : 1,
+		SaveStateOnShutdown : 1,
+		EnableDiscordPresence : 1,
 		UseSavestateSelector : 1,
 		InhibitScreensaver : 1,
 		BackupSavestate : 1,
-		ManuallySetRealTimeClock : 1, // passes user-set real-time clock information to cdvd at startup
-		UseSystemLocaleFormat : 1, // presents OS time format instead of yyyy-MM-dd HH:mm:ss for manual RTC
+		ManuallySetRealTimeClock : 1,
+		UseSystemLocaleFormat : 1,
 
 		HostFs : 1,
 
@@ -1465,10 +1352,8 @@ struct Pcsx2Config
 
 	VROptions VR;
 
-	// Memorycard options - first 2 are default slots, last 6 are multitap 1 and 2
-	// slots (3 each)
 	McdOptions Mcd[8];
-	std::string GzipIsoIndexTemplate; // for quick-access index with gzipped ISO
+	std::string GzipIsoIndexTemplate;
 
 	int PINESlot;
 
@@ -1479,13 +1364,11 @@ struct Pcsx2Config
 	int RtcMinute;
 	int RtcSecond;
 
-	// Set at runtime, not loaded from config.
 	std::string CurrentBlockdump;
 	std::string CurrentIRX;
 	std::string CurrentGameArgs;
 	std::string CustomDataPath;
 	AspectRatioType CurrentAspectRatio = AspectRatioType::RAuto4_3_3_2;
-	// Fall back aspect ratio for games that have patches (when AspectRatioType::RAuto4_3_3_2) is active.
 	float CurrentCustomAspectRatio = 0.f;
 	bool IsPortableMode = false;
 
@@ -1494,7 +1377,6 @@ struct Pcsx2Config
 	void LoadSaveCore(SettingsWrapper& wrap);
 	void LoadSaveMemcards(SettingsWrapper& wrap);
 
-	/// Reloads options affected by patches.
 	void ReloadPatchAffectingOptions();
 
 	std::string FullpathToBios() const;
@@ -1503,16 +1385,12 @@ struct Pcsx2Config
 	bool operator==(const Pcsx2Config& right) const = delete;
 	bool operator!=(const Pcsx2Config& right) const = delete;
 
-	/// Copies runtime configuration settings (e.g. frame limiter state).
 	void CopyRuntimeConfig(Pcsx2Config& cfg);
 
-	/// Copies configuration from one file to another. Does not copy controller settings.
 	static void CopyConfiguration(SettingsInterface* dest_si, SettingsInterface& src_si);
 
-	/// Clears all core keys from the specified interface.
 	static void ClearConfiguration(SettingsInterface* dest_si);
 
-	/// Removes keys that are not valid for per-game settings.
 	static void ClearInvalidPerGameConfiguration(SettingsInterface* si);
 };
 
@@ -1540,33 +1418,22 @@ namespace EmuFolders
 	extern std::string Videos;
 	extern std::string DebuggerLayouts;
 	extern std::string DebuggerSettings;
-	// PCSX2-VR: user VR profile drop folder (per-game yaml; overrides shipped)
 	extern std::string VRProfiles;
 
-	/// Initializes critical folders (AppRoot, DataRoot, Settings). Call once on startup.
 	void SetAppRoot();
 	bool SetResourcesDirectory();
 	bool SetDataDirectory(Error* error);
 
-	// Assumes that AppRoot and DataRoot have been initialized.
 	void SetDefaults(SettingsInterface& si);
 	void LoadConfig(SettingsInterface& si);
 	bool EnsureFoldersExist();
 
-	/// Opens the specified log file for writing.
 	std::FILE* OpenLogFile(std::string_view name, const char* mode);
 
-	/// Returns the path to a resource file, allowing the user to override it.
 	std::string GetOverridableResourcePath(std::string_view name);
-} // namespace EmuFolders
+}
 
-/////////////////////////////////////////////////////////////////////////////////////////
-// Helper Macros for Reading Emu Configurations.
-//
-
-// ------------ CPU / Recompiler Options ---------------
-
-#ifdef _M_X86 // TODO: Remove me once EE/VU/IOP recs are added.
+#ifdef _M_X86
 #define REC_VU1 (EmuConfig.Cpu.Recompiler.EnableVU1)
 #define THREAD_VU1 (REC_VU1 && EmuConfig.Speedhacks.vuThread)
 #else
@@ -1580,39 +1447,33 @@ namespace EmuFolders
 #define CHECK_FASTMEM (EmuConfig.Cpu.Recompiler.EnableEE && EmuConfig.Cpu.Recompiler.EnableFastmem)
 #define CHECK_EXTRAMEM (memGetExtraMemMode())
 
-//------------ SPECIAL GAME FIXES!!! ---------------
-#define CHECK_VUADDSUBHACK (EmuConfig.Gamefixes.VuAddSubHack) // Special Fix for Tri-ace games, they use an encryption algorithm that requires VU addi opcode to be bit-accurate.
-#define CHECK_FPUMULHACK (EmuConfig.Gamefixes.FpuMulHack) // Special Fix for Tales of Destiny hangs.
-#define CHECK_XGKICKHACK (EmuConfig.Gamefixes.XgKickHack) // Special Fix for Erementar Gerad, adds more delay to VU XGkick instructions. Corrects the color of some graphics.
-#define CHECK_EETIMINGHACK (EmuConfig.Gamefixes.EETimingHack) // Fix all scheduled events to happen in 1 cycle.
-#define CHECK_INSTANTDMAHACK (EmuConfig.Gamefixes.InstantDMAHack) // Attempt to finish DMA's instantly, useful for games which rely on cache emulation.
-#define CHECK_SKIPMPEGHACK (EmuConfig.Gamefixes.SkipMPEGHack) // Finds sceMpegIsEnd pattern to tell the game the mpeg is finished (Katamari and a lot of games need this)
-#define CHECK_OPHFLAGHACK (EmuConfig.Gamefixes.OPHFlagHack) // Bleach Blade Battlers
-#define CHECK_DMABUSYHACK (EmuConfig.Gamefixes.DMABusyHack) // Denies writes to the DMAC when it's busy. This is correct behaviour but bad timing can cause problems.
-#define CHECK_VIFFIFOHACK (EmuConfig.Gamefixes.VIFFIFOHack) // Pretends to fill the non-existant VIF FIFO Buffer.
-#define CHECK_VIF1STALLHACK (EmuConfig.Gamefixes.VIF1StallHack) // Like above, processes FIFO data before the stall is allowed (to make sure data goes over).
-#define CHECK_GIFFIFOHACK (EmuConfig.Gamefixes.GIFFIFOHack) // Enabled the GIF FIFO (more correct but slower)
-#define CHECK_VUOVERFLOWHACK (EmuConfig.Gamefixes.VUOverflowHack) // Special Fix for Superman Returns, they check for overflows on PS2 floats which we can't do without soft floats.
+#define CHECK_VUADDSUBHACK (EmuConfig.Gamefixes.VuAddSubHack)
+#define CHECK_FPUMULHACK (EmuConfig.Gamefixes.FpuMulHack)
+#define CHECK_XGKICKHACK (EmuConfig.Gamefixes.XgKickHack)
+#define CHECK_EETIMINGHACK (EmuConfig.Gamefixes.EETimingHack)
+#define CHECK_INSTANTDMAHACK (EmuConfig.Gamefixes.InstantDMAHack)
+#define CHECK_SKIPMPEGHACK (EmuConfig.Gamefixes.SkipMPEGHack)
+#define CHECK_OPHFLAGHACK (EmuConfig.Gamefixes.OPHFlagHack)
+#define CHECK_DMABUSYHACK (EmuConfig.Gamefixes.DMABusyHack)
+#define CHECK_VIFFIFOHACK (EmuConfig.Gamefixes.VIFFIFOHack)
+#define CHECK_VIF1STALLHACK (EmuConfig.Gamefixes.VIF1StallHack)
+#define CHECK_GIFFIFOHACK (EmuConfig.Gamefixes.GIFFIFOHack)
+#define CHECK_VUOVERFLOWHACK (EmuConfig.Gamefixes.VUOverflowHack)
 #define CHECK_FULLVU0SYNCHACK (EmuConfig.Gamefixes.FullVU0SyncHack)
 
-//------------ Advanced Options!!! ---------------
 #define CHECK_VU_OVERFLOW(vunum) (((vunum) == 0) ? EmuConfig.Cpu.Recompiler.vu0Overflow : EmuConfig.Cpu.Recompiler.vu1Overflow)
-#define CHECK_VU_EXTRA_OVERFLOW(vunum) (((vunum) == 0) ? EmuConfig.Cpu.Recompiler.vu0ExtraOverflow : EmuConfig.Cpu.Recompiler.vu1ExtraOverflow) // If enabled, Operands are clamped before being used in the VU recs
+#define CHECK_VU_EXTRA_OVERFLOW(vunum) (((vunum) == 0) ? EmuConfig.Cpu.Recompiler.vu0ExtraOverflow : EmuConfig.Cpu.Recompiler.vu1ExtraOverflow)
 #define CHECK_VU_SIGN_OVERFLOW(vunum) (((vunum) == 0) ? EmuConfig.Cpu.Recompiler.vu0SignOverflow : EmuConfig.Cpu.Recompiler.vu1SignOverflow)
 #define CHECK_VU_UNDERFLOW(vunum) (((vunum) == 0) ? EmuConfig.Cpu.Recompiler.vu0Underflow : EmuConfig.Cpu.Recompiler.vu1Underflow)
 
 #define CHECK_FPU_OVERFLOW (EmuConfig.Cpu.Recompiler.fpuOverflow)
-#define CHECK_FPU_EXTRA_OVERFLOW (EmuConfig.Cpu.Recompiler.fpuExtraOverflow) // If enabled, Operands are checked for infinities before being used in the FPU recs
-#define CHECK_FPU_EXTRA_FLAGS 1 // Always enabled now // Sets D/I flags on FPU instructions
+#define CHECK_FPU_EXTRA_OVERFLOW (EmuConfig.Cpu.Recompiler.fpuExtraOverflow)
+#define CHECK_FPU_EXTRA_FLAGS 1
 #define CHECK_FPU_FULL (EmuConfig.Cpu.Recompiler.fpuFullMode)
 
-//------------ EE Recompiler defines - Comment to disable a recompiler ---------------
+#define SHIFT_RECOMPILE
+#define BRANCH_RECOMPILE
 
-#define SHIFT_RECOMPILE // Speed majorly reduced if disabled
-#define BRANCH_RECOMPILE // Speed extremely reduced if disabled - more then shift
-
-// Disabling all the recompilers in this block is interesting, as it still runs at a reasonable rate.
-// It also adds a few glitches. Really reminds me of the old Linux 64-bit version. --arcum42
 #define ARITHMETICIMM_RECOMPILE
 #define ARITHMETIC_RECOMPILE
 #define MULTDIV_RECOMPILE
@@ -1628,15 +1489,12 @@ namespace EmuFolders
 #define CP0_RECOMPILE
 #define CP2_RECOMPILE
 
-// You can't recompile ARITHMETICIMM without ARITHMETIC.
 #ifndef ARITHMETIC_RECOMPILE
 #undef ARITHMETICIMM_RECOMPILE
 #endif
 
-#define EE_CONST_PROP 1 // rec2 - enables constant propagation (faster)
+#define EE_CONST_PROP 1
 
-// Change to 1 for console logs of SIF, GPU (PS1 mode) and MDEC (PS1 mode).
-// These do spam a lot though!
 #define PSX_EXTRALOGS 0
 
 #undef BITFIELD32

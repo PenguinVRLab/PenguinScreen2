@@ -22,7 +22,7 @@ namespace SPU2
 	static void UpdateSampleRate();
 	static float GetNominalRate();
 	static void InternalReset(bool psxmode);
-} // namespace SPU2
+}
 
 u64 lClocks = 0;
 
@@ -43,12 +43,7 @@ u32 SPU2::GetConsoleSampleRate()
 	return s_psxmode ? PSX_SAMPLE_RATE : SAMPLE_RATE;
 }
 
-// --------------------------------------------------------------------------------------
-//  DMA 4/7 Callbacks from Core Emulator
-// --------------------------------------------------------------------------------------
-
-
-void SPU2readDMA4Mem(u16* pMem, u32 size) // size now in 16bit units
+void SPU2readDMA4Mem(u16* pMem, u32 size)
 {
 	TimeUpdate(psxRegs.cycle);
 
@@ -56,7 +51,7 @@ void SPU2readDMA4Mem(u16* pMem, u32 size) // size now in 16bit units
 	Cores[0].DoDMAread(pMem, size);
 }
 
-void SPU2writeDMA4Mem(u16* pMem, u32 size) // size now in 16bit units
+void SPU2writeDMA4Mem(u16* pMem, u32 size)
 {
 	TimeUpdate(psxRegs.cycle);
 
@@ -102,14 +97,12 @@ void SPU2writeDMA7Mem(u16* pMem, u32 size)
 
 void SPU2::CreateOutputStream()
 {
-	// Initialize volume and mute settings on new session.
 	if (!s_output_stream)
 	{
 		s_standard_volume = EmuConfig.SPU2.StandardVolume;
 		s_fast_forward_volume = EmuConfig.SPU2.FastForwardVolume;
 		s_output_muted = EmuConfig.SPU2.OutputMuted;
 	}
-	// Else persist volume through stream recreates.
 	else if (!s_output_muted)
 		SPU2::SaveOutputVolume();
 
@@ -140,7 +133,6 @@ void SPU2::UpdateSampleRate()
 
 	CreateOutputStream();
 
-	// Can't be capturing when the sample rate changes.
 	if (IsAudioCaptureActive())
 	{
 		MTGS::RunOnGSThread(&GSEndCapture);
@@ -166,13 +158,11 @@ void SPU2::SetOutputVolume(u32 volume)
 
 float SPU2::GetNominalRate()
 {
-	// Adjust nominal rate when syncing to host.
 	return VMManager::IsTargetSpeedAdjustedToHost() ? VMManager::GetTargetSpeed() : 1.0f;
 }
 
 bool SPU2::SetOutputMuted(const bool muted)
 {
-	// User setting takes precedence. Unmute not guaranteed by design.
 	if (!s_output_stream || (!muted && EmuConfig.SPU2.OutputMuted))
 		return false;
 
@@ -237,13 +227,13 @@ void SPU2::InternalReset(bool psxmode)
 	{
 		memset(spu2regs, 0, 0x010000);
 		memset(_spu2mem, 0, 0x200000);
-		memset(_spu2mem + 0x2800, 7, 0x10); // from BIOS reversal. Locks the voices so they don't run free.
-		memset(_spu2mem + 0xe870, 7, 0x10); // Loop which gets left over by the BIOS, Megaman X7 relies on it being there.
+		memset(_spu2mem + 0x2800, 7, 0x10);
+		memset(_spu2mem + 0xe870, 7, 0x10);
 
 		memset(DCFilterIn, 0, sizeof(DCFilterIn));
 		memset(DCFilterOut, 0, sizeof(DCFilterOut));
 
-		Spdif.Info = 0; // Reset IRQ Status if it got set in a previously run game
+		Spdif.Info = 0;
 
 		Cores[0].Init(0);
 		Cores[1].Init(1);
@@ -269,7 +259,6 @@ void SPU2::OnTargetSpeedChanged()
 
 	s_output_stream->SetNominalRate(GetNominalRate());
 
-	// Flipped save as speed has already changed.
 	if (!s_output_muted)
 	{
 		if (VMManager::GetTargetSpeed() == 1.0f)
@@ -335,7 +324,6 @@ void SPU2::CheckForConfigChanges(const Pcsx2Config& old_config)
 	const Pcsx2Config::SPU2Options& opts = EmuConfig.SPU2;
 	const Pcsx2Config::SPU2Options& old_opts = old_config.SPU2;
 
-	// No need to reinit for volume change.
 	if (opts.OutputMuted != old_opts.OutputMuted)
 		SPU2::SetOutputMuted(opts.OutputMuted);
 
@@ -355,7 +343,6 @@ void SPU2::CheckForConfigChanges(const Pcsx2Config& old_config)
 	if (volume_settings_changed)
 		SPU2::UpdateOutputVolume();
 
-	// Things which require re-initialzing the output.
 	if (opts.Backend != old_opts.Backend ||
 		opts.StreamParameters != old_opts.StreamParameters ||
 		opts.DriverName != old_opts.DriverName ||
@@ -369,7 +356,6 @@ void SPU2::CheckForConfigChanges(const Pcsx2Config& old_config)
 	}
 
 #ifdef PCSX2_DEVBUILD
-	// AccessLog controls file output.
 	if (opts.AccessLog != old_opts.AccessLog)
 	{
 		if (AccessLog())
@@ -428,7 +414,6 @@ u16 SPU2read(u32 rmem)
 		{
 			ret = *(regtable[(mem >> 1)]);
 #ifdef PCSX2_DEVBUILD
-			//FileLog("[%10d] SPU2 read mem %x (core %d, register %x): %x\n",Cycles, mem, core, (omem & 0x7ff), ret);
 			SPU2::WriteRegLog("read", rmem, ret);
 #endif
 		}
@@ -439,9 +424,6 @@ u16 SPU2read(u32 rmem)
 
 void SPU2write(u32 rmem, u16 value)
 {
-	// Note: Reverb/Effects are very sensitive to having precise update timings.
-	// If the SPU2 isn't in in sync with the IOP, samples can end up playing at rather
-	// incorrect pitches and loop lengths.
 
 	TimeUpdate(psxRegs.cycle);
 
@@ -491,14 +473,11 @@ s32 SPU2freeze(FreezeAction mode, freezeData* data)
 			jNO_DEFAULT;
 	}
 
-	// technically unreachable, but kills a warning:
 	return 0;
 }
 
 static void DCFilter(float *input)
 {
-	// A simple DC blocking high-pass filter
-	// Implementation from http://peabody.sapp.org/class/dmp2/lab/dcblock/
 	float output[2];
 	output[0] = (input[0] - DCFilterIn[0] + ((0.995f * DCFilterOut[0])));
 	output[1] = (input[1] - DCFilterIn[1] + ((0.995f * DCFilterOut[1])));
@@ -519,8 +498,6 @@ __forceinline void spu2Output(StereoOut32 out)
 	conv[0] = static_cast<float>(clamp_mix(out.Left)) / INT16_MAX;
 	conv[1] = static_cast<float>(clamp_mix(out.Right)) / INT16_MAX;
 
-	/* Some games pause voices with the volume left on leaving us with
-     * significant DC offset, so we filter it out (e.x. SSX 3)*/
 	DCFilter(conv);
 
 	s_current_chunk[s_current_chunk_pos++] = conv[0];

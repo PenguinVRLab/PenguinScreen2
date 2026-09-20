@@ -14,10 +14,7 @@ namespace PacketReader
 	EthernetFrameEditor::EthernetFrameEditor(NetPacket* pkt)
 		: basePkt{pkt}
 	{
-		headerLength = 14; //(6+6+2)
-
-		//Note: we don't have to worry about the Ethernet Frame CRC as it is not included in the packet
-		//Note: We don't support tagged frames
+		headerLength = 14;
 
 		payload = std::make_unique<PayloadPtrEditor>((u8*)&basePkt->buffer[14], pkt->size - headerLength);
 	}
@@ -49,4 +46,4 @@ namespace PacketReader
 	{
 		return payload.get();
 	}
-} // namespace PacketReader
+}

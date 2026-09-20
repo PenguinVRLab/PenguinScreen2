@@ -18,10 +18,6 @@
 #include "wil/resource.h"
 #endif
 
-// Since the context gets used to populate the device list, that unfortunately means
-// we need locking around it, since the UI thread's gonna be saying hi. The settings
-// callbacks don't actually modify the context itself, though, only look at the
-// device list.
 static cubeb* s_cubeb_context;
 static cubeb_device_collection s_cubeb_input_devices;
 static cubeb_device_collection s_cubeb_output_devices;
@@ -33,9 +29,6 @@ static cubeb* GetCubebContext(const char* backend = nullptr)
 	std::lock_guard lock(s_cubeb_context_mutex);
 
 #ifdef _WIN32
-	// For enumeration, we need *any* COM context. multi- or single-threaded.
-	// As COM is per-thread, initialize and tear it down every time.
-	// Doing it only on 0 refcount is a bad idea, because the Cubeb context could be created on one thread, and destroyed on another.
 	HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 	if (hr == RPC_E_CHANGED_MODE)
 	{
@@ -67,7 +60,6 @@ static cubeb* GetCubebContext(const char* backend = nullptr)
 		s_cubeb_refcount++;
 
 #ifdef _WIN32
-	// ReleaseCubebContext will call CoUninitialize
 	uninit.release();
 #endif
 
@@ -171,7 +163,6 @@ namespace usb_mic
 			params.layout = CUBEB_LAYOUT_UNDEFINED;
 			params.prefs = CUBEB_STREAM_PREF_NONE;
 
-			// Prefer minimum latency, reduces the chance of dropped samples due to the extra buffer.
 			if (cubeb_get_min_latency(mContext, &params, &mStreamLatency) != CUBEB_OK)
 				mStreamLatency = (mLatency * mSampleRate) / 1000u;
 
@@ -287,5 +278,5 @@ namespace usb_mic
 
 			return nframes;
 		}
-	} // namespace audiodev_cubeb
-} // namespace usb_mic
+	}
+}

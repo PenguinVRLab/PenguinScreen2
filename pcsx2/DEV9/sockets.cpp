@@ -144,9 +144,6 @@ SocketAdapter::SocketAdapter()
 		}
 	}
 
-	//For DHCP, we need to override some settings
-	//DNS settings as per direct adapters
-
 	const IP_Address ps2IP{{{internalIP.bytes[0], internalIP.bytes[1], internalIP.bytes[2], 100}}};
 	const IP_Address subnet{{{255, 255, 255, 0}}};
 	const IP_Address gateway = internalIP;
@@ -159,7 +156,6 @@ SocketAdapter::SocketAdapter()
 		MAC_Address hostMAC = adMAC.value();
 		MAC_Address newMAC = ps2MAC;
 
-		//Lets take the hosts last 2 bytes to make it unique on Xlink
 		newMAC.bytes[5] = hostMAC.bytes[4];
 		newMAC.bytes[4] = hostMAC.bytes[5];
 
@@ -169,7 +165,6 @@ SocketAdapter::SocketAdapter()
 		Console.Error("DEV9: Socket: Failed to get MAC address for adapter");
 
 #ifdef _WIN32
-	/* Use the MAKEWORD(lowbyte, highbyte) macro declared in Windef.h */
 	const WORD wVersionRequested = MAKEWORD(2, 2);
 
 	WSADATA wsaData{0};
@@ -204,7 +199,6 @@ bool SocketAdapter::recv(NetPacket* pkt)
 		return true;
 
 	ScopedGuard cleanup([&]() {
-		// Garbage collect closed connections
 		if (deleteQueueRecvThread.size() != 0)
 		{
 			std::lock_guard deletelock(deleteRecvSentry);
@@ -265,7 +259,6 @@ bool SocketAdapter::send(NetPacket* pkt)
 
 	pxAssert(std::this_thread::get_id() == sendThreadId);
 	ScopedGuard cleanup([&]() {
-		// Garbage collect closed connections
 		if (deleteQueueSendThread.size() != 0)
 		{
 			std::lock_guard deletelock(deleteSendSentry);
@@ -281,8 +274,6 @@ bool SocketAdapter::send(NetPacket* pkt)
 	{
 		case static_cast<u16>(EtherType::null):
 		case 0x0C00:
-			//Packets with the above ethertypes get sent when the adapter is reset
-			//Catch them here instead of printing an error
 			return true;
 		case static_cast<int>(EtherType::IPv4):
 		{
@@ -298,10 +289,9 @@ bool SocketAdapter::send(NetPacket* pkt)
 
 			if (arpPkt.protocol == static_cast<u16>(EtherType::IPv4))
 			{
-				if (arpPkt.op == 1) //ARP request
+				if (arpPkt.op == 1)
 				{
 					if (*(IP_Address*)arpPkt.targetProtocolAddress.get() != dhcpServer.ps2IP)
-					//it's trying to resolve the virtual gateway's mac addr
 					{
 						ARP_Packet* arpRet = new ARP_Packet(6, 4);
 						*(MAC_Address*)arpRet->targetHardwareAddress.get() = *(MAC_Address*)arpPkt.senderHardwareAddress.get();
@@ -333,7 +323,6 @@ bool SocketAdapter::send(NetPacket* pkt)
 
 void SocketAdapter::reset()
 {
-	//Adapter Reset
 	std::vector<ConnectionKey> keys = connections.GetKeys();
 	DevCon.WriteLn("DEV9: Socket: Reset %d Connections", keys.size());
 	for (size_t i = 0; i < keys.size(); i++)
@@ -380,14 +369,13 @@ bool SocketAdapter::SendIP(IP_Packet* ipPkt)
 		Console.Error("DEV9: Socket: IP packet with bad CSUM");
 		return false;
 	}
-	//Do Checksum in sub functions
 
 	ConnectionKey Key{};
 	Key.ip = ipPkt->destinationIP;
 	Key.protocol = ipPkt->protocol;
 
 	std::lock_guard deletelock(deleteRecvSentry);
-	switch (ipPkt->protocol) //(Prase Payload)
+	switch (ipPkt->protocol)
 	{
 		case (u8)IP_Type::ICMP:
 			return SendICMP(Key, ipPkt);
@@ -398,7 +386,6 @@ bool SocketAdapter::SendIP(IP_Packet* ipPkt)
 		case (u8)IP_Type::UDP:
 			return SendUDP(Key, ipPkt);
 		default:
-			//Log_Error("Unkown Protocol");
 			Console.Error("DEV9: Socket: Unkown IPv4 Protocol %X", ipPkt->protocol);
 			return false;
 	}
@@ -406,11 +393,9 @@ bool SocketAdapter::SendIP(IP_Packet* ipPkt)
 
 bool SocketAdapter::SendICMP(ConnectionKey Key, IP_Packet* ipPkt)
 {
-	//IP_PayloadPtr* ipPayload = static_cast<IP_PayloadPtr*>(ipPkt->GetPayload());
 
 	ICMP_Session* s;
 
-	//Need custom SendFromConnection
 	BaseSession* existingSession = nullptr;
 	connections.TryGetValue(Key, &existingSession);
 	if (existingSession != nullptr)
@@ -476,8 +461,6 @@ bool SocketAdapter::SendUDP(ConnectionKey Key, IP_Packet* ipPkt)
 		return false;
 	else
 	{
-		// Always bind the UDP source port
-		// PS2 software can run into issues if the source port is not preserved
 		UDP_FixedPort* fPort = nullptr;
 		BaseSession* fSession;
 		if (fixedUDPPorts.TryGetValue(udp.sourcePort, &fSession))
@@ -510,7 +493,6 @@ bool SocketAdapter::SendUDP(ConnectionKey Key, IP_Packet* ipPkt)
 			ipPkt->destinationIP == dhcpServer.broadcastIP || ipPkt->destinationIP == IP_Address{{{255, 255, 255, 255}}},
 			(ipPkt->destinationIP.bytes[0] & 0xF0) == 0xE0);
 
-		// If we are unable to bind to the port, fall back to a dynamic port
 		if (s == nullptr)
 		{
 			Console.Error("DEV9: Socket: Failed to Create New UDP Connection from fixed port");
@@ -542,7 +524,6 @@ void SocketAdapter::HandleConnectionClosed(BaseSession* sender)
 	if (!connections.Remove(key))
 		return;
 
-	// Defer deleting the connection untill we have left the calling session's callstack
 	if (std::this_thread::get_id() == sendThreadId)
 		deleteQueueSendThread.push_back(sender);
 	else
@@ -575,7 +556,6 @@ void SocketAdapter::HandleFixedPortClosed(BaseSession* sender)
 		return;
 	fixedUDPPorts.Remove(key.ps2Port);
 
-	// Defer deleting the connection untill we have left the calling session's callstack
 	if (std::this_thread::get_id() == sendThreadId)
 		deleteQueueSendThread.push_back(sender);
 	else
@@ -590,7 +570,6 @@ void SocketAdapter::close()
 
 SocketAdapter::~SocketAdapter()
 {
-	//Force close all sessions
 	std::vector<ConnectionKey> keys = connections.GetKeys();
 	DevCon.WriteLn("DEV9: Socket: Closing %d Connections", keys.size());
 	for (size_t i = 0; i < keys.size(); i++)
@@ -602,9 +581,8 @@ SocketAdapter::~SocketAdapter()
 		delete session;
 	}
 	connections.Clear();
-	fixedUDPPorts.Clear(); //fixedUDP sessions already deleted via connections
+	fixedUDPPorts.Clear();
 
-	//Clear out any delete queues
 	DevCon.WriteLn("DEV9: Socket: Found %d Connections in send delete queue", deleteQueueSendThread.size());
 	DevCon.WriteLn("DEV9: Socket: Found %d Connections in recv delete queue", deleteQueueRecvThread.size());
 	for (BaseSession* s : deleteQueueSendThread)
@@ -614,7 +592,6 @@ SocketAdapter::~SocketAdapter()
 	deleteQueueSendThread.clear();
 	deleteQueueRecvThread.clear();
 
-	//Clear out vRecBuffer
 	while (!vRecBuffer.IsQueueEmpty())
 	{
 		EthernetFrame* retPay;

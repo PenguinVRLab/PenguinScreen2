@@ -30,8 +30,6 @@ class CURRENT_ISA::GSLocalMemoryFunctions
 	static void WriteImage24Z(GSLocalMemory& mem, int& tx, int& ty, const u8* src, int len, GIFRegBITBLTBUF& BITBLTBUF, GIFRegTRXPOS& TRXPOS, GIFRegTRXREG& TRXREG);
 	static void WriteImageX(GSLocalMemory& mem, int& tx, int& ty, const u8* src, int len, GIFRegBITBLTBUF& BITBLTBUF, GIFRegTRXPOS& TRXPOS, GIFRegTRXREG& TRXREG);
 
-	// TODO: ReadImage32/24/...
-
 	static void ReadTexture32(GSLocalMemory& mem, const GSOffset& off, const GSVector4i& r, u8* dst, int dstpitch, const GIFRegTEXA& TEXA);
 	static void ReadTextureGPU24(GSLocalMemory& mem, const GSOffset& off, const GSVector4i& r, u8* dst, int dstpitch, const GIFRegTEXA& TEXA);
 	static void ReadTexture24(GSLocalMemory& mem, const GSOffset& off, const GSVector4i& r, u8* dst, int dstpitch, const GIFRegTEXA& TEXA);
@@ -93,23 +91,23 @@ void GSLocalMemoryFunctions::PopulateFunctions(GSLocalMemory& mem)
 	for (GSLocalMemory::psm_t& psm : mem.m_psm)
 	{
 		psm.wi = WriteImage<PSMCT32, 8, 8, 32>;
-		psm.ri = ReadImageX; // TODO
+		psm.ri = ReadImageX;
 		psm.rtx = ReadTexture32;
 		psm.rtxP = ReadTexture32;
 		psm.rtxb = ReadTextureBlock32;
 		psm.rtxbP = ReadTextureBlock32;
 	}
 
-	mem.m_psm[PSMCT24].wi = WriteImage24; // TODO
+	mem.m_psm[PSMCT24].wi = WriteImage24;
 	mem.m_psm[PSMCT16].wi = WriteImage<PSMCT16, 16, 8, 16>;
 	mem.m_psm[PSMCT16S].wi = WriteImage<PSMCT16S, 16, 8, 16>;
 	mem.m_psm[PSMT8].wi = WriteImage<PSMT8, 16, 16, 8>;
 	mem.m_psm[PSMT4].wi = WriteImage<PSMT4, 32, 16, 4>;
-	mem.m_psm[PSMT8H].wi = WriteImage8H; // TODO
-	mem.m_psm[PSMT4HL].wi = WriteImage4HL; // TODO
-	mem.m_psm[PSMT4HH].wi = WriteImage4HH; // TODO
+	mem.m_psm[PSMT8H].wi = WriteImage8H;
+	mem.m_psm[PSMT4HL].wi = WriteImage4HL;
+	mem.m_psm[PSMT4HH].wi = WriteImage4HH;
 	mem.m_psm[PSMZ32].wi = WriteImage<PSMZ32, 8, 8, 32>;
-	mem.m_psm[PSMZ24].wi = WriteImage24Z; // TODO
+	mem.m_psm[PSMZ24].wi = WriteImage24Z;
 	mem.m_psm[PSMZ16].wi = WriteImage<PSMZ16, 16, 8, 16>;
 	mem.m_psm[PSMZ16S].wi = WriteImage<PSMZ16S, 16, 8, 16>;
 
@@ -221,7 +219,6 @@ void GSLocalMemoryFunctions::WriteImageColumn(GSLocalMemory& mem, int l, int r, 
 				case PSMZ32: GSBlock::WriteColumn32<alignment, 0xffffffff>(y, mem.BlockPtr32Z(x, y, bp, bw), &src[x * 4], srcpitch); break;
 				case PSMZ16: GSBlock::WriteColumn16<alignment>(y, mem.BlockPtr16Z(x, y, bp, bw), &src[x * 2], srcpitch); break;
 				case PSMZ16S: GSBlock::WriteColumn16<alignment>(y, mem.BlockPtr16SZ(x, y, bp, bw), &src[x * 2], srcpitch); break;
-				// TODO
 				default: ASSUME(0);
 			}
 		}
@@ -248,7 +245,6 @@ void GSLocalMemoryFunctions::WriteImageBlock(GSLocalMemory& mem, int l, int r, i
 				case PSMZ32: GSBlock::WriteBlock32<alignment, 0xffffffff>(mem.BlockPtr32Z(x, y, bp, bw), &src[x * 4], srcpitch); break;
 				case PSMZ16: GSBlock::WriteBlock16<alignment>(mem.BlockPtr16Z(x, y, bp, bw), &src[x * 2], srcpitch); break;
 				case PSMZ16S: GSBlock::WriteBlock16<alignment>(mem.BlockPtr16SZ(x, y, bp, bw), &src[x * 2], srcpitch); break;
-				// TODO
 				default: ASSUME(0);
 			}
 		}
@@ -275,7 +271,6 @@ void GSLocalMemoryFunctions::WriteImageLeftRight(GSLocalMemory& mem, int l, int 
 				case PSMZ32: mem.WritePixel32Z(x, y, *(u32*)&src[x * 4], bp, bw); break;
 				case PSMZ16: mem.WritePixel16Z(x, y, *(u16*)&src[x * 2], bp, bw); break;
 				case PSMZ16S: mem.WritePixel16SZ(x, y, *(u16*)&src[x * 2], bp, bw); break;
-				// TODO
 				default: ASSUME(0);
 			}
 		}
@@ -285,14 +280,12 @@ void GSLocalMemoryFunctions::WriteImageLeftRight(GSLocalMemory& mem, int l, int 
 template <int psm, int bsx, int bsy, int trbpp>
 void GSLocalMemoryFunctions::WriteImageTopBottom(GSLocalMemory& mem, int l, int r, int y, int h, const u8* src, int srcpitch, const GIFRegBITBLTBUF& BITBLTBUF)
 {
-	alignas(32) u8 buff[64]; // merge buffer for one column
+	alignas(32) u8 buff[64];
 
 	u32 bp = BITBLTBUF.DBP;
 	u32 bw = BITBLTBUF.DBW;
 
 	const int csy = bsy / 4;
-
-	// merge incomplete column
 
 	int y2 = y & (csy - 1);
 
@@ -314,7 +307,6 @@ void GSLocalMemoryFunctions::WriteImageTopBottom(GSLocalMemory& mem, int l, int 
 				case PSMZ32: dst = mem.BlockPtr32Z(x, y, bp, bw); break;
 				case PSMZ16: dst = mem.BlockPtr16Z(x, y, bp, bw); break;
 				case PSMZ16S: dst = mem.BlockPtr16SZ(x, y, bp, bw); break;
-				// TODO
 				default: ASSUME(0);
 			}
 
@@ -346,7 +338,6 @@ void GSLocalMemoryFunctions::WriteImageTopBottom(GSLocalMemory& mem, int l, int 
 						memcpy(&buff[j * 16], &src[i * srcpitch + (x >> 1)], 16);
 					GSBlock::WriteColumn4<32>(y, dst, buff, 16);
 					break;
-				// TODO
 				default:
 					ASSUME(0);
 			}
@@ -356,8 +347,6 @@ void GSLocalMemoryFunctions::WriteImageTopBottom(GSLocalMemory& mem, int l, int 
 		y += h2;
 		h -= h2;
 	}
-
-	// write whole columns
 
 	{
 		int h2 = h & ~(csy - 1);
@@ -389,8 +378,6 @@ void GSLocalMemoryFunctions::WriteImageTopBottom(GSLocalMemory& mem, int l, int 
 		}
 	}
 
-	// merge incomplete column
-
 	if (h >= 1)
 	{
 		for (int x = l; x < r; x += bsx)
@@ -407,7 +394,6 @@ void GSLocalMemoryFunctions::WriteImageTopBottom(GSLocalMemory& mem, int l, int 
 			case PSMZ32: dst = mem.BlockPtr32Z(x, y, bp, bw); break;
 			case PSMZ16: dst = mem.BlockPtr16Z(x, y, bp, bw); break;
 			case PSMZ16S: dst = mem.BlockPtr16SZ(x, y, bp, bw); break;
-			// TODO
 			default: ASSUME(0);
 			}
 
@@ -439,7 +425,6 @@ void GSLocalMemoryFunctions::WriteImageTopBottom(GSLocalMemory& mem, int l, int 
 						memcpy(&buff[i * 16], &src[i * srcpitch + (x >> 1)], 16);
 					GSBlock::WriteColumn4<32>(y, dst, buff, 16);
 					break;
-				// TODO
 				default:
 					ASSUME(0);
 			}
@@ -456,8 +441,6 @@ void GSLocalMemoryFunctions::WriteImage(GSLocalMemory& mem, int& tx, int& ty, co
 	const int l = (int)TRXPOS.DSAX;
 	const int r = l + (int)TRXREG.RRW;
 
-	// finish the incomplete row first
-
 	if (tx != l)
 	{
 		int n = std::min(len, (r - tx) * trbpp >> 3);
@@ -468,14 +451,9 @@ void GSLocalMemoryFunctions::WriteImage(GSLocalMemory& mem, int& tx, int& ty, co
 
 	const int la = (l + (bsx - 1)) & ~(bsx - 1);
 	const int ra = r & ~(bsx - 1);
-	// Round up to the nearest byte (NFL 2K5 does r = 1, l = 0 bpp =4, causing divide by zero)
 	const int srcpitch = (((r - l) * trbpp) + 7) >> 3;
 	int h = len / srcpitch;
 
-	// Slow path for odd width 4bpp, the fast path expects everything to be perfectly aligned and great,
-	// but things get hairy with 4bpp pixels and odd widths since the lowest size we can address is 8bits, it goes out of sync.
-	// Although I call this a slow path, it's probably faster than modifying the data alignment every other line.
-	// GT3 demo, Jak 2 Japanese subtitles, and the BG Dark Alliance minimap do this.
 	if (trbpp == 4 && (TRXREG.RRW & 0x1))
 	{
 		int count = 0;
@@ -492,32 +470,25 @@ void GSLocalMemoryFunctions::WriteImage(GSLocalMemory& mem, int& tx, int& ty, co
 		return;
 	}
 
-	if (ra - la >= bsx && h > 0) // "transfer width" >= "block width" && there is at least one full row
+	if (ra - la >= bsx && h > 0)
 	{
 		const u8* s = &src[-l * trbpp >> 3];
 
 		src += srcpitch * h;
 		len -= srcpitch * h;
 
-		// left part
-
 		if (l < la)
 		{
 			WriteImageLeftRight<psm, bsx, bsy>(mem, l, la, ty, h, s, srcpitch, BITBLTBUF);
 		}
-
-		// right part
 
 		if (ra < r)
 		{
 			WriteImageLeftRight<psm, bsx, bsy>(mem, ra, r, ty, h, s, srcpitch, BITBLTBUF);
 		}
 
-		// horizontally aligned part
-
 		if (la < ra)
 		{
-			// top part
 
 			{
 				int h2 = std::min(h, bsy - (ty & (bsy - 1)));
@@ -531,8 +502,6 @@ void GSLocalMemoryFunctions::WriteImage(GSLocalMemory& mem, int& tx, int& ty, co
 					h -= h2;
 				}
 			}
-
-			// horizontally and vertically aligned part
 
 			{
 				int h2 = h & ~(bsy - 1);
@@ -564,20 +533,14 @@ void GSLocalMemoryFunctions::WriteImage(GSLocalMemory& mem, int& tx, int& ty, co
 				}
 			}
 
-			// bottom part
-
 			if (h > 0)
 			{
 				WriteImageTopBottom<psm, bsx, bsy, trbpp>(mem, la, ra, ty, h, s, srcpitch, BITBLTBUF);
 
-				// s += srcpitch * h;
 				ty += h;
-				// h -= h;
 			}
 		}
 	}
-
-	// the rest
 
 	if (len > 0)
 	{
@@ -606,7 +569,6 @@ void GSLocalMemoryFunctions::WriteImage24(GSLocalMemory& mem, int& tx, int& ty, 
 
 	if (!aligned || (tw & 7) || (th & 7) || (len % srcpitch))
 	{
-		// TODO
 
 		WriteImageX(mem, tx, ty, src, len, BITBLTBUF, TRXPOS, TRXREG);
 	}
@@ -641,7 +603,6 @@ void GSLocalMemoryFunctions::WriteImage8H(GSLocalMemory& mem, int& tx, int& ty, 
 
 	if (!aligned || (tw & 7) || (th & 7) || (len % srcpitch))
 	{
-		// TODO
 
 		WriteImageX(mem, tx, ty, src, len, BITBLTBUF, TRXPOS, TRXREG);
 	}
@@ -676,7 +637,6 @@ void GSLocalMemoryFunctions::WriteImage4HL(GSLocalMemory& mem, int& tx, int& ty,
 
 	if (!aligned || (tw & 7) || (th & 7) || (len % srcpitch))
 	{
-		// TODO
 
 		WriteImageX(mem, tx, ty, src, len, BITBLTBUF, TRXPOS, TRXREG);
 	}
@@ -711,7 +671,6 @@ void GSLocalMemoryFunctions::WriteImage4HH(GSLocalMemory& mem, int& tx, int& ty,
 
 	if (!aligned || (tw & 7) || (th & 7) || (len % srcpitch))
 	{
-		// TODO
 
 		WriteImageX(mem, tx, ty, src, len, BITBLTBUF, TRXPOS, TRXREG);
 	}
@@ -746,7 +705,6 @@ void GSLocalMemoryFunctions::WriteImage24Z(GSLocalMemory& mem, int& tx, int& ty,
 
 	if (!aligned || (tw & 7) || (th & 7) || (len % srcpitch))
 	{
-		// TODO
 
 		WriteImageX(mem, tx, ty, src, len, BITBLTBUF, TRXPOS, TRXREG);
 	}
@@ -766,11 +724,6 @@ void GSLocalMemoryFunctions::WriteImage24Z(GSLocalMemory& mem, int& tx, int& ty,
 	}
 }
 
-/// Helper for WriteImageX and ReadImageX
-/// `len` is in pixels, unlike WriteImageX/ReadImageX where it's bytes
-/// `xinc` is the amount to increment `x` by per iteration
-/// Creates a GSOffset::PAHelper on a starting (x, y) to get the base address for each line,
-///  then `fn` on the helper and an x offset once for every `xinc` pixels along that line
 template <typename Fn>
 static void readWriteHelper(int& tx, int& ty, int len, int xinc, int sx, int w, const GSOffset& off, Fn&& fn)
 {
@@ -899,8 +852,6 @@ void GSLocalMemoryFunctions::WriteImageX(GSLocalMemory& mem, int& tx, int& ty, c
 	}
 }
 
-//
-
 void GSLocalMemoryFunctions::ReadImageX(const GSLocalMemory& mem, int& tx, int& ty, u8* dst, int len, GIFRegBITBLTBUF& BITBLTBUF, GIFRegTRXPOS& TRXPOS, GIFRegTRXREG& TRXREG)
 {
 	if (len <= 0)
@@ -921,14 +872,11 @@ void GSLocalMemoryFunctions::ReadImageX(const GSLocalMemory& mem, int& tx, int& 
 
 	GSOffset off = mem.GetOffset(bp, bw, BITBLTBUF.SPSM);
 
-	// printf("spsm=%d x=%d ex=%d y=%d len=%d\n", BITBLTBUF.SPSM, x, ex, y, len);
-
 	switch (BITBLTBUF.SPSM)
 	{
 		case PSMCT32:
 		case PSMZ32:
 		{
-			// MGS1 intro, fade effect between two scenes (airplane outside-inside transition)
 
 			int x = tx;
 			int y = ty;
@@ -945,8 +893,6 @@ void GSLocalMemoryFunctions::ReadImageX(const GSLocalMemory& mem, int& tx, int& 
 				{
 					*pd = vm[pa.value(x)];
 				}
-
-				// aligned to a column
 
 				for (int ex8 = ex - 8; len >= 8 && x <= ex8; len -= 8, x += 8, pd += 8)
 				{
@@ -1046,8 +992,6 @@ void GSLocalMemoryFunctions::ReadImageX(const GSLocalMemory& mem, int& tx, int& 
 	}
 }
 
-///////////////////
-
 void GSLocalMemoryFunctions::ReadTexture32(GSLocalMemory& mem, const GSOffset& off, const GSVector4i& r, u8* dst, int dstpitch, const GIFRegTEXA& TEXA)
 {
 	foreachBlock(off.assertSizesMatch(GSLocalMemory::swizzle32), mem, r, dst, dstpitch, 32, [&](u8* read_dst, const u8* src)
@@ -1081,7 +1025,6 @@ void GSLocalMemoryFunctions::ReadTextureGPU24(GSLocalMemory& mem, const GSOffset
 		GSBlock::ReadBlock16(src, read_dst, dstpitch);
 	});
 
-	// Convert packed RGB scanline to 32 bits RGBA
 	pxAssert(dstpitch >= r.width() * 4);
 	for (int y = r.top; y < r.bottom; y++)
 	{
@@ -1184,8 +1127,6 @@ void GSLocalMemoryFunctions::ReadTexture4HH(GSLocalMemory& mem, const GSOffset& 
 	});
 }
 
-///////////////////
-
 void GSLocalMemoryFunctions::ReadTextureBlock32(const GSLocalMemory& mem, u32 bp, u8* dst, int dstpitch, const GIFRegTEXA& TEXA)
 {
 	ALIGN_STACK(32);
@@ -1272,8 +1213,6 @@ void GSLocalMemoryFunctions::ReadTextureBlock4HH(const GSLocalMemory& mem, u32 b
 	GSBlock::ReadAndExpandBlock4HH_32(mem.BlockPtr(bp), dst, dstpitch, mem.m_clut);
 }
 
-// 32/8
-
 void GSLocalMemoryFunctions::ReadTexture8P(GSLocalMemory& mem, const GSOffset& off, const GSVector4i& r, u8* dst, int dstpitch, const GIFRegTEXA& TEXA)
 {
 	foreachBlock(off.assertSizesMatch(GSLocalMemory::swizzle8), mem, r, dst, dstpitch, 8, [&](u8* read_dst, const u8* src)
@@ -1313,8 +1252,6 @@ void GSLocalMemoryFunctions::ReadTexture4HHP(GSLocalMemory& mem, const GSOffset&
 		GSBlock::ReadBlock4HHP(src, read_dst, dstpitch);
 	});
 }
-
-//
 
 void GSLocalMemoryFunctions::ReadTextureBlock8P(const GSLocalMemory& mem, u32 bp, u8* dst, int dstpitch, const GIFRegTEXA& TEXA)
 {

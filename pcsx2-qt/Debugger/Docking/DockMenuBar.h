@@ -14,8 +14,6 @@
 
 class DockMenuBarStyle;
 
-// The widget that replaces the normal menu bar. This contains the original menu
-// bar, the layout switcher and the layout locked/unlocked toggle button.
 class DockMenuBar : public QWidget
 {
 	Q_OBJECT
@@ -27,10 +25,8 @@ public:
 
 	void updateTheme();
 
-	// Notify the menu bar that a new layout has been selected.
 	void onCurrentLayoutChanged(DockLayout::Index current_index);
 
-	// Notify the menu bar that the layout has been locked/unlocked.
 	void onLockStateChanged(bool layout_locked);
 
 	void startBlink(DockLayout::Index layout_index);
@@ -70,7 +66,6 @@ private:
 	DockMenuBarStyle* m_style = nullptr;
 };
 
-// Fixes some theming issues relating to the menu bar and the layout switcher.
 class DockMenuBarStyle : public QProxyStyle
 {
 	Q_OBJECT

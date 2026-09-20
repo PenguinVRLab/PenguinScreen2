@@ -4,7 +4,7 @@
 
 #ifdef _MSC_VER
 #pragma warning(push)
-#pragma warning(disable:4201) //  nonstandard extension used: nameless struct/union
+#pragma warning(disable:4201)
 #endif
 
 #include <stdlib.h>
@@ -191,7 +191,7 @@ static_assert(sizeof(color_rgba) == 4);
 
 bool unpack_bc7(const void *pBlock, color_rgba *pPixels);
 
-} // namespace bc7decomp
+}
 
 #ifdef _MSC_VER
 #pragma warning(pop)

@@ -99,7 +99,6 @@ void GamePatchSettingsWidget::onReloadClicked()
 {
 	reloadList();
 
-	// reload it on the emu thread too, so it picks up any changes
 	g_emu_thread->reloadPatches();
 }
 
@@ -113,7 +112,6 @@ void GamePatchSettingsWidget::disableAllPatches()
 void GamePatchSettingsWidget::reloadList()
 {
 	const SettingsInterface* si = dialog()->getSettingsInterface();
-	// Patches shouldn't have any unlabelled patch groups, because they're new.
 	u32 number_of_unlabeled_patches = 0;
 	bool showAllCRCS = m_ui.allCRCsCheckbox->isChecked();
 	std::vector<Patch::PatchInfo> patches = Patch::GetPatchInfo(dialog()->getSerial(), dialog()->getDiscCRC(), false, showAllCRCS, &number_of_unlabeled_patches);
@@ -160,12 +158,10 @@ void GamePatchSettingsWidget::reloadList()
 			Qt::CheckState check_state;
 			if (!globally_toggleable_option)
 			{
-				// Normal patches
 				check_state = is_on_enable_list && !is_on_disable_list ? Qt::CheckState::Checked : Qt::CheckState::Unchecked;
 			}
 			else
 			{
-				// WS/NI patches
 				if (is_on_disable_list)
 				{
 					check_state = Qt::CheckState::Unchecked;

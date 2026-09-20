@@ -21,9 +21,6 @@ int GSRasterizerData::s_counter = 0;
 
 static int compute_best_thread_height(int threads)
 {
-	// - for more threads screen segments should be smaller to better distribute the pixels
-	// - but not too small to keep the threading overhead low
-	// - ideal value between 3 and 5, or log2(64 / number of threads)
 
 	int th = GSConfig.SWExtraThreadsHeight;
 
@@ -296,14 +293,13 @@ void GSRasterizer::DrawPoint(const GSVertexSW* vertex, int vertex_count, const u
 	}
 }
 
-// Note: this should only be used for the edge drawing functions.
 __forceinline static GSVertexSW ClampVertex(GSVertexSW v, int zpsm)
 {
-	v.c = v.c.sat(255.0f * 128.0f); // RGBA
+	v.c = v.c.sat(255.0f * 128.0f);
 
-	v.t = v.t.blend32<8>(v.t.sat(255.0f * 128.0f)); // F
+	v.t = v.t.blend32<8>(v.t.sat(255.0f * 128.0f));
 
-	v.p.F64[1] = std::clamp(v.p.F64[1], 0.0, zpsm ? 0xFFFFFF.0p0 : 0xFFFFFFFF.0p0); // Z
+	v.p.F64[1] = std::clamp(v.p.F64[1], 0.0, zpsm ? 0xFFFFFF.0p0 : 0xFFFFFFFF.0p0);
 
 	return v;
 }
@@ -336,19 +332,15 @@ void GSRasterizer::DrawEdgeTriangle(const GSVertexSW& v0, const GSVertexSW& v1, 
 	const int rxi1 = static_cast<int>(rx1);
 	const int ryi1 = static_cast<int>(ry1);
 
-	// Note: appears to be asymmetry in how x bound and y bound is handled. Y bounds checking
-	// seems to be accurate here but not x. PS2 sometimes allows antialiased pixel to be +/-1 away
-	// from min/max x values and sometimes not. Not sure the reason so just arbitrarily pick the following for x.
 	int bxi0 = static_cast<int>(std::floor(std::min(x0, x1)));
 	int byi0 = static_cast<int>(std::ceil(std::min(y0, y1) - 1.0f));
 	int bxi1 = static_cast<int>(std::ceil(std::max(x0, x1)));
 	int byi1 = static_cast<int>(std::floor(std::max(y0, y1) + 1.0f));
 
-	// Combine with scissor region.
 	bxi0 = std::max(bxi0, m_scissor.x);
 	byi0 = std::max(byi0, m_scissor.y);
-	bxi1 = std::min(bxi1, m_scissor.z - 1); // b has inclusive coordinates.
-	byi1 = std::min(byi1, m_scissor.w - 1); // b has inclusive coordinates.
+	bxi1 = std::min(bxi1, m_scissor.z - 1);
+	byi1 = std::min(byi1, m_scissor.w - 1);
 
 	const GSVertexSW dedge = dv / GSVector4(std::abs(step_x ? delta_x : delta_y));
 
@@ -356,15 +348,12 @@ void GSRasterizer::DrawEdgeTriangle(const GSVertexSW& v0, const GSVertexSW& v1, 
 
 	GSVertexSW* RESTRICT e = &m_edge.buff[m_edge.count];
 
-	// Decision value for stepping the dependent direction.
-	// D is the fractional part of dependent coordinate scaled by scaleD.
 	constexpr bool pos_D = step_x ? pos_y : pos_x;
 	const int scaleD = static_cast<int>(2 * 16 * 16 * std::abs(step_x ? delta_x : delta_y));
 	const float scaleDf = static_cast<float>(scaleD);
 	const int dD = static_cast<int>(2 * 16 * 16 * (step_x ? delta_y : delta_x));
 	int D = static_cast<int>(scaleD * (step_x ? (y0 - ry0) : (x0 - rx0)));
 
-	// Stepping variables
 	int xi = rxi0;
 	int yi = ryi0;
 	int e1 = efun1.x * xi + efun1.y * yi + efun1.z;
@@ -378,7 +367,6 @@ void GSRasterizer::DrawEdgeTriangle(const GSVertexSW& v0, const GSVertexSW& v1, 
 		e2 += (step_x ? efun2.y : efun2.x) * sign;
 	};
 
-	// Pre-steps
 	const float prestep = step_x ? dxi * (rx0 - x0) : dyi * (ry0 - y0);
 	edge += dedge * GSVector4(prestep);
 	D += static_cast<int>(dD * prestep);
@@ -395,7 +383,6 @@ void GSRasterizer::DrawEdgeTriangle(const GSVertexSW& v0, const GSVertexSW& v1, 
 	{
 		const float d = static_cast<float>(D) / scaleDf;
 
-		// Coverage and coordinates for anti-aliased point.
 		int cov, xi2, yi2, e12, e22;
 
 		const auto GetOffsetVars = [&]<int offset>() {
@@ -417,10 +404,8 @@ void GSRasterizer::DrawEdgeTriangle(const GSVertexSW& v0, const GSVertexSW& v1, 
 			[[maybe_unused]] constexpr int offset = (side ? -1 : 0);
 			GetOffsetVars.template operator()<offset>();
 		}
-		else // d == 0.0f
+		else
 		{
-			// When exactly on the pixel center, top-left edges can create 0 coverage points and
-			// bottom-right edges can create full coverage points (with some rounding error).
 			cov = tl ? 0 : 0xffff;
 			[[maybe_unused]] constexpr int offset = tl ? (side ? -1 : 1) : 0;
 			GetOffsetVars.template operator()<offset>();
@@ -431,9 +416,6 @@ void GSRasterizer::DrawEdgeTriangle(const GSVertexSW& v0, const GSVertexSW& v1, 
 			byi0 <= yi2 && yi2 <= byi1 &&
 			IsOneOfMyScanlines(yi2))
 		{
-			// Clamping here as some values may be extrapolated outside
-			// the allowed ranges. This is suggested by hardware tests though it
-			// may not be totally accurate to do it here.
 			AddScanline(e, 1, xi2, yi2, ClampVertex(edge, zpsm));
 
 			e->p.U32[0] = std::clamp(cov, 0, 0xffff);
@@ -444,7 +426,6 @@ void GSRasterizer::DrawEdgeTriangle(const GSVertexSW& v0, const GSVertexSW& v1, 
 		if (step_x ? (xi == rxi1) : (yi == ryi1))
 			break;
 
-		// Step driving axis.
 		edge += dedge;
 		D += dD;
 		xi += step_x ? dxi : 0;
@@ -452,7 +433,6 @@ void GSRasterizer::DrawEdgeTriangle(const GSVertexSW& v0, const GSVertexSW& v1, 
 		e1 += step_x ? (dxi * efun1.x) : (dyi * efun1.y);
 		e2 += step_x ? (dxi * efun2.x) : (dyi * efun2.y);
 
-		// Step dependent axis.
 		if constexpr (pos_D)
 		{
 			if (D >= scaleD / 2)
@@ -487,7 +467,6 @@ void GSRasterizer::DrawEdgeLine(const GSVertexSW& v0, const GSVertexSW& v1, cons
 	float rx1 = std::floor(x1 + 0.5f);
 	float ry1 = std::floor(y1 + 0.5f);
 
-	// Diamond exit rule for determining coverage of first/last pixel.
 	const auto TestEndpoint = [](float dx, float dy) -> bool {
 		float dist = std::abs(dx) + std::abs(dy);
 		if (dist < 0.5f)
@@ -527,7 +506,6 @@ void GSRasterizer::DrawEdgeLine(const GSVertexSW& v0, const GSVertexSW& v1, cons
 	const int rxi1 = static_cast<int>(rx1);
 	const int ryi1 = static_cast<int>(ry1);
 
-	// Early exit for horizontal lines.
 	if (delta_y == 0.0f && !IsOneOfMyScanlines(ryi0) && !aa)
 		return;
 
@@ -537,15 +515,12 @@ void GSRasterizer::DrawEdgeLine(const GSVertexSW& v0, const GSVertexSW& v1, cons
 
 	GSVertexSW* RESTRICT e = &m_edge.buff[m_edge.count];
 
-	// Decision value for stepping the dependent direction.
-	// D is the fractional part of dependent coordinate scaled by scaleD.
 	constexpr bool pos_D = step_x ? pos_y : pos_x;
 	const int scaleD = static_cast<int>(2 * 16 * 16 * std::abs(step_x ? delta_x : delta_y));
 	const float scaleDf = static_cast<float>(scaleD);
 	const int dD = static_cast<int>(2 * 16 * 16 * (step_x ? delta_y : delta_x));
 	int D = static_cast<int>(scaleD * (step_x ? (y0 - ry0) : (x0 - rx0)));
 
-	// Stepping variables
 	int xi = rxi0;
 	int yi = ryi0;
 
@@ -555,7 +530,6 @@ void GSRasterizer::DrawEdgeLine(const GSVertexSW& v0, const GSVertexSW& v1, cons
 		yi += (step_x ? 1 : 0) * sign;
 	};
 
-	// Pre-steps
 	const float prestep = step_x ? dxi * (rx0 - x0) : dyi * (ry0 - y0);
 	edge += dedge * GSVector4(prestep);
 	D += static_cast<int>(dD * prestep);
@@ -573,9 +547,6 @@ void GSRasterizer::DrawEdgeLine(const GSVertexSW& v0, const GSVertexSW& v1, cons
 			m_scissor.top <= y && y < m_scissor.bottom &&
 			IsOneOfMyScanlines(y))
 		{
-			// Clamping here as some values may be extrapolated outside
-			// the allowed ranges. This is suggested by hardware tests though it
-			// may not be totally accurate to do it here.
 			AddScanline(e, 1, x, y, ClampVertex(edge, zpsm));
 
 			if constexpr (aa)
@@ -604,13 +575,11 @@ void GSRasterizer::DrawEdgeLine(const GSVertexSW& v0, const GSVertexSW& v1, cons
 		if (step_x ? (xi == rxi1) : (yi == ryi1))
 			break;
 
-		// Step driving axis.
 		edge += dedge;
 		D += dD;
 		xi += step_x ? dxi : 0;
 		yi += step_x ? 0 : dyi;
 
-		// Step dependent axis.
 		if constexpr (pos_D)
 		{
 			if (D >= scaleD / 2)
@@ -632,8 +601,6 @@ void GSRasterizer::DrawEdgeTriangle(const GSVertexSW& v0, const GSVertexSW& v1, 
 	const bool pos_x = dv.p.x >= 0.0f;
 	const bool pos_y = dv.p.y >= 0.0f;
 	
-	// side == true => outside of triangle is towards top or left.
-	// side == false => outside of triangle is towards bottom or right.
 	const bool side = tl ^ (step_x && (dv.p.y != 0.0f) && (pos_x == pos_y));
 
 	(this->*m_draw_edge_triangle[step_x][pos_x][pos_y][tl][side])(v0, v1, dv, efun1, efun2);
@@ -668,14 +635,14 @@ void GSRasterizer::DrawLine(const GSVertexSW* vertex, const u16* index)
 
 static const u8 s_ysort[8][4] =
 {
-	{0, 1, 2, 0}, // y0 <= y1 <= y2
-	{1, 0, 2, 0}, // y1 < y0 <= y2
+	{0, 1, 2, 0},
+	{1, 0, 2, 0},
 	{0, 0, 0, 0},
-	{1, 2, 0, 0}, // y1 <= y2 < y0
-	{0, 2, 1, 0}, // y0 <= y2 < y1
+	{1, 2, 0, 0},
+	{0, 2, 1, 0},
 	{0, 0, 0, 0},
-	{2, 0, 1, 0}, // y2 < y0 <= y1
-	{2, 1, 0, 0}, // y2 < y1 < y0
+	{2, 0, 1, 0},
+	{2, 1, 0, 0},
 };
 
 #if _M_SSE >= 0x501
@@ -710,17 +677,13 @@ void GSRasterizer::DrawTriangle(const GSVertexSW* vertex, const u16* index)
 
 	m1 = (y0011 == y1221).mask() & 7;
 
-	// if (i == 0) => y0 < y1 < y2
-	// if (i == 1) => y0 == y1 < y2
-	// if (i == 4) => y0 < y1 == y2
-
-	if (m1 == 7) // y0 == y1 == y2
+	if (m1 == 7)
 		return;
 
 	GSVector4 tbf = y0011.xzxz(y1221).ceil();
 	GSVector4 tbmax = tbf.max(m_fscissor_y);
 	GSVector4 tbmin = tbf.min(m_fscissor_y);
-	GSVector4i tb = GSVector4i(tbmax.xzyw(tbmin)); // max(y0, t) max(y1, t) min(y1, b) min(y2, b)
+	GSVector4i tb = GSVector4i(tbmax.xzyw(tbmin));
 
 	GSVertexSW2 dv0 = v1 - v0;
 	GSVertexSW2 dv1 = v2 - v0;
@@ -728,8 +691,7 @@ void GSRasterizer::DrawTriangle(const GSVertexSW* vertex, const u16* index)
 
 	GSVector4 cross = GSVector4::loadl(&dv0.p) * GSVector4::loadl(&dv1.p).yxwz();
 
-	cross = (cross - cross.yxwz()).yyyy(); // select the second component, the negated cross product
-	// the longest horizontal span would be cross.x / dv1.p.y, but we don't need its actual value
+	cross = (cross - cross.yxwz()).yyyy();
 
 	int m2 = cross.upl(cross == GSVector4::zero()).mask();
 
@@ -749,7 +711,6 @@ void GSRasterizer::DrawTriangle(const GSVertexSW* vertex, const u16* index)
 	ddx[1] = ddx[0].yxzw();
 	ddx[2] = ddx[0].xzyw();
 
-	// Precision is important here. Don't use reciprocal, it will break Jak3/Xenosaga1
 	GSVector8 dxy01c(dxy01 / cross);
 
 	dscan = dv1 * dxy01c.yyyy() - dv0 * dxy01c.wwww();
@@ -819,7 +780,6 @@ void GSRasterizer::DrawTriangle(const GSVertexSW* vertex, const u16* index)
 			f2 = GSVector4i::cxpr(0) - f2;
 		}
 
-		// Bias for top-left edges.
 		f0 += GSVector4i(0, 0, tl0, 0);
 		f1 += GSVector4i(0, 0, tl1, 0);
 		f2 += GSVector4i(0, 0, tl2, 0);
@@ -912,17 +872,13 @@ void GSRasterizer::DrawTriangle(const GSVertexSW* vertex, const u16* index)
 
 	m1 = (y0011 == y1221).mask() & 7;
 
-	// if (i == 0) => y0 < y1 < y2
-	// if (i == 1) => y0 == y1 < y2
-	// if (i == 4) => y0 < y1 == y2
-
 	if (m1 == 7)
-		return; // y0 == y1 == y2
+		return;
 
 	GSVector4 tbf = y0011.xzxz(y1221).ceil();
 	GSVector4 tbmax = tbf.max(m_fscissor_y);
 	GSVector4 tbmin = tbf.min(m_fscissor_y);
-	GSVector4i tb = GSVector4i(tbmax.xzyw(tbmin)); // max(y0, t) max(y1, t) min(y1, b) min(y2, b)
+	GSVector4i tb = GSVector4i(tbmax.xzyw(tbmin));
 
 	GSVertexSW dv0 = v1 - v0;
 	GSVertexSW dv1 = v2 - v0;
@@ -930,8 +886,7 @@ void GSRasterizer::DrawTriangle(const GSVertexSW* vertex, const u16* index)
 
 	GSVector4 cross = GSVector4::loadl(&dv0.p) * GSVector4::loadl(&dv1.p).yxwz();
 
-	cross = (cross - cross.yxwz()).yyyy(); // select the second component, the negated cross product
-	// the longest horizontal span would be cross.x / dv1.p.y, but we don't need its actual value
+	cross = (cross - cross.yxwz()).yyyy();
 
 	int m2 = cross.upl(cross == GSVector4::zero()).mask();
 
@@ -951,7 +906,6 @@ void GSRasterizer::DrawTriangle(const GSVertexSW* vertex, const u16* index)
 	ddx[1] = ddx[0].yxzw();
 	ddx[2] = ddx[0].xzyw();
 
-	// Precision is important here. Don't use reciprocal, it will break Jak3/Xenosaga1
 	GSVector4 dxy01c = dxy01 / cross;
 
 	dscan = dv1 * dxy01c.yyyy() - dv0 * dxy01c.wwww();
@@ -1021,7 +975,6 @@ void GSRasterizer::DrawTriangle(const GSVertexSW* vertex, const u16* index)
 			f2 = GSVector4i::cxpr(0) - f2;
 		}
 
-		// Bias for top-left edges.
 		f0 += GSVector4i(0, 0, tl0, 0);
 		f1 += GSVector4i(0, 0, tl1, 0);
 		f2 += GSVector4i(0, 0, tl2, 0);
@@ -1180,25 +1133,15 @@ void GSRasterizer::DrawSprite(const GSVertexSW* vertex, const u16* index)
 
 void GSRasterizer::DrawEdge(const GSVertexSW& v0, const GSVertexSW& v1, const GSVertexSW& dv, int orientation, int side)
 {
-	// orientation:
-	// - true: |dv.p.y| > |dv.p.x|
-	// - false |dv.p.x| > |dv.p.y|
-	// side:
-	// - true: top/left edge
-	// - false: bottom/right edge
-
-	// TODO: bit slow and too much duplicated code
-	// TODO: inner pre-step is still missing (hardly noticable)
-	// TODO: it does not always line up with the edge of the surrounded triangle
 
 	GSVertexSW* RESTRICT e = &m_edge.buff[m_edge.count];
 
 	if (orientation)
 	{
-		GSVector4 tbf = v0.p.yyyy(v1.p).ceil(); // t t b b
-		GSVector4 tbmax = tbf.max(m_fscissor_y); // max(t, st) max(t, sb) max(b, st) max(b, sb)
-		GSVector4 tbmin = tbf.min(m_fscissor_y); // min(t, st) min(t, sb) min(b, st) min(b, sb)
-		GSVector4i tb = GSVector4i(tbmax.xzyw(tbmin)); // max(t, st) max(b, sb) min(t, st) min(b, sb)
+		GSVector4 tbf = v0.p.yyyy(v1.p).ceil();
+		GSVector4 tbmax = tbf.max(m_fscissor_y);
+		GSVector4 tbmin = tbf.min(m_fscissor_y);
+		GSVector4i tb = GSVector4i(tbmax.xzyw(tbmin));
 
 		int top, bottom;
 
@@ -1206,8 +1149,8 @@ void GSRasterizer::DrawEdge(const GSVertexSW& v0, const GSVertexSW& v1, const GS
 
 		if (dv.p.y >= 0)
 		{
-			top    = tb.extract32<0>(); // max(t, st)
-			bottom = tb.extract32<3>(); // min(b, sb)
+			top    = tb.extract32<0>();
+			bottom = tb.extract32<3>();
 
 			if (top >= bottom)
 				return;
@@ -1219,8 +1162,8 @@ void GSRasterizer::DrawEdge(const GSVertexSW& v0, const GSVertexSW& v1, const GS
 		}
 		else
 		{
-			top    = tb.extract32<1>(); // max(b, st)
-			bottom = tb.extract32<2>(); // min(t, sb)
+			top    = tb.extract32<1>();
+			bottom = tb.extract32<2>();
 
 			if (top >= bottom)
 				return;
@@ -1285,10 +1228,10 @@ void GSRasterizer::DrawEdge(const GSVertexSW& v0, const GSVertexSW& v1, const GS
 	}
 	else
 	{
-		GSVector4 lrf = v0.p.xxxx(v1.p).ceil(); // l l r r
-		GSVector4 lrmax = lrf.max(m_fscissor_x); // max(l, sl) max(l, sr) max(r, sl) max(r, sr)
-		GSVector4 lrmin = lrf.min(m_fscissor_x); // min(l, sl) min(l, sr) min(r, sl) min(r, sr)
-		GSVector4i lr = GSVector4i(lrmax.xzyw(lrmin)); // max(l, sl) max(r, sl) min(l, sr) min(r, sr)
+		GSVector4 lrf = v0.p.xxxx(v1.p).ceil();
+		GSVector4 lrmax = lrf.max(m_fscissor_x);
+		GSVector4 lrmin = lrf.min(m_fscissor_x);
+		GSVector4i lr = GSVector4i(lrmax.xzyw(lrmin));
 
 		int left, right;
 
@@ -1296,8 +1239,8 @@ void GSRasterizer::DrawEdge(const GSVertexSW& v0, const GSVertexSW& v1, const GS
 
 		if ((dv.p >= GSVector4::zero()).mask() & 1)
 		{
-			left  = lr.extract32<0>(); // max(l, sl)
-			right = lr.extract32<3>(); // min(r, sr)
+			left  = lr.extract32<0>();
+			right = lr.extract32<3>();
 
 			if (left >= right)
 				return;
@@ -1309,8 +1252,8 @@ void GSRasterizer::DrawEdge(const GSVertexSW& v0, const GSVertexSW& v1, const GS
 		}
 		else
 		{
-			left  = lr.extract32<1>(); // max(r, sl)
-			right = lr.extract32<2>(); // min(l, sr)
+			left  = lr.extract32<1>();
+			right = lr.extract32<2>();
 
 			if (left >= right)
 				return;
@@ -1383,9 +1326,8 @@ void GSRasterizer::AddScanline(GSVertexSW* e, int pixels, int left, int top, con
 	AddScanlineInfo(e, pixels, left, top);
 }
 
-void GSRasterizer::Flush(const GSVertexSW* vertex, const u16* index, const GSVertexSW& dscan, bool edge /* = false */)
+void GSRasterizer::Flush(const GSVertexSW* vertex, const u16* index, const GSVertexSW& dscan, bool edge )
 {
-	// TODO: on win64 this could be the place where xmm6-15 are preserved (not by each DrawScanline)
 
 	int count = m_edge.count;
 
@@ -1434,7 +1376,6 @@ void GSRasterizer::DrawScanline(int pixels, int left, int top, const GSVertexSW&
 	if ((m_scanmsk_value & 2) && (m_scanmsk_value & 1) == (top & 1)) return;
 	m_pixels.actual += pixels;
 	m_pixels.total += ((left + pixels + (PIXELS_PER_LOOP - 1)) & ~(PIXELS_PER_LOOP - 1)) - (left & ~(PIXELS_PER_LOOP - 1));
-	//m_pixels.total += ((left + pixels + (PIXELS_PER_LOOP - 1)) & ~(PIXELS_PER_LOOP - 1)) - left;
 
 	pxAssert(m_pixels.actual <= m_pixels.total);
 
@@ -1451,8 +1392,6 @@ void GSRasterizer::DrawEdge(int pixels, int left, int top, const GSVertexSW& sca
 
 	m_draw_edge(pixels, left, top, scan, m_local);
 }
-
-//
 
 GSSingleRasterizer::GSSingleRasterizer()
 	: m_r(&m_ds, 0, 1)
@@ -1486,7 +1425,7 @@ bool GSSingleRasterizer::IsSynced() const
 	return true;
 }
 
-int GSSingleRasterizer::GetPixels(bool reset /*= true*/)
+int GSSingleRasterizer::GetPixels(bool reset )
 {
 	return m_r.GetPixels(reset);
 }
@@ -1497,8 +1436,6 @@ void GSSingleRasterizer::PrintStats()
 	m_ds.PrintStats();
 #endif
 }
-
-//
 
 GSRasterizerList::GSRasterizerList(int threads)
 {

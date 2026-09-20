@@ -15,13 +15,13 @@ struct
 	int channel_bit_depth;
 	const char *extension[2];
 } static const pixel[GSPng::Format::COUNT] = {
-	{PNG_COLOR_TYPE_RGBA, 4, 4, 8 , {"_full.png",     nullptr}},         // RGBA_PNG
-	{PNG_COLOR_TYPE_RGB , 4, 3, 8 , {".png",          nullptr}},         // RGB_PNG
-	{PNG_COLOR_TYPE_RGB , 4, 3, 8 , {".png",          "_alpha.png"}},    // RGB_A_PNG
-	{PNG_COLOR_TYPE_GRAY, 4, 1, 8 , {"_alpha.png",    nullptr}},         // ALPHA_PNG
-	{PNG_COLOR_TYPE_GRAY, 1, 1, 8 , {"_R8I.png",      nullptr}},         // R8I_PNG
-	{PNG_COLOR_TYPE_GRAY, 2, 2, 16, {"_R16I.png",     nullptr}},         // R16I_PNG
-	{PNG_COLOR_TYPE_GRAY, 4, 2, 16, {"_R32I_lsb.png", "_R32I_msb.png"}}, // R32I_PNG
+	{PNG_COLOR_TYPE_RGBA, 4, 4, 8 , {"_full.png",     nullptr}},
+	{PNG_COLOR_TYPE_RGB , 4, 3, 8 , {".png",          nullptr}},
+	{PNG_COLOR_TYPE_RGB , 4, 3, 8 , {".png",          "_alpha.png"}},
+	{PNG_COLOR_TYPE_GRAY, 4, 1, 8 , {"_alpha.png",    nullptr}},
+	{PNG_COLOR_TYPE_GRAY, 1, 1, 8 , {"_R8I.png",      nullptr}},
+	{PNG_COLOR_TYPE_GRAY, 2, 2, 16, {"_R16I.png",     nullptr}},
+	{PNG_COLOR_TYPE_GRAY, 4, 2, 16, {"_R32I_lsb.png", "_R32I_msb.png"}},
 };
 
 namespace GSPng
@@ -104,7 +104,6 @@ namespace GSPng
 		if (!SaveFile(filename, fmt, image, row.get(), w, h, pitch, compression, rb_swapped, true))
 			return false;
 
-		// Second image
 		if (pixel[fmt].extension[1] == nullptr)
 			return true;
 
@@ -115,7 +114,6 @@ namespace GSPng
 	Transaction::Transaction(GSPng::Format fmt, const std::string& file, const u8* image, int w, int h, int pitch, int compression)
 		: m_fmt(fmt), m_file(file), m_w(w), m_h(h), m_pitch(pitch), m_compression(compression)
 	{
-		// Note: yes it would be better to use shared pointer
 		m_image = (u8*)_aligned_malloc(pitch * h, 32);
 		if (m_image)
 			memcpy(m_image, image, pitch * h);
@@ -132,4 +130,4 @@ namespace GSPng
 		Save(item->m_fmt, item->m_file, item->m_image, item->m_w, item->m_h, item->m_pitch, item->m_compression);
 	}
 
-} // namespace GSPng
+}

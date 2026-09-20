@@ -68,10 +68,6 @@ DebugAnalysisSettingsWidget::DebugAnalysisSettingsWidget(SettingsWindow* dialog,
 
 	m_ui.setupUi(this);
 
-	// Make sure the user doesn't select symbol sources from both the global
-	// settings and the per-game settings, as these settings will conflict with
-	// each other. It only really makes sense to modify these settings on a
-	// per-game basis anyway.
 	if (dialog->isPerGameSettings())
 	{
 		SettingWidgetBinder::BindWidgetToBoolSetting(
@@ -106,8 +102,6 @@ DebugAnalysisSettingsWidget::DebugAnalysisSettingsWidget(SettingsWindow* dialog,
 	m_dialog->registerWidgetHelp(m_ui.demangleParameters, tr("Demangle Parameters"), tr("Checked"),
 		tr("Include parameter lists in demangled function names."));
 
-	// Same as above. It only makes sense to load extra symbol files on a
-	// per-game basis.
 	if (dialog->isPerGameSettings())
 	{
 		setupSymbolFileList();
@@ -127,8 +121,6 @@ DebugAnalysisSettingsWidget::DebugAnalysisSettingsWidget(SettingsWindow* dialog,
 		tr("Choose where the function scanner looks to find functions. This option can be useful if the application "
 		   "loads additional code at runtime."));
 
-	// Same as above. It only makes sense to set a custom memory range on a
-	// per-game basis.
 	if (dialog->isPerGameSettings())
 	{
 		SettingWidgetBinder::BindWidgetToBoolSetting(
@@ -205,8 +197,6 @@ void DebugAnalysisSettingsWidget::setupSymbolSourceGrid()
 
 	if (!m_dialog || m_dialog->getSerial() == QtHost::GetCurrentGameSerial().toStdString())
 	{
-		// Add symbol sources for which the user has already selected whether or
-		// not they should be cleared.
 		int existing_symbol_source_count = getIntSettingValue("Debugger/Analysis/SymbolSources", "Count", 0);
 		for (int i = 0; i < existing_symbol_source_count; i++)
 		{
@@ -219,9 +209,6 @@ void DebugAnalysisSettingsWidget::setupSymbolSourceGrid()
 			source.modified_by_user = true;
 		}
 
-		// Add any more symbol sources for which the user hasn't made a
-		// selection. These are separate since we don't want to have to store
-		// configuration data for them.
 		R5900SymbolGuardian.Read([&](const ccc::SymbolDatabase& database) {
 			for (const ccc::SymbolSource& symbol_source : database.symbol_sources)
 			{
@@ -241,7 +228,6 @@ void DebugAnalysisSettingsWidget::setupSymbolSourceGrid()
 			return;
 		}
 
-		// Create the check boxes.
 		int i = 0;
 		for (auto& [name, temp] : m_symbol_sources)
 		{
@@ -283,7 +269,6 @@ void DebugAnalysisSettingsWidget::saveSymbolSources()
 	if (!sif)
 		return;
 
-	// Clean up old configuration entries.
 	int old_count = sif->GetIntValue("Debugger/Analysis/SymbolSources", "Count");
 	for (int i = 0; i < old_count; i++)
 	{
@@ -301,7 +286,6 @@ void DebugAnalysisSettingsWidget::saveSymbolSources()
 	if (symbol_sources_to_save == 0)
 		return;
 
-	// Make new configuration entries.
 	sif->SetIntValue("Debugger/Analysis/SymbolSources", "Count", symbol_sources_to_save);
 
 	int i = 0;
@@ -428,7 +412,6 @@ void DebugAnalysisSettingsWidget::saveSymbolFiles()
 	if (!sif)
 		return;
 
-	// Clean up old configuration entries.
 	int old_count = sif->GetIntValue("Debugger/Analysis/ExtraSymbolFiles", "Count");
 	for (int i = 0; i < old_count; i++)
 	{
@@ -441,7 +424,6 @@ void DebugAnalysisSettingsWidget::saveSymbolFiles()
 	if (m_symbol_file_model->rowCount() == 0)
 		return;
 
-	// Make new configuration entries.
 	sif->SetIntValue("Debugger/Analysis/ExtraSymbolFiles", "Count", m_symbol_file_model->rowCount());
 
 	for (int i = 0; i < m_symbol_file_model->rowCount(); i++)

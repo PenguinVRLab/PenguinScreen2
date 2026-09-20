@@ -281,6 +281,7 @@ namespace VR::ProfileDB
 			Focus,
 			Duo,
 			Mirror,
+			Local,
 		};
 		struct Probe
 		{
@@ -317,6 +318,7 @@ namespace VR::ProfileDB
 		std::optional<float> screen_distance;
 		std::optional<float> screen_height;
 		std::optional<float> screen_arc_deg;
+		std::optional<bool> screen_follow_head;
 		std::optional<CameraProfile> camera;
 		std::optional<SplitParams> split;
 		std::string notes;

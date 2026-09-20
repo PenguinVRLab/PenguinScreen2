@@ -18,7 +18,8 @@ SLUS-20090:
     active: { address: 0x003A2A34, atLeast: 2, width: 4 }
     localView: 0
     localPadPort: 0
-    mode: focus
+    mode: local
+  screen: { follow: head }
   camera:
     base: { pointer: 0x003A40A4 }
     guards:

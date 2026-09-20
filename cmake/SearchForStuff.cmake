@@ -32,7 +32,11 @@ endif()
 
 # Platform-specific dependencies.
 if (WIN32)
-	add_subdirectory(3rdparty/D3D12MemAlloc EXCLUDE_FROM_ALL)
+	# Directory is lowercase on disk (and upstream); this reference was mixed
+	# case. Invisible on Windows — the line is WIN32-only and Windows
+	# filesystems are case-insensitive — but fatal when cross-compiling from
+	# a case-sensitive one. See docs/upstream-reports/.
+	add_subdirectory(3rdparty/d3d12memalloc EXCLUDE_FROM_ALL)
 	add_subdirectory(3rdparty/winpixeventruntime EXCLUDE_FROM_ALL)
 	add_subdirectory(3rdparty/winwil EXCLUDE_FROM_ALL)
 	set(FFMPEG_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/3rdparty/ffmpeg/include")

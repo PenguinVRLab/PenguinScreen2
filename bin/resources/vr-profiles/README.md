@@ -13,14 +13,19 @@ read-only in a flatpak install.
 1. Copy the game's file into your **user profiles folder**. The emulator
    creates that folder on first use and leaves a short note in it, along with
    a ready-to-edit copy of one shipped profile, `SLUS-20851.yaml` (Ace Combat
-   5). Because that copy is in your folder, it overrides the shipped Ace Combat
-   5 profile.
+   5). Because that copy is in your folder, it is the one in effect for that
+   game.
 2. Edit the copy. A user file overrides the shipped file for the same serial,
    whole file for whole file.
-3. Boot the game. A log line containing `user profile overrides shipped`
-   confirms your copy is in effect. Delete your copy to go back to the shipped
-   profile — except for the seeded `SLUS-20851.yaml`, which the emulator
-   recreates whenever it is missing.
+3. A log line containing `user profile overrides shipped` confirms your copy
+   is in effect. It appears whenever the profiles are loaded: when the
+   emulator starts, and again after you change a profile file.
+
+To go back to the shipped profile, delete your copy. If you delete the seeded
+`SLUS-20851.yaml`, the emulator recreates it as a fresh copy of the shipped one,
+which gives the same result. While any copy of a game's profile is in your
+folder — including the untouched seed — updates to that game's shipped profile
+do not reach you until you delete it.
 
 Every profile is checked at launch. An invalid file is reported in a dialog
 that names the file and the reason, and that one game falls back; other games
@@ -39,8 +44,9 @@ SLUS-20851:              # the disc serial; must match the file name
 ```
 
 `tier` states what the profile is meant to provide: `screen` is a flat virtual
-screen, `stereo` adds per-eye depth, `immersive` adds a head-driven camera. A
-value outside those three rejects the profile.
+screen, `stereo` adds per-eye depth, `immersive` adds a head-driven camera. It
+is a label: it does not switch anything on or off. A value outside those three
+rejects the profile.
 
 ## `screen`: the virtual screen
 
@@ -49,7 +55,7 @@ value outside those three rejects the profile.
 | `distance` | metres in front of you |
 | `height` | metres above the floor |
 | `follow` | `head` keeps the screen in front of you as you turn; `world` leaves it fixed in the room |
-| `arc` | curve of the screen in degrees; `0` is flat. Needs a VR runtime with cylinder-layer support, otherwise the screen is shown flat |
+| `arc` | curve of the screen in degrees; below `5` the screen is flat. Needs a VR runtime with cylinder-layer support, otherwise the screen is shown flat |
 
 A `distance`, `height` or `arc` written here wins over the matching slider in
 the settings window for that game. Leave a key out to keep it adjustable from
@@ -59,13 +65,14 @@ the settings window.
 
 | Key | Meaning |
 |---|---|
-| `separation` | how far apart the two eyes' images are pushed. Larger is deeper. Start small: the shipped profiles' base values run from `0.007` to `0.02` |
-| `convergence` | the depth that sits exactly at the screen surface. Content nearer than this stays at the screen; content beyond it goes into the screen. The useful range depends entirely on the game: the shipped profiles' base values run from `0.005` to `6.0`, so adjust from the shipped value and do not copy one game's number to another |
+| `separation` | how far apart the two eyes' images are pushed. Larger is deeper. Start small: in the shipped profiles the values directly under `stereo:` (outside `scenes`) run from `0.007` to `0.02` |
+| `convergence` | the depth that sits exactly at the screen surface. Content nearer than this stays at the screen; content beyond it goes into the screen. The useful range depends entirely on the game: in the shipped profiles the values directly under `stereo:` run from `0.005` to `6.0`, so adjust from the shipped value and do not copy one game's number to another |
 
-Depth only ever goes *into* the screen. Nothing is pushed out toward you. The
-one exception is a negative `hudCollimate` `disparity` (below), which is
-accepted with a warning and places aiming marks in front of the screen; keep
-`disparity` positive.
+Depth goes *into* the screen, never out toward you, as long as `separation`
+is positive. The emulator does not check its sign, and a negative value turns
+the depth inside out. A negative `hudCollimate` `disparity` (below) likewise
+places aiming marks in front of the screen; it is accepted with a warning. Keep
+both positive.
 
 If far scenery looks doubled or is uncomfortable to look at, lower
 `separation`. If the whole picture looks flat, raise it, or lower
@@ -98,8 +105,10 @@ stereo:
 
 At most 3 splits and 4 bands. `sep` must be greater than 0 and `conv` must not
 be negative. The joins between bands are worked out for you so depth stays
-continuous. An invalid band set is reported in the log and the game falls back
-to the plain `separation` / `convergence` pair. A band set that exceeds the
+continuous. An invalid band set is reported in the log and ignored: in the
+block directly under `stereo:` the game falls back to the plain `separation` /
+`convergence` pair, and in a scene it falls back to whatever the block under
+`stereo:` uses. A band set that exceeds the
 comfort budget is loaded with a warning.
 
 `map: log` is a smooth alternative with no band edges:

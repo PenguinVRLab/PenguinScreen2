@@ -5,7 +5,7 @@ The files listed below are **original works of Patrick Carey**
 exist in upstream PCSX2; they were added in this fork's history.
 
 They are offered **in this repository** under the repository's license —
-`SPDX-License-Identifier: GPL-3.0`, as marked in each file's header (unchanged).
+`SPDX-License-Identifier: GPL-3.0`, as marked in each file's header.
 
 The copyright holder reserves all rights in these original works, **including the
 right to license the same code under other terms in sibling projects**.

@@ -374,9 +374,37 @@ namespace VR::CameraDriver
 		{
 			float base = 0.0f;
 			float last_written = 0.0f;
+			float head_ref = 0.0f;
+			float clamp_min = -std::numeric_limits<float>::infinity();
+			float clamp_max = std::numeric_limits<float>::infinity();
+			bool wrap360 = false;
+			u32 addr = 0;
+			ProfileDB::CameraEncoding encoding = ProfileDB::CameraEncoding::F32;
+			bool anchored = false;
 			bool has = false;
 		};
 		std::vector<AnchorState> s_anchor;
+
+		void RestoreAnchoredScalar(AnchorState& a)
+		{
+			if (!a.has || !a.anchored)
+			{
+				a.has = false;
+				return;
+			}
+			a.has = false;
+			const std::optional<float> guest = DecodeGuestValue(a.addr, a.encoding);
+			if (guest.has_value() && guest.value() == a.last_written)
+			{
+				float orig = a.base + a.head_ref;
+				if (a.wrap360)
+					orig = Wrap360(orig);
+				orig = std::clamp(orig, a.clamp_min, a.clamp_max);
+				EncodeAndWrite(a.addr, orig, a.encoding);
+			}
+			else
+				DevCon.WriteLn("(VR) CameraDriver: anchored op at 0x%08X not restored — guest value is no longer ours (game wrote it).", a.addr);
+		}
 
 		struct MatBaseline
 		{
@@ -395,11 +423,13 @@ namespace VR::CameraDriver
 		};
 		std::vector<MatAnchor> s_mat_anchor;
 
-		void ResetDeltaState()
+		void ResetDeltaState(bool keep_anchors = false)
 		{
 			std::fill(s_delta_has.begin(), s_delta_has.end(), false);
 			for (MatBaseline& b : s_mat_prev)
 				b.has = false;
+			if (keep_anchors)
+				return;
 			for (MatAnchor& m : s_mat_anchor)
 				m.has = false;
 			for (AnchorState& a : s_anchor)
@@ -413,14 +443,19 @@ namespace VR::CameraDriver
 			float v;
 			if (op.compose == ProfileDB::CameraCompose::Anchored)
 			{
+				if (op_index >= s_anchor.size())
+					return;
 				AnchorState& a = s_anchor[op_index];
+				if (a.has && a.addr != address)
+					RestoreAnchoredScalar(a);
 				const std::optional<float> game = DecodeGuestValue(address, op.encoding);
 				if (!game.has_value())
 					return;
 				const float head_term = src * op.axis_sign * op.scale;
 				if (!a.has)
 				{
-					a.base = game.value() - head_term;
+					a.head_ref = op.anchor_head ? head_term : 0.0f;
+					a.base = game.value() - a.head_ref;
 					a.has = true;
 				}
 				else
@@ -437,8 +472,14 @@ namespace VR::CameraDriver
 					a.base = std::remainder(a.base, 360.0f);
 				}
 				v = std::clamp(v, op.clamp_min, op.clamp_max);
-				a.last_written = v;
 				EncodeAndWrite(address, v, op.encoding);
+				a.last_written = DecodeGuestValue(address, op.encoding).value_or(v);
+				a.addr = address;
+				a.encoding = op.encoding;
+				a.clamp_min = op.clamp_min;
+				a.clamp_max = op.clamp_max;
+				a.wrap360 = (op.wrap == ProfileDB::CameraWrap::Deg360);
+				a.anchored = true;
 				return;
 			}
 			if (op.compose == ProfileDB::CameraCompose::Delta)
@@ -540,6 +581,7 @@ namespace VR::CameraDriver
 		};
 		ResolvedBase s_base;
 		u64 s_vsync_counter = 0;
+		u32 s_base_unresolved_vsyncs = 0;
 
 		std::optional<u32> ScanForBase(const ProfileDB::CameraBase& spec)
 		{
@@ -598,6 +640,23 @@ namespace VR::CameraDriver
 			return static_cast<u32>(base);
 		}
 
+		std::optional<u32> WalkChain(u32 root, const std::vector<s32>& hops)
+		{
+			u32 deref = memRead32(root);
+			if (deref == 0 || deref >= Ps2MemSize::MainRam || (deref & 3u) != 0)
+				return std::nullopt;
+			for (const s32 hop : hops)
+			{
+				const s64 slot = static_cast<s64>(deref) + hop;
+				if (slot < 0 || slot + 4 > static_cast<s64>(Ps2MemSize::MainRam))
+					return std::nullopt;
+				deref = memRead32(static_cast<u32>(slot));
+				if (deref == 0 || deref >= Ps2MemSize::MainRam || (deref & 3u) != 0)
+					return std::nullopt;
+			}
+			return deref;
+		}
+
 		std::optional<u32> GetBase(const ProfileDB::CameraProfile& cam, u32 crc)
 		{
 			if (!cam.base.has_value())
@@ -632,12 +691,13 @@ namespace VR::CameraDriver
 			if (cam.base->is_pointer)
 			{
 				const ProfileDB::CameraBase& spec = cam.base.value();
-				const u32 deref = memRead32(spec.pointer_addr);
-				if (deref == 0 || deref >= Ps2MemSize::MainRam)
+				const std::optional<u32> obj = WalkChain(spec.pointer_addr, spec.deref_offsets);
+				if (!obj.has_value())
 				{
 					s_base.valid = false;
 					return std::nullopt;
 				}
+				u32 deref = obj.value();
 				if (spec.has_validate)
 				{
 					const s64 vaddr = static_cast<s64>(deref) + spec.validate_offset;
@@ -658,7 +718,8 @@ namespace VR::CameraDriver
 				if (!s_base.valid || s_base.crc != crc || s_base.base != base)
 				{
 					s_base = ResolvedBase{crc, base, true, 0};
-					Console.WriteLn("(VR) CameraDriver: camera struct base resolved at 0x%08X (pointer deref).", base);
+					Console.WriteLn("(VR) CameraDriver: camera struct base resolved at 0x%08X (pointer deref, %zu extra hop(s)).",
+						base, spec.deref_offsets.size());
 				}
 				return base;
 			}
@@ -699,12 +760,23 @@ namespace VR::CameraDriver
 		{
 			for (const ProfileDB::CameraGuard& g : guards)
 			{
+				u32 address = g.ee_address;
+				if (g.is_chain)
+				{
+					const std::optional<u32> obj = WalkChain(g.pointer_addr, g.deref_offsets);
+					if (!obj.has_value())
+						return false;
+					const s64 a = static_cast<s64>(obj.value()) + g.offset;
+					if (a < 0 || a + g.width > static_cast<s64>(Ps2MemSize::MainRam))
+						return false;
+					address = static_cast<u32>(a);
+				}
 				u32 v = 0;
 				switch (g.width)
 				{
-					case 1: v = memRead8(g.ee_address); break;
-					case 2: v = memRead16(g.ee_address); break;
-					default: v = memRead32(g.ee_address); break;
+					case 1: v = memRead8(address); break;
+					case 2: v = memRead16(address); break;
+					default: v = memRead32(address); break;
 				}
 				if (v != g.equals)
 					return false;
@@ -963,7 +1035,12 @@ namespace VR::CameraDriver
 			s_hooks_installed = false;
 			s_base.valid = false;
 			s_padlook = PadLookState{};
-			ResetDeltaState();
+			if (vm_state == VMState::Running)
+			{
+				for (AnchorState& a : s_anchor)
+					RestoreAnchoredScalar(a);
+			}
+			ResetDeltaState( vm_state != VMState::Running);
 			PadLook::Publish(0.0f);
 			return;
 		}
@@ -1017,9 +1094,11 @@ namespace VR::CameraDriver
 					}
 					an.has = false;
 				}
+				for (AnchorState& a : s_anchor)
+					RestoreAnchoredScalar(a);
 			}
 			s_padlook = PadLookState{};
-			ResetDeltaState();
+			ResetDeltaState( vm_state != VMState::Running);
 			PadLook::Publish(0.0f);
 			return;
 		}
@@ -1028,6 +1107,21 @@ namespace VR::CameraDriver
 		ApplyCodeHooks(cam, crc);
 
 		const std::optional<u32> base = GetBase(cam, crc);
+		if (cam.base.has_value() && !base.has_value())
+		{
+			s_base_unresolved_vsyncs++;
+			if (s_base_unresolved_vsyncs == 300 || (s_base_unresolved_vsyncs > 300 && (s_base_unresolved_vsyncs - 300) % 1800 == 0))
+			{
+				if (cam.base->is_pointer)
+					Console.Warning("(VR) CameraDriver: camera base UNRESOLVED for %u s while armed (CRC %08X) — relative op(s) are sitting out; pointer root 0x%08X reads 0x%08X (a hop or the validate word failed if that is non-zero).",
+						s_base_unresolved_vsyncs / 60, crc, cam.base->pointer_addr, memRead32(cam.base->pointer_addr));
+				else
+					Console.Warning("(VR) CameraDriver: camera base UNRESOLVED for %u s while armed (CRC %08X) — relative op(s) are sitting out (scan/indexed base: no match).",
+						s_base_unresolved_vsyncs / 60, crc);
+			}
+		}
+		else
+			s_base_unresolved_vsyncs = 0;
 
 		if (s_recenter_requested.exchange(false, std::memory_order_acq_rel) || !s_has_reference ||
 			s_reference_crc != crc)
@@ -1038,7 +1132,7 @@ namespace VR::CameraDriver
 			s_ref_w = pose.orientation_w;
 			s_has_reference = true;
 			s_reference_crc = crc;
-			ResetDeltaState();
+			ResetDeltaState( true);
 			s_padlook.gate = 0;
 			DevCon.WriteLn("(VR) CameraDriver: view recentered.");
 		}
@@ -1048,6 +1142,8 @@ namespace VR::CameraDriver
 			s_delta_crc = crc;
 			s_delta_prev.assign(cam.writes.size(), 0.0f);
 			s_delta_has.assign(cam.writes.size(), false);
+			for (AnchorState& a : s_anchor)
+				RestoreAnchoredScalar(a);
 			s_anchor.assign(cam.writes.size(), AnchorState{});
 		}
 		if (s_mat_crc != crc || s_mat_prev.size() != cam.matrix_writes.size())
@@ -1071,13 +1167,23 @@ namespace VR::CameraDriver
 				if (!base.has_value())
 				{
 					s_delta_has[i] = false;
+					if (i < s_anchor.size()) RestoreAnchoredScalar(s_anchor[i]);
 					continue;
 				}
-				address += base.value();
+				const s64 absolute = static_cast<s64>(address) + static_cast<s64>(base.value());
+				if (absolute < 0 || absolute + 8 > static_cast<s64>(Ps2MemSize::MainRam))
+				{
+					s_delta_has[i] = false;
+					if (i < s_anchor.size()) RestoreAnchoredScalar(s_anchor[i]);
+					continue;
+				}
+				address = static_cast<u32>(absolute);
 			}
 			if (!op.when.empty() && !GuardListPass(op.when))
 			{
 				s_delta_has[i] = false;
+				if (i < s_anchor.size())
+					RestoreAnchoredScalar(s_anchor[i]);
 				continue;
 			}
 			EvaluateAndWrite(op, i, address, euler, pose);
@@ -1138,6 +1244,11 @@ namespace VR::CameraDriver
 			s_padlook = PadLookState{};
 			PadLook::Publish(0.0f);
 		}
+	}
+
+	void OnStateLoaded()
+	{
+		ResetDeltaState();
 	}
 
 	void RequestRecenter()

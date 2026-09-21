@@ -5986,7 +5986,7 @@ void GSRendererHW::DetermineVSConfig(GSTextureCache::Target* rt, float rtscale, 
 					m_vt.m_min.t.x, m_vt.m_min.t.y, m_vt.m_max.t.x, m_vt.m_max.t.y, vr_collimate);
 			}
 		}
-		else if (!s_coll_dead_warned && s_coll_considered > 20000)
+		else if (!s_coll_dead_warned && s_coll_matched == 0 && s_coll_considered > 20000)
 		{
 			s_coll_dead_warned = true;
 			Console.WarningFmt("(VR) HUD collimation: {} rule(s) authored, but NOT ONE of {} UV/FST draws has "

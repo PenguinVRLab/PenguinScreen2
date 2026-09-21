@@ -22,6 +22,8 @@ namespace VR::CameraDriver
 
 	void RequestRecenter();
 
+	void OnStateLoaded();
+
 	bool SelfTestAssembler();
 
 	bool SelfTestMath();

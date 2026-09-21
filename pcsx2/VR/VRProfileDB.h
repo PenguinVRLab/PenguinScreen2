@@ -158,6 +158,10 @@ namespace VR::ProfileDB
 		u32 ee_address = 0;
 		u32 equals = 0;
 		u8 width = 4;
+		bool is_chain = false;
+		u32 pointer_addr = 0;
+		std::vector<s32> deref_offsets;
+		s32 offset = 0;
 	};
 
 	struct CameraWriteOp
@@ -173,6 +177,7 @@ namespace VR::ProfileDB
 		float clamp_min = -std::numeric_limits<float>::infinity();
 		float clamp_max = std::numeric_limits<float>::infinity();
 		float axis_sign = 1.0f;
+		bool anchor_head = true;
 		std::vector<CameraGuard> when;
 	};
 
@@ -211,6 +216,7 @@ namespace VR::ProfileDB
 		u32 scan_end = 0x02000000;
 		bool is_pointer = false;
 		u32 pointer_addr = 0;
+		std::vector<s32> deref_offsets;
 		bool is_indexed = false;
 		u32 indexed_base = 0;
 		s64 array_offset = 0;

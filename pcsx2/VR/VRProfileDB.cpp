@@ -434,6 +434,8 @@ static void warnWidthFit(const std::string_view serial, u32 value, u32 width, co
 						   "(max {:#x}); the probe can never match.", serial, field, value, width, wmax);
 }
 
+static std::optional<s64> parseSignedOffset(std::string_view sv);
+
 static void parseGuardList(const std::string_view serial, const ryml::ConstNodeRef& seq,
 	const char* what, std::vector<VR::ProfileDB::CameraGuard>& out)
 {
@@ -441,12 +443,19 @@ static void parseGuardList(const std::string_view serial, const ryml::ConstNodeR
 	{
 		if (!g.is_map())
 			continue;
+		const bool chain_form = g.has_child("pointer");
+		if (chain_form && g.has_child("address"))
+		{
+			Console.WarningFmt("(VR) ProfileDB: Serial '{}' has a {} with BOTH address and pointer; skipping it.", serial, what);
+			continue;
+		}
 		const std::optional<u32> addr = g.has_child("address") ? parseAddress(nodeVal(g["address"])) : std::nullopt;
+		const std::optional<u32> root = chain_form ? parseAddress(nodeVal(g["pointer"])) : std::nullopt;
 		const std::string_view eq_raw = g.has_child("equals") ? nodeVal(g["equals"]) : std::string_view{};
 		const std::optional<u32> eq = g.has_child("equals") ? parseHexU32(eq_raw) : std::nullopt;
-		if (!addr.has_value() || !eq.has_value())
+		if ((!addr.has_value() && !root.has_value()) || !eq.has_value())
 		{
-			Console.WarningFmt("(VR) ProfileDB: Serial '{}' has a {} with a missing/invalid address or equals; skipping it.", serial, what);
+			Console.WarningFmt("(VR) ProfileDB: Serial '{}' has a {} with a missing/invalid address/pointer or equals; skipping it.", serial, what);
 			continue;
 		}
 		VR::ProfileDB::CameraGuard guard;
@@ -456,12 +465,61 @@ static void parseGuardList(const std::string_view serial, const ryml::ConstNodeR
 			if (wdt.has_value() && (wdt.value() == 1 || wdt.value() == 2 || wdt.value() == 4))
 				guard.width = static_cast<u8>(wdt.value());
 		}
-		if (!inMainRam(addr.value(), guard.width))
+		if (chain_form)
 		{
-			Console.WarningFmt("(VR) ProfileDB: Serial '{}' has a {} address {:#x}+{} outside/crossing main RAM; skipping it.", serial, what, addr.value(), guard.width);
-			continue;
+			if (!inMainRam(root.value(), 4))
+			{
+				Console.WarningFmt("(VR) ProfileDB: Serial '{}' has a {} pointer {:#x} outside main RAM; skipping it.", serial, what, root.value());
+				continue;
+			}
+			constexpr size_t kMaxGuardHops = 4;
+			bool ok = true;
+			if (g.has_child("derefOffsets"))
+			{
+				if (!g["derefOffsets"].is_seq())
+					ok = false;
+				else
+				{
+					for (const ryml::ConstNodeRef& hn : g["derefOffsets"].children())
+					{
+						const std::optional<s64> hop = parseSignedOffset(nodeVal(hn));
+						if (guard.deref_offsets.size() >= kMaxGuardHops || !hop.has_value() ||
+							hop.value() < static_cast<s64>(std::numeric_limits<s32>::min()) ||
+							hop.value() > static_cast<s64>(std::numeric_limits<s32>::max()) || (hop.value() & 3) != 0)
+						{
+							ok = false;
+							break;
+						}
+						guard.deref_offsets.push_back(static_cast<s32>(hop.value()));
+					}
+				}
+			}
+			if (ok && g.has_child("offset"))
+			{
+				const std::optional<s64> off = parseSignedOffset(nodeVal(g["offset"]));
+				if (!off.has_value() || off.value() < static_cast<s64>(std::numeric_limits<s32>::min()) ||
+					off.value() > static_cast<s64>(std::numeric_limits<s32>::max()))
+					ok = false;
+				else
+					guard.offset = static_cast<s32>(off.value());
+			}
+			if (!ok)
+			{
+				Console.WarningFmt("(VR) ProfileDB: Serial '{}' has a {} with an invalid derefOffsets/offset (max 4 word-aligned hops); skipping it.", serial, what);
+				continue;
+			}
+			guard.is_chain = true;
+			guard.pointer_addr = root.value();
 		}
-		guard.ee_address = addr.value();
+		else
+		{
+			if (!inMainRam(addr.value(), guard.width))
+			{
+				Console.WarningFmt("(VR) ProfileDB: Serial '{}' has a {} address {:#x}+{} outside/crossing main RAM; skipping it.", serial, what, addr.value(), guard.width);
+				continue;
+			}
+			guard.ee_address = addr.value();
+		}
 		guard.equals = eq.value();
 		warnHexTrap(serial, eq_raw, eq.value(), what);
 		warnWidthFit(serial, eq.value(), guard.width, what);
@@ -909,6 +967,12 @@ static std::optional<VR::ProfileDB::CameraProfile> parseCamera(const std::string
 			readOptionalFloat(serial, w, "clampMin", "camera op clampMin", op.clamp_min);
 			readOptionalFloat(serial, w, "clampMax", "camera op clampMax", op.clamp_max);
 			readOptionalFloat(serial, w, "axisSign", "camera op axisSign", op.axis_sign);
+			if (w.has_child("anchorHead"))
+			{
+				op.anchor_head = !StringUtil::compareNoCase(nodeVal(w["anchorHead"]), "false");
+				if (op.compose != CameraCompose::Anchored)
+					Console.WarningFmt("(VR) ProfileDB: Serial '{}' sets anchorHead on a non-anchored camera write op; it only affects compose: anchored.", serial);
+			}
 			if (!op.relative && !inMainRam(op.ee_address))
 			{
 				Console.WarningFmt("(VR) ProfileDB: Serial '{}' camera write address {:#x} is outside main RAM; skipping it.", serial, op.ee_address);
@@ -1044,11 +1108,62 @@ static std::optional<VR::ProfileDB::CameraProfile> parseCamera(const std::string
 		else if (bnode.has_child("pointer"))
 		{
 			const std::optional<u32> ptr = parseAddress(nodeVal(bnode["pointer"]));
-			if (ptr.has_value())
+			if (ptr.has_value() && !inMainRam(ptr.value(), 4))
+			{
+				Console.WarningFmt("(VR) ProfileDB: Serial '{}' camera.base pointer {:#x} is outside main RAM; ignoring the base.",
+					serial, ptr.value());
+			}
+			else if (ptr.has_value())
 			{
 				base.is_pointer = true;
 				base.pointer_addr = ptr.value();
 				base_ok = true;
+				if (bnode.has_child("derefOffsets"))
+				{
+					constexpr size_t kMaxDerefHops = 4;
+					if (!bnode["derefOffsets"].is_seq())
+					{
+						Console.WarningFmt("(VR) ProfileDB: Serial '{}' camera.base derefOffsets must be a sequence "
+										   "(e.g. [0x188]); ignoring the whole base.", serial);
+						base_ok = false;
+					}
+					else
+					{
+						for (const ryml::ConstNodeRef& hn : bnode["derefOffsets"].children())
+						{
+							if (base.deref_offsets.size() >= kMaxDerefHops)
+							{
+								Console.WarningFmt("(VR) ProfileDB: Serial '{}' camera.base derefOffsets has more than {} hops; "
+												   "ignoring the whole base.", serial, kMaxDerefHops);
+								base_ok = false;
+								break;
+							}
+							const std::optional<s64> hop = parseSignedOffset(nodeVal(hn));
+							if (!hop.has_value() ||
+								hop.value() < static_cast<s64>(std::numeric_limits<s32>::min()) ||
+								hop.value() > static_cast<s64>(std::numeric_limits<s32>::max()))
+							{
+								Console.WarningFmt("(VR) ProfileDB: Serial '{}' camera.base has an invalid derefOffsets "
+												   "entry; ignoring the whole base (relative ops will not fire).", serial);
+								base_ok = false;
+								break;
+							}
+							if ((hop.value() & 3) != 0)
+							{
+								Console.WarningFmt("(VR) ProfileDB: Serial '{}' camera.base derefOffsets entry {:#x} is not "
+												   "word-aligned; ignoring the whole base.", serial, hop.value());
+								base_ok = false;
+								break;
+							}
+							base.deref_offsets.push_back(static_cast<s32>(hop.value()));
+						}
+						if (base_ok && base.deref_offsets.empty())
+						{
+							Console.WarningFmt("(VR) ProfileDB: Serial '{}' camera.base derefOffsets is empty; that is a "
+											   "plain one-hop pointer base — drop the key.", serial);
+						}
+					}
+				}
 				if (bnode.has_child("pattern"))
 					Console.WarningFmt("(VR) ProfileDB: Serial '{}' camera.base has both pointer and pattern; using the pointer.", serial);
 			}
@@ -1057,6 +1172,12 @@ static std::optional<VR::ProfileDB::CameraProfile> parseCamera(const std::string
 		{
 			base_ok = bnode.has_child("pattern") &&
 			          parseAobPattern(nodeVal(bnode["pattern"]), base.pattern, base.mask);
+		}
+		if (!base.is_pointer && bnode.has_child("derefOffsets"))
+		{
+			Console.WarningFmt("(VR) ProfileDB: Serial '{}' camera.base has derefOffsets but is not a usable pointer-mode "
+							   "base (needs a valid `pointer:`); ignoring the whole base.", serial);
+			base_ok = false;
 		}
 		if (base_ok && !base.is_pointer && bnode.has_child("range") && bnode["range"].is_seq() && bnode["range"].num_children() == 2)
 		{
@@ -1083,16 +1204,23 @@ static std::optional<VR::ProfileDB::CameraProfile> parseCamera(const std::string
 			const ryml::ConstNodeRef vnode = bnode["validate"];
 			const std::optional<s64> voff =
 				vnode.has_child("offset") ? parseSignedOffset(nodeVal(vnode["offset"])) : std::nullopt;
-			const std::optional<u32> veq =
-				vnode.has_child("equals") ? parseHexU32(nodeVal(vnode["equals"])) : std::nullopt;
+			const std::string_view veq_raw = vnode.has_child("equals") ? nodeVal(vnode["equals"]) : std::string_view{};
+			const std::optional<u32> veq = vnode.has_child("equals") ? parseHexU32(veq_raw) : std::nullopt;
 			if (voff.has_value() && veq.has_value())
 			{
 				base.has_validate = true;
 				base.validate_offset = voff.value();
 				base.validate_equals = veq.value();
+				warnHexTrap(serial, veq_raw, veq.value(), "camera.base validate.equals");
 			}
 			else
 				base_ok = false;
+		}
+		if (base_ok && base.is_pointer && !base.deref_offsets.empty() && !base.has_validate)
+		{
+			Console.WarningFmt("(VR) ProfileDB: Serial '{}' camera.base uses derefOffsets without a `validate` block; "
+							   "a pointer chain needs a guard word on the final object. Ignoring the whole base.", serial);
+			base_ok = false;
 		}
 		if (base_ok)
 			cam.base = std::move(base);

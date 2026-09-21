@@ -19,6 +19,7 @@
 #include "GS.h"
 #include "GS/Renderers/HW/GSTextureReplacements.h"
 #include "GSDumpReplayer.h"
+#include "GS/GS.h"
 #include "GameDatabase.h"
 #include "GameList.h"
 #include "Host.h"
@@ -1822,6 +1823,9 @@ bool VMManager::DoLoadState(const char* filename, Error* error)
 		return false;
 
 	Host::OnSaveStateLoaded(filename, true);
+#ifdef ENABLE_VR
+	VR::CameraDriver::OnStateLoaded();
+#endif
 	if (g_InputRecording.isActive())
 	{
 		g_InputRecording.handleLoadingSavestate();
@@ -2776,6 +2780,23 @@ void VMManager::Internal::VSyncOnCPUThread()
 
 #ifdef ENABLE_VR
 	VR::CameraDriver::Apply();
+	{
+		static const char* s_dump_env = std::getenv("PCSX2_VR_GSDUMP_AT_VSYNC");
+		static u64 s_dump_vsyncs = 0;
+		static bool s_dump_fired = false;
+		if (s_dump_env && !s_dump_fired)
+		{
+			u32 at = 0, frames = 1;
+			if (std::sscanf(s_dump_env, "%u:%u", &at, &frames) < 1)
+				at = 0;
+			if (++s_dump_vsyncs >= at)
+			{
+				s_dump_fired = true;
+				Console.WriteLn("(VR) Self-serve GS dump: queuing a %u-frame dump at vsync %llu (PCSX2_VR_GSDUMP_AT_VSYNC).", frames, static_cast<unsigned long long>(s_dump_vsyncs));
+				MTGS::RunOnGSThread([frames]() { GSQueueSnapshot(std::string(), frames); });
+			}
+		}
+	}
 	VR::ApplySceneStereo();
 	VR::SplitState::Apply();
 #endif

@@ -35,7 +35,7 @@ if (WIN32)
 	# Directory is lowercase on disk (and upstream); this reference was mixed
 	# case. Invisible on Windows — the line is WIN32-only and Windows
 	# filesystems are case-insensitive — but fatal when cross-compiling from
-	# a case-sensitive one. See docs/upstream-reports/.
+	# a case-sensitive one.
 	add_subdirectory(3rdparty/d3d12memalloc EXCLUDE_FROM_ALL)
 	add_subdirectory(3rdparty/winpixeventruntime EXCLUDE_FROM_ALL)
 	add_subdirectory(3rdparty/winwil EXCLUDE_FROM_ALL)

@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 Patrick Carey
+// SPDX-FileCopyrightText: 2026 Patrick Carey <patrickfcarey@gmail.com>
 // SPDX-License-Identifier: GPL-3.0
 
 #include "VR/MemWatch.h"

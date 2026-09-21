@@ -16,6 +16,9 @@
 #include "x86/BaseblockEx.h"
 #include "x86/iR5900.h"
 #include "x86/iR5900Analysis.h"
+#ifdef ENABLE_VR
+#include "VR/MemWatch.h"
+#endif
 
 #include "common/AlignedMalloc.h"
 #include "common/FastJmp.h"
@@ -1472,6 +1475,11 @@ void dynarecMemcheck(size_t i)
 		if (!mc.cond.Evaluate())
 			return;
 	}
+
+#ifdef ENABLE_VR
+	if (VR::MemWatchOnHit(mc.start, mc.end, (opcode.flags & IS_STORE) != 0, cpuRegs.pc, op))
+		return;
+#endif
 
 	if (mc.result & MEMCHECK_LOG)
 	{

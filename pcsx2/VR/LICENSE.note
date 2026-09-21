@@ -19,9 +19,18 @@ has them, including around any edits made to wire this module in.
 
 ### `pcsx2/VR/` — VR module (original)
 - `CameraDriver.cpp` / `.h`
+- `ControlQuads.cpp` / `.h`
+- `DepthHistogram.cpp` / `.h`
 - `HeadPose.cpp` / `.h`
+- `MemWatch.cpp` / `.h`
 - `PadLook.cpp` / `.h`
+- `SeatCast.cpp` / `.h`
+- `SeatSession.cpp` / `.h`
+- `SpatialControls.cpp` / `.h`
+- `SplitState.cpp` / `.h`
 - `StereoState.cpp` / `.h`
+- `VRInput.cpp` / `.h`
+- `VRInputState.h`
 - `VRInternal.h`
 - `VRManager.cpp` / `.h`
 - `VRProfileDB.cpp` / `.h`
@@ -29,7 +38,7 @@ has them, including around any edits made to wire this module in.
 - `XRCompositor.cpp` / `.h`
 - `XRSession.cpp` / `.h`
 
-(The VR tooling under `tools/vr/` is likewise original work of the same
-author; its own `LICENSE.note` lives beside it.)
+That is every source file in this directory. The development tooling written for
+this module is likewise original work of the same author and carries its own note.
 
-_Last updated 2026-07-16._
+_Last updated 2026-09-20._

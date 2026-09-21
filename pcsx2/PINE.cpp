@@ -12,6 +12,7 @@
 #include "Counters.h"
 #include "MTGS.h"
 #include "VR/DepthHistogram.h"
+#include "VR/MemWatch.h"
 #include "fmt/format.h"
 #include <chrono>
 #include <condition_variable>
@@ -141,6 +142,8 @@ namespace PINEServer
 		MsgGameVersion = 0xE,
 		MsgStatus = 0xF,
 		MsgVRQhistFlush = 0xE0,
+		MsgVRMemWatch = 0xE1,
+		MsgVRMemWatchPoll = 0xE2,
 		MsgUnimplemented = 0xFF
 	};
 
@@ -583,6 +586,74 @@ PINEServer::IPCBuffer PINEServer::ParseCommand(std::span<u8> buf, std::vector<u8
 				ToResultVector(ret_buffer, size, ret_cnt);
 				ret_cnt += 4;
 				memcpy(&ret_buffer[ret_cnt], st->path.c_str(), size);
+				ret_cnt += size;
+				break;
+			}
+			case MsgVRMemWatch:
+			{
+				if (!VMManager::HasValidVM())
+					goto error;
+				if (!SafetyChecks(buf_cnt, 4 + 3, ret_cnt, 1, buf_size)) [[unlikely]]
+					goto error;
+				const u32 watch_addr = FromSpan<u32>(buf, buf_cnt);
+				const u8 watch_size = FromSpan<u8>(buf, buf_cnt + 4);
+				const u8 watch_cond = FromSpan<u8>(buf, buf_cnt + 5);
+				const u8 watch_stop = FromSpan<u8>(buf, buf_cnt + 6);
+				buf_cnt += 7;
+
+				struct ArmState
+				{
+					std::mutex m;
+					std::condition_variable cv;
+					bool done = false;
+					int id = -1;
+				};
+				auto arm = std::make_shared<ArmState>();
+				Host::RunOnCPUThread([arm, watch_addr, watch_size, watch_cond, watch_stop]() {
+					int id;
+					if (watch_size == 0)
+					{
+						VR::MemWatchClearAll();
+						id = -2;
+					}
+					else
+					{
+						id = VR::MemWatchArm(watch_addr, watch_size, watch_cond, watch_stop != 0);
+					}
+					std::lock_guard<std::mutex> lock(arm->m);
+					arm->id = id;
+					arm->done = true;
+					arm->cv.notify_one();
+				});
+				{
+					std::unique_lock<std::mutex> lock(arm->m);
+					if (!arm->cv.wait_for(lock, std::chrono::seconds(10), [&arm] { return arm->done; }))
+					{
+						Console.Warning("(PINE) MsgVRMemWatch: the CPU thread did not service the request in 10s (VM shut down?)");
+						goto error;
+					}
+					if (arm->id == -1)
+					{
+						Console.Warning("(PINE) MsgVRMemWatch refused: bad size/cond, or no free watch slot");
+						goto error;
+					}
+					const u8 watch_id = (arm->id < 0) ? 0xFF : static_cast<u8>(arm->id);
+					ToResultVector(ret_buffer, watch_id, ret_cnt);
+				}
+				ret_cnt += 1;
+				break;
+			}
+			case MsgVRMemWatchPoll:
+			{
+				u32 dropped = 0;
+				const std::vector<VR::MemWatchHit> hits = VR::MemWatchDrain(&dropped);
+				const std::vector<u8> payload = VR::MemWatchTable::Serialize(hits, dropped);
+				const u32 size = static_cast<u32>(payload.size());
+				if (!SafetyChecks(buf_cnt, 0, ret_cnt, size + 4, buf_size)) [[unlikely]]
+					goto error;
+				ToResultVector(ret_buffer, size, ret_cnt);
+				ret_cnt += 4;
+				memcpy(&ret_buffer[ret_cnt], payload.data(), size);
 				ret_cnt += size;
 				break;
 			}

@@ -862,9 +862,9 @@ static std::optional<VR::ProfileDB::SplitParams> parseSplit(
 
 	if (sp.layout == SplitParams::Layout::Vertical)
 		advise(serial, "split",
-			fmt::format("(VR) ProfileDB: {} split: vertical layout parsed, but the A6 "
-						"separation rescale has no live consumer yet — stereo in a "
-						"vertical split will read ~2x too deep until that wiring lands. "
+			fmt::format("(VR) ProfileDB: {} split: vertical layout parsed, but the "
+						"separation rescale a vertical split needs is not wired up yet — "
+						"stereo will read about twice as deep until it is. "
 						"Horizontal splits are unaffected.", serial));
 
 	return sp;
@@ -1862,9 +1862,9 @@ static std::optional<VR::ProfileDB::SpatialControlSpec> parseControlEntry(const 
 	if (!(std::isfinite(spec.steer_curve) && spec.steer_curve >= 0.2f && spec.steer_curve <= 5.0f))
 		return reject(fmt::format("steerCurve {:g} is out of range (need 0.2 <= steerCurve <= 5)", spec.steer_curve));
 	if (!(spec.steer_sign == 1.0f || spec.steer_sign == -1.0f))
-		return reject(fmt::format("steerSign {:g} must be 1 or -1 — read it from the ladder, never guess it", spec.steer_sign));
+		return reject(fmt::format("steerSign {:g} must be 1 or -1 — determine it by observing the game, do not guess", spec.steer_sign));
 	if (!(spec.lever_sign == 1.0f || spec.lever_sign == -1.0f))
-		return reject(fmt::format("leverSign {:g} must be 1 or -1 — read it from the ladder, never guess it", spec.lever_sign));
+		return reject(fmt::format("leverSign {:g} must be 1 or -1 — determine it by observing the game, do not guess", spec.lever_sign));
 	if (!unit_range(spec.output_floor))
 	{
 		return reject(fmt::format("outputFloor {:g} is out of range (need 0 <= outputFloor < 1; it is a FRACTION of full "

@@ -15,6 +15,8 @@ namespace VR
 
 	void ApplySceneStereo();
 
+	void ClearSpatialControls();
+
 	bool WantsVR();
 
 	bool EffectiveVREnabled(bool cfg_enable);

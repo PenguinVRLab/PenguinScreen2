@@ -1124,12 +1124,18 @@ void VMManager::UpdateDiscDetails(bool booting)
 
 void VMManager::ClearDiscDetails()
 {
-	std::unique_lock lock(s_info_mutex);
-	s_disc_crc = 0;
-	s_title = {};
-	s_disc_version = {};
-	s_disc_elf = {};
-	s_disc_serial = {};
+	{
+		std::unique_lock lock(s_info_mutex);
+		s_disc_crc = 0;
+		s_title = {};
+		s_disc_version = {};
+		s_disc_elf = {};
+		s_disc_serial = {};
+	}
+
+#ifdef ENABLE_VR
+	VR::ClearSpatialControls();
+#endif
 }
 
 void VMManager::HandleELFChange(bool verbose_patches_if_changed)

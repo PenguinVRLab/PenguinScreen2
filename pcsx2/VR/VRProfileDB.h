@@ -5,6 +5,8 @@
 
 #include "common/Pcsx2Defs.h"
 
+#include "VR/SpatialControls.h"
+
 #include <limits>
 #include <optional>
 #include <string>
@@ -158,6 +160,7 @@ namespace VR::ProfileDB
 		u32 ee_address = 0;
 		u32 equals = 0;
 		u8 width = 4;
+		bool not_equals = false;
 		bool is_chain = false;
 		u32 pointer_addr = 0;
 		std::vector<s32> deref_offsets;
@@ -275,6 +278,62 @@ namespace VR::ProfileDB
 		std::optional<CameraPadLook> pad_look;
 	};
 
+	struct SpatialControlSpec
+	{
+		std::string device;
+		SpatialControls::DeviceKind kind = SpatialControls::DeviceKind::Count;
+		std::string id;
+		struct
+		{
+			float side = 0.0f;
+			float height = 0.0f;
+			float forward = 0.0f;
+			float yaw_deg = 0.0f;
+		} placement;
+		float travel = 0.12f;
+		float sweep_deg = 60.0f;
+		float arm_length = 0.20f;
+		bool upright = false;
+		float grab_radius = 0.05f;
+		float grab_length = 0.12f;
+		SpatialControls::GrabMode grab_mode = SpatialControls::GrabMode::Toggle;
+		float break_away = 0.25f;
+		SpatialControls::ReleaseMode release = SpatialControls::ReleaseMode::Latch;
+		float spring_rate = 4.0f;
+		bool one_way = false;
+		int detented = 0;
+		SpatialControls::PowerMode power = SpatialControls::PowerMode::Sum;
+		float engage = 0.0f;
+		SpatialControls::TwinMode mode = SpatialControls::TwinMode::Composed;
+		float lever_sign = 1.0f;
+		float steer_full_lock = 1.0f;
+		float steer_deadband = 0.05f;
+		float steer_curve = 1.0f;
+		float steer_sign = 1.0f;
+		float output_floor = 0.0f;
+		float lock_to_lock_deg = 900.0f;
+		float rim_radius = 0.18f;
+		int gears = 6;
+		bool has_reverse = true;
+		bool has_neutral = true;
+		float travel_x = 0.10f;
+		float travel_y = 0.10f;
+		bool twist = false;
+		float twist_range_deg = 60.0f;
+		bool rifle = false;
+		bool aim_left = false;
+		std::string preset;
+		std::vector<CameraGuard> when;
+		struct Bind
+		{
+			std::string control;
+			std::string target;
+		};
+		std::vector<Bind> bind;
+		u32 pad_port = 0;
+		int usb_port = -1;
+	};
+
 	struct SplitParams
 	{
 		enum class Layout : u8
@@ -327,6 +386,7 @@ namespace VR::ProfileDB
 		std::optional<bool> screen_follow_head;
 		std::optional<CameraProfile> camera;
 		std::optional<SplitParams> split;
+		std::vector<SpatialControlSpec> controls;
 		std::string notes;
 	};
 

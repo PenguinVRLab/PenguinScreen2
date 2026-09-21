@@ -202,7 +202,11 @@ u8 PadDualshock2::ButtonQuery(u8 commandByte)
 
 u8 PadDualshock2::Poll(u8 commandByte)
 {
+#ifdef ENABLE_VR
+	const u32 buttons = (this->unifiedSlot == 0) ? VR::PadLook::ProbeButtons(GetButtons()) : GetButtons();
+#else
 	const u32 buttons = GetButtons();
+#endif
 #ifdef ENABLE_VR
 	if (this->unifiedSlot == 0)
 		VR::PadLook::UpdateRecenterChord(IsButtonBitSet(buttons, 2), IsButtonBitSet(buttons, 3),
@@ -266,6 +270,10 @@ u8 PadDualshock2::Poll(u8 commandByte)
 #endif
 			return GetPressure(Inputs::PAD_R_RIGHT);
 		case 6:
+#ifdef ENABLE_VR
+			if (this->unifiedSlot == 0)
+				return VR::PadLook::ProbeStick(VR::PadLook::StickAxis::RY, GetPressure(Inputs::PAD_R_UP));
+#endif
 			return GetPressure(Inputs::PAD_R_UP);
 		case 7:
 #ifdef ENABLE_VR
@@ -275,6 +283,10 @@ u8 PadDualshock2::Poll(u8 commandByte)
 			return GetPressure(Inputs::PAD_L_RIGHT);
 		case 8:
 			g_Sio0.SetAcknowledge(false);
+#ifdef ENABLE_VR
+			if (this->unifiedSlot == 0)
+				return VR::PadLook::ProbeStick(VR::PadLook::StickAxis::LY, GetPressure(Inputs::PAD_L_UP));
+#endif
 			return GetPressure(Inputs::PAD_L_UP);
 		case 9:
 			return IsButtonBitSet(buttons, 13) ? GetPressure(Inputs::PAD_RIGHT) : 0;
@@ -289,8 +301,16 @@ u8 PadDualshock2::Poll(u8 commandByte)
 		case 14:
 			return IsButtonBitSet(buttons, 5) ? GetPressure(Inputs::PAD_CIRCLE) : 0;
 		case 15:
+#ifdef ENABLE_VR
+			if (this->unifiedSlot == 0)
+				return IsButtonBitSet(buttons, 6) ? VR::PadLook::ProbePressure(VR::PadLook::ProbeButton::CROSS, GetPressure(Inputs::PAD_CROSS)) : 0;
+#endif
 			return IsButtonBitSet(buttons, 6) ? GetPressure(Inputs::PAD_CROSS) : 0;
 		case 16:
+#ifdef ENABLE_VR
+			if (this->unifiedSlot == 0)
+				return IsButtonBitSet(buttons, 7) ? VR::PadLook::ProbePressure(VR::PadLook::ProbeButton::SQUARE, GetPressure(Inputs::PAD_SQUARE)) : 0;
+#endif
 			return IsButtonBitSet(buttons, 7) ? GetPressure(Inputs::PAD_SQUARE) : 0;
 		case 17:
 			return IsButtonBitSet(buttons, 2) ? GetPressure(Inputs::PAD_L1) : 0;

@@ -1001,7 +1001,10 @@ struct alignas(16) GSHWDrawConfig
 		u32 max_depth;
 		float line_aa1_width;
 		GSVector2 vr_stereo;
-		GSVector2 vr_pad;
+		u32 vr_map_mode;
+		u32 vr_band_count;
+		GSVector4 vr_splits;
+		GSVector4 vr_band[4];
 		__fi VSConstantBuffer()
 		{
 			memset(static_cast<void*>(this), 0, sizeof(*this));
@@ -1587,6 +1590,7 @@ public:
 	virtual void CopyRect(GSTexture* sTex, GSTexture* dTex, const GSVector4i& r, u32 destX, u32 destY) = 0;
 
 	virtual void BroadcastLayer0(GSTexture* tex, const GSVector4& dRect) {}
+
 
 	void StretchRect(GSTexture* sTex, const GSVector4& sRect, GSTexture* dTex, const GSVector4& dRect, ShaderConvertSelector shader, Filter filter);
 	void StretchRect(GSTexture* sTex, GSTexture* dTex, const GSVector4& dRect, ShaderConvertSelector shader, Filter filter);

@@ -20,7 +20,7 @@ VRSettingsWidget::VRSettingsWidget(SettingsWindow* settings_dialog, QWidget* par
 
 	setupTab(m_ui, tr("Virtual Reality"));
 
-	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.enable, "VR", "Enable", true);
+	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.enable, "VR", "Enable", false);
 	SettingWidgetBinder::BindWidgetToFloatSetting(sif, m_ui.screenDistance, "VR", "ScreenDistance", 2.0f);
 	SettingWidgetBinder::BindWidgetToFloatSetting(sif, m_ui.screenHeight, "VR", "ScreenHeight", 1.4f);
 	SettingWidgetBinder::BindWidgetToFloatSetting(sif, m_ui.screenArc, "VR", "ScreenArcDeg", 100.0f);
@@ -30,9 +30,11 @@ VRSettingsWidget::VRSettingsWidget(SettingsWindow* settings_dialog, QWidget* par
 	SettingWidgetBinder::BindWidgetToFloatSetting(sif, m_ui.stereoConvergence, "VR", "StereoConvergence", 20.0f);
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.headCamera, "VR", "HeadCamera", true);
 
-	dialog()->registerWidgetHelp(m_ui.enable, tr("Enable VR (OpenXR)"), tr("Checked"),
+	dialog()->registerWidgetHelp(m_ui.enable, tr("Enable VR (OpenXR)"), tr("Unchecked"),
 		tr("Renders the emulated display on a virtual screen inside a connected OpenXR headset. Requires the Vulkan "
-		   "renderer and a running OpenXR runtime. Takes effect when the emulator restarts."));
+		   "renderer and a running OpenXR runtime. Takes effect when the emulator restarts. The VR launcher arms VR "
+		   "for you without changing this setting, so leaving it unchecked still gives you VR when you start from "
+		   "the VR shortcut."));
 
 	dialog()->registerWidgetHelp(m_ui.screenDistance, tr("Screen Distance"), tr("2.0 m"),
 		tr("Sets how far in front of you the virtual screen is placed, in metres."));

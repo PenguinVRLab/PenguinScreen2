@@ -30,7 +30,10 @@ layout(std140, set = 0, binding = 0) uniform cb0
 	uint MaxDepth;
 	float LineAA1Width;
 	vec2 vr_stereo;
-	vec2 vr_pad;
+	uint vr_map_mode;
+	uint vr_band_count;
+	vec4 vr_splits;
+	vec4 vr_band[4];
 };
 
 layout(location = 0) out VSOutput
@@ -47,6 +50,48 @@ layout(location = 0) out VSOutput
 	float inv_cov;
 	flat uint interior;
 } vsOut;
+
+#if !VS_FST
+float vr_stereo_disp(float q_in, float z_norm)
+{
+	float q = q_in;
+	if (vr_band[3].w != 0.0f)
+		q = max(vr_band[2].w * (z_norm - vr_band[1].w), 0.0f);
+
+	if (vr_map_mode == 0u)
+	{
+		return vr_stereo.x * max(0.0f, 1.0f - vr_stereo.y * q);
+	}
+
+	if (vr_map_mode == 2u)
+	{
+		float w = 1.0f / max(q, 1e-8f);
+		float t = clamp(log(w / vr_band[0].x) / log(vr_band[0].y / vr_band[0].x), 0.0f, 1.0f);
+		return (vr_band[0].z * t) * vr_splits.w;
+	}
+
+	vec4 band;
+	if      (q >= vr_splits.x) band = vr_band[0];
+	else if (q >= vr_splits.y) band = vr_band[1];
+	else if (q >= vr_splits.z) band = vr_band[2];
+	else                       band = vr_band[3];
+
+	float d = band.z + band.y * (1.0f - band.x * q);
+	return max(0.0f, d) * vr_splits.w;
+}
+#endif
+
+#if VS_FST
+float vr_collimate_signed()
+{
+	#if VS_MULTIVIEW
+		float vr_coll_sign = (gl_ViewIndex == 0) ? -1.0f : 1.0f;
+	#else
+		float vr_coll_sign = 1.0f;
+	#endif
+	return vr_coll_sign * vr_band[0].w;
+}
+#endif
 
 #if VS_EXPAND == VS_EXPAND_NONE
 
@@ -68,15 +113,20 @@ void main()
 	gl_Position.y = -gl_Position.y;
 
 	#if !VS_FST
-		if (vr_stereo.x != 0.0f)
+		if (vr_stereo.x != 0.0f || vr_map_mode != 0u)
 		{
 			#if VS_MULTIVIEW
 				float vr_eye_sign = (gl_ViewIndex == 0) ? -1.0f : 1.0f;
 			#else
 				float vr_eye_sign = 1.0f;
 			#endif
-			gl_Position.x += vr_eye_sign * vr_stereo.x * max(0.0f, 1.0f - vr_stereo.y * a_q);
+			gl_Position.x += vr_eye_sign * vr_stereo_disp(a_q, gl_Position.z);
 		}
+	#endif
+
+	#if VS_FST
+		if (vr_band[0].w != 0.0f)
+			gl_Position.x += vr_collimate_signed();
 	#endif
 
 	#if VS_TME
@@ -419,15 +469,20 @@ void main()
 	gl_Position = vtx.p;
 
 	#if !VS_FST
-		if (vr_stereo.x != 0.0f)
+		if (vr_stereo.x != 0.0f || vr_map_mode != 0u)
 		{
 			#if VS_MULTIVIEW
 				float vr_eye_sign = (gl_ViewIndex == 0) ? -1.0f : 1.0f;
 			#else
 				float vr_eye_sign = 1.0f;
 			#endif
-			gl_Position.x += vr_eye_sign * vr_stereo.x * max(0.0f, 1.0f - vr_stereo.y * vtx.t.w);
+			gl_Position.x += vr_eye_sign * vr_stereo_disp(vtx.t.w, gl_Position.z);
 		}
+	#endif
+
+	#if VS_FST
+		if (vr_band[0].w != 0.0f)
+			gl_Position.x += vr_collimate_signed();
 	#endif
 
 	vsOut.t = vtx.t;

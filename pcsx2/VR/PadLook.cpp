@@ -1,9 +1,10 @@
-// SPDX-FileCopyrightText: 2026 Patrick Carey
+// SPDX-FileCopyrightText: 2026 Patrick Carey <patrickfcarey@gmail.com>
 // SPDX-License-Identifier: GPL-3.0
 
 #include "VR/PadLook.h"
 
 #include "Host.h"
+#include "Memory.h"
 #include "VR/CameraDriver.h"
 #include "VR/XRCompositor.h"
 #include "VR/XRSession.h"
@@ -12,13 +13,22 @@
 
 #include <algorithm>
 #include <atomic>
+#include <bit>
+#include <cctype>
 #include <cmath>
+#include <cstdarg>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <string>
+#include <vector>
 
 namespace VR::PadLook
 {
 	namespace
 	{
 		std::atomic<int> s_rx_offset{0};
+
 	}
 
 	void Publish(float deflection)
@@ -30,8 +40,10 @@ namespace VR::PadLook
 			std::memory_order_relaxed);
 	}
 
+
 	u8 ApplyRx(u8 real)
 	{
+
 		const int offset = s_rx_offset.load(std::memory_order_relaxed);
 		if (offset == 0)
 			return real;

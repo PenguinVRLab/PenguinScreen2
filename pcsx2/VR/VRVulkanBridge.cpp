@@ -1,9 +1,10 @@
-// SPDX-FileCopyrightText: 2026 Patrick Carey
+// SPDX-FileCopyrightText: 2026 Patrick Carey <patrickfcarey@gmail.com>
 // SPDX-License-Identifier: GPL-3.0
 
 #ifdef ENABLE_VULKAN
 
 #include "VR/VRVulkanBridge.h"
+#include "VR/SeatSession.h"
 #include "VR/VRInternal.h"
 #include "VR/VRManager.h"
 #include "VR/XRCompositor.h"
@@ -20,6 +21,7 @@ namespace VR
 
 		void AbortBootstrap()
 		{
+			SeatSession::Stop();
 			XRCompositor::Shutdown();
 			XRSession::DestroySession();
 			XRSession::DestroyInstance();

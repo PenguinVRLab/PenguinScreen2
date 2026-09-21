@@ -102,7 +102,11 @@ if("${CMAKE_HOST_SYSTEM_PROCESSOR}" STREQUAL "x86_64" OR "${CMAKE_HOST_SYSTEM_PR
 
 		if(USE_CLANG_CL)
 			# clang-cl => need to explicitly enable SSE4.1.
-			add_compile_options("-msse4.1")
+			# Scoped to C/CXX: add_compile_options() applies to EVERY language,
+			# and MASM sources go to llvm-ml, which reads -msse4.1 as another
+			# -m<machine> and ends up with target 'unknown' — so FastJmp.asm
+			# fails to assemble with an error that never mentions SSE.
+			add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:-msse4.1>")
 		endif()
 	else()
 		# Multi-ISA => SSE4, otherwise native.

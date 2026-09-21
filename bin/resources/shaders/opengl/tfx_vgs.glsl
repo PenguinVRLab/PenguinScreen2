@@ -16,7 +16,10 @@ layout(std140, binding = 1) uniform cb20
 	uint  MaxDepth;
 	float LineAA1Width;
 	vec2  vr_stereo;
-	vec2  vr_pad;
+	uint  vr_map_mode;
+	uint  vr_band_count;
+	vec4  vr_splits;
+	vec4  vr_band[4];
 };
 
 #ifdef VERTEX_SHADER

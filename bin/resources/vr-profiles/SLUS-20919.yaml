@@ -17,7 +17,8 @@ SLUS-20919:
     convergence: 0.005
     uvDraws: screen
     pinUniformQ: true
+    zDrivenDepth: true
     scenes:
       - { when: { address: 0x00A97884, equals: 1, width: 1 }, convergence: 16.0, label: menu }
   camera:
-    padLook: { maxLookDeg: 18, engageDeg: 2, curve: 0.7 }
+    padLook: { maxLookDeg: 18, engageDeg: 6, releaseDeg: 4, curve: 1.6, stickFloor: 0.4016 }

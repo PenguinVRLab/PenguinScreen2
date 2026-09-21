@@ -1,9 +1,11 @@
-// SPDX-FileCopyrightText: 2026 Patrick Carey
+// SPDX-FileCopyrightText: 2026 Patrick Carey <patrickfcarey@gmail.com>
 // SPDX-License-Identifier: GPL-3.0
 
 #pragma once
 
 #include "common/Pcsx2Defs.h"
+
+#include "VR/SpatialControls.h"
 
 #include <limits>
 #include <optional>
@@ -26,6 +28,45 @@ namespace VR::ProfileDB
 		World,
 	};
 
+	enum class StereoMap : u32
+	{
+		Linear = 0,
+		Bands = 1,
+		Log = 2,
+	};
+
+	struct StereoBand
+	{
+		float conv = 0.0f;
+		float sep = 0.0f;
+	};
+
+	struct StereoLogParams
+	{
+		float w0 = 1.0f;
+		float w1 = 1.0f;
+		float dfar = 0.0f;
+	};
+
+	struct StereoResolvedMap
+	{
+		StereoMap map = StereoMap::Linear;
+		u32 band_count = 1;
+		float split_q[3] = {};
+		float conv[4] = {};
+		float sep[4] = {};
+		float bias[4] = {};
+		float log_w0 = 0.0f;
+		float log_w1 = 0.0f;
+		float log_dfar = 0.0f;
+	};
+
+	u32 SelectBand(const StereoResolvedMap& map, float q);
+
+	float EvalBand(const StereoResolvedMap& map, u32 band, float q);
+
+	float EvalDisparity(const StereoResolvedMap& map, float separation, float convergence, float q);
+
 	struct StereoSceneRule
 	{
 		u32 ee_address = 0;
@@ -33,7 +74,32 @@ namespace VR::ProfileDB
 		u8 width = 4;
 		std::optional<float> separation;
 		std::optional<float> convergence;
+
+		std::optional<StereoResolvedMap> map_override;
+
 		std::string label;
+	};
+
+	struct CollimateRule
+	{
+		s8 prim = -1;
+		s8 tme = 1;
+		s8 abe = -1;
+		s32 min_w = 0;
+		s32 max_w = 0;
+		s32 min_h = 0;
+		s32 max_h = 0;
+		float rx0 = 0.0f, ry0 = 0.0f, rx1 = 0.0f, ry1 = 0.0f;
+		float tu0 = 0.0f, tv0 = 0.0f, tu1 = 0.0f, tv1 = 0.0f;
+		std::string label;
+	};
+
+	static constexpr u32 kMaxCollimateRules = 4;
+
+	struct HudCollimate
+	{
+		float disparity = 0.0f;
+		std::vector<CollimateRule> rules;
 	};
 
 	struct StereoParams
@@ -44,7 +110,18 @@ namespace VR::ProfileDB
 
 		bool pin_uniform_q = false;
 
+		bool z_driven_depth = false;
+
 		std::vector<StereoSceneRule> scenes;
+
+		std::optional<HudCollimate> hud_collimate;
+
+		StereoMap map = StereoMap::Linear;
+		std::vector<float> splits;
+		std::vector<StereoBand> bands;
+		std::optional<StereoLogParams> log_params;
+
+		StereoResolvedMap resolved;
 	};
 
 	enum class CameraEncoding
@@ -83,6 +160,11 @@ namespace VR::ProfileDB
 		u32 ee_address = 0;
 		u32 equals = 0;
 		u8 width = 4;
+		bool not_equals = false;
+		bool is_chain = false;
+		u32 pointer_addr = 0;
+		std::vector<s32> deref_offsets;
+		s32 offset = 0;
 	};
 
 	struct CameraWriteOp
@@ -98,6 +180,7 @@ namespace VR::ProfileDB
 		float clamp_min = -std::numeric_limits<float>::infinity();
 		float clamp_max = std::numeric_limits<float>::infinity();
 		float axis_sign = 1.0f;
+		bool anchor_head = true;
 		std::vector<CameraGuard> when;
 	};
 
@@ -136,6 +219,7 @@ namespace VR::ProfileDB
 		u32 scan_end = 0x02000000;
 		bool is_pointer = false;
 		u32 pointer_addr = 0;
+		std::vector<s32> deref_offsets;
 		bool is_indexed = false;
 		u32 indexed_base = 0;
 		s64 array_offset = 0;
@@ -176,7 +260,10 @@ namespace VR::ProfileDB
 		float engage_deg = 12.0f;
 		float curve = 1.0f;
 		bool latch = false;
+
 		float release_deg = 4.0f;
+
+		float stick_floor = 0.0f;
 	};
 
 	struct CameraProfile
@@ -191,6 +278,101 @@ namespace VR::ProfileDB
 		std::optional<CameraPadLook> pad_look;
 	};
 
+	struct SpatialControlSpec
+	{
+		std::string device;
+		SpatialControls::DeviceKind kind = SpatialControls::DeviceKind::Count;
+		std::string id;
+		struct
+		{
+			float side = 0.0f;
+			float height = 0.0f;
+			float forward = 0.0f;
+			float yaw_deg = 0.0f;
+		} placement;
+		float travel = 0.12f;
+		float sweep_deg = 60.0f;
+		float arm_length = 0.20f;
+		bool upright = false;
+		float grab_radius = 0.05f;
+		float grab_length = 0.12f;
+		SpatialControls::GrabMode grab_mode = SpatialControls::GrabMode::Toggle;
+		float break_away = 0.25f;
+		SpatialControls::ReleaseMode release = SpatialControls::ReleaseMode::Latch;
+		float spring_rate = 4.0f;
+		bool one_way = false;
+		int detented = 0;
+		SpatialControls::PowerMode power = SpatialControls::PowerMode::Sum;
+		float engage = 0.0f;
+		SpatialControls::TwinMode mode = SpatialControls::TwinMode::Composed;
+		float lever_sign = 1.0f;
+		float steer_full_lock = 1.0f;
+		float steer_deadband = 0.05f;
+		float steer_curve = 1.0f;
+		float steer_sign = 1.0f;
+		float output_floor = 0.0f;
+		float lock_to_lock_deg = 900.0f;
+		float rim_radius = 0.18f;
+		int gears = 6;
+		bool has_reverse = true;
+		bool has_neutral = true;
+		float travel_x = 0.10f;
+		float travel_y = 0.10f;
+		bool twist = false;
+		float twist_range_deg = 60.0f;
+		bool rifle = false;
+		bool aim_left = false;
+		std::string preset;
+		std::vector<CameraGuard> when;
+		struct Bind
+		{
+			std::string control;
+			std::string target;
+		};
+		std::vector<Bind> bind;
+		u32 pad_port = 0;
+		int usb_port = -1;
+	};
+
+	struct SplitParams
+	{
+		enum class Layout : u8
+		{
+			Horizontal,
+			Vertical,
+		};
+		enum class Mode : u8
+		{
+			Focus,
+			Duo,
+			Mirror,
+			Local,
+		};
+		struct Probe
+		{
+			u32 ee_address = 0;
+			u32 threshold = 0;
+			bool at_least = false;
+			u8 width = 4;
+		};
+		struct Rect
+		{
+			float x = 0.0f, y = 0.0f, w = 1.0f, h = 1.0f;
+		};
+
+		Layout layout = Layout::Horizontal;
+		u8 views = 2;
+		u8 local_view = 0;
+		u8 local_pad_port = 0;
+		Rect rects[2];
+		bool rects_explicit = false;
+		std::optional<Probe> active;
+		Mode mode = Mode::Focus;
+		float side_scale = 0.4f;
+		float side_angle_deg = 35.0f;
+		bool stereo_on = true;
+	};
+
 	struct Profile
 	{
 		std::string serial;
@@ -201,7 +383,10 @@ namespace VR::ProfileDB
 		std::optional<float> screen_distance;
 		std::optional<float> screen_height;
 		std::optional<float> screen_arc_deg;
+		std::optional<bool> screen_follow_head;
 		std::optional<CameraProfile> camera;
+		std::optional<SplitParams> split;
+		std::vector<SpatialControlSpec> controls;
 		std::string notes;
 	};
 
@@ -216,6 +401,33 @@ namespace VR::ProfileDB
 	};
 
 	const std::vector<LoadIssue>& ValidateAtLaunch();
+
+	enum class StereoRail
+	{
+		Divergence,
+		FixationGap,
+	};
+
+	struct StereoRailFinding
+	{
+		StereoRail rail = StereoRail::Divergence;
+		std::string serial;
+		std::string site;
+		float arcmin = 0.0f;
+		bool from_map = false;
+		std::string message;
+	};
+
+	const std::vector<StereoRailFinding>& StereoRailFindings();
+
+	struct ProfileAdvisory
+	{
+		std::string serial;
+		std::string site;
+		std::string message;
+	};
+
+	const std::vector<ProfileAdvisory>& ProfileAdvisories();
 
 	struct Summary
 	{
@@ -232,4 +444,5 @@ namespace VR::ProfileDB
 	const Profile* Lookup(const std::string_view serial, u32 crc);
 
 	void Reset();
+
 }

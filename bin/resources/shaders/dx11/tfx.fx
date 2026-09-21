@@ -1510,7 +1510,10 @@ cbuffer cb0
 	uint MaxDepth;
 	float LineAA1Width;
 	float2 vr_stereo;
-	float2 vr_pad;
+	uint vr_map_mode;
+	uint vr_band_count;
+	float4 vr_splits;
+	float4 vr_band[4];
 };
 
 #ifdef DX12

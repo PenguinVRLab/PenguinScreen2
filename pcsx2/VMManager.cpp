@@ -5,6 +5,7 @@
 #include "BuildVersion.h"
 #ifdef ENABLE_VR
 #include "VR/CameraDriver.h"
+#include "VR/SplitState.h"
 #include "VR/VRManager.h"
 #endif
 #include "CDVD/CDVD.h"
@@ -18,6 +19,7 @@
 #include "GS.h"
 #include "GS/Renderers/HW/GSTextureReplacements.h"
 #include "GSDumpReplayer.h"
+#include "GS/GS.h"
 #include "GameDatabase.h"
 #include "GameList.h"
 #include "Host.h"
@@ -1117,12 +1119,18 @@ void VMManager::UpdateDiscDetails(bool booting)
 
 void VMManager::ClearDiscDetails()
 {
-	std::unique_lock lock(s_info_mutex);
-	s_disc_crc = 0;
-	s_title = {};
-	s_disc_version = {};
-	s_disc_elf = {};
-	s_disc_serial = {};
+	{
+		std::unique_lock lock(s_info_mutex);
+		s_disc_crc = 0;
+		s_title = {};
+		s_disc_version = {};
+		s_disc_elf = {};
+		s_disc_serial = {};
+	}
+
+#ifdef ENABLE_VR
+	VR::ClearSpatialControls();
+#endif
 }
 
 void VMManager::HandleELFChange(bool verbose_patches_if_changed)
@@ -1816,6 +1824,9 @@ bool VMManager::DoLoadState(const char* filename, Error* error)
 		return false;
 
 	Host::OnSaveStateLoaded(filename, true);
+#ifdef ENABLE_VR
+	VR::CameraDriver::OnStateLoaded();
+#endif
 	if (g_InputRecording.isActive())
 	{
 		g_InputRecording.handleLoadingSavestate();
@@ -2771,6 +2782,7 @@ void VMManager::Internal::VSyncOnCPUThread()
 #ifdef ENABLE_VR
 	VR::CameraDriver::Apply();
 	VR::ApplySceneStereo();
+	VR::SplitState::Apply();
 #endif
 
 	if (s_frame_advance_count > 0)

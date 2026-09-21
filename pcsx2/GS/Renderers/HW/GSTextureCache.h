@@ -423,6 +423,7 @@ protected:
 	std::unordered_map<SurfaceOffsetKey, SurfaceOffset, SurfaceOffsetKeyHash, SurfaceOffsetKeyEqual> m_surface_offset_cache;
 
 	Source* m_temporary_source = nullptr;
+	Source* m_draw_inflight_source = nullptr;
 	GSTexture* m_temporary_z = nullptr;
 	TempZAddress m_temporary_z_info;
 
@@ -538,6 +539,8 @@ public:
 
 	void InvalidateSourcesFromTarget(const Target* t);
 
+	void RetargetSourcesAfterPromotion(const Target* t, GSTexture* old_tex, GSTexture* new_tex);
+
 	void ReplaceSourceTexture(Source* s, GSTexture* new_texture, float new_scale, const GSVector2i& new_unscaled_size,
 		HashCacheEntry* hc_entry, bool new_texture_is_shared);
 
@@ -567,6 +570,8 @@ public:
 	SurfaceOffset ComputeSurfaceOffset(const SurfaceOffsetKey& sok);
 
 	void InvalidateTemporarySource();
+
+	__fi void SetDrawInFlightSource(Source* s) { m_draw_inflight_source = s; }
 	void SetTemporaryZ(GSTexture* temp_z);
 	GSTexture* GetTemporaryZ();
 	TempZAddress GetTemporaryZInfo();

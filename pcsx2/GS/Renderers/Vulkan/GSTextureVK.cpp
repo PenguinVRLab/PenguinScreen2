@@ -234,6 +234,9 @@ GSTexture* GSTextureVK::GetLayerProxyTexture(u32 layer)
 		return this;
 
 	pxAssert(layer < m_array_layers);
+
+	CommitClear();
+
 	if (m_layer_proxies.empty())
 		m_layer_proxies.resize(m_array_layers);
 
@@ -328,7 +331,7 @@ void GSTextureVK::Destroy(bool defer)
 
 VkImageLayout GSTextureVK::GetVkLayout() const
 {
-	return GetVkImageLayout(m_layout);
+	return GetVkImageLayout(GetLayout());
 }
 
 void* GSTextureVK::GetNativeHandle() const
@@ -863,11 +866,15 @@ VkFramebuffer GSTextureVK::GetLinkedFramebuffer(GSTextureVK* depth_texture, bool
 			return fb;
 	}
 
+	const bool multiview =
+		(GetArrayLayers() > 1) || (depth_texture && depth_texture->GetArrayLayers() > 1);
+
 	const VkRenderPass rp = GSDeviceVK::GetInstance()->GetRenderPass(
 		!IsDepthStencil() ? m_vk_format : VK_FORMAT_UNDEFINED,
 		!IsDepthStencil() ? (depth_texture ? depth_texture->m_vk_format : VK_FORMAT_UNDEFINED) : m_vk_format,
 		VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_LOAD_OP_LOAD,
-		VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE, feedback_loop_color, feedback_loop_depth);
+		VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+		feedback_loop_color, feedback_loop_depth, multiview);
 	if (!rp)
 		return VK_NULL_HANDLE;
 

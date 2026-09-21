@@ -14,6 +14,7 @@
 
 #ifdef ENABLE_VR
 #include "VR/PadLook.h"
+#include "VR/SplitState.h"
 #endif
 
 static const InputBindingInfo s_bindings[] = {
@@ -256,7 +257,12 @@ u8 PadDualshock2::Poll(u8 commandByte)
 		case 5:
 #ifdef ENABLE_VR
 			if (this->unifiedSlot == 0)
-				return VR::PadLook::ApplyRx(GetPressure(Inputs::PAD_R_RIGHT));
+			{
+				u8 rx = VR::SplitState::Active()
+							? GetPressure(Inputs::PAD_R_RIGHT)
+							: VR::PadLook::ApplyRx(GetPressure(Inputs::PAD_R_RIGHT));
+				return rx;
+			}
 #endif
 			return GetPressure(Inputs::PAD_R_RIGHT);
 		case 6:

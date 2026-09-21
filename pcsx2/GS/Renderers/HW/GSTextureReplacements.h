@@ -39,8 +39,9 @@ namespace GSTextureReplacements
 
 	bool HasAnyReplacementTextures();
 	bool HasReplacementTextureWithOtherPalette(const GSTextureCache::HashCacheKey& hash);
-	GSTexture* LookupReplacementTexture(const GSTextureCache::HashCacheKey& hash, bool mipmap, bool* pending, std::pair<u8, u8>* alpha_minmax);
-	GSTexture* CreateReplacementTexture(const ReplacementTexture& rtex, bool mipmap);
+	GSTexture* LookupReplacementTexture(const GSTextureCache::HashCacheKey& hash, bool mipmap, bool* pending, std::pair<u8, u8>* alpha_minmax, bool force_sync = false,
+		GSTextureCache::SourceRegion classic_region = {}, u32 base_width = 0, u32 base_height = 0);
+	GSTexture* CreateReplacementTexture(const ReplacementTexture& rtex, bool mipmap, const GSVector4i& crop = GSVector4i::zero());
 	void ProcessAsyncLoadedTextures();
 
 	void DumpTexture(const GSTextureCache::HashCacheKey& hash, const GIFRegTEX0& TEX0, const GIFRegTEXA& TEXA,

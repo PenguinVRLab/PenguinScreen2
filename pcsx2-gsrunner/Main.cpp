@@ -46,6 +46,7 @@
 #include "pcsx2/PerformanceMetrics.h"
 #include "pcsx2/VMManager.h"
 #ifdef ENABLE_VR
+#include "pcsx2/VR/VRManager.h"
 #include "pcsx2/VR/VRProfileDB.h"
 #endif
 
@@ -156,6 +157,11 @@ bool GSRunner::InitializeConfig()
 	Host::Internal::SetBaseSettingsLayer(&si);
 
 	VMManager::SetDefaultSettings(si, true, true, true, true, true);
+
+#ifdef ENABLE_VR
+	si.SetBoolValue("VR", "Enable", true);
+	VR::SetStereoRenderArmed(true);
+#endif
 
 	VMManager::Internal::LoadStartupSettings();
 	return true;
@@ -497,6 +503,12 @@ static void PrintCommandLineHelp(const char* progname)
 	std::fprintf(stderr, "  -logfile <filename>: Writes emu log to filename.\n");
 	std::fprintf(stderr, "  -noshadercache: Disables the shader cache (useful for parallel runs).\n");
 	std::fprintf(stderr, "  -perf: Enable frame timing performance stats.\n");
+#ifdef ENABLE_VR
+	std::fprintf(stderr, "  -vr: (VR) Arm a real OpenXR SESSION for this run. NOT needed for stereo rendering --\n"
+						 "    gsrunner already renders stereo by default (that is what the replay harness is\n"
+						 "    for). Pass this only from scripts that deliberately stand up a runtime; it is\n"
+						 "    the flag that makes a replay able to seize a live headset.\n");
+#endif
 	std::fprintf(stderr, "  --: Signals that no more arguments will follow and the remaining\n"
 						 "    parameters make up the filename. Use when the filename contains\n"
 						 "    spaces or starts with a dash.\n");
@@ -643,6 +655,14 @@ bool GSRunner::ParseCommandLineArgs(int argc, char* argv[], VMBootParameters& pa
 				Console.WriteLn("Looping dump playback %d times.", s_loop_count);
 				continue;
 			}
+#ifdef ENABLE_VR
+			else if (CHECK_ARG("-vr") || CHECK_ARG("--vr"))
+			{
+				VR::SetLaunchRequestedVR(true);
+				Console.WriteLn("(VR) Armed for VR by -vr: this run may create an OpenXR session.");
+				continue;
+			}
+#endif
 			else if (CHECK_ARG_PARAM("-renderer"))
 			{
 				const char* rname = argv[++i];
@@ -975,6 +995,51 @@ int main(int argc, char* argv[])
 			Console.ErrorFmt("(VR) {} invalid VR profile file(s) — refusing to run. Fix or remove them.", issues.size());
 			std::fflush(stderr);
 			return EXIT_FAILURE;
+		}
+
+		{
+			const auto& findings = VR::ProfileDB::StereoRailFindings();
+			size_t scalar_div = 0, scalar_gap = 0;
+			const VR::ProfileDB::StereoRailFinding* worst = nullptr;
+			for (const auto& f : findings)
+			{
+				if (f.from_map)
+				{
+					std::fputs(fmt::format("{}\n", f.message).c_str(), stderr);
+					continue;
+				}
+				if (f.rail == VR::ProfileDB::StereoRail::Divergence)
+					scalar_div++;
+				else
+					scalar_gap++;
+				if (!worst || f.arcmin > worst->arcmin)
+					worst = &f;
+			}
+			if (scalar_div || scalar_gap)
+			{
+				std::fputs(fmt::format("(VR) stereo depth rails: {} profile(s) past the safe far-field range "
+									   "and {} past the overlay-step advisory on their base "
+									   "separation (worst: {}). Full list in emulog.txt.\n",
+					scalar_div, scalar_gap, worst ? worst->serial : std::string("-"))
+							   .c_str(),
+					stderr);
+			}
+			std::fflush(stderr);
+		}
+
+		{
+			const auto& advisories = VR::ProfileDB::ProfileAdvisories();
+			for (const auto& a : advisories)
+				std::fputs(fmt::format("{}\n", a.message).c_str(), stderr);
+			if (!advisories.empty())
+			{
+				std::fputs(fmt::format("(VR) {} profile block(s) DROPPED as out of range — the affected "
+									   "games run, but without the feature the profile authored.\n",
+							   advisories.size())
+							   .c_str(),
+					stderr);
+			}
+			std::fflush(stderr);
 		}
 	}
 #endif

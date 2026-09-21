@@ -5165,7 +5165,31 @@ void GSTextureCache::InvalidateSourcesFromTarget(const Target* t)
 			m_src.RemoveAt(src);
 		}
 	}
+
 }
+
+void GSTextureCache::RetargetSourcesAfterPromotion(const Target* t, GSTexture* old_tex, GSTexture* new_tex)
+{
+
+	for (Source* src : m_src.m_surfaces)
+	{
+		if (src->m_texture != old_tex)
+			continue;
+
+		pxAssert(src->m_shared_texture);
+		if (!src->m_shared_texture)
+			continue;
+
+		src->m_texture = new_tex;
+	}
+
+	if (m_temporary_source && m_temporary_source->m_texture == old_tex && m_temporary_source->m_shared_texture)
+	{
+		m_temporary_source->m_texture = new_tex;
+	}
+
+}
+
 
 void GSTextureCache::ReplaceSourceTexture(Source* s, GSTexture* new_texture, float new_scale,
 	const GSVector2i& new_unscaled_size, HashCacheEntry* hc_entry, bool new_texture_is_shared)
@@ -6066,9 +6090,24 @@ GSTextureCache::HashCacheEntry* GSTextureCache::LookupHashCache(const GIFRegTEX0
 
 	HashCacheKey key{HashCacheKey::Create(TEX0, TEXA, (dump || replace || !paltex) ? clut : nullptr, lod, region)};
 
+	const bool classic = GSConfig.ClassicTextureNames && (dump || replace) &&
+	                     (region.HasEither() || TEX0.TCC != 0);
+	HashCacheKey classic_key = key;
+	if (classic)
+	{
+		if (region.HasEither())
+		{
+			classic_key = HashCacheKey::Create(
+				TEX0, TEXA, (dump || replace || !paltex) ? clut : nullptr, lod, SourceRegion{});
+		}
+		classic_key.TEX0.TCC = TEX0.TCC;
+	}
+
 	if (dump)
 	{
 		GSTextureReplacements::DumpTexture(key, TEX0, TEXA, region, g_gs_renderer->m_mem, 0);
+		if (classic)
+			GSTextureReplacements::DumpTexture(classic_key, TEX0, TEXA, SourceRegion{}, g_gs_renderer->m_mem, 0);
 
 		if (lod && GSConfig.DumpReplaceableMipmaps)
 		{
@@ -6078,6 +6117,8 @@ GSTextureCache::HashCacheEntry* GSTextureCache::LookupHashCache(const GIFRegTEX0
 			{
 				const GIFRegTEX0 MIP_TEX0{g_gs_renderer->GetTex0Layer(basemip + mip)};
 				GSTextureReplacements::DumpTexture(key, MIP_TEX0, TEXA, region, g_gs_renderer->m_mem, mip);
+				if (classic)
+					GSTextureReplacements::DumpTexture(classic_key, MIP_TEX0, TEXA, SourceRegion{}, g_gs_renderer->m_mem, mip);
 			}
 		}
 	}
@@ -6105,6 +6146,12 @@ GSTextureCache::HashCacheEntry* GSTextureCache::LookupHashCache(const GIFRegTEX0
 		std::pair<u8, u8> alpha_minmax;
 		GSTexture* replacement_tex = GSTextureReplacements::LookupReplacementTexture(key, lod != nullptr,
 			&replacement_texture_pending, &alpha_minmax);
+		if (!replacement_tex && !replacement_texture_pending && classic)
+		{
+			replacement_tex = GSTextureReplacements::LookupReplacementTexture(classic_key, lod != nullptr,
+				&replacement_texture_pending, &alpha_minmax, true,
+				region, 1u << TEX0.TW, 1u << TEX0.TH);
+		}
 		if (replacement_tex)
 		{
 			paltex = false;
@@ -6115,7 +6162,8 @@ GSTextureCache::HashCacheEntry* GSTextureCache::LookupHashCache(const GIFRegTEX0
 		else if (
 			replacement_texture_pending ||
 
-			(paltex && GSTextureReplacements::HasReplacementTextureWithOtherPalette(key)))
+			(paltex && (GSTextureReplacements::HasReplacementTextureWithOtherPalette(key) ||
+						   (classic && GSTextureReplacements::HasReplacementTextureWithOtherPalette(classic_key)))))
 		{
 			paltex = false;
 
@@ -7162,11 +7210,10 @@ bool GSTextureCache::Target::PromoteToStereo()
 	if (!old_tex || old_tex->GetArrayLayers() >= 2)
 		return true;
 
-	const GSVector2i size = old_tex->GetSize();
 	const bool depth = old_tex->IsDepthStencil();
-	GSTexture* tex = depth ?
-		g_gs_device->CreateDepthStencil(size.x, size.y, false, true, 2) :
-		g_gs_device->CreateRenderTarget(size.x, size.y, old_tex->GetFormat(), false, true, 2);
+	const GSVector2i size = old_tex->GetSize();
+	GSTexture* tex = g_gs_device->FetchSurface(old_tex->GetUsage(), size.x, size.y, 1,
+		old_tex->GetFormat(), false, PreferReusedLabelledTexture(), 2);
 	if (!tex)
 	{
 		Console.Error("TC: Failed to allocate %dx%d stereo target for promotion.", size.x, size.y);
@@ -7189,7 +7236,9 @@ bool GSTextureCache::Target::PromoteToStereo()
 		g_gs_device->InvalidateRenderTarget(tex);
 	}
 
-	g_texture_cache->InvalidateSourcesFromTarget(this);
+	{
+		g_texture_cache->RetargetSourcesAfterPromotion(this, old_tex, tex);
+	}
 
 	g_texture_cache->m_target_memory_usage =
 		(g_texture_cache->m_target_memory_usage - old_tex->GetMemUsage()) + tex->GetMemUsage();
@@ -7337,6 +7386,11 @@ void GSTextureCache::SourceMap::RemoveAll()
 
 void GSTextureCache::SourceMap::RemoveAt(Source* s)
 {
+	if (g_texture_cache->m_draw_inflight_source == s)
+	{
+		pxAssertMsg(false, "TC: freeing the Source the current draw is holding (use-after-free window)");
+	}
+
 	m_surfaces.erase(s);
 
 	GL_CACHE("TC: Remove Src Texture: 0x%x TBW %u PSM %s",

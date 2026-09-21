@@ -376,9 +376,11 @@ echo ">> Launching..."
 XR_ENV=()
 [ -n "${XR_RUNTIME_JSON:-}" ] && XR_ENV+=("--env=XR_RUNTIME_JSON=$XR_RUNTIME_JSON")
 if flatpak info "$APP_ID" >/dev/null 2>&1; then
-	exec flatpak run "${XR_ENV[@]}" "$APP_ID"
+	# --vr is what actually arms VR. XR_RUNTIME_JSON above only tells the OpenXR
+	# loader WHICH runtime to bind; it never means "enable VR".
+	exec flatpak run "${XR_ENV[@]}" "$APP_ID" --vr
 elif command -v pcsx2-qt >/dev/null 2>&1; then
-	exec pcsx2-qt
+	exec pcsx2-qt --vr
 else
 	echo "!! Emulator not found (flatpak $APP_ID or pcsx2-qt on PATH)."
 	exit 1

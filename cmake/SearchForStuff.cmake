@@ -32,7 +32,11 @@ endif()
 
 # Platform-specific dependencies.
 if (WIN32)
-	add_subdirectory(3rdparty/D3D12MemAlloc EXCLUDE_FROM_ALL)
+	# Directory is lowercase on disk (and upstream); this reference was mixed
+	# case. Invisible on Windows — the line is WIN32-only and Windows
+	# filesystems are case-insensitive — but fatal when cross-compiling from
+	# a case-sensitive one.
+	add_subdirectory(3rdparty/d3d12memalloc EXCLUDE_FROM_ALL)
 	add_subdirectory(3rdparty/winpixeventruntime EXCLUDE_FROM_ALL)
 	add_subdirectory(3rdparty/winwil EXCLUDE_FROM_ALL)
 	set(FFMPEG_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/3rdparty/ffmpeg/include")
@@ -107,7 +111,7 @@ if(USE_VULKAN)
 endif()
 
 if(ENABLE_VR)
-	# Vendored OpenXR SDK, built as a static loader. See 3rdparty/openxr/README.pcsx2.md.
+	# Vendored OpenXR SDK, built as a static loader.
 	set(DYNAMIC_LOADER OFF CACHE BOOL "Build the OpenXR loader as a shared library" FORCE)
 	set(BUILD_LOADER ON CACHE BOOL "Build the OpenXR loader" FORCE)
 	set(BUILD_API_LAYERS OFF CACHE BOOL "Build OpenXR API layers" FORCE)

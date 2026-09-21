@@ -1633,8 +1633,9 @@ VkRenderPass GSDeviceVK::CreateCachedRenderPass(RenderPassCacheKey key)
 				subpass_dependency[num_subpass_dependencies].dstAccessMask =
 					UseFeedbackLoopLayout() ? VK_ACCESS_SHADER_READ_BIT : VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
 				subpass_dependency[num_subpass_dependencies].dependencyFlags =
-					UseFeedbackLoopLayout() ? (VK_DEPENDENCY_BY_REGION_BIT | VK_DEPENDENCY_FEEDBACK_LOOP_BIT_EXT) :
-											  VK_DEPENDENCY_BY_REGION_BIT;
+					(UseFeedbackLoopLayout() ? (VK_DEPENDENCY_BY_REGION_BIT | VK_DEPENDENCY_FEEDBACK_LOOP_BIT_EXT) :
+											   VK_DEPENDENCY_BY_REGION_BIT) |
+					(key.multiview ? VK_DEPENDENCY_VIEW_LOCAL_BIT : 0u);
 				num_subpass_dependencies++;
 			}
 		}
@@ -1676,8 +1677,9 @@ VkRenderPass GSDeviceVK::CreateCachedRenderPass(RenderPassCacheKey key)
 				subpass_dependency[num_subpass_dependencies].dstAccessMask =
 					UseFeedbackLoopLayout() ? VK_ACCESS_SHADER_READ_BIT : VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
 				subpass_dependency[num_subpass_dependencies].dependencyFlags =
-					UseFeedbackLoopLayout() ? (VK_DEPENDENCY_BY_REGION_BIT | VK_DEPENDENCY_FEEDBACK_LOOP_BIT_EXT) :
-											  VK_DEPENDENCY_BY_REGION_BIT;
+					(UseFeedbackLoopLayout() ? (VK_DEPENDENCY_BY_REGION_BIT | VK_DEPENDENCY_FEEDBACK_LOOP_BIT_EXT) :
+											   VK_DEPENDENCY_BY_REGION_BIT) |
+					(key.multiview ? VK_DEPENDENCY_VIEW_LOCAL_BIT : 0u);
 				num_subpass_dependencies++;
 			}
 		}
@@ -2229,6 +2231,7 @@ bool GSDeviceVK::Create(GSVSyncMode vsync_mode, bool allow_present_throttle)
 		return false;
 
 	InitializeState();
+
 	return true;
 }
 
@@ -3021,6 +3024,7 @@ void GSDeviceVK::CopyRect(GSTexture* sTex, GSTexture* dTex, const GSVector4i& r,
 	dTexVK->SetState(GSTexture::State::Dirty);
 }
 
+
 void GSDeviceVK::BroadcastLayer0(GSTexture* tex, const GSVector4& dRect)
 {
 	GSTextureVK* const texVK = static_cast<GSTextureVK*>(tex);
@@ -3141,7 +3145,8 @@ void GSDeviceVK::DrawMultiStretchRects(
 
 	DoMultiStretchRects(rects + first, count, static_cast<GSTextureVK*>(dTex), shader);
 
-	if (dTex && dTex->GetArrayLayers() >= 2)
+	if (
+		dTex && dTex->GetArrayLayers() >= 2)
 	{
 		GSVector4 mn = rects[0].dst_rect.min(rects[0].dst_rect.zwxy());
 		GSVector4 mx = rects[0].dst_rect.max(rects[0].dst_rect.zwxy());
@@ -6385,13 +6390,16 @@ void GSDeviceVK::UpdateHWPipelineSelector(GSHWDrawConfig& config, PipelineSelect
 	pipe.vs.multiview = ((config.rt && config.rt->GetArrayLayers() > 1) ||
 						 (config.ds && config.ds->GetArrayLayers() > 1));
 	pipe.ps.key_hi = config.ps.key_hi;
-	m_tfx_tex_in_array = (pipe.vs.multiview && config.tex && config.tex->GetArrayLayers() > 1);
+	m_tfx_tex_in_array = (
+		pipe.vs.multiview && config.tex && config.tex->GetArrayLayers() > 1);
 	pipe.ps.tex_in_array = m_tfx_tex_in_array;
 	const bool fb_layout_sampled = UseFeedbackLoopLayout();
-	m_tfx_rt_in_array = (fb_layout_sampled && pipe.vs.multiview && config.rt &&
+	m_tfx_rt_in_array = (
+		fb_layout_sampled && pipe.vs.multiview && config.rt &&
 						 config.rt->GetArrayLayers() > 1 && !config.ps.HasColorROV());
 	pipe.ps.rt_in_array = m_tfx_rt_in_array;
-	m_tfx_depth_in_array = (fb_layout_sampled && pipe.vs.multiview && config.ds &&
+	m_tfx_depth_in_array = (
+		fb_layout_sampled && pipe.vs.multiview && config.ds &&
 							config.ds->GetArrayLayers() > 1 && !config.ps.HasDepthROV());
 	pipe.ps.depth_in_array = m_tfx_depth_in_array;
 	pipe.ps.key_lo = config.ps.key_lo;

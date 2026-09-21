@@ -115,6 +115,11 @@ static InputInterceptHook::Callback m_event_intercept_callback;
 
 static std::array<std::unique_ptr<InputSource>, static_cast<u32>(InputSourceType::Count)> s_input_sources;
 
+#ifdef ENABLE_VR
+static std::mutex s_vr_binding_overlay_mutex;
+static std::vector<InputManager::VRBindingOverlayEntry> s_vr_binding_overlay;
+#endif
+
 static std::atomic<InputLayout> s_gamepad_icon_preference = InputLayout::Unknown;
 
 static const HotkeyInfo* const s_hotkey_list[] = {g_common_hotkeys, g_gs_hotkeys, g_host_hotkeys};
@@ -639,6 +644,9 @@ static std::array<const char*, static_cast<u32>(InputSourceType::Count)> s_input
 	"DInput",
 	"XInput",
 #endif
+#ifdef ENABLE_VR
+	"VR",
+#endif
 }};
 
 InputSource* InputManager::GetInputSourceInterface(InputSourceType type)
@@ -666,6 +674,11 @@ bool InputManager::GetInputSourceDefaultEnabled(InputSourceType type)
 
 		case InputSourceType::XInput:
 			return false;
+#endif
+
+#ifdef ENABLE_VR
+		case InputSourceType::VR:
+			return true;
 #endif
 
 		default:
@@ -828,6 +841,21 @@ void InputManager::AddPadBindings(SettingsInterface& si, u32 pad_index, bool is_
 			case InputBindingInfo::Type::HalfAxis:
 			{
 				const std::vector<std::string> bindings(si.GetStringList(section.c_str(), bi.name));
+#ifdef ENABLE_VR
+				{
+					const std::vector<std::string> vr_bindings(GetVRBindingOverlay(section, bi.name));
+					if (!vr_bindings.empty())
+					{
+						const float sensitivity = si.GetFloatValue(section.c_str(), fmt::format("{}Scale", bi.name).c_str(), 1.0f);
+						const float deadzone = si.GetFloatValue(section.c_str(), fmt::format("{}Deadzone", bi.name).c_str(), 0.0f);
+						AddBindings(
+							vr_bindings, InputAxisEventHandler{[pad_index, bind_index = bi.bind_index, sensitivity, deadzone](InputBindingKey key, float value) {
+								Pad::SetControllerState(pad_index, bind_index, ApplySingleBindingScale(sensitivity, deadzone, value));
+							}},
+							bi.bind_type, si, section.c_str(), bi.name, is_profile);
+					}
+				}
+#endif
 				if (!bindings.empty())
 				{
 					const float sensitivity = si.GetFloatValue(section.c_str(), fmt::format("{}Scale", bi.name).c_str(), 1.0f);
@@ -937,6 +965,21 @@ void InputManager::AddUSBBindings(SettingsInterface& si, u32 port, bool is_profi
 			case InputBindingInfo::Type::HalfAxis:
 			{
 				const std::vector<std::string> bindings(si.GetStringList(section.c_str(), bind_name.c_str()));
+#ifdef ENABLE_VR
+				{
+					const std::vector<std::string> vr_bindings(GetVRBindingOverlay(section, bind_name));
+					if (!vr_bindings.empty())
+					{
+						const float sensitivity = si.GetFloatValue(section.c_str(), fmt::format("{}Scale", bi.name).c_str(), 1.0f);
+						const float deadzone = si.GetFloatValue(section.c_str(), fmt::format("{}Deadzone", bi.name).c_str(), 0.0f);
+						AddBindings(
+							vr_bindings, InputAxisEventHandler{[port, bind_index = bi.bind_index, sensitivity, deadzone](InputBindingKey key, float value) {
+								USB::SetDeviceBindValue(port, bind_index, ApplySingleBindingScale(sensitivity, deadzone, value));
+							}},
+							bi.bind_type, si, section.c_str(), bind_name.c_str(), is_profile);
+					}
+				}
+#endif
 				if (!bindings.empty())
 				{
 					const float sensitivity = si.GetFloatValue(section.c_str(), fmt::format("{}Scale", bi.name).c_str(), 1.0f);
@@ -1660,6 +1703,41 @@ bool InputManager::IsInputSourceEnabled(SettingsInterface& si, InputSourceType t
 	return si.GetBoolValue("InputSources", InputManager::InputSourceToString(type), InputManager::GetInputSourceDefaultEnabled(type));
 }
 
+#ifdef ENABLE_VR
+bool InputManager::SetVRBindingOverlay(std::vector<VRBindingOverlayEntry> entries)
+{
+	std::lock_guard lock(s_vr_binding_overlay_mutex);
+	bool same = (entries.size() == s_vr_binding_overlay.size());
+	for (size_t i = 0; same && i < entries.size(); i++)
+	{
+		same = (entries[i].section == s_vr_binding_overlay[i].section) && (entries[i].key == s_vr_binding_overlay[i].key) &&
+			   (entries[i].binding == s_vr_binding_overlay[i].binding);
+	}
+	if (same)
+		return false;
+	s_vr_binding_overlay = std::move(entries);
+	return true;
+}
+
+std::vector<std::string> InputManager::GetVRBindingOverlay(const std::string_view section, const std::string_view key)
+{
+	std::vector<std::string> ret;
+	std::lock_guard lock(s_vr_binding_overlay_mutex);
+	for (const VRBindingOverlayEntry& e : s_vr_binding_overlay)
+	{
+		if (e.section == section && e.key == key)
+			ret.push_back(e.binding);
+	}
+	return ret;
+}
+
+bool InputManager::HasVRBindingOverlay()
+{
+	std::lock_guard lock(s_vr_binding_overlay_mutex);
+	return !s_vr_binding_overlay.empty();
+}
+#endif
+
 template <typename T>
 void InputManager::UpdateInputSourceState(SettingsInterface& si, std::unique_lock<std::mutex>& settings_lock, InputSourceType type)
 {
@@ -1701,6 +1779,9 @@ void InputManager::UpdateInputSourceState(SettingsInterface& si, std::unique_loc
 #include "Input/DInputSource.h"
 #include "Input/XInputSource.h"
 #endif
+#ifdef ENABLE_VR
+#include "Input/VRInputSource.h"
+#endif
 
 void InputManager::ReloadSources(SettingsInterface& si, std::unique_lock<std::mutex>& settings_lock)
 {
@@ -1708,5 +1789,8 @@ void InputManager::ReloadSources(SettingsInterface& si, std::unique_lock<std::mu
 #ifdef _WIN32
 	UpdateInputSourceState<DInputSource>(si, settings_lock, InputSourceType::DInput);
 	UpdateInputSourceState<XInputSource>(si, settings_lock, InputSourceType::XInput);
+#endif
+#ifdef ENABLE_VR
+	UpdateInputSourceState<VRInputSource>(si, settings_lock, InputSourceType::VR);
 #endif
 }

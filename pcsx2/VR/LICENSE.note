@@ -5,7 +5,7 @@ The files listed below are **original works of Patrick Carey**
 exist in upstream PCSX2; they were added in this fork's history.
 
 They are offered **in this repository** under the repository's license —
-`SPDX-License-Identifier: GPL-3.0`, as marked in each file's header (unchanged).
+`SPDX-License-Identifier: GPL-3.0`, as marked in each file's header.
 
 The copyright holder reserves all rights in these original works, **including the
 right to license the same code under other terms in sibling projects**.
@@ -19,9 +19,16 @@ has them, including around any edits made to wire this module in.
 
 ### `pcsx2/VR/` — VR module (original)
 - `CameraDriver.cpp` / `.h`
+- `ControlQuads.cpp` / `.h`
 - `HeadPose.cpp` / `.h`
 - `PadLook.cpp` / `.h`
+- `SeatCast.cpp` / `.h`
+- `SeatSession.cpp` / `.h`
+- `SpatialControls.cpp` / `.h`
+- `SplitState.cpp` / `.h`
 - `StereoState.cpp` / `.h`
+- `VRInput.cpp` / `.h`
+- `VRInputState.h`
 - `VRInternal.h`
 - `VRManager.cpp` / `.h`
 - `VRProfileDB.cpp` / `.h`
@@ -29,7 +36,7 @@ has them, including around any edits made to wire this module in.
 - `XRCompositor.cpp` / `.h`
 - `XRSession.cpp` / `.h`
 
-(The VR tooling under `tools/vr/` is likewise original work of the same
-author; its own `LICENSE.note` lives beside it.)
+That is every source file in this directory. The development tooling written for
+this module is likewise original work of the same author and carries its own note.
 
-_Last updated 2026-07-16._
+_Last updated 2026-09-20._

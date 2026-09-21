@@ -1061,10 +1061,17 @@ set(pcsx2arm64Headers
 # PCSX2-VR: OpenXR support
 set(pcsx2VRSources
 	VR/CameraDriver.cpp
+	VR/ControlQuads.cpp
+	VR/SplitState.cpp
+	VR/SeatCast.cpp
+	VR/SeatSession.cpp
+	VR/SpatialControls.cpp
 	VR/HeadPose.cpp
 	VR/PadLook.cpp
 	VR/StereoState.cpp
+	VR/VRInput.cpp
 	VR/VRManager.cpp
+	Input/VRInputSource.cpp
 	VR/VRProfileDB.cpp
 	VR/VRVulkanBridge.cpp
 	VR/XRCompositor.cpp
@@ -1073,9 +1080,17 @@ set(pcsx2VRSources
 
 set(pcsx2VRHeaders
 	VR/CameraDriver.h
+	VR/ControlQuads.h
+	VR/SplitState.h
+	VR/SeatCast.h
+	VR/SeatSession.h
+	VR/SpatialControls.h
 	VR/HeadPose.h
 	VR/PadLook.h
 	VR/StereoState.h
+	VR/VRInput.h
+	VR/VRInputState.h
+	Input/VRInputSource.h
 	VR/VRInternal.h
 	VR/VRManager.h
 	VR/VRProfileDB.h
@@ -1496,3 +1511,15 @@ source_group(Resources/GUI FILES ${pcsx2GuiResources})
 source_group(Resources/PAD FILES ${pcsx2PADResources})
 source_group(Resources/Recording FILES ${pcsx2RecordingVirtualPadResources})
 source_group(Resources REGULAR_EXPRESSION ${CMAKE_CURRENT_BINARY_DIR}/*)
+
+# SeatSession alone is built WITH exceptions: the WiVRn client library throws
+# C++ exceptions on connection loss, and containing a foreign throw requires
+# landing pads in the frames it unwinds through. Everything else stays
+# -fno-exceptions.
+set_source_files_properties(VR/SeatSession.cpp VR/XRSession.cpp PROPERTIES
+	COMPILE_OPTIONS "-fexceptions"
+	SKIP_PRECOMPILE_HEADERS ON) # the PCH was built -fno-exceptions and refuses to mix
+# XRSession joins the island for its TEARDOWN paths: destroying a session whose
+# WiVRn connection already died makes the client library THROW mid-shutdown,
+# and -fno-exceptions frames turn that into an abort during an otherwise clean
+# quit.

@@ -13,10 +13,189 @@
 #include <bit>
 #ifdef ENABLE_VR
 #include "VR/StereoState.h"
+#include <algorithm>
+#include <cmath>
 #endif
 
 using PS_ATST  = GSShader::PS_ATST;
 using PS_AFAIL = GSShader::PS_AFAIL;
+
+#ifdef ENABLE_VR
+namespace
+{
+	struct VRZQDepthFit
+	{
+		static constexpr u32 CAPACITY = 4096;
+		u32 n = 0;
+		u32 dropped = 0;
+		float m[CAPACITY];
+		float a[CAPACITY];
+		float zr[CAPACITY];
+		float qr[CAPACITY];
+		float scratch[CAPACITY];
+
+		bool valid = false;
+		float a0 = 0.0f;
+		float beta = 0.0f;
+		float r2 = 0.0f;
+		float agree = 0.0f;
+		u32 fit_draws = 0;
+
+		u64 frames_fitted = 0;
+		u64 frames_rejected = 0;
+		bool warned = false;
+		bool warned_dropped = false;
+
+		__fi void AddDraw(float slope, float intercept, float z_rep, float q_rep)
+		{
+			if (n >= CAPACITY)
+			{
+				dropped++;
+				return;
+			}
+			m[n] = slope;
+			a[n] = intercept;
+			zr[n] = z_rep;
+			qr[n] = q_rep;
+			n++;
+		}
+
+		__fi void ResetFrame()
+		{
+			n = 0;
+			dropped = 0;
+		}
+	};
+
+	VRZQDepthFit s_vr_zqfit;
+
+	constexpr u32 VR_ZQFIT_MIN_DRAWS = 16;
+
+	constexpr double VR_ZQFIT_GAUGE_LO = 0.98630;
+	constexpr double VR_ZQFIT_GAUGE_HI = 1.01390;
+
+
+	float VRZQFitMinAgree()
+	{
+		static const float v =
+			0.70f
+			;
+		return v;
+	}
+	float VRZQFitMinR2()
+	{
+		static const float v =
+			0.90f
+			;
+		return v;
+	}
+
+
+	void VRZQDepthFitEndOfFrame()
+	{
+		VRZQDepthFit& f = s_vr_zqfit;
+		const u32 n = f.n;
+
+		if (n < VR_ZQFIT_MIN_DRAWS)
+		{
+			f.ResetFrame();
+			return;
+		}
+
+		if (f.dropped > 0 && !f.warned_dropped)
+		{
+			f.warned_dropped = true;
+			Console.WarningFmt("(VR) Z-driven depth: {} eligible draw(s) over the {}-line fit buffer were "
+							   "DROPPED this frame. The fit is still a median of {} draws and remains "
+							   "usable, but it no longer sees the whole frame — raise VRZQDepthFit::CAPACITY "
+							   "if this persists. Reported once per run.",
+				f.dropped, VRZQDepthFit::CAPACITY, VRZQDepthFit::CAPACITY);
+		}
+
+		std::copy(f.m, f.m + n, f.scratch);
+		std::nth_element(f.scratch, f.scratch + (n / 2), f.scratch + n);
+		const double m_ref = static_cast<double>(f.scratch[n / 2]);
+		std::copy(f.a, f.a + n, f.scratch);
+		std::nth_element(f.scratch, f.scratch + (n / 2), f.scratch + n);
+		const double a_ref = static_cast<double>(f.scratch[n / 2]);
+
+		double zlo = f.zr[0], zhi = f.zr[0];
+		for (u32 i = 1; i < n; i++)
+		{
+			zlo = std::min(zlo, static_cast<double>(f.zr[i]));
+			zhi = std::max(zhi, static_cast<double>(f.zr[i]));
+		}
+		const double tol = 0.05 * std::max(std::abs(a_ref), std::max(zhi - zlo, 1.0));
+		u32 agreeing = 0;
+		for (u32 i = 0; i < n; i++)
+			agreeing += (std::abs(static_cast<double>(f.a[i]) - a_ref) <= tol) ? 1u : 0u;
+		const double agree = static_cast<double>(agreeing) / static_cast<double>(n);
+
+		double ssr = 0.0, sq = 0.0, sqq = 0.0;
+		u32 gauge_n = 0;
+		const double lo_m = m_ref * VR_ZQFIT_GAUGE_LO, hi_m = m_ref * VR_ZQFIT_GAUGE_HI;
+		for (u32 i = 0; i < n; i++)
+		{
+			const double mi = static_cast<double>(f.m[i]);
+			if (m_ref <= 0.0 || mi < lo_m || mi > hi_m)
+				continue;
+			const double q = static_cast<double>(f.qr[i]);
+			const double qh = m_ref * (static_cast<double>(f.zr[i]) - a_ref);
+			ssr += (q - qh) * (q - qh);
+			sq += q;
+			sqq += q * q;
+			gauge_n++;
+		}
+		double r2 = 0.0;
+		if (gauge_n >= 2)
+		{
+			const double sst = sqq - (sq * sq) / static_cast<double>(gauge_n);
+			r2 = (sst > 0.0) ? (1.0 - ssr / sst) : 0.0;
+		}
+
+		const char* reason =
+			(m_ref <= 0.0)                            ? "slope <= 0 (z and q disagree in sign)" :
+			(agree < static_cast<double>(VRZQFitMinAgree())) ? "z-intercepts do not agree — this game's Z is not affine in 1/w" :
+			(gauge_n < 2)                             ? "no reference gauge (fewer than 2 draws at the median slope)" :
+			(r2 < static_cast<double>(VRZQFitMinR2())) ? "R2 below threshold" :
+			                                            nullptr;
+
+		if (reason)
+		{
+			const bool was_valid = f.valid;
+			f.valid = false;
+			f.frames_rejected++;
+			if (!f.warned || was_valid)
+			{
+				f.warned = true;
+				Console.WarningFmt("(VR) Z-driven depth: fit REFUSED — {} (draws={}, intercept agreement={:.3f}, "
+								   "gauge draws={}, R2={:.6f}, slope={:.6e}, A={:.1f}). Falling back to the "
+								   "RGBAQ.Q domain for the next frame; co-located layers may separate again "
+								   "while this holds.",
+					reason, n, agree, gauge_n, r2, m_ref, a_ref);
+			}
+		}
+		else
+		{
+			const bool first = (f.frames_fitted == 0);
+			f.valid = true;
+			f.a0 = static_cast<float>(a_ref * 0x1p-32);
+			f.beta = static_cast<float>(m_ref * 0x1p32);
+			f.r2 = static_cast<float>(r2);
+			f.agree = static_cast<float>(agree);
+			f.fit_draws = n;
+			f.frames_fitted++;
+			f.warned = false;
+			if (first)
+				Console.WriteLn("(VR) Z-driven depth: first accepted fit — draws=%u intercept agreement=%.3f "
+								"R2=%.6f (slope %.6e, A %.1f). Displacement now evaluates over screen Z.",
+					n, agree, r2, m_ref, a_ref);
+		}
+
+		f.ResetFrame();
+	}
+}
+#endif
 
 GSRendererHW::GSRendererHW()
 	: GSRenderer()
@@ -98,6 +277,10 @@ void GSRendererHW::UpdateSettings(const Pcsx2Config::GSOptions& old_config)
 
 void GSRendererHW::VSync(u32 field, bool registers_written, bool idle_frame)
 {
+#ifdef ENABLE_VR
+	VRZQDepthFitEndOfFrame();
+#endif
+
 	if (GSConfig.LoadTextureReplacements)
 		GSTextureReplacements::ProcessAsyncLoadedTextures();
 
@@ -5064,6 +5247,7 @@ void GSRendererHW::EmulateZbuffer(const GSTextureCache::Target* ds)
 	if (ds && m_cached_ctx.TEST.ZTE)
 	{
 		m_conf.depth.ztst = m_cached_ctx.TEST.ZTST;
+
 		if (m_cached_ctx.ZBUF.ZMSK || (PRIM->AA1 && m_vt.m_primclass == GS_LINE_CLASS))
 		{
 			m_conf.depth.zwe = false;
@@ -5629,11 +5813,152 @@ void GSRendererHW::DetermineVSConfig(GSTextureCache::Target* rt, float rtscale, 
 	{
 		vr_pin_screen = true;
 	}
+	const bool vr_mono_centre = !vr_multiview_target
+		;
+	const bool vr_engaged = st.enabled && !vr_pin_screen && !vr_mono_centre;
+	const float vr_eye_sign = vr_multiview_target ? 1.0f : VR::StereoState::GetCurrentEyeSign();
 	m_conf.cb_vs.vr_stereo =
-		(st.enabled && !vr_pin_screen) ?
-			GSVector2(st.separation * (vr_multiview_target ? 1.0f : VR::StereoState::GetCurrentEyeSign()),
-				st.convergence) :
+		vr_engaged ?
+			GSVector2(st.separation * vr_eye_sign, st.convergence) :
 			GSVector2(0.0f, 0.0f);
+	if (vr_engaged && st.map != VR::StereoState::Params::Map::Linear)
+	{
+		m_conf.cb_vs.vr_map_mode = static_cast<u32>(st.map);
+		m_conf.cb_vs.vr_band_count = st.band_count;
+		m_conf.cb_vs.vr_splits = GSVector4(st.split_q[0], st.split_q[1], st.split_q[2], vr_eye_sign);
+		if (st.map == VR::StereoState::Params::Map::Log)
+		{
+			m_conf.cb_vs.vr_band[0] = GSVector4(st.log_w0, st.log_w1, st.log_dfar, 0.0f);
+			m_conf.cb_vs.vr_band[1] = GSVector4::zero();
+			m_conf.cb_vs.vr_band[2] = GSVector4::zero();
+			m_conf.cb_vs.vr_band[3] = GSVector4::zero();
+		}
+		else
+		{
+			for (u32 i = 0; i < 4; i++)
+				m_conf.cb_vs.vr_band[i] = GSVector4(st.conv[i], st.sep[i], st.bias[i], 0.0f);
+		}
+	}
+	else
+	{
+		m_conf.cb_vs.vr_map_mode = 0;
+		m_conf.cb_vs.vr_band_count = 0;
+		m_conf.cb_vs.vr_splits = GSVector4::zero();
+		m_conf.cb_vs.vr_band[0] = GSVector4::zero();
+		m_conf.cb_vs.vr_band[1] = GSVector4::zero();
+		m_conf.cb_vs.vr_band[2] = GSVector4::zero();
+		m_conf.cb_vs.vr_band[3] = GSVector4::zero();
+	}
+	float vr_collimate = 0.0f;
+	if (vr_engaged && PRIM->FST && st.collimate_disparity != 0.0f)
+	{
+		const int rw = m_r.width();
+		const int rh = m_r.height();
+		int matched = -1;
+		for (u32 i = 0; i < st.collimate_rule_count && matched < 0; i++)
+		{
+			const VR::StereoState::Params::CollimateRule& r = st.collimate_rules[i];
+			if (r.prim >= 0 && static_cast<int>(m_vt.m_primclass) != static_cast<int>(r.prim))
+				continue;
+			if (r.tme >= 0 && (PRIM->TME ? 1 : 0) != static_cast<int>(r.tme))
+				continue;
+			if (r.abe >= 0 && (PRIM->ABE ? 1 : 0) != static_cast<int>(r.abe))
+				continue;
+			if ((r.min_w > 0 && rw < r.min_w) || (r.max_w > 0 && rw > r.max_w))
+				continue;
+			if ((r.min_h > 0 && rh < r.min_h) || (r.max_h > 0 && rh > r.max_h))
+				continue;
+			if (r.rx1 > r.rx0)
+			{
+				const float w = static_cast<float>(unscaled_size.x);
+				if (static_cast<float>(m_r.x) < r.rx0 * w || static_cast<float>(m_r.z) > r.rx1 * w)
+					continue;
+			}
+			if (r.ry1 > r.ry0)
+			{
+				const float h = static_cast<float>(unscaled_size.y);
+				if (static_cast<float>(m_r.y) < r.ry0 * h || static_cast<float>(m_r.w) > r.ry1 * h)
+					continue;
+			}
+			if (r.tu1 > r.tu0)
+			{
+				if (m_vt.m_min.t.x < r.tu0 || m_vt.m_max.t.x > r.tu1)
+					continue;
+			}
+			if (r.tv1 > r.tv0)
+			{
+				if (m_vt.m_min.t.y < r.tv0 || m_vt.m_max.t.y > r.tv1)
+					continue;
+			}
+			matched = static_cast<int>(i);
+		}
+
+		if (matched >= 0)
+			vr_collimate = st.collimate_disparity * vr_eye_sign;
+
+		static u64 s_coll_considered = 0;
+		static u64 s_coll_matched = 0;
+		static bool s_coll_dead_warned = false;
+		s_coll_considered++;
+		if (matched >= 0)
+		{
+			if (s_coll_matched++ == 0)
+			{
+				DevCon.WriteLn("(VR) HUD collimation: rule %d ('%s') FIRST MATCH after %llu FST draws — "
+							   "prim=%d tme=%d abe=%d r=%d,%d-%d,%d (%dx%d) uv=%.1f,%.1f-%.1f,%.1f d=%+.4f",
+					matched, st.collimate_rules[matched].label,
+					static_cast<unsigned long long>(s_coll_considered),
+					static_cast<int>(m_vt.m_primclass), PRIM->TME ? 1 : 0, PRIM->ABE ? 1 : 0,
+					m_r.x, m_r.y, m_r.z, m_r.w, rw, rh,
+					m_vt.m_min.t.x, m_vt.m_min.t.y, m_vt.m_max.t.x, m_vt.m_max.t.y, vr_collimate);
+			}
+		}
+		else if (!s_coll_dead_warned && s_coll_matched == 0 && s_coll_considered > 20000)
+		{
+			s_coll_dead_warned = true;
+			Console.WarningFmt("(VR) HUD collimation: {} rule(s) authored, but NOT ONE of {} UV/FST draws has "
+							   "matched. The rule does not describe this game's symbology.",
+				st.collimate_rule_count, s_coll_considered);
+		}
+
+	}
+	m_conf.cb_vs.vr_band[0].w = vr_collimate;
+
+	const bool vr_z_globally_constrained =
+		(m_cached_ctx.TEST.ZTE != 0 && m_cached_ctx.TEST.ZTST > ZTST_ALWAYS);
+
+	if (st.z_driven_depth && vr_engaged && vr_z_globally_constrained)
+	{
+		const bool vr_fit_q_trustworthy =
+			PRIM->TME && !PRIM->FST &&
+			!(m_vt.m_accurate_stq && m_vt.m_primclass == GS_SPRITE_CLASS);
+		if (vr_fit_q_trustworthy && !m_vt.m_eq.z && !m_vt.m_eq.q)
+		{
+			const double zlo = static_cast<double>(m_vt.m_min.p.z);
+			const double zhi = static_cast<double>(m_vt.m_max.p.z);
+			const double qlo = static_cast<double>(m_vt.m_min.t.z);
+			const double qhi = static_cast<double>(m_vt.m_max.t.z);
+			const double dz = zhi - zlo;
+			const double dq = qhi - qlo;
+			if (dz > 0.0 && dq > 0.0 && qlo > 0.0 && (dq / qhi) > 1e-3)
+			{
+				const double slope = dq / dz;
+				const double intercept = zlo - qlo / slope;
+				if (std::isfinite(slope) && std::isfinite(intercept))
+				{
+					s_vr_zqfit.AddDraw(static_cast<float>(slope), static_cast<float>(intercept),
+						static_cast<float>(zhi), static_cast<float>(qhi));
+				}
+			}
+		}
+	}
+
+	const bool vr_zq_apply =
+		vr_engaged && st.z_driven_depth && s_vr_zqfit.valid && vr_z_globally_constrained;
+	m_conf.cb_vs.vr_band[1].w = vr_zq_apply ? s_vr_zqfit.a0 : 0.0f;
+	m_conf.cb_vs.vr_band[2].w = vr_zq_apply ? s_vr_zqfit.beta : 0.0f;
+	m_conf.cb_vs.vr_band[3].w = vr_zq_apply ? 1.0f : 0.0f;
+
 	if (vr_multiview_target)
 	{
 		static bool s_logged_mv_draw = false;
@@ -5646,6 +5971,11 @@ void GSRendererHW::DetermineVSConfig(GSTextureCache::Target* rt, float rtscale, 
 	}
 #else
 	m_conf.cb_vs.vr_stereo = GSVector2(0.0f, 0.0f);
+	m_conf.cb_vs.vr_map_mode = 0;
+	m_conf.cb_vs.vr_band[0].w = 0.0f;
+	m_conf.cb_vs.vr_band[1].w = 0.0f;
+	m_conf.cb_vs.vr_band[2].w = 0.0f;
+	m_conf.cb_vs.vr_band[3].w = 0.0f;
 #endif
 
 	m_conf.vs.iip = !IsFlatShaded();
@@ -7660,7 +7990,10 @@ __ri void GSRendererHW::HandleTextureHazards(const GSTextureCache::Target* rt, c
 	const GSVector2i scaled_copy_size = GSVector2i(static_cast<int>(std::ceil(static_cast<float>(copy_size.x) * scale)),
 		static_cast<int>(std::ceil(static_cast<float>(copy_size.y) * scale)));
 	const bool clear = src_target->m_texture->IsRenderTarget();
-	src_copy.reset(g_gs_device->CreateCompatible(src_target->m_texture, scaled_copy_size, clear));
+	const u32 copy_layers =
+		src_target->m_texture->GetArrayLayers();
+	src_copy.reset(g_gs_device->FetchSurface(src_target->m_texture->GetUsage(), scaled_copy_size.x,
+		scaled_copy_size.y, 1, src_target->m_texture->GetFormat(), clear, true, copy_layers));
 	if (!src_copy) [[unlikely]]
 	{
 		Console.Error("HW: Failed to allocate %dx%d texture for hazard copy", scaled_copy_size.x, scaled_copy_size.y);
@@ -7669,43 +8002,51 @@ __ri void GSRendererHW::HandleTextureHazards(const GSTextureCache::Target* rt, c
 		return;
 	}
 
-	if (m_downscale_source)
+
+	for (u32 copy_layer = 0; copy_layer < copy_layers; copy_layer++)
 	{
-		if (src_target->m_texture->IsDepthStencil() || std::floor(src_target->GetScale()) != src_target->GetScale())
+		GSTexture* const copy_src = (copy_layers > 1) ?
+			src_target->m_texture->GetLayerProxyTexture(copy_layer) : src_target->m_texture;
+		GSTexture* const copy_dst = (copy_layers > 1) ?
+			src_copy->GetLayerProxyTexture(copy_layer) : src_copy.get();
+
+		if (m_downscale_source)
 		{
-			GSVector4 src_rect = GSVector4(tmm.coverage) / GSVector4(GSVector4i::loadh(src_unscaled_size).zwzw());
-			const GSVector4 dst_rect = GSVector4(tmm.coverage);
-			g_gs_device->StretchRectAuto(src_target->m_texture, src_rect, src_copy.get(), dst_rect, Nearest);
+			if (src_target->m_texture->IsDepthStencil() || std::floor(src_target->GetScale()) != src_target->GetScale())
+			{
+				GSVector4 src_rect = GSVector4(tmm.coverage) / GSVector4(GSVector4i::loadh(src_unscaled_size).zwzw());
+				const GSVector4 dst_rect = GSVector4(tmm.coverage);
+				g_gs_device->StretchRectAuto(copy_src, src_rect, copy_dst, dst_rect, Nearest);
+			}
+			else
+			{
+				const u32 downsample_factor = static_cast<u32>(src_target->GetScale());
+				const GSVector2i clamp_min = (GSConfig.UserHacks_HalfPixelOffset != GSHalfPixelOffset::Native) ?
+				                                 GSVector2i(0, 0) :
+				                                 GSVector2i(downsample_factor, downsample_factor);
+				GSVector4i copy_rect = tmm.coverage;
+				if (target_region)
+				{
+					copy_rect += GSVector4i(source_region.GetMinX(), source_region.GetMinY()).xyxy();
+				}
+				const GSVector4 dRect = GSVector4((copy_rect + GSVector4i(-1, 1).xxyy()).rintersect(src_target->GetUnscaledRect()));
+				g_gs_device->FilteredDownsampleTexture(copy_src, copy_dst, downsample_factor, clamp_min, dRect);
+			}
 		}
 		else
 		{
-			const u32 downsample_factor = static_cast<u32>(src_target->GetScale());
-			const GSVector2i clamp_min = (GSConfig.UserHacks_HalfPixelOffset != GSHalfPixelOffset::Native) ?
-			                                 GSVector2i(0, 0) :
-			                                 GSVector2i(downsample_factor, downsample_factor);
-			GSVector4i copy_rect = tmm.coverage;
-			if (target_region)
-			{
-				copy_rect += GSVector4i(source_region.GetMinX(), source_region.GetMinY()).xyxy();
-			}
-			const GSVector4 dRect = GSVector4((copy_rect + GSVector4i(-1, 1).xxyy()).rintersect(src_target->GetUnscaledRect()));
-			g_gs_device->FilteredDownsampleTexture(src_target->m_texture, src_copy.get(), downsample_factor, clamp_min, dRect);
+			const GSVector4i offset = copy_range - GSVector4i(copy_dst_offset).xyxy();
+			GSVector4i bilinear_range = copy_range + GSVector4i(-1, -1, 1, 1);
+			bilinear_range = bilinear_range.rintersect(src_bounds);
+
+			const GSVector4 src_rect = GSVector4(bilinear_range) / GSVector4(src_unscaled_size).xyxy();
+			const GSVector4 dst_rect = (GSVector4(bilinear_range) - GSVector4(offset).xyxy()) * scale;
+
+			g_gs_device->StretchRectAuto(copy_src, src_rect, copy_dst, dst_rect, Nearest);
 		}
 	}
-	else
-	{
-		const GSVector4i offset = copy_range - GSVector4i(copy_dst_offset).xyxy();
-		copy_range.x -= 1;
-		copy_range.y -= 1;
-		copy_range.z += 1;
-		copy_range.w += 1;
-		copy_range = copy_range.rintersect(src_bounds);
 
-		const GSVector4 src_rect = GSVector4(copy_range) / GSVector4(src_unscaled_size).xyxy();
-		const GSVector4 dst_rect = (GSVector4(copy_range) - GSVector4(offset).xyxy()) * scale;
 
-		g_gs_device->StretchRectAuto(src_target->m_texture, src_rect, src_copy.get(), dst_rect, Nearest);
-	}
 	m_conf.tex = src_copy.get();
 }
 
@@ -8226,6 +8567,12 @@ __ri void GSRendererHW::DrawPrims(GSTextureCache::Target* rt, GSTextureCache::Ta
 
 	const GSDrawingEnvironment& env = *m_draw_env;
 
+	struct InFlightSourceScope
+	{
+		explicit InFlightSourceScope(GSTextureCache::Source* s) { g_texture_cache->SetDrawInFlightSource(s); }
+		~InFlightSourceScope() { g_texture_cache->SetDrawInFlightSource(nullptr); }
+	} inflight_source_scope(tex);
+
 	DATEOptions date_options;
 	date_options.enabled = rt && m_cached_ctx.TEST.DATE && m_cached_ctx.FRAME.PSM != PSMCT24;
 	date_options.primid = false;
@@ -8235,7 +8582,8 @@ __ri void GSRendererHW::DrawPrims(GSTextureCache::Target* rt, GSTextureCache::Ta
 	ResetStates();
 
 	m_conf.cb_vs.texture_offset = {};
-	m_conf.ps.scanmsk = env.SCANMSK.MSK;
+	m_conf.ps.scanmsk =
+		env.SCANMSK.MSK;
 #ifdef ENABLE_VR
 	if (rt && rt->m_texture && rt->m_texture->GetArrayLayers() == 1 &&
 		g_gs_device->SupportsStereoTargets() && VR::StereoState::Get().enabled &&
@@ -8268,6 +8616,7 @@ __ri void GSRendererHW::DrawPrims(GSTextureCache::Target* rt, GSTextureCache::Ta
 							"not yet layer-consistent (Phase A); expect right-eye depth artifacts here.");
 		}
 	}
+
 #endif
 	m_conf.rt = rt ? rt->m_texture : nullptr;
 	m_conf.ds = ds ? (m_using_temp_z ? g_texture_cache->GetTemporaryZ() : ds->m_texture) : nullptr;

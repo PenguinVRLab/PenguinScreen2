@@ -100,7 +100,10 @@ struct GSMTLMainVSUniform
 	uint max_depth;
 	float line_aa1_width;
 	vector_float2 vr_stereo;
-	vector_float2 vr_pad;
+	uint vr_map_mode;
+	uint vr_band_count;
+	vector_float4 vr_splits;
+	vector_float4 vr_band[4];
 };
 
 struct GSMTLMainPSUniform

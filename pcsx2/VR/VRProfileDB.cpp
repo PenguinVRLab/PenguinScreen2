@@ -451,14 +451,22 @@ static void parseGuardList(const std::string_view serial, const ryml::ConstNodeR
 		}
 		const std::optional<u32> addr = g.has_child("address") ? parseAddress(nodeVal(g["address"])) : std::nullopt;
 		const std::optional<u32> root = chain_form ? parseAddress(nodeVal(g["pointer"])) : std::nullopt;
-		const std::string_view eq_raw = g.has_child("equals") ? nodeVal(g["equals"]) : std::string_view{};
-		const std::optional<u32> eq = g.has_child("equals") ? parseHexU32(eq_raw) : std::nullopt;
+		const bool has_eq = g.has_child("equals");
+		const bool has_ne = g.has_child("notEquals");
+		if (has_eq && has_ne)
+		{
+			Console.WarningFmt("(VR) ProfileDB: Serial '{}' has a {} with BOTH equals and notEquals; skipping it.", serial, what);
+			continue;
+		}
+		const std::string_view eq_raw = has_eq ? nodeVal(g["equals"]) : (has_ne ? nodeVal(g["notEquals"]) : std::string_view{});
+		const std::optional<u32> eq = (has_eq || has_ne) ? parseHexU32(eq_raw) : std::nullopt;
 		if ((!addr.has_value() && !root.has_value()) || !eq.has_value())
 		{
-			Console.WarningFmt("(VR) ProfileDB: Serial '{}' has a {} with a missing/invalid address/pointer or equals; skipping it.", serial, what);
+			Console.WarningFmt("(VR) ProfileDB: Serial '{}' has a {} with a missing/invalid address/pointer or equals/notEquals; skipping it.", serial, what);
 			continue;
 		}
 		VR::ProfileDB::CameraGuard guard;
+		guard.not_equals = has_ne;
 		if (g.has_child("width"))
 		{
 			const std::optional<u32> wdt = StringUtil::FromChars<u32>(nodeVal(g["width"]));
@@ -1628,6 +1636,325 @@ static std::optional<VR::ProfileDB::HudCollimate> parseHudCollimate(
 	return hc;
 }
 
+static bool validControlInstanceId(const std::string_view id)
+{
+	if (id.empty() || id.size() > 32)
+		return false;
+	for (const char ch : id)
+	{
+		const bool ok = (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '-';
+		if (!ok)
+			return false;
+	}
+	return true;
+}
+
+static void readOptionalBool(const std::string_view serial, const ryml::ConstNodeRef& node, const char* key,
+	const char* what, bool& dst)
+{
+	if (!node.has_child(key))
+		return;
+	const std::string_view v = nodeVal(node[key]);
+	if (StringUtil::compareNoCase(v, "true") || StringUtil::compareNoCase(v, "yes") || StringUtil::compareNoCase(v, "on"))
+		dst = true;
+	else if (StringUtil::compareNoCase(v, "false") || StringUtil::compareNoCase(v, "no") || StringUtil::compareNoCase(v, "off"))
+		dst = false;
+	else
+		Console.WarningFmt("(VR) ProfileDB: Serial '{}' {} '{}' is not a boolean; keeping the default.", serial, what, v);
+}
+
+static std::optional<VR::ProfileDB::SpatialControlSpec> parseControlEntry(const std::string_view serial,
+	const ryml::ConstNodeRef& c, size_t index, const std::unordered_set<std::string>& seen_ids)
+{
+	using namespace VR::SpatialControls;
+	using VR::ProfileDB::SpatialControlSpec;
+
+	const std::string site = fmt::format("controls[{}]", index);
+	const std::string display = StringUtil::toUpper(serial);
+	const auto reject = [&](const std::string& why) -> std::optional<SpatialControlSpec> {
+		advise(serial, "controls",
+			fmt::format("(VR) ProfileDB: {} {}: {} — the whole control is DROPPED, so this game gets no such device.",
+				display, site, why));
+		return std::nullopt;
+	};
+
+	if (!c.is_map())
+		return reject("the entry is not a map");
+	warnUnknownKeys(serial, c, site.c_str(), {"device", "id", "placement", "params", "when", "bind", "pad", "usbPort", "notes"});
+
+	SpatialControlSpec spec;
+	if (!c.has_child("device"))
+		return reject("has no `device`");
+	spec.device.assign(nodeVal(c["device"]));
+	const DeviceDef* def = FindDevice(spec.device);
+	if (!def)
+	{
+		return reject(fmt::format("device '{}' is not in the catalogue (Throttle, TwinThrottles, Wheel, Shifter, Stick, "
+								  "LightGun — exact, case-sensitive)",
+			spec.device));
+	}
+	spec.kind = def->kind;
+
+	if (!c.has_child("id"))
+		return reject("has no `id`");
+	spec.id.assign(nodeVal(c["id"]));
+	if (!validControlInstanceId(spec.id))
+		return reject(fmt::format("id '{}' must be 1..32 characters of [A-Za-z0-9_-] (it becomes the device name VR-<id>)", spec.id));
+	if (seen_ids.count(spec.id) != 0)
+		return reject(fmt::format("id '{}' is already used by an earlier control", spec.id));
+
+	if (def->kind == DeviceKind::Wheel || def->kind == DeviceKind::Stick)
+		spec.release = ReleaseMode::Spring;
+	if (def->kind == DeviceKind::Shifter)
+		spec.grab_mode = GrabMode::Hold;
+
+	if (c.has_child("placement"))
+	{
+		if (!c["placement"].is_map())
+			return reject("placement is not a map");
+		const ryml::ConstNodeRef p = c["placement"];
+		const std::string where = site + ".placement";
+		warnUnknownKeys(serial, p, where.c_str(), {"side", "height", "forward", "yawDeg"});
+		readOptionalFloat(serial, p, "side", "controls placement side", spec.placement.side);
+		readOptionalFloat(serial, p, "height", "controls placement height", spec.placement.height);
+		readOptionalFloat(serial, p, "forward", "controls placement forward", spec.placement.forward);
+		readOptionalFloat(serial, p, "yawDeg", "controls placement yawDeg", spec.placement.yaw_deg);
+	}
+
+	if (c.has_child("params"))
+	{
+		if (!c["params"].is_map())
+			return reject("params is not a map");
+		const ryml::ConstNodeRef p = c["params"];
+		const std::string where = site + ".params";
+		warnUnknownKeys(serial, p, where.c_str(),
+			{"travel", "grabRadius", "release", "springRate", "oneWay", "detented", "power", "engage", "steerFullLock",
+				"steerDeadband", "steerCurve", "steerSign", "outputFloor", "lockToLockDeg", "rimRadius", "gears", "reverse",
+				"neutral", "travelX", "travelY", "twist", "twistRangeDeg", "aim", "aimHand", "preset", "mode", "leverSign",
+				"grabMode", "breakAway", "grabLength", "sweep", "armLength", "upright"});
+		readOptionalFloat(serial, p, "travel", "controls travel", spec.travel);
+		readOptionalFloat(serial, p, "sweep", "controls sweep", spec.sweep_deg);
+		readOptionalFloat(serial, p, "armLength", "controls armLength", spec.arm_length);
+		readOptionalBool(serial, p, "upright", "controls upright", spec.upright);
+		if (p.has_child("travel") && (def->kind == DeviceKind::Throttle || def->kind == DeviceKind::TwinThrottles))
+		{
+			Console.WarningFmt("(VR) ProfileDB: Serial '{}' {}: `travel` is the slide / Shifter key; a {} is a lever arm — use "
+							   "`sweep` (degrees) and `armLength` (metres). Ignored.",
+				serial, site, spec.device);
+		}
+		readOptionalFloat(serial, p, "grabRadius", "controls grabRadius", spec.grab_radius);
+		readOptionalFloat(serial, p, "grabLength", "controls grabLength", spec.grab_length);
+		readOptionalFloat(serial, p, "breakAway", "controls breakAway", spec.break_away);
+		if (p.has_child("grabMode"))
+		{
+			const std::string_view v = nodeVal(p["grabMode"]);
+			if (StringUtil::compareNoCase(v, "toggle"))
+				spec.grab_mode = GrabMode::Toggle;
+			else if (StringUtil::compareNoCase(v, "hold"))
+				spec.grab_mode = GrabMode::Hold;
+			else
+				return reject(fmt::format("grabMode '{}' is not one of toggle, hold", v));
+		}
+		readOptionalFloat(serial, p, "springRate", "controls springRate", spec.spring_rate);
+		readOptionalBool(serial, p, "oneWay", "controls oneWay", spec.one_way);
+		readOptionalS32(serial, p, "detented", "controls detented", spec.detented);
+		readOptionalFloat(serial, p, "engage", "controls engage", spec.engage);
+		readOptionalFloat(serial, p, "steerFullLock", "controls steerFullLock", spec.steer_full_lock);
+		readOptionalFloat(serial, p, "steerDeadband", "controls steerDeadband", spec.steer_deadband);
+		readOptionalFloat(serial, p, "steerCurve", "controls steerCurve", spec.steer_curve);
+		readOptionalFloat(serial, p, "steerSign", "controls steerSign", spec.steer_sign);
+		readOptionalFloat(serial, p, "outputFloor", "controls outputFloor", spec.output_floor);
+		readOptionalFloat(serial, p, "leverSign", "controls leverSign", spec.lever_sign);
+		readOptionalFloat(serial, p, "lockToLockDeg", "controls lockToLockDeg", spec.lock_to_lock_deg);
+		readOptionalFloat(serial, p, "rimRadius", "controls rimRadius", spec.rim_radius);
+		readOptionalS32(serial, p, "gears", "controls gears", spec.gears);
+		readOptionalBool(serial, p, "reverse", "controls reverse", spec.has_reverse);
+		readOptionalBool(serial, p, "neutral", "controls neutral", spec.has_neutral);
+		readOptionalFloat(serial, p, "travelX", "controls travelX", spec.travel_x);
+		readOptionalFloat(serial, p, "travelY", "controls travelY", spec.travel_y);
+		readOptionalBool(serial, p, "twist", "controls twist", spec.twist);
+		readOptionalFloat(serial, p, "twistRangeDeg", "controls twistRangeDeg", spec.twist_range_deg);
+		if (p.has_child("release"))
+		{
+			const std::string_view v = nodeVal(p["release"]);
+			if (StringUtil::compareNoCase(v, "latch"))
+				spec.release = ReleaseMode::Latch;
+			else if (StringUtil::compareNoCase(v, "spring"))
+				spec.release = ReleaseMode::Spring;
+			else if (StringUtil::compareNoCase(v, "detent"))
+				spec.release = ReleaseMode::Detent;
+			else
+				return reject(fmt::format("release '{}' is not one of latch, spring, detent", v));
+		}
+		if (p.has_child("power"))
+		{
+			const std::string_view v = nodeVal(p["power"]);
+			if (StringUtil::compareNoCase(v, "sum"))
+				spec.power = PowerMode::Sum;
+			else if (StringUtil::compareNoCase(v, "max"))
+				spec.power = PowerMode::Max;
+			else
+				return reject(fmt::format("power '{}' is not one of sum, max", v));
+		}
+		if (p.has_child("mode"))
+		{
+			const std::string_view v = nodeVal(p["mode"]);
+			if (StringUtil::compareNoCase(v, "composed"))
+				spec.mode = TwinMode::Composed;
+			else if (StringUtil::compareNoCase(v, "direct"))
+				spec.mode = TwinMode::Direct;
+			else
+				return reject(fmt::format("mode '{}' is not one of composed, direct", v));
+		}
+		if (p.has_child("aim"))
+		{
+			const std::string_view v = nodeVal(p["aim"]);
+			if (StringUtil::compareNoCase(v, "pistol"))
+				spec.rifle = false;
+			else if (StringUtil::compareNoCase(v, "rifle"))
+				spec.rifle = true;
+			else
+				return reject(fmt::format("aim '{}' is not one of pistol, rifle", v));
+		}
+		if (p.has_child("aimHand"))
+		{
+			const std::string_view v = nodeVal(p["aimHand"]);
+			if (StringUtil::compareNoCase(v, "left"))
+				spec.aim_left = true;
+			else if (StringUtil::compareNoCase(v, "right"))
+				spec.aim_left = false;
+			else
+				return reject(fmt::format("aimHand '{}' is not one of left, right", v));
+		}
+		if (p.has_child("preset"))
+		{
+			const std::string_view v = nodeVal(p["preset"]);
+			if (!StringUtil::compareNoCase(v, "pod") && !StringUtil::compareNoCase(v, "tank"))
+				return reject(fmt::format("preset '{}' is not one of pod, tank", v));
+			spec.preset.assign(v);
+		}
+	}
+
+	const auto finite_pos = [](float v) { return std::isfinite(v) && v > 0.0f; };
+	const auto unit_range = [](float v) { return std::isfinite(v) && v >= 0.0f && v < 1.0f; };
+	if (!finite_pos(spec.travel))
+		return reject(fmt::format("travel {:g} must be > 0 (metres from rest to full)", spec.travel));
+	if (!finite_pos(spec.grab_radius))
+		return reject(fmt::format("grabRadius {:g} must be > 0 (metres: the grab capsule's radius about the handle)", spec.grab_radius));
+	if (!(std::isfinite(spec.grab_length) && spec.grab_length >= 0.0f))
+		return reject(fmt::format("grabLength {:g} must be >= 0 (metres: the grab capsule's length along the handle)", spec.grab_length));
+	if (!(std::isfinite(spec.sweep_deg) && spec.sweep_deg > 0.0f && spec.sweep_deg <= 180.0f))
+		return reject(fmt::format("sweep {:g} must be in (0, 180] degrees (the lever arm's full arc, rear stop to front stop)", spec.sweep_deg));
+	if (!finite_pos(spec.arm_length))
+		return reject(fmt::format("armLength {:g} must be > 0 (metres from the arm's pivot to the grip)", spec.arm_length));
+	if (!(std::isfinite(spec.break_away) && spec.break_away >= 0.0f))
+		return reject(fmt::format("breakAway {:g} must be >= 0 (metres from the handle; 0 disables)", spec.break_away));
+	if (!finite_pos(spec.spring_rate))
+		return reject(fmt::format("springRate {:g} must be > 0 (full-travel units per second)", spec.spring_rate));
+	if (spec.detented != 0 && (spec.detented < 2 || spec.detented > kMaxNotches))
+		return reject(fmt::format("detented {} must be 0 (continuous) or 2..{}", spec.detented, kMaxNotches));
+	if (!unit_range(spec.engage))
+		return reject(fmt::format("engage {:g} is out of range (need 0 <= engage < 1; 0 = continuous Power)", spec.engage));
+	if (!finite_pos(spec.steer_full_lock))
+		return reject(fmt::format("steerFullLock {:g} must be > 0 (the lever difference that means full lock)", spec.steer_full_lock));
+	if (!unit_range(spec.steer_deadband))
+		return reject(fmt::format("steerDeadband {:g} is out of range (need 0 <= steerDeadband < 1)", spec.steer_deadband));
+	if (!(std::isfinite(spec.steer_curve) && spec.steer_curve >= 0.2f && spec.steer_curve <= 5.0f))
+		return reject(fmt::format("steerCurve {:g} is out of range (need 0.2 <= steerCurve <= 5)", spec.steer_curve));
+	if (!(spec.steer_sign == 1.0f || spec.steer_sign == -1.0f))
+		return reject(fmt::format("steerSign {:g} must be 1 or -1 — read it from the ladder, never guess it", spec.steer_sign));
+	if (!(spec.lever_sign == 1.0f || spec.lever_sign == -1.0f))
+		return reject(fmt::format("leverSign {:g} must be 1 or -1 — read it from the ladder, never guess it", spec.lever_sign));
+	if (!unit_range(spec.output_floor))
+	{
+		return reject(fmt::format("outputFloor {:g} is out of range (need 0 <= outputFloor < 1; it is a FRACTION of full "
+								  "deflection — the game's own stick deadzone, measured, not a percent)",
+			spec.output_floor));
+	}
+	if (!finite_pos(spec.lock_to_lock_deg))
+		return reject(fmt::format("lockToLockDeg {:g} must be > 0", spec.lock_to_lock_deg));
+	if (!finite_pos(spec.rim_radius))
+		return reject(fmt::format("rimRadius {:g} must be > 0 (metres)", spec.rim_radius));
+	if (spec.gears < 1 || spec.gears > 6)
+		return reject(fmt::format("gears {} must be 1..6", spec.gears));
+	if (!finite_pos(spec.travel_x) || !finite_pos(spec.travel_y))
+		return reject(fmt::format("travelX {:g} / travelY {:g} must be > 0 (metres to full deflection)", spec.travel_x, spec.travel_y));
+	if (!finite_pos(spec.twist_range_deg))
+		return reject(fmt::format("twistRangeDeg {:g} must be > 0", spec.twist_range_deg));
+
+	if (c.has_child("when"))
+	{
+		if (!c["when"].is_seq())
+			return reject("when is not a list");
+		parseGuardList(serial, c["when"], "controls when-guard", spec.when);
+	}
+
+	if (c.has_child("pad"))
+	{
+		const std::optional<u32> v = StringUtil::FromChars<u32>(nodeVal(c["pad"]));
+		if (!v.has_value() || v.value() < 1 || v.value() > 8)
+			return reject("pad must be 1..8 (the DualShock port, 1-based)");
+		spec.pad_port = v.value() - 1;
+	}
+	if (c.has_child("usbPort"))
+	{
+		const std::optional<u32> v = StringUtil::FromChars<u32>(nodeVal(c["usbPort"]));
+		if (!v.has_value() || v.value() < 1 || v.value() > 2)
+			return reject("usbPort must be 1 or 2 (1-based)");
+		spec.usb_port = static_cast<int>(v.value()) - 1;
+	}
+
+	if (c.has_child("bind"))
+	{
+		if (!c["bind"].is_map())
+			return reject("bind is not a map");
+		for (const ryml::ConstNodeRef& kv : c["bind"].children())
+		{
+			if (!kv.has_key())
+				continue;
+			const std::string_view control(kv.key().data(), kv.key().size());
+			const ControlDef* cd = FindControl(*def, control);
+			if (!cd)
+			{
+				std::string have;
+				for (const ControlDef& d : def->controls)
+				{
+					if (!have.empty())
+						have += ", ";
+					have += d.name;
+				}
+				return reject(fmt::format("bind names '{}', which {} does not have (its controls: {})", control, spec.device, have));
+			}
+			const std::string_view target = nodeVal(kv);
+			if (target.empty())
+				return reject(fmt::format("bind '{}' has an empty target", control));
+			SpatialControlSpec::Bind b;
+			b.control.assign(control);
+			b.target.assign(target);
+			spec.bind.push_back(std::move(b));
+		}
+	}
+
+	return spec;
+}
+
+static std::vector<VR::ProfileDB::SpatialControlSpec> parseControls(const std::string_view serial, const ryml::ConstNodeRef& seq)
+{
+	std::vector<VR::ProfileDB::SpatialControlSpec> out;
+	std::unordered_set<std::string> seen;
+	size_t index = 0;
+	for (const ryml::ConstNodeRef& c : seq.children())
+	{
+		std::optional<VR::ProfileDB::SpatialControlSpec> spec = parseControlEntry(serial, c, index++, seen);
+		if (!spec.has_value())
+			continue;
+		seen.insert(spec->id);
+		out.push_back(std::move(spec.value()));
+	}
+	return out;
+}
+
+
 bool VR::ProfileDB::parseProfile(const std::string_view serial, const ryml::NodeRef& node, Profile& out)
 {
 	out.serial.assign(serial.data(), serial.size());
@@ -1831,6 +2158,16 @@ bool VR::ProfileDB::parseProfile(const std::string_view serial, const ryml::Node
 
 	if (node.has_child("split") && node["split"].is_map())
 		out.split = parseSplit(serial, node["split"]);
+
+	if (node.has_child("controls"))
+	{
+		if (node["controls"].is_seq())
+			out.controls = parseControls(serial, node["controls"]);
+		else
+			advise(serial, "controls",
+				fmt::format("(VR) ProfileDB: {} controls: is not a list — IGNORED, so this game gets no virtual control.",
+					StringUtil::toUpper(serial)));
+	}
 
 	if (node.has_child("name"))
 		out.name.assign(nodeVal(node["name"]));

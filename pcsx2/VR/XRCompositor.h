@@ -21,4 +21,15 @@ namespace VR::XRCompositor
 		bool follow_head = false);
 
 	void RequestScreenReanchor();
+
+	bool IsReanchorRequested();
+	void ClearReanchorRequestForTest();
+
+	struct ScreenAnchor
+	{
+		float x = 0.0f, y = 0.0f, z = 0.0f;
+		float yaw = 0.0f;
+		u32 generation = 0;
+	};
+	ScreenAnchor GetScreenAnchor();
 }

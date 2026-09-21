@@ -15,6 +15,9 @@
 #include "MTGS.h"
 #include "Memory.h"
 #include "VMManager.h"
+#include "Input/InputManager.h"
+#include "Input/VRInputSource.h"
+#include "USB/USB.h"
 
 #include "GS/Renderers/Common/GSTexture.h"
 #include "GS/Renderers/Vulkan/GSDeviceVK.h"
@@ -279,6 +282,33 @@ namespace VR
 		}
 	}
 
+	static void ApplySpatialControls(const ProfileDB::Profile* profile)
+	{
+		std::vector<ProfileDB::SpatialControlSpec> specs;
+		if (profile && !profile->controls.empty() && WantsVR())
+			specs = profile->controls;
+
+		VRInputSource::SetActiveControls(specs);
+
+		std::vector<InputManager::VRBindingOverlayEntry> overlay = VRInputSource::BuildBindingOverlay(specs,
+			[](u32 usb_port) { return Host::GetStringSettingValue(USB::GetConfigSection(usb_port).c_str(), "Type", "None"); });
+		const size_t count = overlay.size();
+		if (InputManager::SetVRBindingOverlay(std::move(overlay)))
+		{
+			if (count > 0)
+				Console.WriteLn("(VR) Spatial controls: %zu control(s), %zu binding(s) overlaid from the profile; reloading input bindings.",
+					specs.size(), count);
+			else
+				Console.WriteLn("(VR) Spatial controls: profile bindings restored; reloading input bindings.");
+			VMManager::ReloadInputBindings(true);
+		}
+	}
+
+	void ClearSpatialControls()
+	{
+		ApplySpatialControls(nullptr);
+	}
+
 	void UpdateSettings()
 	{
 		const Pcsx2Config::VROptions& new_settings = EmuConfig.VR;
@@ -294,6 +324,8 @@ namespace VR
 		const std::string serial = VMManager::GetDiscSerial();
 		const ProfileDB::Profile* profile =
 			serial.empty() ? nullptr : ProfileDB::Lookup(serial, VMManager::GetDiscCRC());
+
+		ApplySpatialControls(profile);
 
 		float screen_distance = new_settings.ScreenDistance;
 		float screen_height = new_settings.ScreenHeight;

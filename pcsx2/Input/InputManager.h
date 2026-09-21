@@ -6,9 +6,11 @@
 #include <functional>
 #include <mutex>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <variant>
 #include <utility>
+#include <vector>
 
 #include "common/Pcsx2Types.h"
 #include "common/SettingsInterface.h"
@@ -26,6 +28,9 @@ enum class InputSourceType : u32
 #ifdef _WIN32
 	DInput,
 	XInput,
+#endif
+#ifdef ENABLE_VR
+	VR,
 #endif
 	Count,
 };
@@ -243,6 +248,18 @@ namespace InputManager
 	void OnInputDeviceConnected(const std::string_view identifier, const std::string_view device_name);
 
 	void OnInputDeviceDisconnected(const InputBindingKey key, const std::string_view identifier);
+
+#ifdef ENABLE_VR
+	struct VRBindingOverlayEntry
+	{
+		std::string section;
+		std::string key;
+		std::string binding;
+	};
+	bool SetVRBindingOverlay(std::vector<VRBindingOverlayEntry> entries);
+	std::vector<std::string> GetVRBindingOverlay(const std::string_view section, const std::string_view key);
+	bool HasVRBindingOverlay();
+#endif
 }
 
 namespace Host

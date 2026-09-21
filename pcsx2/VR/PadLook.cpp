@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <atomic>
 #include <bit>
+#include <cctype>
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
@@ -227,49 +228,122 @@ namespace VR::PadLook
 			std::memory_order_relaxed);
 	}
 
-	u8 ProbeStick(StickAxis axis, u8 real)
+	namespace
 	{
-		struct Probe
+		struct ProbeTable
 		{
-			int axis = -1;
-			u8 value = 0x80;
+			static constexpr int kSlots = 6;
+			int value[kSlots];
+			bool any = false;
 
-			Probe()
+			ProbeTable()
 			{
+				for (int& v : value)
+					v = -1;
 				const char* e = std::getenv("PCSX2_VR_PADSTICK");
 				if (!e || !*e)
 					return;
-				const bool is_lx = (e[0] == 'l' || e[0] == 'L') && (e[1] == 'x' || e[1] == 'X');
-				const bool is_rx = (e[0] == 'r' || e[0] == 'R') && (e[1] == 'x' || e[1] == 'X');
-				if ((!is_lx && !is_rx) || e[2] != ':')
+				std::string spec(e);
+				size_t pos = 0;
+				while (pos <= spec.size())
 				{
-					Console.Error("(VR) PCSX2_VR_PADSTICK: expected <lx|rx>:<byte>, got '%s' — probe inert.", e);
-					return;
+					const size_t comma = spec.find(',', pos);
+					const std::string hold = spec.substr(pos, comma == std::string::npos ? std::string::npos : comma - pos);
+					pos = (comma == std::string::npos) ? spec.size() + 1 : comma + 1;
+					if (hold.empty())
+						continue;
+					const size_t colon = hold.find(':');
+					if (colon == std::string::npos)
+					{
+						Console.Error("(VR) PCSX2_VR_PADSTICK: expected <lx|ly|rx|ry|x|sq>:<byte>, got '%s' — hold ignored.", hold.c_str());
+						continue;
+					}
+					std::string key = hold.substr(0, colon);
+					for (char& c : key)
+						c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+					int slot = -1;
+					if (key == "lx") slot = static_cast<int>(StickAxis::LX);
+					else if (key == "rx") slot = static_cast<int>(StickAxis::RX);
+					else if (key == "ly") slot = static_cast<int>(StickAxis::LY);
+					else if (key == "ry") slot = static_cast<int>(StickAxis::RY);
+					else if (key == "x") slot = 4 + static_cast<int>(ProbeButton::CROSS);
+					else if (key == "sq") slot = 4 + static_cast<int>(ProbeButton::SQUARE);
+					if (slot < 0)
+					{
+						Console.Error("(VR) PCSX2_VR_PADSTICK: unknown hold '%s' — ignored.", key.c_str());
+						continue;
+					}
+					const long v = std::strtol(hold.c_str() + colon + 1, nullptr, 0);
+					if (v < 0 || v > 255)
+					{
+						Console.Error("(VR) PCSX2_VR_PADSTICK: byte %ld out of range 0..255 for '%s' — hold ignored.", v, key.c_str());
+						continue;
+					}
+					value[slot] = static_cast<int>(v);
+					any = true;
+					Console.WriteLn("(VR) padStick PROBE ARMED: %s forced to 0x%02X (headless hold; no VR state armed).",
+						key.c_str(), static_cast<unsigned>(v));
 				}
-				const long v = std::strtol(e + 3, nullptr, 0);
-				if (v < 0 || v > 255)
-				{
-					Console.Error("(VR) PCSX2_VR_PADSTICK: byte %ld out of range 0..255 — probe inert.", v);
-					return;
-				}
-				axis = static_cast<int>(is_lx ? StickAxis::LX : StickAxis::RX);
-				value = static_cast<u8>(v);
-				Console.WriteLn("(VR) padStick PROBE ARMED: %s forced to 0x%02X (headless stick-hold; no VR state armed).",
-					is_lx ? "LX" : "RX", value);
 			}
 		};
-		static const Probe s_probe;
 
-		if (s_probe.axis != static_cast<int>(axis))
-			return real;
-
-		static std::atomic<u64> s_hits{0};
-		if (s_hits.fetch_add(1, std::memory_order_relaxed) == 0)
+		const ProbeTable& Probes()
 		{
-			Console.WriteLn("(VR) padStick PROBE FIRED on %s — this poll site returned the forced byte.",
-				axis == StickAxis::LX ? "LX" : "RX");
+			static const ProbeTable s_table;
+			return s_table;
 		}
-		return s_probe.value;
+
+		const char* SlotName(int slot)
+		{
+			static constexpr const char* kNames[ProbeTable::kSlots] = {"LX", "RX", "LY", "RY", "CROSS", "SQUARE"};
+			return (slot >= 0 && slot < ProbeTable::kSlots) ? kNames[slot] : "?";
+		}
+
+		void LogFired(int slot)
+		{
+			static std::atomic<u32> s_fired{0};
+			const u32 bit = 1u << slot;
+			if ((s_fired.fetch_or(bit, std::memory_order_relaxed) & bit) == 0)
+				Console.WriteLn("(VR) padStick PROBE FIRED on %s — this poll site returned the forced byte.", SlotName(slot));
+		}
+	}
+
+	u8 ProbeStick(StickAxis axis, u8 real)
+	{
+		const ProbeTable& t = Probes();
+		if (!t.any) [[likely]]
+			return real;
+		const int slot = static_cast<int>(axis);
+		const int v = t.value[slot];
+		if (v < 0)
+			return real;
+		LogFired(slot);
+		return static_cast<u8>(v);
+	}
+
+	u32 ProbeButtons(u32 buttons)
+	{
+		const ProbeTable& t = Probes();
+		if (!t.any) [[likely]]
+			return buttons;
+		if (t.value[4 + static_cast<int>(ProbeButton::CROSS)] >= 0)
+			buttons &= ~(1u << 6);
+		if (t.value[4 + static_cast<int>(ProbeButton::SQUARE)] >= 0)
+			buttons &= ~(1u << 7);
+		return buttons;
+	}
+
+	u8 ProbePressure(ProbeButton button, u8 real)
+	{
+		const ProbeTable& t = Probes();
+		if (!t.any) [[likely]]
+			return real;
+		const int slot = 4 + static_cast<int>(button);
+		const int v = t.value[slot];
+		if (v < 0)
+			return real;
+		LogFired(slot);
+		return static_cast<u8>(v);
 	}
 
 	u8 ApplyRx(u8 real)

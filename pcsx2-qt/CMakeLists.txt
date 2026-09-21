@@ -275,7 +275,7 @@ target_sources(pcsx2-qt PRIVATE
 # build: its body calls VR::GetSessionStatus() and VR::ProfileDB::ListProfiles(),
 # which live in pcsx2/VR/* and are only compiled when ENABLE_VR is on. Every
 # USE of the widget in SettingsWindow.cpp was already guarded — only this source
-# listing was not, so -DENABLE_VR=OFF compiled all 922 objects and then failed
+# listing was not, so -DENABLE_VR=OFF compiled the whole tree and then failed
 # at the final link with two undefined symbols. Mirrors the same conditional
 # pcsx2/CMakeLists.txt already uses for the VR sources themselves.
 if(ENABLE_VR)

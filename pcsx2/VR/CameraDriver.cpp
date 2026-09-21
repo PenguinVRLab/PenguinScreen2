@@ -778,7 +778,7 @@ namespace VR::CameraDriver
 					case 2: v = memRead16(address); break;
 					default: v = memRead32(address); break;
 				}
-				if (v != g.equals)
+				if ((v == g.equals) == g.not_equals)
 					return false;
 			}
 			return true;

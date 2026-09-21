@@ -15,9 +15,21 @@ namespace VR::PadLook
 	{
 		LX,
 		RX,
+		LY,
+		RY,
+	};
+
+	enum class ProbeButton
+	{
+		CROSS,
+		SQUARE,
 	};
 
 	u8 ProbeStick(StickAxis axis, u8 real);
+
+	u32 ProbeButtons(u32 buttons);
+
+	u8 ProbePressure(ProbeButton button, u8 real);
 
 	void UpdateRecenterChord(bool l1, bool r1, bool l3, bool r3);
 }

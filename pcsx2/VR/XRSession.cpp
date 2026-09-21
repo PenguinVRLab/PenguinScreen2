@@ -3,6 +3,7 @@
 
 #include "VR/XRSession.h"
 #include <cstdlib>
+#include "VR/VRInput.h"
 #include "VR/VRManager.h"
 
 #include "common/Assertions.h"
@@ -393,6 +394,9 @@ namespace VR::XRSession
 
 		s_session_state = XR_SESSION_STATE_UNKNOWN;
 		Console.WriteLn("(VR) XR session created (Vulkan, queue family %u).", queue_family);
+
+		if (!XRInput::Initialize())
+			Console.Warning("(VR) Controller input unavailable this session; spatial controls stay inert.");
 		return true;
 	}
 #endif
@@ -401,6 +405,8 @@ namespace VR::XRSession
 	{
 		if (s_session == XR_NULL_HANDLE)
 			return;
+
+		XRInput::Shutdown();
 
 		if (s_session_running.load(std::memory_order_acquire))
 		{

@@ -89,8 +89,8 @@ client from the store (Meta Horizon Store for Quest).
 
 **3. Drop in your own files** - found automatically at next launch:
 
-    BIOS (dumped from your console)  ->  ~/PS2-BIOS
-    games (.iso/.chd/.bin+.cue ...)  ->  ~/PS2-Games
+    BIOS (dumped from your console)  goes in  ~/PS2-BIOS
+    games (.iso/.chd/.bin+.cue ...)  goes in  ~/PS2-Games
 
 **4. Play in VR:**
 

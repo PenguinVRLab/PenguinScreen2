@@ -44,10 +44,10 @@ Use **Desktop Mode** for installing and launching (Game Mode is a bonus where it
   the two routes below.
 - **Over a USB-C cable: supported.** A USB-C data cable from the Deck straight to the headset:
   1. One time, one of two ways. **Easiest:** with the WiVRn app 26.9 or newer on Horizon OS 2.6 or newer, turn on
-     **USB networking** in the headset's WiVRn app (Settings → System) and run `bash enable-vr-discovery.sh` once on
+     **USB networking** in the headset's WiVRn app (Settings, then System) and run `bash enable-vr-discovery.sh` once on
      the Deck (your password; it lets the headset find the Deck over the cable and adds the network profile the link
-     needs). No developer account. **Otherwise:** turn on **Developer Mode** for the headset (Meta Horizon phone app →
-     Devices → your headset → Headset settings → Developer Mode, with a free developer account) and run
+     needs). No developer account. **Otherwise:** turn on **Developer Mode** for the headset (Meta Horizon phone app, then
+     Devices, then your headset, then Headset settings, then Developer Mode, with a free developer account) and run
      `bash setup-configure-deps.sh` while online so it downloads `adb`. The launcher says which it sees, or that the
      headset is offering neither yet.
   2. Plug the cable in and run `bash launch-vr-session.sh`. The first time, the headset shows "Allow USB

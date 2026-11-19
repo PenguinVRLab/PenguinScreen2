@@ -24,7 +24,7 @@ read-only in a flatpak install.
 To go back to the shipped profile, delete your copy. If you delete the seeded
 `SLUS-20851.yaml`, the emulator recreates it as a fresh copy of the shipped one,
 which gives the same result. While any copy of a game's profile is in your
-folder — including the untouched seed — updates to that game's shipped profile
+folder - including the untouched seed - updates to that game's shipped profile
 do not reach you until you delete it.
 
 Every profile is checked at launch. An invalid file is reported in a dialog
@@ -168,7 +168,7 @@ feature works on the Vulkan renderer only.
 
 ## `fov`: how wide the game itself draws
 
-Some profiles set the **game's own field of view** — how much of the world the
+Some profiles set the **game's own field of view** - how much of the world the
 game draws, per view. Matched to the screen's width, a turn of your head shows
 more world at its true size instead of the edge of a picture.
 
@@ -185,12 +185,12 @@ view it applies to and what it should look like:
 | `ramp` | seconds to ease from one view to the next; `0` changes instantly |
 
 The emulator gives the game its own value back when you leave a scene, when you
-switch VR off, and when the game changes. **VR → Game field of view** in the
+switch VR off, and when the game changes. **VR, then Game field of view** in the
 settings window turns the whole feature off.
 
 Changing the addresses or the calibration needs the measuring tools; changing
 `target` and `ramp` is safe to try. A mistake anywhere in this block stops that
-profile from loading, with a message naming what is wrong — it never loads half
+profile from loading, with a message naming what is wrong - it never loads half
 a field of view.
 
 ## Everything else

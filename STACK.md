@@ -1,4 +1,4 @@
-# STACK — what this release was built on
+# STACK - what this release was built on
 
 This documents the ENTIRE stack used to develop this release.
 The flatpak bundles these versions wherever bundleable; host-side pieces are
@@ -7,7 +7,7 @@ listed as requirements.
 ## Building from source: the required libraries
 
 The source repo's `build.sh` probes these before configuring (building from
-source means a source checkout — that script is not part of the install kit).
+source means a source checkout - that script is not part of the install kit).
 CMake minimums (from the build system itself):
 
 | Dependency | Minimum | Distro package usually OK? |
@@ -19,16 +19,16 @@ CMake minimums (from the build system itself):
 | freetype | 2.10 | yes |
 | ffmpeg (libavcodec/format/util/swscale/swresample) | 4.x+ | yes |
 | shaderc | any | yes |
-| **SDL3** | **3.2.6** | **often NO — build from source or vendor repo** |
-| **Qt6** (widgets/gui/network/svg/linguist tools) | **6.10.1** | **usually NO — Qt online installer or prefix build** |
-| **KDDockWidgets-qt6** | **2.3.0** | **NO — build from source** |
-| **ryml (rapidyaml)** | recent | **NO — build from source** |
-| **plutovg / plutosvg** | 1.1.0 / 0.0.7 | **NO — build from source** |
+| **SDL3** | **3.2.6** | **often NO - build from source or vendor repo** |
+| **Qt6** (widgets/gui/network/svg/linguist tools) | **6.10.1** | **usually NO - Qt online installer or prefix build** |
+| **KDDockWidgets-qt6** | **2.3.0** | **NO - build from source** |
+| **ryml (rapidyaml)** | recent | **NO - build from source** |
+| **plutovg / plutosvg** | 1.1.0 / 0.0.7 | **NO - build from source** |
 | X11/XRandR, Wayland, extra-cmake-modules, libbacktrace | any | yes |
 
 For the newer-than-distro set: build each into one local prefix and pass
 `-DCMAKE_PREFIX_PATH=$HOME/deps` to that script (forwarded to cmake). The
-**flatpak avoids all of this** — its manifest pins every one of these as a
+**flatpak avoids all of this** - its manifest pins every one of these as a
 commit-pinned module; from-source is the enthusiast path.
 
 ## Bundled in the flatpak (pinned)
@@ -37,14 +37,14 @@ commit-pinned module; from-source is the enthusiast path.
   build image whose packages are pinned to Ubuntu's snapshot archive of **2026-10-15**
 - Toolchain: llvm **20.1.8** (SDK extension)
 - ffmpeg: the org.kde.Platform runtime provides the libavcodec/libavformat
-  the app links against — **nothing extra is required to launch** (the
+  the app links against - **nothing extra is required to launch** (the
   sonames resolve from the runtime's own codec set). The optional
   `org.freedesktop.Platform.ffmpeg-full` add-extension only adds extra
   patent-encumbered codecs; if Flathub offers a branch matching your
-  freedesktop runtime it will be picked up automatically — never install a
+  freedesktop runtime it will be picked up automatically - never install a
   pinned branch by hand (a stale pinned branch
   simply doesn't exist on Flathub and the install errors out).
-- Dependency modules: commit-pinned in the manifest in this tree —
+- Dependency modules: commit-pinned in the manifest in this tree -
   the manifest IS the exact list
 - **PS VR2 support out of the box: Monado with its PS VR2 driver is vendored
   INTO this flatpak**: Monado `main` at commit `ded98428a572b264eaea6917895c85f7d131bcbe`
@@ -76,7 +76,7 @@ commit-pinned module; from-source is the enthusiast path.
   unpinned (`flatpak install --user flathub io.github.wivrn.wivrn` in
   `setup-configure-deps.sh`), so the PC side updates only with
   `flatpak update --user io.github.wivrn.wivrn`. Keep the PC server and the
-  headset's WiVRn app on matching versions — mismatches refuse to connect;
+  headset's WiVRn app on matching versions - mismatches refuse to connect;
   the launcher prints the installed version at every start (Quickstart §4).
   - the runtime runs on the HOST; the flatpak reaches it through the
     active-runtime discovery path (`xdg-config/openxr`) and the WiVRn socket

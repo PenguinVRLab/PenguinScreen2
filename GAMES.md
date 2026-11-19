@@ -19,10 +19,10 @@ screen like any other game. This list is generated from the profiles this releas
 | **Ace Combat 5: The Unsung War**<br>SLUS-20851 · North America | 🟠 | depth; multi-layer depth in the cockpit | your head turns the camera (left-right, up-down, tilt): cockpit view, in flight | the game's field of view matched to the headset: cockpit view, in flight<br>aiming brackets drawn at the target's depth |
 | **ESPN NFL 2K5**<br>SLUS-20919 · North America | 🟠 | depth; menus get their own setting | your head turns the camera (left-right): the first-person camera during play<br>turning your head nudges the camera (left-right): every other camera | the game's field of view matched to the headset: first-person camera |
 | **Gran Turismo 4 Spec II**<br>SCUS-97436 · North America | ✅ | multi-layer depth | your head turns the camera (left-right, up-down): the cockpit (interior) view while racing | the game's field of view matched to the headset: cockpit view |
-| **Grand Theft Auto III**<br>SLUS-20062 · North America | 🟠 | depth, tuned for the third-person camera | — | — |
-| **King's Field IV: The Ancient City**<br>SLUS-20318 · North America | 🟠 | depth | your head turns the camera (left-right, up-down): first-person play; off in menus and pause | — |
-| **NASCAR Thunder 2004**<br>SLUS-20824 · North America | 🟠 | multi-layer depth | your head turns the camera (left-right, up-down): the Cockpit camera: Gameplay Settings → Camera Angle, or Circle during a race | — |
-| **Richard Burns Rally**<br>SLES-52323 · Europe | 🟠 | depth | — | two hidden in-car cameras: the bumper view becomes the driver's seat, the chase view a mid-cabin view |
+| **Grand Theft Auto III**<br>SLUS-20062 · North America | 🟠 | depth, tuned for the third-person camera | none | none |
+| **King's Field IV: The Ancient City**<br>SLUS-20318 · North America | 🟠 | depth | your head turns the camera (left-right, up-down): first-person play; off in menus and pause | none |
+| **NASCAR Thunder 2004**<br>SLUS-20824 · North America | 🟠 | multi-layer depth | your head turns the camera (left-right, up-down): the Cockpit camera: Gameplay Settings, then Camera Angle, or Circle during a race | none |
+| **Richard Burns Rally**<br>SLES-52323 · Europe | 🟠 | depth | none | two hidden in-car cameras: the bumper view becomes the driver's seat, the chase view a mid-cabin view |
 | **Star Wars: Racer Revenge**<br>SLUS-20268 · North America | 🟠 | depth | your head turns the camera (left-right): the pod (first-person) view, up to the game's own 30-degree limit | hand-tracked twin throttles: grab the pod's two levers (needs tracked hand controllers) |
 | **TimeSplitters**<br>SLUS-20090 · North America | 🟠 | depth | head movement added to the game's own look (left-right, up-down): first-person play; the stick keeps working | the screen follows your head<br>split split screen: the game's split screen is split, and each of 2 players gets their own half in their own headset (the only game with it today; see DEVICES.md, multi-seat VR multiplayer) |
 
@@ -37,7 +37,7 @@ screen like any other game. This list is generated from the profiles this releas
 **Gran Turismo 4 Spec II**
 
 - This profile is for Gran Turismo 4 Spec II v1.10, the community overhaul that runs on the GT4 Online Public Beta disc. An unmodified beta disc gets no profile.
-- In the game set Options → Screen to Progressive, or the picture doubles.
+- In the game, set Options, then Screen, to Progressive, or the picture doubles.
 - Objects very close to you inside the cockpit show little or no depth.
 
 **Grand Theft Auto III**

@@ -794,8 +794,8 @@ namespace QtUtils
 		{
 			if (is_flatpak)
 			{
-				executable_path = "flatpak run org.penguinvr.penguinscreen2";
-				icon_name = "org.penguinvr.penguinscreen2";
+				executable_path = "flatpak run com.penguinvrlabs.penguinscreen2";
+				icon_name = "com.penguinvrlabs.penguinscreen2";
 			}
 			else
 			{

@@ -6,6 +6,9 @@
 #include "GS/GSUtil.h"
 #include "MultiISA.h"
 #include "common/StringUtil.h"
+#ifdef ENABLE_VR
+#include "VR/VRManager.h"
+#endif
 
 #include <array>
 
@@ -268,6 +271,10 @@ u32 GSUtil::GetChannelMask(u32 spsm, u32 fbmsk)
 
 GSRendererType GSUtil::GetPreferredRenderer()
 {
+#if defined(ENABLE_VR) && defined(ENABLE_VULKAN)
+	if (VR::WantsVR())
+		return GSRendererType::VK;
+#endif
 	static GSRendererType preferred_renderer = GSRendererType::Auto;
 	if (preferred_renderer == GSRendererType::Auto)
 	{

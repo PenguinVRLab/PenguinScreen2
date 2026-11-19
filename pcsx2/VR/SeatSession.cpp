@@ -4,6 +4,9 @@
 #include "VR/SeatSession.h"
 #include "VR/SeatCast.h"
 #include "VR/VRManager.h"
+#include "VR/XRSwapchainFormat.h"
+#include "VR/SwapchainWait.h"
+#include "VR/XRFrameHealth.h"
 
 #include "common/Console.h"
 
@@ -14,6 +17,7 @@
 #include <openxr/openxr_platform.h>
 
 #include <dlfcn.h>
+#include <sys/stat.h>
 #include <fstream>
 
 #include <atomic>
@@ -49,36 +53,13 @@ namespace VR::SeatSession
 		};
 		using PFN_negotiate = XrResult(XRAPI_PTR*)(const XrNegotiateLoaderInfo_*, XrNegotiateRuntimeRequest_*);
 
-		std::string RuntimeLibFromManifest(const std::string& json_path)
-		{
-			std::ifstream f(json_path);
-			if (!f.good())
-				return {};
-			std::string text((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-			const size_t key = text.find("\"library_path\"");
-			if (key == std::string::npos)
-				return {};
-			const size_t colon = text.find(':', key);
-			const size_t q1 = text.find('"', colon + 1);
-			const size_t q2 = text.find('"', q1 + 1);
-			if (q1 == std::string::npos || q2 == std::string::npos)
-				return {};
-			std::string lib = text.substr(q1 + 1, q2 - q1 - 1);
-			if (!lib.empty() && lib[0] != '/')
-			{
-				const size_t slash = json_path.rfind('/');
-				if (slash != std::string::npos)
-					lib = json_path.substr(0, slash + 1) + lib;
-			}
-			return lib;
-		}
-
 		struct XrFns
 		{
 			void* lib = nullptr;
 			PFN_xrGetInstanceProcAddr gipa = nullptr;
 #define XFN(name) PFN_xr##name name = nullptr
 			XFN(CreateInstance);
+			XFN(EnumerateInstanceExtensionProperties);
 			XFN(DestroyInstance);
 			XFN(GetSystem);
 			XFN(CreateSession);
@@ -93,6 +74,7 @@ namespace VR::SeatSession
 			XFN(EndFrame);
 			XFN(CreateSwapchain);
 			XFN(DestroySwapchain);
+			XFN(EnumerateSwapchainFormats);
 			XFN(EnumerateSwapchainImages);
 			XFN(AcquireSwapchainImage);
 			XFN(WaitSwapchainImage);
@@ -139,6 +121,7 @@ namespace VR::SeatSession
 				gipa = rr.getInstanceProcAddr;
 #define LOADN(name) 	if (XR_FAILED(gipa(XR_NULL_HANDLE, "xr" #name, reinterpret_cast<PFN_xrVoidFunction*>(&name))) || !(name)) 	{ 		name = nullptr; 	}
 				LOADN(CreateInstance);
+				LOADN(EnumerateInstanceExtensionProperties);
 #undef LOADN
 				return CreateInstance != nullptr;
 			}
@@ -160,6 +143,7 @@ namespace VR::SeatSession
 				LOADN(EndFrame);
 				LOADN(CreateSwapchain);
 				LOADN(DestroySwapchain);
+				LOADN(EnumerateSwapchainFormats);
 				LOADN(EnumerateSwapchainImages);
 				LOADN(AcquireSwapchainImage);
 				LOADN(WaitSwapchainImage);
@@ -179,6 +163,11 @@ namespace VR::SeatSession
 		std::thread s_thread;
 		std::atomic<bool> s_run{false};
 		std::atomic<bool> s_running{false};
+		std::atomic<bool> s_exited{true};
+		bool s_abandoned = false;
+		std::atomic<int> s_state{static_cast<int>(State::Idle)};
+		void SetState(State s) { s_state.store(static_cast<int>(s), std::memory_order_release); }
+		constexpr XrDuration kSeatImageWaitNs = 100'000'000;
 
 		struct VkFns
 		{
@@ -278,6 +267,9 @@ namespace VR::SeatSession
 			XrSpace space = XR_NULL_HANDLE;
 			XrSwapchain swapchain = XR_NULL_HANDLE;
 			u32 chain_w = 0, chain_h = 0;
+			u32 chain_generation = 0;
+			int64_t format = 0;
+			bool swap_rb = false;
 			std::vector<XrSwapchainImageVulkanKHR> images;
 
 			VkInstance vk_instance = VK_NULL_HANDLE;
@@ -294,6 +286,9 @@ namespace VR::SeatSession
 			size_t staging_size = 0;
 
 			bool session_running = false;
+			std::string dir;
+			std::string sock;
+			const char* fail_reason = nullptr;
 		};
 
 		bool XrOk(XrResult r, const char* what)
@@ -342,12 +337,33 @@ namespace VR::SeatSession
 			bool m_swapped = false;
 		};
 
+		std::string FindRuntimeSocket(const std::string& dir)
+		{
+			if (dir.empty())
+				return {};
+			for (const char* rel : {"/wivrn/comp_ipc", "/monado_comp_ipc", "/penguinscreen2-monado/comp_ipc"})
+			{
+				const std::string p = dir + rel;
+				struct stat sb;
+				if (stat(p.c_str(), &sb) == 0 && S_ISSOCK(sb.st_mode))
+					return p;
+			}
+			return {};
+		}
+
+		bool SocketPresent(const std::string& path)
+		{
+			struct stat sb;
+			return !path.empty() && stat(path.c_str(), &sb) == 0;
+		}
+
 		bool CreateStack(Stack& st, int seat)
 		{
 			const std::string dir = VR::ResolveSeatRuntimeDir(seat);
+			st.dir = dir;
 			if (seat > 1 && dir.empty())
 			{
-				Console.Error("(VR) SeatSession: seat %d has no [VR] XrSeatRuntimeDirs entry — not starting.", seat);
+				Console.Error("(VR) SeatSession: seat %d has no runtime dir (--vr-seat-dirs or [VR] XrSeatRuntimeDirs) — not starting.", seat);
 				return false;
 			}
 			if (!st.fn.LoadBase())
@@ -358,7 +374,7 @@ namespace VR::SeatSession
 			const std::string manifest = VR::ResolveSeatRuntimeJson(seat);
 			if (manifest.empty())
 			{
-				Console.Error("(VR) SeatSession: no runtime manifest for seat %d (set XR_RUNTIME_JSON or [VR] XrSeatRuntimeJsons).", seat);
+				Console.Error("(VR) SeatSession: no usable runtime manifest for seat %d: not starting (a named one that is missing is reported above; with none named, set XR_RUNTIME_JSON or [VR] XrSeatRuntimeJsons).", seat);
 				return false;
 			}
 			if (!st.xr.Negotiate(manifest))
@@ -372,13 +388,39 @@ namespace VR::SeatSession
 				ici.applicationInfo.applicationVersion = 1;
 				ici.applicationInfo.engineVersion = 1;
 				ici.applicationInfo.apiVersion = XR_API_VERSION_1_0;
-				const char* exts[1] = {XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME};
+				std::vector<XrExtensionProperties> props;
+				if (st.xr.EnumerateInstanceExtensionProperties)
+				{
+					u32 n = 0;
+					if (XR_SUCCEEDED(st.xr.EnumerateInstanceExtensionProperties(nullptr, 0, &n, nullptr)) && n > 0)
+					{
+						props.assign(n, {XR_TYPE_EXTENSION_PROPERTIES});
+						if (XR_SUCCEEDED(st.xr.EnumerateInstanceExtensionProperties(nullptr, n, &n, props.data())))
+							props.resize(n);
+						else
+							props.clear();
+					}
+				}
+				std::vector<const char*> offered;
+				for (const XrExtensionProperties& ep : props)
+					offered.push_back(ep.extensionName);
+				const char* binding = ChooseVulkanBinding(offered.data(), offered.size());
+				if (!binding)
+				{
+					Console.Error("(VR) SeatSession: seat %d's runtime does not offer XR_KHR_vulkan_enable2 (%zu "
+								  "extension(s) offered); the seat has no other Vulkan binding — not starting.",
+						seat, offered.size());
+					return false;
+				}
+				Console.WriteLn("(VR) SeatSession: seat %d Vulkan binding: %s.", seat, binding);
+				const char* exts[1] = {binding};
 				ici.enabledExtensionCount = 1;
 				ici.enabledExtensionNames = exts;
 				if (!XrOk(st.xr.CreateInstance(&ici, &st.instance), "xrCreateInstance(seat)"))
 					return false;
-				Console.WriteLn("(VR) SeatSession: seat %d instance up (%s/wivrn/comp_ipc)", seat,
-					dir.empty() ? "<default>" : dir.c_str());
+				st.sock = FindRuntimeSocket(dir);
+				Console.WriteLn("(VR) SeatSession: seat %d instance up (runtime dir %s; socket %s)", seat,
+					dir.empty() ? "<default>" : dir.c_str(), st.sock.empty() ? "<none found>" : st.sock.c_str());
 
 			}
 			if (!st.xr.LoadForInstance(st.instance))
@@ -390,11 +432,18 @@ namespace VR::SeatSession
 				XrSystemGetInfo sgi2 = {XR_TYPE_SYSTEM_GET_INFO};
 				sgi2.formFactor = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
 				XrResult sr = XR_ERROR_FORM_FACTOR_UNAVAILABLE;
+				SetState(State::Waiting);
 				while (s_run.load(std::memory_order_acquire))
 				{
 					sr = st.xr.GetSystem(st.instance, &sgi2, &st.system);
 					if (XR_SUCCEEDED(sr))
 						break;
+					Observation o;
+					o.get_system = sr;
+					o.socket_seen = !st.sock.empty();
+					o.socket_now = SocketPresent(st.sock);
+					if ((st.fail_reason = RuntimeFailure(o)) != nullptr)
+						return false;
 					std::this_thread::sleep_for(std::chrono::seconds(1));
 				}
 				if (!XR_SUCCEEDED(sr))
@@ -492,6 +541,41 @@ namespace VR::SeatSession
 			if (!XrOk(st.xr.CreateReferenceSpace(st.session, &rci, &st.space), "xrCreateReferenceSpace(seat)"))
 				return false;
 
+			{
+				u32 fn = 0;
+				std::vector<int64_t> formats;
+				if (XR_SUCCEEDED(st.xr.EnumerateSwapchainFormats(st.session, 0, &fn, nullptr)) && fn > 0)
+				{
+					formats.resize(fn);
+					if (!XrOk(st.xr.EnumerateSwapchainFormats(st.session, fn, &fn, formats.data()),
+							"xrEnumerateSwapchainFormats(seat)"))
+						return false;
+					formats.resize(fn);
+				}
+				std::string offered;
+				char name[32];
+				for (int64_t f : formats)
+				{
+					offered += XRSwapchainFormat::FormatName(f, name, sizeof(name));
+					offered += ' ';
+				}
+				const XRSwapchainFormat::Choice pick = ChooseSwapchainFormat(formats.data(), formats.size(), false
+				);
+				if (pick.rung == XRSwapchainFormat::Rung::Unsupported)
+				{
+					Console.Error("(VR) SeatSession: seat %d: no offered swapchain format is reachable by a built "
+								  "conversion rung. Offered: %s. Not starting.",
+						seat, offered.c_str());
+					return false;
+				}
+				st.format = pick.format;
+				st.swap_rb = (pick.rung == XRSwapchainFormat::Rung::BlitSwizzle);
+				Console.WriteLn("(VR) SeatSession: seat %d swapchain format: %s via %s%s (%s; offered: %s).", seat,
+					XRSwapchainFormat::FormatName(pick.format, name, sizeof(name)), XRSwapchainFormat::RungName(pick.rung),
+					st.swap_rb ? " (red/blue swapped on the CPU)" : "",
+					pick.srgb ? "sRGB, gamma correct" : "UNORM, brightness may be off", offered.c_str());
+			}
+
 			VkCommandPoolCreateInfo pci = {VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
 			pci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 			pci.queueFamilyIndex = st.vk_queue_family;
@@ -519,9 +603,10 @@ namespace VR::SeatSession
 				st.swapchain = XR_NULL_HANDLE;
 				st.images.clear();
 			}
+			st.chain_generation++;
 			XrSwapchainCreateInfo ci = {XR_TYPE_SWAPCHAIN_CREATE_INFO};
 			ci.usageFlags = XR_SWAPCHAIN_USAGE_TRANSFER_DST_BIT | XR_SWAPCHAIN_USAGE_SAMPLED_BIT;
-			ci.format = VK_FORMAT_R8G8B8A8_UNORM;
+			ci.format = st.format;
 			ci.sampleCount = 1;
 			ci.width = w;
 			ci.height = h;
@@ -617,11 +702,18 @@ namespace VR::SeatSession
 			st = {};
 		}
 
-		void PumpEvents(Stack& st)
+		const char* PumpEvents(Stack& st)
 		{
 			XrEventDataBuffer ev = {XR_TYPE_EVENT_DATA_BUFFER};
-			while (st.xr.PollEvent(st.instance, &ev) == XR_SUCCESS)
+			XrResult pr;
+			while ((pr = st.xr.PollEvent(st.instance, &ev)) == XR_SUCCESS)
 			{
+				Observation o;
+				o.instance_loss = (ev.type == XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING);
+				if (ev.type == XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED)
+					o.session_state = reinterpret_cast<const XrEventDataSessionStateChanged*>(&ev)->state;
+				if (const char* why = RuntimeFailure(o))
+					return why;
 				if (ev.type == XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED)
 				{
 					const auto* sc = reinterpret_cast<const XrEventDataSessionStateChanged*>(&ev);
@@ -644,6 +736,21 @@ namespace VR::SeatSession
 				}
 				ev = {XR_TYPE_EVENT_DATA_BUFFER};
 			}
+			Observation o;
+			o.poll = pr;
+			return RuntimeFailure(o);
+		}
+
+		void Fail(int seat, const std::string& dir, const char* why)
+		{
+#ifdef VR_SEATFAIL_PLANTED
+			SetState(State::Idle);
+#else
+			SetState(State::Failed);
+#endif
+			Console.Error("(VR) SeatSession: seat %d FAILED (%s); runtime dir %s. Not restarted. "
+						  "The game and the primary headset continue.",
+				seat, why, dir.empty() ? "<default>" : dir.c_str());
 		}
 
 		void ThreadBody(int seat);
@@ -658,13 +765,18 @@ namespace VR::SeatSession
 			{
 				Console.Error("(VR) SeatSession: runtime exception — seat screen down (%s). "
 							  "The game and the primary headset continue.", e.what());
+				if (s_run.load(std::memory_order_acquire))
+					Fail(seat, VR::ResolveSeatRuntimeDir(seat), "its runtime threw (the line above)");
 			}
 			catch (...)
 			{
 				Console.Error("(VR) SeatSession: unknown exception — seat screen down. "
 							  "The game and the primary headset continue.");
+				if (s_run.load(std::memory_order_acquire))
+					Fail(seat, VR::ResolveSeatRuntimeDir(seat), "its runtime threw (the line above)");
 			}
 			s_running.store(false);
+			s_exited.store(true, std::memory_order_release);
 		}
 
 		void ThreadBody(int seat)
@@ -672,19 +784,52 @@ namespace VR::SeatSession
 			Stack st;
 			if (!CreateStack(st, seat))
 			{
+				const std::string dir = st.dir;
+				const char* why = st.fail_reason;
 				DestroyStack(st);
 				s_running.store(false);
+				if (s_run.load(std::memory_order_acquire))
+					Fail(seat, dir, why ? why : "its runtime could not be set up; the error is above");
+				else
+					SetState(State::Idle);
 				return;
 			}
 			s_running.store(true);
+			const std::string seat_dir = st.dir;
+			auto next_sock_check = std::chrono::steady_clock::now();
+			const char* failed = nullptr;
 
 			std::vector<u8> frame_buf(static_cast<size_t>(SeatCast::kMaxWidth) * 4 * 2048);
 			u64 last_seq = 0;
 			SeatCast::Frame fr = {};
+			XRFrameHealth::Streak streak;
+			SwapchainWait::FailureTracker wait_failures;
+			bool wait_pending = false;
+			u32 pending_index = 0;
+			u32 pending_generation = 0;
+			u32 released_generation = 0;
+			bool lost = false;
+			const auto loss = [&](XrResult res, const char* call) {
+				Console.Error("(VR) SeatSession: %s failed (%d) — seat session lost; seat screen down. "
+							  "The game and the primary headset continue.", call, static_cast<int>(res));
+				lost = true;
+				failed = "its frame calls kept failing: the session is lost";
+			};
 
 			while (s_run.load(std::memory_order_acquire))
 			{
-				PumpEvents(st);
+				if ((failed = PumpEvents(st)) != nullptr)
+					break;
+				if (!st.sock.empty() && std::chrono::steady_clock::now() >= next_sock_check)
+				{
+					next_sock_check = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+					Observation o;
+					o.socket_seen = true;
+					o.socket_now = SocketPresent(st.sock);
+					if ((failed = RuntimeFailure(o)) != nullptr)
+						break;
+				}
+				SetState(st.session_running ? State::Running : State::Waiting);
 				if (!st.session_running)
 				{
 					std::this_thread::sleep_for(std::chrono::milliseconds(50));
@@ -693,30 +838,93 @@ namespace VR::SeatSession
 
 				XrFrameState fs = {XR_TYPE_FRAME_STATE};
 				XrFrameWaitInfo fwi = {XR_TYPE_FRAME_WAIT_INFO};
-				if (!XR_SUCCEEDED(st.xr.WaitFrame(st.session, &fwi, &fs)))
+				const XrResult wr = st.xr.WaitFrame(st.session, &fwi, &fs);
+				if (streak.Record(wr))
+				{
+					loss(wr, "xrWaitFrame");
+					break;
+				}
+				if (!XR_SUCCEEDED(wr))
 				{
 					std::this_thread::sleep_for(std::chrono::milliseconds(50));
 					continue;
 				}
 				XrFrameBeginInfo fbi = {XR_TYPE_FRAME_BEGIN_INFO};
-				if (!XR_SUCCEEDED(st.xr.BeginFrame(st.session, &fbi)))
+				XrResult br = st.xr.BeginFrame(st.session, &fbi);
+				while (XR_FAILED(br) && br != XR_ERROR_SESSION_NOT_RUNNING && s_run.load(std::memory_order_acquire))
+				{
+					if (streak.Record(br))
+					{
+						loss(br, "xrBeginFrame");
+						break;
+					}
+					std::this_thread::sleep_for(std::chrono::milliseconds(10));
+					br = st.xr.BeginFrame(st.session, &fbi);
+				}
+				if (lost)
+					break;
+				streak.Record(br);
+				if (!XR_SUCCEEDED(br))
 					continue;
 
 				const bool got = SeatCast::ConsumeLatest(last_seq, frame_buf.data(), frame_buf.size(), &fr);
-				bool have_image = (st.swapchain != XR_NULL_HANDLE);
+				bool have_image = (st.swapchain != XR_NULL_HANDLE && released_generation == st.chain_generation);
 				if (got)
 				{
 					last_seq = fr.seq;
 					if (EnsureSwapchain(st, fr.width, fr.height) &&
 						EnsureStaging(st, static_cast<size_t>(fr.stride) * fr.height))
 					{
-						std::memcpy(st.staging_map, fr.pixels, static_cast<size_t>(fr.stride) * fr.height);
-						u32 img_index = 0;
-						XrSwapchainImageAcquireInfo ac = {XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
-						XrSwapchainImageWaitInfo wi = {XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
-						wi.timeout = XR_INFINITE_DURATION;
-						if (XR_SUCCEEDED(st.xr.AcquireSwapchainImage(st.swapchain, &ac, &img_index)) &&
-							XR_SUCCEEDED(st.xr.WaitSwapchainImage(st.swapchain, &wi)))
+						if (!st.swap_rb)
+						{
+							std::memcpy(st.staging_map, fr.pixels, static_cast<size_t>(fr.stride) * fr.height);
+						}
+						else
+						{
+							const size_t words = static_cast<size_t>(fr.stride) / 4 * fr.height;
+							const u32* in = reinterpret_cast<const u32*>(fr.pixels);
+							u32* out = static_cast<u32*>(st.staging_map);
+							for (size_t i = 0; i < words; i++)
+								out[i] = XRSwapchainFormat::SwapRedBlue(in[i]);
+						}
+						if (wait_pending && pending_generation != st.chain_generation)
+							wait_pending = false;
+						if (!wait_pending)
+						{
+							u32 idx = 0;
+							XrSwapchainImageAcquireInfo ac = {XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
+							if (XR_SUCCEEDED(st.xr.AcquireSwapchainImage(st.swapchain, &ac, &idx)))
+							{
+								pending_index = idx;
+								pending_generation = st.chain_generation;
+								wait_pending = true;
+							}
+						}
+						bool ready = false;
+						if (wait_pending)
+						{
+							XrSwapchainImageWaitInfo wi = {XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
+							wi.timeout = kSeatImageWaitNs;
+							const XrResult ir = st.xr.WaitSwapchainImage(st.swapchain, &wi);
+							switch (SwapchainWait::OnWait(wait_failures, ir))
+							{
+								case SwapchainWait::Action::Use:
+									wait_pending = false;
+									ready = true;
+									break;
+								case SwapchainWait::Action::Reacquire:
+									wait_pending = false;
+									break;
+								case SwapchainWait::Action::Lost:
+									loss(ir, "xrWaitSwapchainImage");
+									break;
+								case SwapchainWait::Action::Hold:
+								default:
+									break;
+							}
+						}
+						const u32 img_index = pending_index;
+						if (ready)
 						{
 							VkCommandBufferBeginInfo cb = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
 							cb.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
@@ -753,8 +961,9 @@ namespace VR::SeatSession
 							st.fn.QueueSubmit(st.vk_queue, 1, &si, st.vk_fence);
 							st.fn.WaitForFences(st.vk_device, 1, &st.vk_fence, VK_TRUE, UINT64_MAX);
 							XrSwapchainImageReleaseInfo rel = {XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
-							st.xr.ReleaseSwapchainImage(st.swapchain, &rel);
-							have_image = true;
+							if (XR_SUCCEEDED(st.xr.ReleaseSwapchainImage(st.swapchain, &rel)))
+								released_generation = st.chain_generation;
+							have_image = (released_generation == st.chain_generation);
 						}
 					}
 				}
@@ -783,20 +992,148 @@ namespace VR::SeatSession
 				fei.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
 				fei.layerCount = layer_count;
 				fei.layers = layer_count ? layers : nullptr;
-				st.xr.EndFrame(st.session, &fei);
+				const XrResult er = st.xr.EndFrame(st.session, &fei);
+				if (lost || streak.Record(er))
+				{
+					if (!lost)
+						loss(er, "xrEndFrame");
+					break;
+				}
 			}
 
 			DestroyStack(st);
 			s_running.store(false);
+			if (failed)
+				Fail(seat, seat_dir, failed);
+			else
+				SetState(State::Idle);
 			Console.WriteLn("(VR) SeatSession: thread exited.");
 		}
+	}
+
+	const char* StateName(State s)
+	{
+		switch (s)
+		{
+			case State::Idle: return "IDLE";
+			case State::Connecting: return "CONNECTING";
+			case State::Waiting: return "WAITING";
+			case State::Running: return "RUNNING";
+			case State::Failed: return "FAILED";
+		}
+		return "?";
+	}
+
+	State GetState()
+	{
+		return static_cast<State>(s_state.load(std::memory_order_acquire));
+	}
+
+	const char* RuntimeFailure(const Observation& o)
+	{
+#ifdef VR_SEATFAIL_PLANTED
+		(void)o;
+		return nullptr;
+#else
+		if (o.poll < 0)
+			return "its runtime's event queue failed (xrPollEvent): the server or its IPC is gone";
+		if (o.instance_loss)
+			return "its runtime announced instance loss";
+		if (o.session_state == XR_SESSION_STATE_LOSS_PENDING)
+			return "its session is being lost (LOSS_PENDING)";
+		if (o.session_state == XR_SESSION_STATE_EXITING)
+			return "its runtime ended the session (EXITING)";
+		if (o.get_system == XR_ERROR_INSTANCE_LOST || o.get_system == XR_ERROR_RUNTIME_FAILURE ||
+			o.get_system == XR_ERROR_RUNTIME_UNAVAILABLE)
+			return "its runtime went away while the seat waited for its headset (xrGetSystem)";
+		if (o.socket_seen && !o.socket_now)
+			return "its runtime socket vanished from the seat dir: the server stopped";
+		return nullptr;
+#endif
+	}
+
+	std::string RuntimeLibFromManifest(const std::string& json_path)
+	{
+		std::ifstream f(json_path);
+		if (!f.good())
+			return {};
+		std::string text((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+		const size_t key = text.find("\"library_path\"");
+		if (key == std::string::npos)
+			return {};
+		const size_t colon = text.find(':', key);
+		const size_t q1 = text.find('"', colon + 1);
+		const size_t q2 = text.find('"', q1 + 1);
+		if (q1 == std::string::npos || q2 == std::string::npos)
+			return {};
+		std::string lib = text.substr(q1 + 1, q2 - q1 - 1);
+		if (lib.empty() || lib.find_first_of("/\\") == std::string::npos || lib[0] == '/')
+			return lib;
+		std::string dir = json_path;
+		if (char* real = ::realpath(json_path.c_str(), nullptr))
+		{
+			dir = real;
+			std::free(real);
+		}
+		const size_t slash = dir.rfind('/');
+		if (slash == std::string::npos)
+			return lib;
+		return dir.substr(0, slash + 1) + lib;
+	}
+
+	const char* ChooseVulkanBinding(const char* const* offered, size_t count)
+	{
+		for (size_t i = 0; i < count; i++)
+		{
+			if (offered[i] && std::strcmp(offered[i], XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME) == 0)
+				return XR_KHR_VULKAN_ENABLE2_EXTENSION_NAME;
+		}
+		return nullptr;
+	}
+
+	XRSwapchainFormat::Choice ChooseSwapchainFormat(const int64_t* offered, size_t count, bool prefer_unorm)
+	{
+		return XRSwapchainFormat::Choose(offered, count, prefer_unorm);
+	}
+
+	bool JoinOrDetach(std::thread& t, const std::atomic<bool>& exited, std::chrono::milliseconds timeout)
+	{
+		if (!t.joinable())
+			return true;
+#ifdef VR_FORKBUGS_PLANTED_SEATJOIN
+		t.join();
+		return true;
+#else
+		const auto deadline = std::chrono::steady_clock::now() + timeout;
+		while (!exited.load(std::memory_order_acquire) && std::chrono::steady_clock::now() < deadline)
+			std::this_thread::sleep_for(std::chrono::milliseconds(10));
+		if (exited.load(std::memory_order_acquire))
+		{
+			t.join();
+			return true;
+		}
+		t.detach();
+		return false;
+#endif
 	}
 
 	void Start(int seat)
 	{
 		if (s_thread.joinable())
 			return;
+		if (s_abandoned)
+		{
+			if (!s_exited.load(std::memory_order_acquire))
+			{
+				Console.Error("(VR) SeatSession: a previous seat thread is still stuck in its runtime; "
+							  "not starting another beside it.");
+				return;
+			}
+			s_abandoned = false;
+		}
 		s_run.store(true);
+		s_exited.store(false, std::memory_order_release);
+		SetState(State::Connecting);
 		s_thread = std::thread(ThreadMain, seat);
 	}
 
@@ -805,7 +1142,13 @@ namespace VR::SeatSession
 		if (!s_thread.joinable())
 			return;
 		s_run.store(false);
-		s_thread.join();
+		if (!JoinOrDetach(s_thread, s_exited, kStopJoinTimeout))
+		{
+			s_abandoned = true;
+			Console.Error("(VR) SeatSession: the seat thread did not exit within %lld ms; detached it "
+						  "(its runtime is stuck). VM shutdown continues.",
+				static_cast<long long>(kStopJoinTimeout.count()));
+		}
 		SeatCast::Shutdown();
 	}
 

@@ -77,6 +77,16 @@ float vr_stereo_disp(float q_in, float z_norm)
 	else                       band = vr_band[3];
 
 	float d = band.z + band.y * (1.0f - band.x * q);
+	if (vr_map_mode == 3u && d < 0.0f)
+	{
+	#if defined(VR_CROSSED_PLANTED_SIGN)
+		return (vr_stereo.y * tanh(min(vr_stereo.x * (-d) / vr_stereo.y, 9.0f))) * vr_splits.w;
+	#elif defined(VR_CROSSED_PLANTED_NOLIMIT)
+		return (vr_stereo.x * d) * vr_splits.w;
+	#else
+		return (-vr_stereo.y * tanh(min(vr_stereo.x * (-d) / vr_stereo.y, 9.0f))) * vr_splits.w;
+	#endif
+	}
 	return max(0.0f, d) * vr_splits.w;
 }
 #endif

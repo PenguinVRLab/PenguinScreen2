@@ -130,6 +130,7 @@ public Q_SLOTS:
 	void requestReset();
 	bool requestShutdown(bool allow_confirm = true, bool allow_save_to_state = true, bool default_save_to_state = true);
 	void requestExit(bool allow_confirm = true);
+	bool requestExitForRestart(QString* why = nullptr);
 	void checkForSettingChanges();
 	std::optional<WindowInfo> getWindowInfo();
 
@@ -315,6 +316,7 @@ private:
 	QMenu* m_status_volume_menu = nullptr;
 	QAction* m_status_volume_per_game_action = nullptr;
 	QAction* m_status_volume_toggle_mute_action = nullptr;
+	QAction* m_vr_quick_menu_action = nullptr;
 	QSlider* m_status_volume_slider = nullptr;
 	QLabel* m_status_gpu_widget = nullptr;
 	QLabel* m_status_fps_widget = nullptr;

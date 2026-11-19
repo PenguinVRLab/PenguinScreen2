@@ -1,0 +1,133 @@
+{
+ "atlas": {
+  "file": "atlas.png",
+  "format": "rgba8-straight",
+  "pixels_sha256": "84bff0dd48f4f0d0f874a3245c51b64729ef81bbe5f2a55c58d5b312db031dcc",
+  "sha256": "54766713447d72d86159dc0f022b7de356e2efaa43b17cdd7252194d93a00075",
+  "size_px": [
+   512,
+   352
+  ]
+ },
+ "cells": [
+  {
+   "action": null,
+   "bind": "test.lamp",
+   "class": "lamp",
+   "default": false,
+   "focus": false,
+   "id": "lamp",
+   "rect_px": [
+    384,
+    80,
+    96,
+    96
+   ],
+   "sprites": {
+    "off": 2,
+    "on": 1
+   }
+  }
+ ],
+ "comfort": {
+  "depth_mm": -80,
+  "hover_mm": 100,
+  "poke_press_mm": 5,
+  "poke_release_mm": 15,
+  "reach_m": 0.55
+ },
+ "focus_order": [],
+ "format": "vrui",
+ "input": {
+  "nav": [
+   "ray"
+  ],
+  "tier": "menu"
+ },
+ "kind": "panel",
+ "placement": {
+  "anchor": "screen",
+  "height_m": 0.25,
+  "layer": "panel",
+  "offset_m": [
+   0.0,
+   0.0,
+   -1.2
+  ],
+  "pauses_game": false,
+  "show_when": "always",
+  "width_m": 0.5,
+  "yaw_deg": 0.0
+ },
+ "preview": {
+  "file": "preview.png",
+  "format": "rgba8-straight",
+  "pixels_sha256": "de20ae686a9215b369ca15cbfd40b02e9f8e385d601c80d38e25b009e8613d5d",
+  "sha256": "0c6ad4baddc94627aded23e5983cd3114d80da2f062c601ad9929d39467f79f8",
+  "size_px": [
+   512,
+   256
+  ]
+ },
+ "raster_px": [
+  512,
+  256
+ ],
+ "resources": {
+  "layers": 1
+ },
+ "source": {
+  "file": "ok_minimal.ui",
+  "sha256": "c5fd2a8b7e2948c6e61e1dd76622643cf1c682ea411f18d05bbadaeff5b31983"
+ },
+ "sprites": [
+  {
+   "id": 0,
+   "rect": [
+    0,
+    0,
+    512,
+    256
+   ],
+   "role": "background"
+  },
+  {
+   "cell": "lamp",
+   "id": 1,
+   "rect": [
+    0,
+    256,
+    96,
+    96
+   ],
+   "role": "lamp_on"
+  },
+  {
+   "cell": "lamp",
+   "id": 2,
+   "rect": [
+    96,
+    256,
+    96,
+    96
+   ],
+   "role": "lamp_off"
+  }
+ ],
+ "toolchain": {
+  "collection": "vrwidgets 0.1.0",
+  "compiler": "vruic 0.1.0",
+  "font": {
+   "cap_height_em": 0.518,
+   "family": "ProggyForever",
+   "file": "ProggyForever-Regular.ttf",
+   "sha256": "56864f00513974a481a9db1a996dc100657fca0faeef76e60aa59c6a0cf5b1b6",
+   "size_factor": 1.407343
+  },
+  "pyside6": "6.10.3",
+  "qt": "6.10.3",
+  "unpremultiply": "exact-round-half-up"
+ },
+ "version": "1.0.0",
+ "warnings": []
+}

@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: 2026 Patrick Carey
+# SPDX-License-Identifier: CC-BY-NC-4.0
+# PenguinScreen2 shipped profile — generated, data only.
+# Copyright (c) 2026 Patrick Carey. Licensed CC BY-NC 4.0 (non-commercial
+# use/share/adapt with attribution); COMMERCIAL RIGHTS RESERVED. This is
+# DATA, not part of the GPL emulator — see LICENSE.md in this folder.
+# To customize: COPY this file into your user profiles folder and edit
+# the copy — a user file for the same serial overrides this one at
+# launch. Do not edit here (read-only in flatpak installs).
+
+SLES-52323:
+  name: "Richard Burns Rally"
+  crcs: [0x185BC820]
+  tier: stereo
+  stereo: { separation: 0.008, convergence: 6.0, uvDraws: screen }
+  camera:
+    writes:
+      - address: 0x004694F0
+        encoding: s32angle
+        source: constant
+        bias: 5
+        when:
+          - { address: 0x004694F0, equals: 3, width: 4 }
+      - address: 0x004694F0
+        encoding: s32angle
+        source: constant
+        bias: 6
+        when:
+          - { address: 0x004694F0, equals: 1, width: 4 }

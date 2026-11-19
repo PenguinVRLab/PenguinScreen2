@@ -13,6 +13,8 @@
 
 #include <QtWidgets/QLabel>
 
+#include <algorithm>
+
 VRSettingsWidget::VRSettingsWidget(SettingsWindow* settings_dialog, QWidget* parent)
 	: SettingsWidget(settings_dialog, parent)
 {
@@ -29,6 +31,7 @@ VRSettingsWidget::VRSettingsWidget(SettingsWindow* settings_dialog, QWidget* par
 	SettingWidgetBinder::BindWidgetToFloatSetting(sif, m_ui.stereoSeparation, "VR", "StereoSeparation", 0.02f);
 	SettingWidgetBinder::BindWidgetToFloatSetting(sif, m_ui.stereoConvergence, "VR", "StereoConvergence", 20.0f);
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.headCamera, "VR", "HeadCamera", true);
+	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_ui.gameFov, "VR", "GameFov", true);
 
 	dialog()->registerWidgetHelp(m_ui.enable, tr("Enable VR (OpenXR)"), tr("Unchecked"),
 		tr("Renders the emulated display on a virtual screen inside a connected OpenXR headset. Requires the Vulkan "
@@ -66,6 +69,12 @@ VRSettingsWidget::VRSettingsWidget(SettingsWindow* settings_dialog, QWidget* par
 		tr("Drives the game's own camera with your head movement, by writing the head pose into the game's memory each "
 		   "frame. Requires a per-game immersive profile with verified camera addresses; does nothing for games without "
 		   "one. Takes effect immediately."));
+
+	dialog()->registerWidgetHelp(m_ui.gameFov, tr("Game Field of View"), tr("Checked"),
+		tr("Sets how wide the game itself draws, per view, so a turn of your head shows more of the world at its true "
+		   "size instead of the edge of a picture. Requires a per-game profile with a measured field-of-view block; "
+		   "does nothing for games without one. The game's own value is given back when you leave a view, and when "
+		   "this is switched off. Takes effect immediately."));
 
 	dialog()->registerWidgetHelp(m_ui.profileBrowser, tr("Per-Game Profiles"), tr("N/A"),
 		tr("Browses the profiles bundled in vr-profiles.yaml. Profiles apply automatically to the matching game — this "
@@ -160,7 +169,7 @@ void VRSettingsWidget::populateProfileBrowser()
 	m_ui.profileBrowser->clear();
 
 	const std::string running_serial = VMManager::GetDiscSerial();
-	int running_index = -1;
+	const u32 running_crc = VMManager::GetDiscCRC();
 	for (const VR::ProfileDB::Summary& p : m_profiles)
 	{
 		QStringList caps;
@@ -173,11 +182,6 @@ void VRSettingsWidget::populateProfileBrowser()
 									  p.name.empty() ? tr("(unnamed)") : QString::fromStdString(p.name),
 									  caps.isEmpty() ? tr("none") : caps.join(QStringLiteral(", ")));
 		m_ui.profileBrowser->addItem(label);
-		if (!running_serial.empty() &&
-			QString::fromStdString(p.serial).compare(QString::fromStdString(running_serial), Qt::CaseInsensitive) == 0)
-		{
-			running_index = m_ui.profileBrowser->count() - 1;
-		}
 	}
 
 	if (m_ui.profileBrowser->count() == 0)
@@ -186,25 +190,54 @@ void VRSettingsWidget::populateProfileBrowser()
 		m_ui.profileBrowser->setEnabled(false);
 	}
 
+	const std::optional<size_t> bound =
+		running_serial.empty() ? std::nullopt : VR::ProfileDB::BoundSummaryRow(m_profiles, running_serial, running_crc);
+
 	if (running_serial.empty())
 	{
 		m_ui.profileStatus->setText(tr("No game is running."));
 	}
-	else if (running_index >= 0)
+	else if (bound.has_value())
 	{
-		m_ui.profileBrowser->setCurrentIndex(running_index);
-		const VR::ProfileDB::Summary& match = m_profiles[static_cast<size_t>(running_index)];
+		m_ui.profileBrowser->setCurrentIndex(static_cast<int>(bound.value()));
+		const VR::ProfileDB::Summary& match = m_profiles[bound.value()];
 		if (match.has_stereo)
 			m_running_profile_stereo = std::make_pair(match.separation, match.convergence);
 		m_ui.profileStatus->setText(
-			tr("Running game %1: profile FOUND — it applies automatically while \"Use Per-Game Profile\" is checked.")
-				.arg(QString::fromStdString(running_serial)));
+			tr("Running game %1: profile FOUND — it applies automatically while \"Use Per-Game Profile\" is checked. File: %2")
+				.arg(QString::fromStdString(running_serial))
+				.arg(match.source_path.empty() ? tr("(built in)") : QString::fromStdString(match.source_path)));
 	}
 	else
 	{
-		m_ui.profileStatus->setText(
-			tr("Running game %1: no bundled profile — the Separation/Convergence values above apply.")
-				.arg(QString::fromStdString(running_serial)));
+		QStringList other_crcs;
+		int first_row = -1;
+		for (size_t i = 0; i < m_profiles.size(); i++)
+		{
+			const VR::ProfileDB::Summary& p = m_profiles[i];
+			if (QString::fromStdString(p.serial).compare(QString::fromStdString(running_serial), Qt::CaseInsensitive) != 0)
+				continue;
+			if (first_row < 0)
+				first_row = static_cast<int>(i);
+			for (const u32 c : p.crcs)
+				other_crcs << QStringLiteral("%1").arg(c, 8, 16, QLatin1Char('0')).toUpper();
+		}
+		if (first_row >= 0)
+		{
+			m_ui.profileBrowser->setCurrentIndex(first_row);
+			m_ui.profileStatus->setText(
+				tr("Running game %1 (CRC %2): a profile exists for another build of this game (CRC %3), so it does NOT "
+				   "apply to this disc. The Separation/Convergence values above apply.")
+					.arg(QString::fromStdString(running_serial))
+					.arg(QStringLiteral("%1").arg(running_crc, 8, 16, QLatin1Char('0')).toUpper())
+					.arg(other_crcs.isEmpty() ? tr("none listed") : other_crcs.join(QStringLiteral(", "))));
+		}
+		else
+		{
+			m_ui.profileStatus->setText(
+				tr("Running game %1: no bundled profile — the Separation/Convergence values above apply.")
+					.arg(QString::fromStdString(running_serial)));
+		}
 	}
 
 	updateProfileDetails(m_ui.profileBrowser->currentIndex());

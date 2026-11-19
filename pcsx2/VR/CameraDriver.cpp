@@ -3,12 +3,18 @@
 
 #include "VR/CameraDriver.h"
 #include "VR/HeadPose.h"
+#include "VR/DisplayFit.h"
+#include "VR/ExecHook.h"
 #include "VR/PadLook.h"
 #include "VR/VRManager.h"
 #include "VR/SplitState.h"
+#include "VR/GuestRam.h"
+#include "VR/GuestPatch.h"
 #include "VR/VRProfileDB.h"
+#include "VR/WorldProjection.h"
 
 #include "Config.h"
+#include "Host.h"
 #include "Memory.h"
 #include "VMManager.h"
 
@@ -78,61 +84,16 @@ namespace VR::CameraDriver
 			}
 		}
 
-		s32 SaturateRound(float v, double lo, double hi)
-		{
-			const double d = std::clamp(static_cast<double>(v), lo, hi);
-			return static_cast<s32>(std::lround(d));
-		}
-
 		void EncodeAndWrite(u32 address, float value, ProfileDB::CameraEncoding enc)
 		{
-			if (!std::isfinite(value))
-				return;
-
-			switch (enc)
-			{
-				case ProfileDB::CameraEncoding::F32:
-				{
-					memWrite32(address, std::bit_cast<u32>(value));
-					break;
-				}
-				case ProfileDB::CameraEncoding::S16_12:
-				{
-					const s32 raw = SaturateRound(value * 4096.0f,
-						std::numeric_limits<s16>::min(), std::numeric_limits<s16>::max());
-					memWrite16(address, static_cast<u16>(static_cast<s16>(raw)));
-					break;
-				}
-				case ProfileDB::CameraEncoding::S32Angle:
-				{
-					const s32 raw = SaturateRound(value,
-						std::numeric_limits<s32>::min(), std::numeric_limits<s32>::max());
-					memWrite32(address, static_cast<u32>(raw));
-					break;
-				}
-				default:
-					break;
-			}
+			EEMemoryInterface ee;
+			GuestRam::EncodeAndWrite(ee, address, value, enc);
 		}
 
 		std::optional<float> DecodeGuestValue(u32 address, ProfileDB::CameraEncoding enc)
 		{
-			switch (enc)
-			{
-				case ProfileDB::CameraEncoding::F32:
-				{
-					const float v = std::bit_cast<float>(static_cast<u32>(memRead32(address)));
-					if (!std::isfinite(v))
-						return std::nullopt;
-					return v;
-				}
-				case ProfileDB::CameraEncoding::S16_12:
-					return static_cast<float>(static_cast<s16>(static_cast<u16>(memRead16(address)))) * (1.0f / 4096.0f);
-				case ProfileDB::CameraEncoding::S32Angle:
-					return static_cast<float>(static_cast<s32>(memRead32(address)));
-				default:
-					return std::nullopt;
-			}
+			EEMemoryInterface ee;
+			return GuestRam::DecodeGuestValue(ee, address, enc);
 		}
 
 		float Wrap360(float v)
@@ -232,6 +193,15 @@ namespace VR::CameraDriver
 		u32 s_delta_crc = 0;
 		std::vector<float> s_delta_prev;
 		std::vector<bool> s_delta_has;
+		std::vector<float> s_delta_total;
+		std::vector<float> s_delta_written;
+		std::vector<bool> s_delta_written_has;
+		u32 s_base_now = 0;
+		u64 s_base_now_vsync = 0;
+		void ResetDeltaTotals()
+		{
+			std::fill(s_delta_total.begin(), s_delta_total.end(), 0.0f);
+		}
 
 		struct AnchorState
 		{
@@ -269,11 +239,7 @@ namespace VR::CameraDriver
 				DevCon.WriteLn("(VR) CameraDriver: anchored op at 0x%08X not restored — guest value is no longer ours (game wrote it).", a.addr);
 		}
 
-		struct MatBaseline
-		{
-			float yaw = 0.0f, pitch = 0.0f, roll = 0.0f;
-			bool has = false;
-		};
+		using MatBaseline = MatrixHeadBaseline;
 		u32 s_mat_crc = 0;
 		std::vector<MatBaseline> s_mat_prev;
 
@@ -289,8 +255,9 @@ namespace VR::CameraDriver
 		void ResetDeltaState(bool keep_anchors = false)
 		{
 			std::fill(s_delta_has.begin(), s_delta_has.end(), false);
+			std::fill(s_delta_written_has.begin(), s_delta_written_has.end(), false);
 			for (MatBaseline& b : s_mat_prev)
-				b.has = false;
+				b.Reset();
 			if (keep_anchors)
 				return;
 			for (MatAnchor& m : s_mat_anchor)
@@ -364,7 +331,14 @@ namespace VR::CameraDriver
 				const std::optional<float> game = DecodeGuestValue(address, op.encoding);
 				if (!game.has_value())
 					return;
-				v = game.value() + d * op.axis_sign * op.scale;
+				const bool hold = op.head_only_projected && s_delta_written_has[op_index] && VR::WorldProjection::EeEnabled();
+				const DeltaStep step = ComposeDelta(game.value(), hold ? &s_delta_written[op_index] : nullptr,
+					d * op.axis_sign * op.scale, op.wrap == ProfileDB::CameraWrap::Deg360, op.clamp_min, op.clamp_max);
+				s_delta_total[op_index] += step.applied;
+				s_delta_written[op_index] = step.value;
+				s_delta_written_has[op_index] = true;
+				EncodeAndWrite(address, step.value, op.encoding);
+				return;
 			}
 			else
 			{
@@ -396,8 +370,9 @@ namespace VR::CameraDriver
 						std::memcpy(base.m, an.base, sizeof(base.m));
 				}
 
-				const Mat3 r_off = Mat3FromEulerYXZ(e.yaw * op.axis_sign_yaw,
-					e.pitch * op.axis_sign_pitch, e.roll * op.axis_sign_roll);
+				float off[3];
+				MatrixOpAngles(op, s_mat_prev[op_index], e.yaw, e.pitch, e.roll, off);
+				const Mat3 r_off = Mat3FromEulerYXZ(off[0], off[1], off[2]);
 				const Mat3 r_new = (op.order == ProfileDB::MatrixComposeOrder::Pre)
 									   ? Mat3Mul(r_off, base)
 									   : Mat3Mul(base, r_off);
@@ -411,16 +386,10 @@ namespace VR::CameraDriver
 				return;
 			}
 
-			MatBaseline& prev = s_mat_prev[op_index];
-			if (!prev.has)
-			{
-				prev = MatBaseline{e.yaw, e.pitch, e.roll, true};
+			float d[3];
+			if (!MatrixOpAngles(op, s_mat_prev[op_index], e.yaw, e.pitch, e.roll, d))
 				return;
-			}
-			const float dyaw = std::remainder(e.yaw - prev.yaw, 2.0f * PI_F) * op.axis_sign_yaw;
-			const float dpitch = std::remainder(e.pitch - prev.pitch, 2.0f * PI_F) * op.axis_sign_pitch;
-			const float droll = std::remainder(e.roll - prev.roll, 2.0f * PI_F) * op.axis_sign_roll;
-			prev = MatBaseline{e.yaw, e.pitch, e.roll, true};
+			const float dyaw = d[0], dpitch = d[1], droll = d[2];
 
 			const std::optional<Mat3> game = ReadGuestMat3(address);
 			if (!game.has_value())
@@ -505,19 +474,8 @@ namespace VR::CameraDriver
 
 		std::optional<u32> WalkChain(u32 root, const std::vector<s32>& hops)
 		{
-			u32 deref = memRead32(root);
-			if (deref == 0 || deref >= Ps2MemSize::MainRam || (deref & 3u) != 0)
-				return std::nullopt;
-			for (const s32 hop : hops)
-			{
-				const s64 slot = static_cast<s64>(deref) + hop;
-				if (slot < 0 || slot + 4 > static_cast<s64>(Ps2MemSize::MainRam))
-					return std::nullopt;
-				deref = memRead32(static_cast<u32>(slot));
-				if (deref == 0 || deref >= Ps2MemSize::MainRam || (deref & 3u) != 0)
-					return std::nullopt;
-			}
-			return deref;
+			EEMemoryInterface ee;
+			return GuestRam::WalkChain(ee, root, hops);
 		}
 
 		std::optional<u32> GetBase(const ProfileDB::CameraProfile& cam, u32 crc)
@@ -535,14 +493,16 @@ namespace VR::CameraDriver
 					case 2: idx = memRead16(spec.index_addr); break;
 					default: idx = memRead32(spec.index_addr); break;
 				}
-				const s64 resolved = static_cast<s64>(spec.indexed_base) + spec.array_offset +
-									 static_cast<s64>(idx) * static_cast<s64>(spec.stride);
-				if (resolved < 0 || resolved >= static_cast<s64>(Ps2MemSize::MainRam))
+				const std::optional<u32> element = ProfileDB::ResolveIndexedBase(spec, idx, [](u32 a, u32* v) {
+					*v = memRead32(a);
+					return true;
+				});
+				if (!element.has_value())
 				{
 					s_base.valid = false;
 					return std::nullopt;
 				}
-				const u32 base = static_cast<u32>(resolved);
+				const u32 base = element.value();
 				if (!s_base.valid || s_base.crc != crc || s_base.base != base)
 				{
 					s_base = ResolvedBase{crc, base, true, 0};
@@ -621,30 +581,8 @@ namespace VR::CameraDriver
 
 		bool GuardListPass(const std::vector<ProfileDB::CameraGuard>& guards)
 		{
-			for (const ProfileDB::CameraGuard& g : guards)
-			{
-				u32 address = g.ee_address;
-				if (g.is_chain)
-				{
-					const std::optional<u32> obj = WalkChain(g.pointer_addr, g.deref_offsets);
-					if (!obj.has_value())
-						return false;
-					const s64 a = static_cast<s64>(obj.value()) + g.offset;
-					if (a < 0 || a + g.width > static_cast<s64>(Ps2MemSize::MainRam))
-						return false;
-					address = static_cast<u32>(a);
-				}
-				u32 v = 0;
-				switch (g.width)
-				{
-					case 1: v = memRead8(address); break;
-					case 2: v = memRead16(address); break;
-					default: v = memRead32(address); break;
-				}
-				if ((v == g.equals) == g.not_equals)
-					return false;
-			}
-			return true;
+			EEMemoryInterface ee;
+			return GuestRam::GuardListPass(ee, guards);
 		}
 
 		bool GuardsPass(const ProfileDB::CameraProfile& cam)
@@ -652,119 +590,65 @@ namespace VR::CameraDriver
 			return GuardListPass(cam.guards);
 		}
 
-		bool s_silence_applied = false;
-		u32 s_silence_crc = 0;
+		GuestPatch::Ledger s_patches;
+		bool s_patches_log_set = false;
 
-		void ApplySilence(const ProfileDB::CameraProfile& cam, u32 crc)
+		void EnsurePatchLog()
 		{
-			if (s_silence_applied && s_silence_crc == crc)
+			if (s_patches_log_set)
 				return;
-			for (const ProfileDB::CameraSilence& sil : cam.silence)
-				memWrite32(sil.ee_address, sil.value_on);
-			if (!cam.silence.empty())
-				DevCon.WriteLn("(VR) CameraDriver: game camera writer silenced (%zu patch(es)).", cam.silence.size());
-			s_silence_applied = true;
-			s_silence_crc = crc;
-		}
-
-		void RestoreSilence(const ProfileDB::CameraProfile& cam, u32 crc)
-		{
-			if (!s_silence_applied || s_silence_crc != crc)
-			{
-				s_silence_applied = false;
-				return;
-			}
-			for (const ProfileDB::CameraSilence& sil : cam.silence)
-				memWrite32(sil.ee_address, sil.value_off);
-			if (!cam.silence.empty())
-				DevCon.WriteLn("(VR) CameraDriver: game camera writer restored.");
-			s_silence_applied = false;
-		}
-
-		bool s_hooks_installed = false;
-		u32 s_hooks_crc = 0;
-		std::vector<u32> s_hook_original;
-
-		void ApplyCodeHooks(const ProfileDB::CameraProfile& cam, u32 crc)
-		{
-			if (s_hooks_installed && s_hooks_crc == crc)
-			{
-				bool intact = true;
-				for (size_t i = 0; i < cam.code_hooks.size() && i < s_hook_original.size(); i++)
+			s_patches_log_set = true;
+			s_patches.SetLog([](GuestPatch::LogLevel level, const std::string& line) {
+				switch (level)
 				{
-					if (s_hook_original[i] == 0)
-						continue;
-					if (static_cast<u32>(memRead32(cam.code_hooks[i].hook_address)) != AssembleHook(cam.code_hooks[i]).trampoline)
-					{
-						intact = false;
+					case GuestPatch::LogLevel::Routine:
+						DevCon.WriteLn(line);
 						break;
-					}
+					case GuestPatch::LogLevel::Notice:
+						Console.WriteLn(line);
+						break;
+					case GuestPatch::LogLevel::Warning:
+						Console.Warning(line);
+						break;
 				}
-				if (intact)
-					return;
-				s_hooks_installed = false;
-			}
-			s_hook_original.assign(cam.code_hooks.size(), 0);
-			size_t installed = 0;
-			for (size_t i = 0; i < cam.code_hooks.size(); i++)
+			});
+		}
+
+		std::vector<GuestPatch::Hook> s_hook_list;
+		std::vector<const ProfileDB::CameraCodeHook*> s_hook_src;
+
+		void BuildHookList(const ProfileDB::CameraProfile& cam)
+		{
+			s_hook_list.clear();
+			s_hook_src.clear();
+			for (const ProfileDB::CameraCodeHook& h : cam.code_hooks)
 			{
-				const ProfileDB::CameraCodeHook& h = cam.code_hooks[i];
 				if (!h.enabled)
 					continue;
-				const u32 orig = static_cast<u32>(memRead32(h.hook_address));
-				if ((orig >> 26) != 0x03u)
-				{
-					DevCon.WriteLn("(VR) CameraDriver: code-hook site 0x%08X is not a JAL (0x%08X); skipping install.",
-						h.hook_address, orig);
-					continue;
-				}
 				const AssembledHook a = AssembleHook(h);
-				for (int w = 0; w < 5; w++)
-					memWrite32(h.cave_address + static_cast<u32>(w) * 4u, a.cave[w]);
-				memWrite32(h.scratch_address, 0);
-				memWrite32(h.hook_address, a.trampoline);
-				s_hook_original[i] = orig;
-				installed++;
+				GuestPatch::Hook g;
+				g.site = h.hook_address;
+				g.original = MipsJal(h.tail_jump_address);
+				g.trampoline = a.trampoline;
+				g.cave = h.cave_address;
+				for (size_t w = 0; w < g.body.size(); w++)
+					g.body[w] = a.cave[w];
+				g.scratch = h.scratch_address;
+				s_hook_list.push_back(g);
+				s_hook_src.push_back(&h);
 			}
-			if (installed > 0)
-				DevCon.WriteLn("(VR) CameraDriver: %zu camera code-hook(s) installed.", installed);
-			s_hooks_installed = true;
-			s_hooks_crc = crc;
 		}
 
-		void RestoreCodeHooks(const ProfileDB::CameraProfile& cam, u32 crc)
+		void WriteCodeHookScratch(const EulerAngles& e, const HeadPose::Snapshot& pose)
 		{
-			if (!s_hooks_installed || s_hooks_crc != crc)
+			EEMemoryInterface ee;
+			for (size_t i = 0; i < s_hook_list.size(); i++)
 			{
-				s_hooks_installed = false;
-				return;
-			}
-			size_t restored = 0;
-			for (size_t i = 0; i < cam.code_hooks.size() && i < s_hook_original.size(); i++)
-			{
-				if (s_hook_original[i] == 0)
-					continue;
-				memWrite32(cam.code_hooks[i].hook_address, s_hook_original[i]);
-				s_hook_original[i] = 0;
-				restored++;
-			}
-			if (restored > 0)
-				DevCon.WriteLn("(VR) CameraDriver: %zu camera code-hook(s) restored.", restored);
-			s_hooks_installed = false;
-		}
-
-		void WriteCodeHookScratch(const ProfileDB::CameraProfile& cam, const EulerAngles& e,
-			const HeadPose::Snapshot& pose)
-		{
-			if (!s_hooks_installed)
-				return;
-			for (size_t i = 0; i < cam.code_hooks.size() && i < s_hook_original.size(); i++)
-			{
-				if (s_hook_original[i] == 0)
-					continue;
-				const ProfileDB::CameraCodeHook& h = cam.code_hooks[i];
+				const ProfileDB::CameraCodeHook& h = *s_hook_src[i];
 				const float v = SelectSource(h.source, e, pose) * h.axis_sign * h.scale;
-				EncodeAndWrite(h.scratch_address, v, ProfileDB::CameraEncoding::F32);
+				if (!std::isfinite(v))
+					continue;
+				s_patches.WriteScratch(ee, i, std::bit_cast<u32>(v));
 			}
 		}
 
@@ -774,8 +658,11 @@ namespace VR::CameraDriver
 
 		std::atomic_bool s_recenter_requested{false};
 		bool s_has_reference = false;
+		float s_head_rel[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+		u64 s_head_rel_sample = 0;
 		u32 s_reference_crc = 0;
 		float s_ref_x = 0.0f, s_ref_y = 0.0f, s_ref_z = 0.0f, s_ref_w = 1.0f;
+		float s_ref_px = 0.0f, s_ref_py = 0.0f, s_ref_pz = 0.0f;
 
 		void QuatMultiply(float ax, float ay, float az, float aw, float bx, float by, float bz, float bw,
 			float& ox, float& oy, float& oz, float& ow)
@@ -796,6 +683,158 @@ namespace VR::CameraDriver
 			y = oy;
 			z = oz;
 			w = ow;
+		}
+
+		enum class DirectState : u8
+		{
+			Idle,
+			Queued,
+			Armed,
+			Refused,
+		};
+		std::atomic<DirectState> s_direct_state{DirectState::Idle};
+		u32 s_direct_crc = 0;
+		u64 s_direct_retry_vsync = 0;
+		bool s_direct_retry_said = false;
+
+		bool DirectLeversInMemory(const ProfileDB::CameraDirectLook& dl)
+		{
+			const std::optional<ProfileDB::CameraDirectLever>* const levers[3] = {&dl.yaw, &dl.pitch, &dl.aim};
+			for (const auto* lv : levers)
+			{
+				if (lv->has_value() && memRead32((*lv)->hook_address) != (*lv)->expect)
+					return false;
+			}
+			return true;
+		}
+
+		void DirectLookRelease()
+		{
+			ExecHookSetHead(0.0f, 0.0f, false);
+			if (s_direct_state.load() == DirectState::Idle)
+				return;
+			s_direct_state.store(DirectState::Idle);
+			s_direct_crc = 0;
+			Host::RunOnCPUThread([]() { ExecHookClearAll(); });
+		}
+
+		void DirectLookHold()
+		{
+				ExecHookSetHead(0.0f, 0.0f, false);
+		}
+
+		bool DirectLookApply(const ProfileDB::CameraDirectLook& dl, u32 crc, float yaw_rad, float pitch_rad)
+		{
+			if (s_direct_crc != crc && s_direct_state.load() != DirectState::Idle)
+				DirectLookRelease();
+
+			DirectLookPlan yaw, pitch, aim;
+			if (dl.yaw.has_value())
+				yaw = PlanDirectLever(dl.yaw.value(), yaw_rad);
+			if (dl.pitch.has_value())
+				pitch = PlanDirectLever(dl.pitch.value(), pitch_rad);
+			if (dl.aim.has_value())
+				aim = PlanDirectLever(dl.aim.value(), yaw_rad);
+
+			if (s_direct_state.load() == DirectState::Refused && s_vsync_counter >= s_direct_retry_vsync)
+			{
+				s_direct_retry_vsync = s_vsync_counter + 60;
+				if (DirectLeversInMemory(dl))
+				{
+					Console.WriteLn("(VR) CameraDriver: directLook: the game now holds the levers' instructions; arming again.");
+					s_direct_state.store(DirectState::Idle);
+				}
+				else if (!s_direct_retry_said)
+				{
+					s_direct_retry_said = true;
+					Console.WriteLn("(VR) CameraDriver: directLook: the levers' instructions are not in memory yet (the code loads later, or "
+									"this is another revision); looking again once a second. padLook carries the look meanwhile.");
+				}
+			}
+
+			if (s_direct_state.load() == DirectState::Idle)
+			{
+				s_direct_state.store(DirectState::Queued);
+				s_direct_crc = crc;
+				s_direct_retry_said = false;
+				const bool has_yaw = dl.yaw.has_value(), has_pitch = dl.pitch.has_value(), has_aim = dl.aim.has_value();
+				ExecGate gates[EXEC_GATES_MAX];
+				int gate_count = 0;
+				for (const ProfileDB::CameraGuard& g : dl.when)
+				{
+					if (g.is_chain || gate_count >= EXEC_GATES_MAX)
+						continue;
+					gates[gate_count].address = g.ee_address;
+					gates[gate_count].equals = g.equals;
+					gates[gate_count].width = g.width;
+					gates[gate_count].not_equals = g.not_equals;
+					gate_count++;
+				}
+				const ExecGate gate0 = gates[0], gate1 = gates[1];
+				Host::RunOnCPUThread([yaw, pitch, aim, has_yaw, has_pitch, has_aim, gate0, gate1, crc]() {
+					const auto spec_of = [gate0, gate1](const DirectLookPlan& p, bool is_pitch) {
+						ExecHookSpec s;
+						s.pc = p.pc;
+						s.expect_op = p.expect;
+						s.action = p.is_aim ? ExecAction::AimLookAt : (p.is_view ? ExecAction::ComposeView : ExecAction::AddGpr);
+						s.reg = p.is_aim ? p.eye_reg : p.reg;
+						s.reg2 = p.is_aim ? p.reg : 0;
+						s.address = p.view_address;
+						s.use_pitch = is_pitch;
+						if (p.is_aim)
+						{
+							s.yaw_units = p.units;
+							s.pitch_units = p.pitch_units;
+						}
+						else
+						{
+							s.yaw_units = (p.is_view && is_pitch) ? 0.0f : p.units;
+							s.pitch_units = (p.is_view && !is_pitch) ? 0.0f : p.units;
+						}
+						s.caller_sp_offset = p.caller_sp_offset;
+						s.caller_expect = p.caller;
+						s.gates[0] = gate0;
+						s.gates[1] = gate1;
+						return s;
+					};
+					bool ok = true;
+					if (has_yaw)
+						ok = (ExecHookArm(spec_of(yaw, false)) >= 0) && ok;
+					if (has_pitch)
+						ok = (ExecHookArm(spec_of(pitch, true)) >= 0) && ok;
+					if (has_aim)
+						ok = (ExecHookArm(spec_of(aim, false)) >= 0) && ok;
+					if (ok)
+					{
+						Console.WriteLn(Color_StrongGreen, "(VR) CameraDriver: directLook ARMED (CRC %08X) — yaw %s, pitch %s, aim %s.",
+							crc, has_yaw ? "yes" : "no", has_pitch ? "yes" : "no", has_aim ? "yes" : "no");
+						s_direct_state.store(DirectState::Armed);
+					}
+					else
+					{
+						ExecHookClearAll();
+						Console.Warning("(VR) CameraDriver: directLook REFUSED (CRC %08X) — a lever did not arm; padLook, if "
+										"the profile has one, carries the head-look.",
+							crc);
+						s_direct_state.store(DirectState::Refused);
+						s_direct_retry_vsync = s_vsync_counter + 60;
+					}
+				});
+			}
+
+			if (s_direct_state.load() != DirectState::Armed)
+			{
+				ExecHookSetHead(0.0f, 0.0f, false);
+				return false;
+			}
+			if (!dl.when.empty() && !GuardListPass(dl.when))
+			{
+				ExecHookSetHead(0.0f, 0.0f, false);
+				return false;
+			}
+			const DirectLookAngles head = PlanDirectAngles(dl, yaw_rad, pitch_rad);
+			ExecHookSetHead(head.yaw_rad, head.pitch_rad, true);
+			return true;
 		}
 
 	}
@@ -845,6 +884,12 @@ namespace VR::CameraDriver
 		return deflection;
 	}
 
+	HeadPose::Snapshot VsyncHead()
+	{
+		HeadPose::Snapshot pose = HeadPose::Get();
+		return pose;
+	}
+
 	void Apply()
 	{
 		s_vsync_counter++;
@@ -857,23 +902,27 @@ namespace VR::CameraDriver
 		if (!vm_live)
 		{
 			s_armed_logged = false;
-			s_silence_applied = false;
-			s_hooks_installed = false;
+			s_patches.Forget();
 			s_base.valid = false;
 			s_padlook = PadLookState{};
 			ResetDeltaState();
+			ResetDeltaTotals();
 			PadLook::Publish(0.0f);
+			DirectLookRelease();
 			return;
 		}
 
 		ProfileDB::EnsureLoaded();
 		const u32 crc = VMManager::GetDiscCRC();
+		EnsurePatchLog();
+		EEMemoryInterface patch_mem;
+		s_patches.Service(patch_mem, crc, vm_state == VMState::Running, s_vsync_counter);
 		const ProfileDB::Profile* profile = ProfileDB::Lookup(VMManager::GetDiscSerial(), crc);
 		if (!profile || !profile->camera.has_value())
 		{
 			s_armed_logged = false;
-			s_silence_applied = false;
-			s_hooks_installed = false;
+			if (vm_state == VMState::Running)
+				s_patches.Disarm(patch_mem, s_vsync_counter, nullptr);
 			s_base.valid = false;
 			s_padlook = PadLookState{};
 			if (vm_state == VMState::Running)
@@ -883,13 +932,16 @@ namespace VR::CameraDriver
 			}
 			ResetDeltaState( vm_state != VMState::Running);
 			PadLook::Publish(0.0f);
+			DirectLookRelease();
 			return;
 		}
 		const ProfileDB::CameraProfile& cam = profile->camera.value();
 
-		HeadPose::Snapshot pose = HeadPose::Get();
+		const HeadPose::Snapshot pose = VsyncHead();
 
-		const bool armed = switched_on && (vm_state == VMState::Running) && pose.valid && GuardsPass(cam);
+		const bool projection_ok = cam.ArmsWithWorldProjection(VR::WorldProjection::EeEnabled());
+		const bool armed =
+			switched_on && (vm_state == VMState::Running) && pose.valid && projection_ok && GuardsPass(cam);
 
 		if (armed != s_armed_logged)
 		{
@@ -903,6 +955,7 @@ namespace VR::CameraDriver
 					!switched_on                   ? "VR/HeadCamera switch off" :
 					(vm_state != VMState::Running) ? "VM not Running (paused)" :
 					!pose.valid                    ? "no valid head pose published" :
+					!projection_ok                 ? "world projection off (camera.requiresWorldProjection)" :
 													 "profile guard failed";
 				Console.WriteLn(Color_StrongOrange, "(VR) CameraDriver: DISARMED (CRC %08X) — %s.", crc, reason);
 			}
@@ -911,8 +964,16 @@ namespace VR::CameraDriver
 
 		if (!armed)
 		{
-			RestoreSilence(cam, crc);
-			RestoreCodeHooks(cam, crc);
+			if (s_patches.RepairPending() && GuardsPass(cam))
+			{
+				BuildHookList(cam);
+				const GuestPatch::Ledger::Lists lists{cam.silence, s_hook_list};
+				s_patches.Disarm(patch_mem, s_vsync_counter, &lists);
+			}
+			else
+			{
+				s_patches.Disarm(patch_mem, s_vsync_counter, nullptr);
+			}
 			if (vm_state == VMState::Running)
 			{
 				for (MatAnchor& an : s_mat_anchor)
@@ -940,13 +1001,16 @@ namespace VR::CameraDriver
 			s_padlook = PadLookState{};
 			ResetDeltaState( vm_state != VMState::Running);
 			PadLook::Publish(0.0f);
+			DirectLookHold();
 			return;
 		}
 
-		ApplySilence(cam, crc);
-		ApplyCodeHooks(cam, crc);
+		BuildHookList(cam);
+		s_patches.Arm(patch_mem, cam.silence, s_hook_list, s_vsync_counter);
 
 		const std::optional<u32> base = GetBase(cam, crc);
+		s_base_now = base.value_or(0);
+		s_base_now_vsync = base.has_value() ? s_vsync_counter : 0;
 		if (cam.base.has_value() && !base.has_value())
 		{
 			s_base_unresolved_vsyncs++;
@@ -970,8 +1034,12 @@ namespace VR::CameraDriver
 			s_ref_y = pose.orientation_y;
 			s_ref_z = pose.orientation_z;
 			s_ref_w = pose.orientation_w;
+			s_ref_px = pose.position_x;
+			s_ref_py = pose.position_y;
+			s_ref_pz = pose.position_z;
 			s_has_reference = true;
 			s_reference_crc = crc;
+			ResetDeltaTotals();
 			ResetDeltaState( true);
 			s_padlook.gate = 0;
 			DevCon.WriteLn("(VR) CameraDriver: view recentered.");
@@ -982,6 +1050,9 @@ namespace VR::CameraDriver
 			s_delta_crc = crc;
 			s_delta_prev.assign(cam.writes.size(), 0.0f);
 			s_delta_has.assign(cam.writes.size(), false);
+			s_delta_total.assign(cam.writes.size(), 0.0f);
+			s_delta_written.assign(cam.writes.size(), 0.0f);
+			s_delta_written_has.assign(cam.writes.size(), false);
 			for (AnchorState& a : s_anchor)
 				RestoreAnchoredScalar(a);
 			s_anchor.assign(cam.writes.size(), AnchorState{});
@@ -995,8 +1066,17 @@ namespace VR::CameraDriver
 
 		float qx = pose.orientation_x, qy = pose.orientation_y, qz = pose.orientation_z, qw = pose.orientation_w;
 		ApplyReference(qx, qy, qz, qw);
+		s_head_rel[0] = qx;
+		s_head_rel[1] = qy;
+		s_head_rel[2] = qz;
+		s_head_rel[3] = qw;
+		s_head_rel_sample++;
 
-		const EulerAngles euler = QuaternionToEulerYXZ(qx, qy, qz, qw);
+		EulerAngles euler = QuaternionToEulerYXZ(qx, qy, qz, qw);
+		const float head_yaw_rad = euler.yaw, head_pitch_rad = euler.pitch;
+		const EulerAngles raw_euler = euler;
+		const DisplayFit::Fit display_fit = DisplayFit::Get();
+		DisplayFit::HeadToReference(euler.yaw, euler.pitch, display_fit);
 
 		for (size_t i = 0; i < cam.writes.size(); i++)
 		{
@@ -1026,7 +1106,9 @@ namespace VR::CameraDriver
 					RestoreAnchoredScalar(s_anchor[i]);
 				continue;
 			}
-			EvaluateAndWrite(op, i, address, euler, pose);
+			EulerAngles op_euler = raw_euler;
+			DisplayFit::HeadForOp(op_euler.yaw, op_euler.pitch, display_fit, op.fitted_angles);
+			EvaluateAndWrite(op, i, address, op_euler, pose);
 		}
 
 		for (size_t i = 0; i < cam.matrix_writes.size(); i++)
@@ -1038,7 +1120,7 @@ namespace VR::CameraDriver
 			{
 				if (!base.has_value())
 				{
-					s_mat_prev[i].has = false;
+					s_mat_prev[i].OnGap();
 					continue;
 				}
 				address += base.value();
@@ -1046,7 +1128,7 @@ namespace VR::CameraDriver
 			}
 			if (!op.when.empty() && !GuardListPass(op.when))
 			{
-				s_mat_prev[i].has = false;
+				s_mat_prev[i].OnGap();
 				if (s_mat_anchor[i].has)
 				{
 					const std::optional<Mat3> guest = ReadGuestMat3(address);
@@ -1069,12 +1151,26 @@ namespace VR::CameraDriver
 			ApplyMatrixOp(op, i, address, taddress, euler);
 		}
 
-		WriteCodeHookScratch(cam, euler, pose);
+		WriteCodeHookScratch(euler, pose);
 
-		if (cam.fov.has_value())
-			EncodeAndWrite(cam.fov->ee_address, cam.fov->scale, cam.fov->encoding);
+		bool direct = false;
+		if (cam.direct_look.has_value())
+		{
+			const ProfileDB::CameraDirectLook& dl = cam.direct_look.value();
+			direct = DirectLookApply(dl, crc, dl.fitted_angles ? euler.yaw : head_yaw_rad,
+				dl.fitted_angles ? euler.pitch : head_pitch_rad);
+		}
+		else
+		{
+			DirectLookRelease();
+		}
 
-		if (cam.pad_look.has_value())
+		if (direct)
+		{
+			s_padlook = PadLookState{};
+			PadLook::Publish(0.0f);
+		}
+		else if (cam.pad_look.has_value())
 		{
 			const float yaw_deg = euler.yaw * (180.0f / PI_F);
 			PadLook::Publish(PadLookDeflection(cam.pad_look.value(), yaw_deg, s_padlook));
@@ -1089,6 +1185,8 @@ namespace VR::CameraDriver
 	void OnStateLoaded()
 	{
 		ResetDeltaState();
+		ResetDeltaTotals();
+		s_patches.OnStateLoaded();
 	}
 
 	void RequestRecenter()
@@ -1097,4 +1195,143 @@ namespace VR::CameraDriver
 	}
 
 
+	void HeadEulerYXZ(const float q[4], float out[3])
+	{
+		const EulerAngles e = QuaternionToEulerYXZ(q[0], q[1], q[2], q[3]);
+		out[0] = e.yaw;
+		out[1] = e.pitch;
+		out[2] = e.roll;
+	}
+
+	bool MatrixOpAngles(const ProfileDB::CameraMatrixOp& op, MatrixHeadBaseline& prev,
+		float head_yaw_rad, float head_pitch_rad, float head_roll_rad, float out[3])
+	{
+		constexpr float to_rad = PI_F / 180.0f;
+		constexpr float turn = 2.0f * PI_F;
+		const float raw[3] = {head_yaw_rad, head_pitch_rad, head_roll_rad};
+		const float lo_deg[3] = {op.yaw_min_deg, op.pitch_min_deg, op.roll_min_deg};
+		const float hi_deg[3] = {op.yaw_max_deg, op.pitch_max_deg, op.roll_max_deg};
+		const bool near_zenith = std::abs(head_pitch_rad) > 80.0f * to_rad;
+		float c[3];
+		for (int a = 0; a < 3; a++)
+		{
+			if (std::isinf(lo_deg[a]) && std::isinf(hi_deg[a]))
+			{
+				c[a] = raw[a];
+				continue;
+			}
+			if (near_zenith && a != 1 && prev.view_has[a])
+			{
+				c[a] = prev.last_view[a];
+				continue;
+			}
+			const float lo = lo_deg[a] * to_rad, hi = hi_deg[a] * to_rad;
+			if (raw[a] >= lo && raw[a] <= hi)
+				prev.held[a] = 0;
+			else if (prev.held[a] == 0)
+			{
+				if (std::isinf(lo_deg[a]))
+					prev.held[a] = 1;
+				else if (std::isinf(hi_deg[a]))
+					prev.held[a] = -1;
+				else
+				{
+					const float ref = prev.view_has[a] ? prev.last_view[a] : raw[a];
+					const float d_hi = std::abs(std::remainder(ref - hi, turn));
+					const float d_lo = std::abs(std::remainder(ref - lo, turn));
+					prev.held[a] = (d_hi <= d_lo) ? 1 : -1;
+				}
+			}
+			c[a] = (prev.held[a] > 0) ? hi : (prev.held[a] < 0) ? lo : raw[a];
+			prev.last_view[a] = c[a];
+			prev.view_has[a] = true;
+		}
+		const float y = c[0], p = c[1], r = c[2];
+		if (op.anchored)
+		{
+			out[0] = y * op.axis_sign_yaw;
+			out[1] = p * op.axis_sign_pitch;
+			out[2] = r * op.axis_sign_roll;
+			return true;
+		}
+		if (!prev.has)
+		{
+			prev.yaw = y;
+			prev.pitch = p;
+			prev.roll = r;
+			prev.has = true;
+			return false;
+		}
+		out[0] = std::remainder(y - prev.yaw, turn) * op.axis_sign_yaw;
+		out[1] = std::remainder(p - prev.pitch, turn) * op.axis_sign_pitch;
+		out[2] = std::remainder(r - prev.roll, turn) * op.axis_sign_roll;
+		prev.yaw = y;
+		prev.pitch = p;
+		prev.roll = r;
+		return true;
+	}
+
+	DeltaStep ComposeDelta(float game, const float* hold, float d, bool wrap360, float clamp_min, float clamp_max)
+	{
+		const float start = hold ? *hold : game;
+		DeltaStep s;
+		s.value = start + d;
+		if (wrap360)
+			s.value = Wrap360(s.value);
+		s.value = std::clamp(s.value, clamp_min, clamp_max);
+#if defined(VR_CAMERA_PLANTED_TOTAL_UNCLAMPED)
+		s.applied = d;
+#else
+		s.applied = wrap360 ? std::remainder(s.value - start, 360.0f) : s.value - start;
+#endif
+		return s;
+	}
+
+	bool DeltaTotal(size_t op_index, float* total)
+	{
+		if (op_index >= s_delta_total.size())
+			return false;
+		*total = s_delta_total[op_index];
+		return true;
+	}
+
+	bool ResolvedBaseNow(u32* base)
+	{
+		if (s_base_now_vsync == 0 || s_base_now_vsync != s_vsync_counter || s_base_now == 0)
+			return false;
+		*base = s_base_now;
+		return true;
+	}
+
+	bool AnchoredBase(size_t op_index, float* base)
+	{
+		if (op_index >= s_anchor.size() || !s_anchor[op_index].has || !s_anchor[op_index].anchored)
+			return false;
+		*base = s_anchor[op_index].base;
+		return true;
+	}
+
+	bool HeadRelative(float orientation[4], u64* sample)
+	{
+		if (s_head_rel_sample == 0)
+			return false;
+		for (int i = 0; i < 4; i++)
+			orientation[i] = s_head_rel[i];
+		*sample = s_head_rel_sample;
+		return true;
+	}
+
+	bool Reference(float orientation[4], float position[3])
+	{
+		if (!s_has_reference)
+			return false;
+		orientation[0] = s_ref_x;
+		orientation[1] = s_ref_y;
+		orientation[2] = s_ref_z;
+		orientation[3] = s_ref_w;
+		position[0] = s_ref_px;
+		position[1] = s_ref_py;
+		position[2] = s_ref_pz;
+		return true;
+	}
 }

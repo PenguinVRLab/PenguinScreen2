@@ -13,6 +13,7 @@
 
 #ifdef ENABLE_VR
 #include "VR/VRVulkanBridge.h"
+#include "VR/XRCompositor.h"
 #endif
 
 #include "BuildVersion.h"
@@ -2419,6 +2420,8 @@ GSDevice::PresentResult GSDeviceVK::BeginPresent(bool frame_skip)
 
 	if (!m_swap_chain)
 	{
+#ifdef ENABLE_VR
+#endif
 		ExecuteCommandBuffer(false);
 		return PresentResult::FrameSkipped;
 	}
@@ -2503,6 +2506,10 @@ void GSDeviceVK::EndPresent()
 	m_is_presenting = false;
 	m_swap_chain->GetCurrentTexture()->TransitionToLayout(cmdbuffer, GSTextureVK::Layout::PresentSrc);
 	g_perfmon.Put(GSPerfMon::RenderPasses, 1);
+
+#ifdef ENABLE_VR
+	RenderImGuiUiPanel();
+#endif
 
 	SubmitCommandBuffer(m_swap_chain.get());
 	MoveToNextCommandBuffer();
@@ -4629,6 +4636,20 @@ bool GSDeviceVK::CompileImGuiPipeline()
 	}
 
 	Vulkan::SetObjectName(m_device, m_imgui_pipeline, "ImGui pipeline");
+
+#ifdef ENABLE_VR
+	if (m_imgui_panel_pipeline == VK_NULL_HANDLE)
+	{
+		gpb.SetRenderPass(GetRenderPass(LookupNativeFormat(GSTexture::Format::Color), VK_FORMAT_UNDEFINED), 0);
+		gpb.SetBlendAttachment(0, true, VK_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, VK_BLEND_OP_ADD,
+			VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, VK_BLEND_OP_ADD);
+		m_imgui_panel_pipeline = gpb.Create(m_device, g_vulkan_shader_cache->GetPipelineCache(), false);
+		if (m_imgui_panel_pipeline)
+			Vulkan::SetObjectName(m_device, m_imgui_panel_pipeline, "ImGui VR UI panel pipeline");
+		else
+			Console.Error("VK: Failed to compile the ImGui VR UI panel pipeline; no UI panel in the headset");
+	}
+#endif
 	return true;
 }
 
@@ -4641,14 +4662,73 @@ void GSDeviceVK::RenderImGui()
 
 	UpdateImGuiTextures();
 
+	const float surface_w = static_cast<float>(m_window_info.surface_width);
+	const float surface_h = static_cast<float>(m_window_info.surface_height);
+	float layout_w = surface_w, layout_h = surface_h;
+#ifdef ENABLE_VR
+	if (ImGuiManager::IsVRPanelLayout() && draw_data->DisplaySize.x > 0.0f && draw_data->DisplaySize.y > 0.0f)
+	{
+		layout_w = draw_data->DisplaySize.x;
+		layout_h = draw_data->DisplaySize.y;
+	}
+#endif
+	DrawImGuiData(draw_data, m_imgui_pipeline, layout_w, layout_h, surface_w / layout_w, surface_h / layout_h);
+}
+
+#ifdef ENABLE_VR
+void GSDeviceVK::RenderImGuiUiPanel()
+{
+	if (!VR::XRCompositor::UiPanelWantsPixels() || !ImGuiManager::IsVRPanelLayout() || m_imgui_panel_pipeline == VK_NULL_HANDLE)
+		return;
+	const ImDrawData* draw_data = ImGui::GetDrawData();
+	if (!draw_data || !(draw_data->DisplaySize.x > 0.0f) || !(draw_data->DisplaySize.y > 0.0f))
+		return;
+	constexpr u32 kW = VR::XRCompositor::kUiPanelWidth, kH = VR::XRCompositor::kUiPanelHeight;
+	if (!m_vr_ui_panel)
+	{
+		m_vr_ui_panel.reset(CreateRenderTarget(kW, kH, GSTexture::Format::Color, false));
+		if (!m_vr_ui_panel)
+			return;
+		Console.WriteLn("(VR) UiPanel: ImGui panel target created (%ux%u).", kW, kH);
+	}
+	GSTextureVK* rt = static_cast<GSTextureVK*>(m_vr_ui_panel.get());
+	const VkCommandBuffer cmd = GetCurrentCommandBuffer();
+	rt->TransitionToLayout(cmd, GSTextureVK::Layout::ColorAttachment);
+	const VkFramebuffer fb = rt->GetFramebuffer(false);
+	if (fb == VK_NULL_HANDLE)
+		return;
+	static constexpr VkClearValue kTransparent = {};
+	const VkRenderPassBeginInfo rp = {VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO, nullptr,
+		GetRenderPass(rt->GetVkFormat(), VK_FORMAT_UNDEFINED, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE), fb,
+		{{0, 0}, {kW, kH}}, 1u, &kTransparent};
+	vkCmdBeginRenderPass(cmd, &rp, VK_SUBPASS_CONTENTS_INLINE);
+	const VkViewport vp{0.0f, 0.0f, static_cast<float>(kW), static_cast<float>(kH), 0.0f, 1.0f};
+	vkCmdSetViewport(cmd, 0, 1, &vp);
+#ifndef VR_UIPANEL_PLANTED_NODRAW
+	if (draw_data->CmdListsCount > 0)
+		DrawImGuiData(draw_data, m_imgui_panel_pipeline, draw_data->DisplaySize.x, draw_data->DisplaySize.y,
+			static_cast<float>(kW) / draw_data->DisplaySize.x, static_cast<float>(kH) / draw_data->DisplaySize.y);
+#endif
+	vkCmdEndRenderPass(cmd);
+	g_perfmon.Put(GSPerfMon::RenderPasses, 1);
+	VR::XRCompositor::SetUiPanelSource(rt);
+}
+
+#endif
+
+void GSDeviceVK::DrawImGuiData(const ImDrawData* draw_data, VkPipeline pipeline, float layout_w, float layout_h,
+	float clip_sx, float clip_sy)
+{
 	const GSVector4 uniforms(
-		2.0f / static_cast<float>(m_window_info.surface_width),
-		2.0f / static_cast<float>(m_window_info.surface_height),
+		2.0f / layout_w,
+		2.0f / layout_h,
 		-1.0f,
 		-1.0f);
+	const bool scale_clip = (clip_sx != 1.0f || clip_sy != 1.0f);
+	const GSVector4 clip_scale(clip_sx, clip_sy, clip_sx, clip_sy);
 
 	SetUtilityPushConstants(&uniforms, sizeof(uniforms));
-	SetPipeline(m_imgui_pipeline);
+	SetPipeline(pipeline);
 
 	if (m_utility_sampler != m_linear_sampler)
 	{
@@ -4684,9 +4764,11 @@ void GSDeviceVK::RenderImGui()
 			const ImDrawCmd* pcmd = &cmd_list->CmdBuffer[cmd_i];
 			pxAssert(!pcmd->UserCallback);
 
-			const GSVector4 clip = GSVector4::load<false>(&pcmd->ClipRect);
+			GSVector4 clip = GSVector4::load<false>(&pcmd->ClipRect);
 			if ((clip.zwzw() <= clip.xyxy()).mask() != 0)
 				continue;
+			if (scale_clip)
+				clip = clip * clip_scale;
 
 			SetScissor(GSVector4i(clip).max_i32(GSVector4i::zero()));
 
@@ -4762,6 +4844,9 @@ bool GSDeviceVK::DoCAS(
 
 void GSDeviceVK::DestroyResources()
 {
+#ifdef ENABLE_VR
+	m_vr_ui_panel.reset();
+#endif
 	if (m_tfx_ubo_descriptor_set != VK_NULL_HANDLE)
 		FreePersistentDescriptorSet(m_tfx_ubo_descriptor_set);
 
@@ -4825,6 +4910,11 @@ void GSDeviceVK::DestroyResources()
 		vkDestroyDescriptorSetLayout(m_device, m_cas_ds_layout, nullptr);
 	if (m_imgui_pipeline != VK_NULL_HANDLE)
 		vkDestroyPipeline(m_device, m_imgui_pipeline, nullptr);
+#ifdef ENABLE_VR
+	if (m_imgui_panel_pipeline != VK_NULL_HANDLE)
+		vkDestroyPipeline(m_device, m_imgui_panel_pipeline, nullptr);
+	m_imgui_panel_pipeline = VK_NULL_HANDLE;
+#endif
 
 	for (const auto& it : m_samplers)
 	{
@@ -4916,6 +5006,12 @@ VkShaderModule GSDeviceVK::GetTFXVertexShader(GSHWDrawConfig::VSSelector sel)
 	if (sel.multiview)
 		DevCon.WriteLn("(VR) Compiling multiview TFX vertex shader variant (key %02X).", sel.key);
 	AddMacro(ss, "VS_PROVOKING_VERTEX_LAST", static_cast<int>(m_features.provoking_vertex_last));
+#ifdef VR_CROSSED_PLANTED_SIGN
+	AddMacro(ss, "VR_CROSSED_PLANTED_SIGN", 1);
+#endif
+#ifdef VR_CROSSED_PLANTED_NOLIMIT
+	AddMacro(ss, "VR_CROSSED_PLANTED_NOLIMIT", 1);
+#endif
 	ss << m_tfx_source;
 
 	VkShaderModule mod = g_vulkan_shader_cache->GetVertexShader(ss.str());

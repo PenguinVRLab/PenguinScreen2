@@ -1,0 +1,107 @@
+{
+  "name": "mesa-radv",
+  "buildsystem": "meson",
+  "config-opts": [
+    "-Dbuildtype=release",
+    "-Dplatforms=x11,wayland",
+    "-Dvulkan-drivers=amd",
+    "-Dgallium-drivers=",
+    "-Dllvm=disabled",
+    "-Damd-use-llvm=false",
+    "-Dxlib-lease=enabled",
+    "-Dglx=disabled",
+    "-Degl=disabled",
+    "-Dgbm=disabled",
+    "-Dopengl=false",
+    "-Dgles1=disabled",
+    "-Dgles2=disabled",
+    "-Dshared-glapi=disabled",
+    "-Dvulkan-layers=",
+    "-Dvulkan-beta=false",
+    "-Dbuild-tests=false",
+    "-Dzstd=disabled",
+    "-Dvalgrind=disabled",
+    "-Dlibunwind=disabled",
+    "-Dlmsensors=disabled",
+    "-Dandroid-libbacktrace=disabled"
+  ],
+  "build-options": {
+    "strip": true
+  },
+  "sources": [
+    {
+      "type": "archive",
+      "url": "https://archive.mesa3d.org/mesa-26.2.2.tar.xz",
+      "sha256": "eeb29ca7e56cfaa8e8a79538dcf834e3b18e501c31bef5145e959ea437cc4216",
+      "mirror-urls": [
+        "https://mesa.freedesktop.org/archive/mesa-26.2.2.tar.xz"
+      ]
+    }
+  ],
+  "post-install": [
+    "install -Dm644 ../docs/license.rst \"${FLATPAK_DEST}/share/licenses/${FLATPAK_ID}/MESA-LICENSE\"",
+    "install -Dm644 ../VERSION \"${FLATPAK_DEST}/share/penguinscreen2/mesa-radv.version\"",
+    "rm -rf \"${FLATPAK_DEST}\"/lib/python3*"
+  ],
+  "cleanup": [
+    "/include",
+    "/lib/pkgconfig"
+  ],
+  "modules": [
+    {
+      "name": "libdrm-amdgpu",
+      "buildsystem": "meson",
+      "config-opts": [
+        "-Damdgpu=enabled",
+        "-Dintel=disabled",
+        "-Dradeon=disabled",
+        "-Dnouveau=disabled",
+        "-Dvmwgfx=disabled",
+        "-Domap=disabled",
+        "-Dexynos=disabled",
+        "-Dfreedreno=disabled",
+        "-Dtegra=disabled",
+        "-Detnaviv=disabled",
+        "-Dcairo-tests=disabled",
+        "-Dman-pages=disabled",
+        "-Dvalgrind=disabled",
+        "-Dudev=false",
+        "-Dtests=false",
+        "-Dinstall-test-programs=false"
+      ],
+      "build-options": {
+        "strip": true
+      },
+      "sources": [
+        {
+          "type": "git",
+          "url": "https://gitlab.freedesktop.org/mesa/drm.git",
+          "tag": "libdrm-2.4.134",
+          "commit": "e984d448b8b17aab853369e6c203e53719f46de1"
+        }
+      ],
+      "cleanup": [
+        "/include",
+        "/lib/pkgconfig",
+        "/share"
+      ]
+    },
+    {
+      "name": "pyyaml",
+      "buildsystem": "simple",
+      "build-commands": [
+        "d=\"${FLATPAK_DEST}/lib/python$(python3 -c 'import sys; print(\"%d.%d\" % sys.version_info[:2])')/site-packages\"; mkdir -p \"$d\" && cp -r lib/yaml \"$d/\""
+      ],
+      "sources": [
+        {
+          "type": "archive",
+          "url": "https://files.pythonhosted.org/packages/source/P/PyYAML/pyyaml-6.0.2.tar.gz",
+          "sha256": "d584d9ec91ad65861cc08d42e834324ef890a082e591037abe114850ff7bbc3e"
+        }
+      ],
+      "cleanup": [
+        "/lib/python*"
+      ]
+    }
+  ]
+}

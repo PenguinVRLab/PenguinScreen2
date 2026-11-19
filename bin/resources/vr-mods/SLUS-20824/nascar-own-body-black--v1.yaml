@@ -1,0 +1,199 @@
+# SPDX-FileCopyrightText: 2026 Patrick Carey <patrickfcarey@gmail.com>
+# SPDX-License-Identifier: CC-BY-NC-4.0
+# Original vr-mods DATA (not GPL program code; not derived from PCSX2 or any game). Non-commercial
+# use/share/adapt with attribution; COMMERCIAL RIGHTS RESERVED. See vr-mods/LICENSE.md.
+SLUS-20824:
+  - name: "Own car body in the cockpit"
+    description: "Draws your own car's body, in black, around you in the cockpit views."
+    origin: PenguinVR
+    kind: fix
+    version: "1"
+    crcs: [0x612542D0]
+    enabled: true
+    # It changes only this machine's picture, so it may run in a networked match.
+    netplay:
+      effect: local
+      runs_in: [offline, lan, online]
+    # From the cockpit the game draws no car around the driver. 0x00219EB8 (nop) draws the camera's own car;
+    # the near and far body caves give that car alone a private VU1 entry table of BLACK stubs (black where
+    # the texture is opaque, see-through where it is not) and skip its exterior driver (part 2) and side glass
+    # (part 28). Every other car draws as stock. The car loop names the camera's own car only for camera
+    # types 2, 3 and 17 (Bumper, Cockpit, one more), so the chase cameras are untouched.
+    guards:
+      - { address: 0x00217E4C, equals: 0xAE260024, width: 4 }
+      - { address: 0x002180F8, equals: 0x0C095E92, width: 4 }
+    vu1:
+      - micro: 0x3C10
+        # BLACK stubs (nt04_black_stubs.vu, 104 instructions): ALPHA -> 0x46 = (0 - Cd) * As + Cd and
+        # PRMODE |= ABE in the batch's GS header at TOP-9, then the stock entry.
+        match:
+          - { micro: 0x1158, words: [0x800A06BC, 0x000002FF, 0x100B50C0, 0x000002FF] }
+          - { micro: 0x1228, words: [0x800A06BC, 0x000002FF, 0x100B50C0, 0x000002FF] }
+          - { micro: 0x0750, words: [0x800A06BC, 0x000002FF, 0x100B50C0, 0x000002FF] }
+          - { micro: 0x2F00, words: [0x800A06BC, 0x000002FF, 0x100B50C0, 0x000002FF] }
+          - { micro: 0x2FE8, words: [0x800A06BC, 0x000002FF, 0x100B50C0, 0x000002FF] }
+          - { micro: 0x0350, words: [0x800A06BC, 0x000002FF, 0x100B50C0, 0x000002FF] }
+          - { micro: 0x1318, words: [0x800A06BC, 0x000002FF, 0x100B50C0, 0x000002FF] }
+          - { micro: 0x13E8, words: [0x800A06BC, 0x000002FF, 0x100B50C0, 0x000002FF] }
+          - { micro: 0x1F60, words: [0x01E10800, 0x000002FF, 0x01E30801, 0x000002FF] }
+          - { micro: 0x20E8, words: [0x09040802, 0x000002FF, 0x01E10800, 0x000002FF] }
+        words: [
+          0x800A06BC, 0x000002FF, 0x10020046, 0x000002FF, 0x800155F2, 0x000002FF, 0x10040040, 0x000002FF,
+          0x09030800, 0x000002FF, 0x12050001, 0x000002FF, 0x100F022B, 0x000002FF, 0x0B020801, 0x000002FF,
+          0x0A800801, 0x000002FF, 0x800418F5, 0x000002FF, 0x800518F4, 0x000002FF, 0x48007800, 0x000002FF,
+          0x0B030800, 0x000002FF, 0x800A06BC, 0x000002FF, 0x10020046, 0x000002FF, 0x800155F2, 0x000002FF,
+          0x10040040, 0x000002FF, 0x09030800, 0x000002FF, 0x12050001, 0x000002FF, 0x100F0245, 0x000002FF,
+          0x0B020801, 0x000002FF, 0x0A800801, 0x000002FF, 0x800418F5, 0x000002FF, 0x800518F4, 0x000002FF,
+          0x48007800, 0x000002FF, 0x0B030800, 0x000002FF, 0x800A06BC, 0x000002FF, 0x10020046, 0x000002FF,
+          0x800155F2, 0x000002FF, 0x10040040, 0x000002FF, 0x09030800, 0x000002FF, 0x12050001, 0x000002FF,
+          0x100F00EA, 0x000002FF, 0x0B020801, 0x000002FF, 0x0A800801, 0x000002FF, 0x800418F5, 0x000002FF,
+          0x800518F4, 0x000002FF, 0x48007800, 0x000002FF, 0x0B030800, 0x000002FF, 0x800A06BC, 0x000002FF,
+          0x10020046, 0x000002FF, 0x800155F2, 0x000002FF, 0x10040040, 0x000002FF, 0x09030800, 0x000002FF,
+          0x12050001, 0x000002FF, 0x100F05E0, 0x000002FF, 0x0B020801, 0x000002FF, 0x0A800801, 0x000002FF,
+          0x800418F5, 0x000002FF, 0x800518F4, 0x000002FF, 0x48007800, 0x000002FF, 0x0B030800, 0x000002FF,
+          0x800A06BC, 0x000002FF, 0x10020046, 0x000002FF, 0x800155F2, 0x000002FF, 0x10040040, 0x000002FF,
+          0x09030800, 0x000002FF, 0x12050001, 0x000002FF, 0x100F05FD, 0x000002FF, 0x0B020801, 0x000002FF,
+          0x0A800801, 0x000002FF, 0x800418F5, 0x000002FF, 0x800518F4, 0x000002FF, 0x48007800, 0x000002FF,
+          0x0B030800, 0x000002FF, 0x800A06BC, 0x000002FF, 0x10020046, 0x000002FF, 0x800155F2, 0x000002FF,
+          0x10040040, 0x000002FF, 0x09030800, 0x000002FF, 0x12050001, 0x000002FF, 0x100F006A, 0x000002FF,
+          0x0B020801, 0x000002FF, 0x0A800801, 0x000002FF, 0x800418F5, 0x000002FF, 0x800518F4, 0x000002FF,
+          0x48007800, 0x000002FF, 0x0B030800, 0x000002FF, 0x800A06BC, 0x000002FF, 0x10020046, 0x000002FF,
+          0x800155F2, 0x000002FF, 0x10040040, 0x000002FF, 0x09030800, 0x000002FF, 0x12050001, 0x000002FF,
+          0x100F0263, 0x000002FF, 0x0B020801, 0x000002FF, 0x0A800801, 0x000002FF, 0x800418F5, 0x000002FF,
+          0x800518F4, 0x000002FF, 0x48007800, 0x000002FF, 0x0B030800, 0x000002FF, 0x800A06BC, 0x000002FF,
+          0x10020046, 0x000002FF, 0x800155F2, 0x000002FF, 0x10040040, 0x000002FF, 0x09030800, 0x000002FF,
+          0x12050001, 0x000002FF, 0x100F027D, 0x000002FF, 0x0B020801, 0x000002FF, 0x0A800801, 0x000002FF,
+          0x800418F5, 0x000002FF, 0x800518F4, 0x000002FF, 0x48007800, 0x000002FF, 0x0B030800, 0x000002FF]
+    ee:
+      - { address: 0x000F1D00, value: 0x3C190025 }
+      - { address: 0x000F1D04, value: 0x10000003 }
+      - { address: 0x000F1D08, value: 0x373965D0 }
+      - { address: 0x000F1D0C, value: 0x3C190025 }
+      - { address: 0x000F1D10, value: 0x373963A0 }
+      - { address: 0x000F1D14, value: 0x8FA802D0 }
+      - { address: 0x000F1D18, value: 0x15120021 }
+      - { address: 0x000F1D1C, value: 0x00000000 }
+      - { address: 0x000F1D20, value: 0x8E280024 }
+      - { address: 0x000F1D24, value: 0x3C0B000F }
+      - { address: 0x000F1D28, value: 0x356B1F00 }
+      - { address: 0x000F1D2C, value: 0x110B0014 }
+      - { address: 0x000F1D30, value: 0x240C0008 }
+      - { address: 0x000F1D34, value: 0x8D0D0000 }
+      - { address: 0x000F1D38, value: 0x3C0E000F }
+      - { address: 0x000F1D3C, value: 0x35CE1F40 }
+      - { address: 0x000F1D40, value: 0x8DCF0000 }
+      - { address: 0x000F1D44, value: 0x11E00006 }
+      - { address: 0x000F1D48, value: 0x8DD80004 }
+      - { address: 0x000F1D4C, value: 0x11ED0003 }
+      - { address: 0x000F1D50, value: 0x00000000 }
+      - { address: 0x000F1D54, value: 0x1000FFFA }
+      - { address: 0x000F1D58, value: 0x25CE0008 }
+      - { address: 0x000F1D5C, value: 0x0300682D }
+      - { address: 0x000F1D60, value: 0xAD6D0000 }
+      - { address: 0x000F1D64, value: 0x258CFFFF }
+      - { address: 0x000F1D68, value: 0x25080004 }
+      - { address: 0x000F1D6C, value: 0x1580FFF1 }
+      - { address: 0x000F1D70, value: 0x256B0004 }
+      - { address: 0x000F1D74, value: 0x3C0B000F }
+      - { address: 0x000F1D78, value: 0x356B1F00 }
+      - { address: 0x000F1D7C, value: 0xAE2B0024 }
+      - { address: 0x000F1D80, value: 0x3C090025 }
+      - { address: 0x000F1D84, value: 0x352963A0 }
+      - { address: 0x000F1D88, value: 0x17290005 }
+      - { address: 0x000F1D8C, value: 0x24090002 }
+      - { address: 0x000F1D90, value: 0x10A90005 }
+      - { address: 0x000F1D94, value: 0x2409001C }
+      - { address: 0x000F1D98, value: 0x10A90003 }
+      - { address: 0x000F1D9C, value: 0x00000000 }
+      - { address: 0x000F1DA0, value: 0x03200008 }
+      - { address: 0x000F1DA4, value: 0x00000000 }
+      - { address: 0x000F1DA8, value: 0x03E00008 }
+      - { address: 0x000F1DAC, value: 0x00000000 }
+      - { address: 0x000F1E00, value: 0x3C190025 }
+      - { address: 0x000F1E04, value: 0x10000003 }
+      - { address: 0x000F1E08, value: 0x373965D0 }
+      - { address: 0x000F1E0C, value: 0x3C190025 }
+      - { address: 0x000F1E10, value: 0x373963A0 }
+      - { address: 0x000F1E14, value: 0x8FA802A0 }
+      - { address: 0x000F1E18, value: 0x15120021 }
+      - { address: 0x000F1E1C, value: 0x00000000 }
+      - { address: 0x000F1E20, value: 0x8E080024 }
+      - { address: 0x000F1E24, value: 0x3C0B000F }
+      - { address: 0x000F1E28, value: 0x356B1F00 }
+      - { address: 0x000F1E2C, value: 0x110B0014 }
+      - { address: 0x000F1E30, value: 0x240C0008 }
+      - { address: 0x000F1E34, value: 0x8D0D0000 }
+      - { address: 0x000F1E38, value: 0x3C0E000F }
+      - { address: 0x000F1E3C, value: 0x35CE1F40 }
+      - { address: 0x000F1E40, value: 0x8DCF0000 }
+      - { address: 0x000F1E44, value: 0x11E00006 }
+      - { address: 0x000F1E48, value: 0x8DD80004 }
+      - { address: 0x000F1E4C, value: 0x11ED0003 }
+      - { address: 0x000F1E50, value: 0x00000000 }
+      - { address: 0x000F1E54, value: 0x1000FFFA }
+      - { address: 0x000F1E58, value: 0x25CE0008 }
+      - { address: 0x000F1E5C, value: 0x0300682D }
+      - { address: 0x000F1E60, value: 0xAD6D0000 }
+      - { address: 0x000F1E64, value: 0x258CFFFF }
+      - { address: 0x000F1E68, value: 0x25080004 }
+      - { address: 0x000F1E6C, value: 0x1580FFF1 }
+      - { address: 0x000F1E70, value: 0x256B0004 }
+      - { address: 0x000F1E74, value: 0x3C0B000F }
+      - { address: 0x000F1E78, value: 0x356B1F00 }
+      - { address: 0x000F1E7C, value: 0xAE0B0024 }
+      - { address: 0x000F1E80, value: 0x3C090025 }
+      - { address: 0x000F1E84, value: 0x352963A0 }
+      - { address: 0x000F1E88, value: 0x17290005 }
+      - { address: 0x000F1E8C, value: 0x24090002 }
+      - { address: 0x000F1E90, value: 0x10A90005 }
+      - { address: 0x000F1E94, value: 0x2409001C }
+      - { address: 0x000F1E98, value: 0x10A90003 }
+      - { address: 0x000F1E9C, value: 0x00000000 }
+      - { address: 0x000F1EA0, value: 0x03200008 }
+      - { address: 0x000F1EA4, value: 0x00000000 }
+      - { address: 0x000F1EA8, value: 0x03E00008 }
+      - { address: 0x000F1EAC, value: 0x00000000 }
+      - { address: 0x000F1F40, value: 0x00001158 }
+      - { address: 0x000F1F44, value: 0x00003C10 }
+      - { address: 0x000F1F48, value: 0x00001228 }
+      - { address: 0x000F1F4C, value: 0x00003C78 }
+      - { address: 0x000F1F50, value: 0x00000750 }
+      - { address: 0x000F1F54, value: 0x00003CE0 }
+      - { address: 0x000F1F58, value: 0x00002F00 }
+      - { address: 0x000F1F5C, value: 0x00003D48 }
+      - { address: 0x000F1F60, value: 0x00002FE8 }
+      - { address: 0x000F1F64, value: 0x00003DB0 }
+      - { address: 0x000F1F68, value: 0x00000350 }
+      - { address: 0x000F1F6C, value: 0x00003E18 }
+      - { address: 0x000F1F70, value: 0x00001318 }
+      - { address: 0x000F1F74, value: 0x00003E80 }
+      - { address: 0x000F1F78, value: 0x000013E8 }
+      - { address: 0x000F1F7C, value: 0x00003EE8 }
+      - { address: 0x000F1F80, value: 0x00000000 }
+      - { address: 0x000F1F84, value: 0x00000000 }
+      - { address: 0x00217E98, value: 0x0C03C743, original: 0x0C0958E8 }
+      - { address: 0x00217EBC, value: 0x0C03C743, original: 0x0C0958E8 }
+      - { address: 0x00217ED8, value: 0x0C03C743, original: 0x0C0958E8 }
+      - { address: 0x00217F24, value: 0x0C03C743, original: 0x0C0958E8 }
+      - { address: 0x00217F54, value: 0x0C03C743, original: 0x0C0958E8 }
+      - { address: 0x00217F64, value: 0x0C03C743, original: 0x0C0958E8 }
+      - { address: 0x00217F74, value: 0x0C03C743, original: 0x0C0958E8 }
+      - { address: 0x00217F98, value: 0x0C03C743, original: 0x0C0958E8 }
+      - { address: 0x00217FB8, value: 0x0C03C743, original: 0x0C0958E8 }
+      - { address: 0x00218020, value: 0x0C03C743, original: 0x0C0958E8 }
+      - { address: 0x0021804C, value: 0x0C03C743, original: 0x0C0958E8 }
+      - { address: 0x0021805C, value: 0x0C03C743, original: 0x0C0958E8 }
+      - { address: 0x00218074, value: 0x0C03C743, original: 0x0C0958E8 }
+      - { address: 0x00218098, value: 0x0C03C743, original: 0x0C0958E8 }
+      - { address: 0x002180B8, value: 0x0C03C743, original: 0x0C0958E8 }
+      - { address: 0x00217BA8, value: 0x0C03C783, original: 0x0C0958E8 }
+      - { address: 0x00217BB8, value: 0x0C03C783, original: 0x0C0958E8 }
+      - { address: 0x00217BFC, value: 0x0C03C783, original: 0x0C0958E8 }
+      - { address: 0x00217C10, value: 0x0C03C783, original: 0x0C0958E8 }
+      - { address: 0x00217C20, value: 0x0C03C783, original: 0x0C0958E8 }
+      - { address: 0x00217C40, value: 0x0C03C783, original: 0x0C0958E8 }
+      - { address: 0x00217C60, value: 0x0C03C783, original: 0x0C0958E8 }
+      - { address: 0x00217F44, value: 0x0C03C740, original: 0x0C095974 }
+      - { address: 0x00217FFC, value: 0x0C03C740, original: 0x0C095974 }
+      - { address: 0x00217BE8, value: 0x0C03C780, original: 0x0C095974 }
+      - { address: 0x00219EB8, value: 0x00000000, original: 0x13D00010 }

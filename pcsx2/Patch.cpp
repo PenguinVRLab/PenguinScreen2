@@ -18,6 +18,9 @@
 #include "Memory.h"
 #include "Patch.h"
 #include "R5900.h"
+#ifdef ENABLE_VR
+#include "VR/NetplayModList.h"
+#endif
 
 #include "IconsFontAwesome.h"
 #include "fmt/format.h"
@@ -781,6 +784,20 @@ void Patch::UpdateActivePatches(bool reload_enabled_list, bool verbose, bool ver
 
 	if ((!s_active_gamedb_dynamic_patches.empty() || !s_active_pnach_dynamic_patches.empty()) && Cpu)
 		Cpu->Reset();
+
+#ifdef ENABLE_VR
+	const auto names = [](const std::vector<PatchGroup>& groups, const std::vector<std::string>& enable_list) {
+		std::vector<std::string> out;
+		for (const PatchGroup& g : groups)
+		{
+			if (g.name.empty() || std::find(enable_list.begin(), enable_list.end(), g.name) != enable_list.end())
+				out.push_back(g.name.empty() ? std::string("unnamed") : g.name);
+		}
+		return out;
+	};
+	VR::Netplay::SetLocalPatches(names(s_game_patches, s_enabled_patches),
+		EmuConfig.EnableCheats ? names(s_cheat_patches, s_enabled_cheats) : std::vector<std::string>());
+#endif
 }
 
 void Patch::ApplyPatchSettingOverrides()
@@ -841,6 +858,9 @@ void Patch::UnloadPatches()
 	decltype(s_cheat_patches)().swap(s_cheat_patches);
 	decltype(s_game_patches)().swap(s_game_patches);
 	decltype(s_gamedb_patches)().swap(s_gamedb_patches);
+#ifdef ENABLE_VR
+	VR::Netplay::SetLocalPatches({}, {});
+#endif
 }
 
 void Patch::PatchFunc::patch(PatchGroup* group, const std::string_view cmd, const std::string_view param)

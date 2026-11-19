@@ -286,6 +286,15 @@ if(ENABLE_VR)
 	)
 endif()
 
+# PadXR bindings page: a view over pcsx2/VR/PadXRBindings.h,
+# VR-only like the page above.
+if(ENABLE_VR)
+	target_sources(pcsx2-qt PRIVATE
+		Settings/PadXRBindingsWidget.cpp
+		Settings/PadXRBindingsWidget.h
+	)
+endif()
+
 if (NOT APPLE)
     target_sources(pcsx2-qt PRIVATE
         ShortcutCreationDialog.cpp

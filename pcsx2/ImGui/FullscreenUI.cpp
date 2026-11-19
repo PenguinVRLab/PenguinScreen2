@@ -23,6 +23,18 @@
 #include "USB/USB.h"
 #include "VMManager.h"
 #include "ps2/BiosTools.h"
+#ifdef ENABLE_VR
+#include "VR/XRCompositor.h"
+#include "VR/HandCapture.h"
+#include "VR/NearField.h"
+#include "VR/VRManager.h"
+#include "VR/VRMods.h"
+#include "VR/VRModsMenu.h"
+#include "VR/VRRelaunch.h"
+#include "VR/VROptionsReadout.h"
+#include "VR/VRProfileDB.h"
+#include "common/Timer.h"
+#endif
 
 #include "common/Console.h"
 #include "common/Error.h"
@@ -43,6 +55,38 @@
 #include "imgui_internal.h"
 
 #include "fmt/chrono.h"
+
+#ifdef ENABLE_VR
+namespace FullscreenUI
+{
+	enum class VRQuickPage
+	{
+		Main,
+		Mods,
+	};
+	enum class VRQuickClose
+	{
+		Resume,
+		SystemButton,
+		CloseGame,
+	};
+	static VRQuickPage s_vr_quick_page = VRQuickPage::Main;
+	static std::vector<VR::OptionsReadout::Row> s_vr_readout;
+	static bool s_vr_readout_ready = false;
+	static u32 s_vr_snapshot_seq = 0;
+	static bool s_vr_snapshot_pending = false;
+	static Common::Timer::Value s_vr_snapshot_time = 0;
+	static bool s_vr_dialog_open = false;
+
+	static void RequestVRMenuSnapshot();
+	static void RequestVRQuickMenuClose(VRQuickClose via);
+	static void DrawVRModsPage(bool just_focused);
+	static void ResetVRQuickMenuState();
+	static void ReportVRRestartRefused(std::string text);
+	static void VRArmRestartAfterGameCloses();
+	static void VRDisarmRestartAfterGameCloses();
+}
+#endif
 
 TinyString FullscreenUI::TimeToPrintableString(time_t t)
 {
@@ -399,6 +443,9 @@ void FullscreenUI::OnVMStarted()
 		if (!IsInitialized())
 			return;
 
+#ifdef ENABLE_VR
+		ResetVRQuickMenuState();
+#endif
 		s_current_main_window = MainWindowType::None;
 		QueueResetFocus(FocusResetType::WindowChanged);
 	});
@@ -416,6 +463,10 @@ void FullscreenUI::OnVMDestroyed()
 		s_pause_menu_was_open = false;
 		s_was_paused_on_quick_menu_open = false;
 		s_current_pause_submenu = PauseSubMenu::None;
+#ifdef ENABLE_VR
+		ResetVRQuickMenuState();
+		VRDisarmRestartAfterGameCloses();
+#endif
 		ReturnToMainWindow();
 	});
 }
@@ -478,8 +529,71 @@ void FullscreenUI::OpenPauseMenu()
 	});
 }
 
+void FullscreenUI::OpenVRQuickMenu()
+{
+	if (!VMManager::HasValidVM() || !ImGuiManager::InitializeFullscreenUI() || s_current_main_window != MainWindowType::None)
+		return;
+	const bool online = EmuConfig.DEV9.EthEnable || VMManager::IsOnlineLocked();
+	if (!online)
+		PauseForMenuOpen(true);
+	else
+		s_was_paused_on_quick_menu_open = (VMManager::GetState() == VMState::Paused);
+	ForceKeyNavEnabled();
+	s_current_main_window = MainWindowType::VRQuickMenu;
+	s_current_pause_submenu = PauseSubMenu::None;
+	QueueResetFocus(FocusResetType::WindowChanged);
+#ifdef ENABLE_VR
+	ResetVRQuickMenuState();
+	RequestVRMenuSnapshot();
+#endif
+	Console.WriteLn("(VR) UiPanel: quick menu open (%s).", online ? "online: not paused, the pad is masked" : "paused");
+}
+
+void FullscreenUI::ToggleVRQuickMenu()
+{
+	if (IsVRQuickMenuOpen())
+	{
+#ifdef ENABLE_VR
+		RequestVRQuickMenuClose(VRQuickClose::SystemButton);
+#else
+		ClosePauseMenu();
+#endif
+		return;
+	}
+	OpenVRQuickMenu();
+}
+
+bool FullscreenUI::IsVRQuickMenuOpen()
+{
+	return s_initialized && s_current_main_window == MainWindowType::VRQuickMenu;
+}
+
+void FullscreenUI::CloseVRUi()
+{
+	if (!IsInitialized())
+		return;
+	const bool quick = (s_current_main_window == MainWindowType::VRQuickMenu);
+#ifdef ENABLE_VR
+	if (quick)
+	{
+		RequestVRQuickMenuClose(VRQuickClose::SystemButton);
+		return;
+	}
+#endif
+	if (quick || s_current_main_window == MainWindowType::PauseMenu)
+	{
+		ClosePauseMenu();
+		Console.WriteLn("(VR) UiPanel: %s closed (system button).", quick ? "quick menu" : "pause menu");
+	}
+}
+
 void FullscreenUI::ClosePauseMenu()
 {
+#ifdef ENABLE_VR
+	VRDisarmRestartAfterGameCloses();
+#endif
+	if (VRQuickMenuBlocksLeave())
+		return;
 	if (!IsInitialized() || !VMManager::HasValidVM())
 		return;
 
@@ -494,6 +608,12 @@ void FullscreenUI::ClosePauseMenu()
 
 void FullscreenUI::OpenPauseSubMenu(PauseSubMenu submenu)
 {
+#ifdef ENABLE_VR
+	if (submenu != PauseSubMenu::Exit)
+		VRDisarmRestartAfterGameCloses();
+#endif
+	if (VRQuickMenuBlocksLeave())
+		return;
 	s_current_main_window = MainWindowType::PauseMenu;
 	s_current_pause_submenu = submenu;
 	QueueResetFocus(FocusResetType::WindowChanged);
@@ -526,6 +646,9 @@ void FullscreenUI::Shutdown(bool clear_state)
 		s_pause_menu_was_open = false;
 		s_was_paused_on_quick_menu_open = false;
 		s_about_window_open = false;
+#ifdef ENABLE_VR
+		ResetVRQuickMenuState();
+#endif
 	}
 	s_hotkey_list_cache = {};
 
@@ -599,6 +722,9 @@ void FullscreenUI::Render()
 			break;
 		case MainWindowType::PauseMenu:
 			DrawPauseMenu(s_current_main_window);
+			break;
+		case MainWindowType::VRQuickMenu:
+			DrawVRQuickMenu();
 			break;
 		case MainWindowType::Achievements:
 			Achievements::DrawAchievementsWindow();
@@ -687,6 +813,8 @@ void FullscreenUI::InvalidateCoverCache()
 
 void FullscreenUI::ReturnToPreviousWindow()
 {
+	if (VRQuickMenuBlocksLeave())
+		return;
 	if (VMManager::HasValidVM() && s_pause_menu_was_open)
 	{
 		s_current_main_window = MainWindowType::PauseMenu;
@@ -700,6 +828,8 @@ void FullscreenUI::ReturnToPreviousWindow()
 
 void FullscreenUI::ReturnToMainWindow()
 {
+	if (VRQuickMenuBlocksLeave())
+		return;
 	ClosePauseMenu();
 
 	if (VMManager::HasValidVM())
@@ -912,6 +1042,9 @@ void FullscreenUI::RequestShutdown(bool save_state)
 
 void FullscreenUI::DoShutdown(bool save_state)
 {
+#ifdef ENABLE_VR
+	VRArmRestartAfterGameCloses();
+#endif
 	Host::RunOnCPUThread([save_state]() { Host::RequestVMShutdown(false, save_state, save_state); });
 }
 
@@ -1486,6 +1619,512 @@ static void DrawShadowedText(
 {
 	ImGuiFullscreen::AddTextWithShadow(dl, font, pos, col, text, text_end, wrap_width);
 }
+
+#ifdef ENABLE_VR
+static void DrawVRWrappedRow(const std::string& text, const char* id, float min_height)
+{
+	const float width = std::max(1.0f, ImGui::GetContentRegionAvail().x - ImGui::GetStyle().FramePadding.x * 2.0f);
+	const float text_h = g_large_font.first->CalcTextSizeA(g_large_font.second, FLT_MAX, width, text.c_str()).y;
+	ImVec2 min, max;
+	bool visible, hovered;
+	MenuButtonFrame(id, true, std::max(min_height, ImGuiFullscreen::LayoutUnscale(text_h)), &visible, &hovered, &min, &max);
+	if (!visible)
+		return;
+	const ImVec4 clip(min.x, min.y, max.x, max.y);
+	ImGuiFullscreen::AddTextWithShadow(ImGui::GetWindowDrawList(), g_large_font, min, ImGui::GetColorU32(ImGuiCol_Text), text.c_str(),
+		nullptr, width, &clip);
+}
+
+static bool DrawVRModLine(const char* id, const VR::ModsMenu::LineText& t, bool on, bool enabled, float min_height)
+{
+	const float toggle_width = LayoutScale(50.0f);
+	const float toggle_height = LayoutScale(25.0f);
+	const float toggle_gap = LayoutScale(8.0f);
+	const float row_gap = LayoutScale(4.0f);
+	const float text_w = std::max(1.0f, ImGui::GetContentRegionAvail().x - ImGui::GetStyle().FramePadding.x * 2.0f - toggle_width - toggle_gap);
+	const auto height_of = [text_w](const std::pair<ImFont*, float>& font, const std::string& s) {
+		return s.empty() ? 0.0f : font.first->CalcTextSizeA(font.second, FLT_MAX, text_w, s.c_str()).y;
+	};
+	const float name_h = height_of(g_large_font, t.name);
+	const float desc_h = height_of(g_medium_font, t.description);
+	const float sub_h = height_of(g_medium_font, t.subtext);
+	const float content = name_h + (desc_h > 0.0f ? row_gap + desc_h : 0.0f) + (sub_h > 0.0f ? row_gap + sub_h : 0.0f);
+	ImVec2 min, max;
+	bool visible, hovered;
+	const bool pressed = MenuButtonFrame(id, enabled, std::max(min_height, ImGuiFullscreen::LayoutUnscale(std::max(content, toggle_height))),
+		&visible, &hovered, &min, &max, ImGuiButtonFlags_PressedOnClick);
+	if (!visible)
+		return false;
+	ImDrawList* dl = ImGui::GetWindowDrawList();
+	const ImVec4 clip(min.x, min.y, min.x + text_w, max.y);
+	const ImVec4 text_col = ImGui::GetStyleColorVec4(enabled ? ImGuiCol_Text : ImGuiCol_TextDisabled);
+	float y = min.y;
+	ImGuiFullscreen::AddTextWithShadow(dl, g_large_font, ImVec2(min.x, y), ImGui::GetColorU32(text_col), t.name.c_str(), nullptr, text_w, &clip);
+	y += name_h;
+	if (desc_h > 0.0f)
+	{
+		y += row_gap;
+		ImGuiFullscreen::AddTextWithShadow(dl, g_medium_font, ImVec2(min.x, y), ImGui::GetColorU32(MulAlpha(text_col, 0.85f)),
+			t.description.c_str(), nullptr, text_w, &clip);
+		y += desc_h;
+	}
+	if (sub_h > 0.0f)
+	{
+		y += row_gap;
+		ImGuiFullscreen::AddTextWithShadow(dl, g_medium_font, ImVec2(min.x, y), ImGui::GetColorU32(MulAlpha(text_col, 0.60f)),
+			t.subtext.c_str(), nullptr, text_w, &clip);
+	}
+	const float radius = toggle_height * 0.5f;
+	const float tv = on ? 1.0f : 0.0f;
+	const ImVec2 toggle_pos(max.x - toggle_width, min.y + (max.y - min.y - toggle_height) * 0.5f);
+	const ImU32 col_bg = enabled ? ImGui::GetColorU32(ImLerp(HEX_TO_IMVEC4(0x8C8C8C, 0xff), ImGuiFullscreen::UISecondaryStrongColor, tv)) :
+								   ImGui::GetColorU32(ImGuiFullscreen::UIDisabledColor);
+	const ImU32 col_knob = enabled ? IM_COL32(255, 255, 255, 255) : IM_COL32(200, 200, 200, 200);
+	dl->AddRectFilled(toggle_pos, ImVec2(toggle_pos.x + toggle_width, toggle_pos.y + toggle_height), col_bg, radius);
+	dl->AddCircleFilled(ImVec2(toggle_pos.x + radius + tv * (toggle_width - radius * 2.0f), toggle_pos.y + radius), radius - 1.5f, col_knob, 32);
+	return pressed;
+}
+#endif
+
+void FullscreenUI::DrawVRQuickMenu()
+{
+	ImDrawList* dl = ImGui::GetBackgroundDrawList();
+	const ImVec2 display_size(ImGui::GetIO().DisplaySize);
+	dl->AddRectFilled(
+		ImVec2(0.0f, 0.0f), display_size, IM_COL32(UIBackgroundColor.x * 255, UIBackgroundColor.y * 255, UIBackgroundColor.z * 255, 200));
+
+	const ImVec2 window_size(LayoutScale(640.0f), std::max(0.0f, display_size.y - LayoutScale(LAYOUT_FOOTER_HEIGHT)));
+	const ImVec2 window_pos((display_size.x - window_size.x) * 0.5f, 0.0f);
+	if (BeginFullscreenWindow(window_pos, window_size, "vr_quick_menu", ImVec4(0.0f, 0.0f, 0.0f, 0.0f), 0.0f,
+			ImVec2(10.0f, 10.0f), ImGuiWindowFlags_NoBackground))
+	{
+		const bool just_focused = ResetFocusHere();
+#ifdef ENABLE_VR
+		if (s_vr_quick_page == VRQuickPage::Mods)
+		{
+			DrawVRModsPage(just_focused);
+			EndFullscreenWindow();
+			return;
+		}
+		if (!s_vr_snapshot_pending &&
+			Common::Timer::ConvertValueToSeconds(Common::Timer::GetCurrentValue() - s_vr_snapshot_time) >= 1.0)
+			RequestVRMenuSnapshot();
+		BeginMenuButtons(0, 0.0f, ImGuiFullscreen::LAYOUT_MENU_BUTTON_X_PADDING, ImGuiFullscreen::LAYOUT_MENU_BUTTON_Y_PADDING,
+			ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY);
+#else
+		BeginMenuButtons(10, 1.0f, ImGuiFullscreen::LAYOUT_MENU_BUTTON_X_PADDING, ImGuiFullscreen::LAYOUT_MENU_BUTTON_Y_PADDING,
+			ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY);
+#endif
+
+		if (just_focused)
+			ImGui::SetFocusID(ImGui::GetID(FSUI_ICONSTR(ICON_FA_PLAY, "Resume")), ImGui::GetCurrentWindow());
+
+		if (ActiveButton(FSUI_ICONSTR(ICON_FA_PLAY, "Resume"), false) || WantsToCloseMenu())
+		{
+#ifdef ENABLE_VR
+			RequestVRQuickMenuClose(VRQuickClose::Resume);
+			EndMenuButtons();
+			EndFullscreenWindow();
+			return;
+#else
+			ClosePauseMenu();
+#endif
+		}
+
+#ifdef ENABLE_VR
+		if (VR::WantsVR() && ActiveButton(FSUI_ICONSTR(ICON_FA_ARROWS_ROTATE, "Recenter"), false))
+			VR::XRCompositor::RequestUiRecentre();
+#endif
+
+		SettingsInterface* bsi = GetEditingSettingsInterface(false);
+		const float h = ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY;
+		DrawFloatRangeSetting(bsi, FSUI_ICONSTR(ICON_FA_TV, "Screen Distance"), nullptr, "VR", "ScreenDistance", 2.0f, 0.5f,
+			10.0f, "%.1f m", 1.0f, true, h);
+		DrawFloatRangeSetting(bsi, FSUI_ICONSTR(ICON_FA_TV, "Screen Height"), nullptr, "VR", "ScreenHeight", 1.4f, 0.3f, 6.0f,
+			"%.1f m", 1.0f, true, h);
+		DrawFloatRangeSetting(bsi, FSUI_ICONSTR(ICON_FA_ARROWS_UP_DOWN, "Screen Vertical Offset"), nullptr, "VR",
+			"ScreenVerticalOffset", 0.0f, -1.0f, 1.0f, "%.2f m", 1.0f, true, h);
+		DrawFloatRangeSetting(bsi, FSUI_ICONSTR(ICON_FA_TV, "Screen Curve"), nullptr, "VR", "ScreenArcDeg", 100.0f, 0.0f, 270.0f,
+			"%.0f deg", 1.0f, true, h);
+		DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_GLASSES, "Stereo"), nullptr, "VR", "StereoMode", true, true, false, h);
+		DrawToggleSetting(bsi, FSUI_ICONSTR(ICON_FA_VIDEO, "Head Camera"), nullptr, "VR", "HeadCamera", true, true, false, h);
+#ifdef ENABLE_VR
+		if (VR::HandCapture::Global().HasRecipe() && !s_current_disc_serial.empty() && s_current_disc_crc != 0)
+		{
+			bool game_hands = VR::HandCapture::Global().Enabled();
+			if (ImGuiFullscreen::ToggleButton(FSUI_ICONSTR(ICON_FA_GAMEPAD, "Game Hands"), nullptr, &game_hands, true, h))
+			{
+				VR::HandCapture::Global().SetEnabled(game_hands);
+				if (game_hands)
+					VR::NearField::SetProfileHands(VR::NearField::Hands::Game);
+				INISettingsInterface gsi(VMManager::GetGameSettingsPath(s_current_disc_serial, s_current_disc_crc));
+				gsi.Load();
+				gsi.SetBoolValue("VR", "GameHands", game_hands);
+				if (!gsi.Save())
+					Console.Warning("(VR) Game Hands: the game's settings file could not be written; the choice lasts this session.");
+				Host::RunOnCPUThread([]() { VMManager::ReloadGameSettings(); });
+			}
+		}
+#endif
+
+		const bool paused = (VMManager::GetState() == VMState::Paused);
+		if (ActiveButton(paused ? FSUI_ICONSTR(ICON_FA_PLAY, "Unpause Game") : FSUI_ICONSTR(ICON_FA_PAUSE, "Pause Game"), false))
+		{
+			s_was_paused_on_quick_menu_open = !paused;
+			Host::RunOnCPUThread([pause = !paused]() { VMManager::SetPaused(pause); });
+		}
+
+#ifdef ENABLE_VR
+		{
+			const size_t held = s_vr_mods_model.Changes().size();
+			const std::string mods = held ? fmt::format("{} Mods ({} change{} held)", ICON_FA_PUZZLE_PIECE, held, held == 1 ? "" : "s") :
+											fmt::format("{} Mods", ICON_FA_PUZZLE_PIECE);
+			if (ActiveButton(mods.c_str(), false))
+			{
+				s_vr_quick_page = VRQuickPage::Mods;
+				QueueResetFocus(FocusResetType::WindowChanged);
+			}
+		}
+#endif
+
+		if (ActiveButton(FSUI_ICONSTR(ICON_FA_POWER_OFF, "Close Game"), false))
+		{
+#ifdef ENABLE_VR
+			RequestVRQuickMenuClose(VRQuickClose::CloseGame);
+#else
+			OpenPauseSubMenu(PauseSubMenu::Exit);
+#endif
+		}
+
+#ifdef ENABLE_VR
+		MenuHeading("This game");
+		if (!s_vr_readout_ready)
+			ActiveButton("Reading this game's VR options...", false, false, h);
+		for (size_t i = 0; i < s_vr_readout.size(); i++)
+			DrawVRWrappedRow(s_vr_readout[i].text, fmt::format("##vr-this-game-{}", i).c_str(), h);
+#endif
+
+		EndMenuButtons();
+	}
+	EndFullscreenWindow();
+}
+
+#ifdef ENABLE_VR
+void FullscreenUI::ResetVRQuickMenuState()
+{
+	s_vr_quick_page = VRQuickPage::Main;
+	s_vr_mods_model.Discard();
+	s_vr_readout.clear();
+	s_vr_readout_ready = false;
+	s_vr_snapshot_seq++;
+	s_vr_snapshot_pending = false;
+	if (s_vr_dialog_open)
+	{
+		s_vr_dialog_open = false;
+		if (ImGuiFullscreen::IsMessageBoxDialogOpen())
+			ImGuiFullscreen::CloseMessageDialog();
+	}
+}
+
+static VR::OptionsReadout::Facts GatherVRMenuFacts()
+{
+	VR::OptionsReadout::Facts f;
+	f.vr_on = VR::WantsVR();
+	f.running = VMManager::HasValidVM();
+	const Pcsx2Config::VROptions& c = EmuConfig.VR;
+	{
+		auto lock = Host::GetSettingsLock();
+		const SettingsInterface* game = Host::Internal::GetGameSettingsLayer();
+		const auto in_game = [game](const char* key) { return game && game->ContainsValue("VR", key); };
+		f.stereo_mode = {c.StereoMode, in_game("StereoMode")};
+		f.stereo_use_profile = {c.StereoUseProfile, in_game("StereoUseProfile")};
+		f.head_camera = {c.HeadCamera, in_game("HeadCamera")};
+		f.game_fov = {c.GameFov, in_game("GameFov")};
+		f.world_projection = {c.WorldProjection, in_game("WorldProjection")};
+		f.follows_patch_aspect = {c.ScreenFollowsPatchAspect, in_game("ScreenFollowsPatchAspect")};
+		f.stereo_separation = {c.StereoSeparation, in_game("StereoSeparation")};
+		f.stereo_convergence = {c.StereoConvergence, in_game("StereoConvergence")};
+		f.screen_distance = {c.ScreenDistance, in_game("ScreenDistance")};
+		f.screen_height = {c.ScreenHeight, in_game("ScreenHeight")};
+		f.screen_vertical_offset = {c.ScreenVerticalOffset, in_game("ScreenVerticalOffset")};
+		f.screen_arc_deg = {c.ScreenArcDeg, in_game("ScreenArcDeg")};
+		f.display_fit_fill = {c.DisplayFitFill, in_game("DisplayFitFill")};
+		f.curve_fallback = {c.ScreenCurveFallback, in_game("ScreenCurveFallback")};
+		bool game_hands = false;
+		if (game && game->GetBoolValue("VR", "GameHands", &game_hands))
+			f.game_hands_setting = game_hands;
+	}
+	const std::string serial = VMManager::GetDiscSerial();
+	const VR::ProfileDB::Profile* p = serial.empty() ? nullptr : VR::ProfileDB::Lookup(serial, VMManager::GetDiscCRC());
+	if (p)
+	{
+		f.has_profile = true;
+		f.profile_name = p->name;
+		f.profile_user = p->from_user_folder;
+		f.p_stereo = p->stereo.has_value();
+		if (p->stereo.has_value())
+		{
+			f.p_separation = p->stereo->separation;
+			f.p_convergence = p->stereo->convergence;
+		}
+		f.p_camera = p->camera.has_value();
+		f.p_fov = p->fov.has_value();
+		f.p_projection = p->projection.has_value();
+		f.p_screen_distance = p->screen_distance;
+		f.p_screen_height = p->screen_height;
+		f.p_screen_arc_deg = p->screen_arc_deg;
+		f.p_follow_head = p->screen_follow_head;
+		if (p->screen_curve_fallback.has_value())
+			f.p_curve_fallback = std::string(VR::ScreenCurve::FallbackName(p->screen_curve_fallback.value()));
+		if (p->hands != VR::NearField::Hands::Off)
+			f.p_hands = VR::NearField::HandsName(p->hands);
+		f.p_game_hands_recipe = p->game_hands.has_value();
+		f.p_hands_game = p->hands == VR::NearField::Hands::Game;
+		f.p_controls = static_cast<u32>(p->controls.size());
+		f.p_split = p->split.has_value();
+	}
+	return f;
+}
+
+void FullscreenUI::RequestVRMenuSnapshot()
+{
+	const u32 seq = ++s_vr_snapshot_seq;
+	s_vr_snapshot_pending = true;
+	s_vr_snapshot_time = Common::Timer::GetCurrentValue();
+	Host::RunOnCPUThread([seq]() {
+		VR::Mods::EnsureLoaded();
+		std::vector<VR::Mods::Line> lines = VR::Mods::Lines();
+		std::vector<VR::Mods::Mod> mods = VR::Mods::ModsOf(VMManager::GetDiscSerial());
+		std::vector<VR::OptionsReadout::Row> rows = VR::OptionsReadout::Describe(GatherVRMenuFacts());
+		MTGS::RunOnGSThread([seq, lines = std::move(lines), mods = std::move(mods), rows = std::move(rows)]() {
+			if (!IsInitialized() || seq != s_vr_snapshot_seq)
+				return;
+			s_vr_mods_model.SetMods(mods);
+			s_vr_mods_model.SetLines(lines);
+			s_vr_readout = rows;
+			s_vr_readout_ready = true;
+			s_vr_snapshot_pending = false;
+		});
+	});
+}
+
+static bool WriteVRModChanges(const std::vector<VR::ModsMenu::Change>& changes)
+{
+	const VR::ModsMenu::WriteOutcome w = VR::ModsMenu::WritePlayerCopies(FullscreenUI::s_vr_mods_model.Lines(), changes, EmuFolders::VRMods);
+	if (!w.ok)
+	{
+		Console.WarningFmt("(VR) Mods menu: your switches were not saved: {}", w.refusal);
+		FullscreenUI::s_vr_dialog_open = true;
+		ImGuiFullscreen::OpenInfoMessageDialog("Mods", fmt::format("Your switches were not saved: {}", w.refusal),
+			[]() { FullscreenUI::s_vr_dialog_open = false; });
+		return false;
+	}
+	for (const std::string& path : w.written)
+		Console.WriteLnFmt("(VR) Mods menu: wrote the player's copy {}", path);
+	for (const std::string& path : w.removed)
+		Console.WriteLnFmt("(VR) Mods menu: removed the player's copy of an older version {}", path);
+	FullscreenUI::s_vr_mods_model.Discard();
+	return true;
+}
+
+static bool WriteHeldVRModChanges()
+{
+	return WriteVRModChanges(FullscreenUI::s_vr_mods_model.Changes());
+}
+
+static VR::ModsMenu::GameId CurrentVRMenuGame()
+{
+	return {VMManager::HasValidVM(), FullscreenUI::s_current_disc_serial, FullscreenUI::s_current_disc_crc};
+}
+
+static std::string VRGameKey(const VR::ModsMenu::GameId& g)
+{
+	return g.running ? fmt::format("{}/{:08X}", g.serial, g.crc) : std::string();
+}
+
+void FullscreenUI::ReportVRRestartRefused(std::string text)
+{
+	if (!VMManager::HasValidVM())
+		return;
+	Console.WarningFmt("(VR) Mods menu: {}", text);
+	if (s_current_main_window == MainWindowType::None)
+	{
+		s_current_main_window = MainWindowType::VRQuickMenu;
+		s_vr_quick_page = VRQuickPage::Main;
+		QueueResetFocus(FocusResetType::WindowChanged);
+		RequestVRMenuSnapshot();
+	}
+	s_vr_dialog_open = true;
+	ImGuiFullscreen::OpenInfoMessageDialog("Restart", std::move(text), []() { s_vr_dialog_open = false; });
+}
+
+void FullscreenUI::RequestVRQuickMenuClose(VRQuickClose via)
+{
+	const VR::ModsMenu::CloseDecision d = VR::ModsMenu::DecideClose(s_vr_mods_model);
+	if (d.prompt)
+	{
+		if (ImGuiFullscreen::IsMessageBoxDialogOpen())
+			return;
+		Console.WriteLn("(VR) UiPanel: quick menu close held: changes need a restart (prompt shown).");
+		const VR::ModsMenu::GameId asked = CurrentVRMenuGame();
+		s_vr_dialog_open = true;
+		const bool close_game = (via == VRQuickClose::CloseGame);
+		ImGuiFullscreen::OpenConfirmMessageDialog("Restart", VR::ModsMenu::RestartPromptText(close_game), [asked, close_game](bool proceed) {
+			s_vr_dialog_open = false;
+			const VR::ModsMenu::PromptOutcome o = VR::ModsMenu::AnswerPrompt(s_vr_mods_model, proceed, asked, CurrentVRMenuGame(), close_game);
+			if (o.discard)
+			{
+				Console.WriteLn("(VR) Mods menu: the prompt was answered after its game ended; nothing is saved.");
+				s_vr_mods_model.Discard();
+				return;
+			}
+			if (o.keep_open)
+				return;
+			if (o.write && !WriteVRModChanges(o.changes))
+				return;
+			if (o.close_game)
+			{
+				ResetVRQuickMenuState();
+				OpenPauseSubMenu(PauseSubMenu::Exit);
+				if (o.restart_after_close)
+					VR::Relaunch::PendRestartAfterGameCloses(VRGameKey(asked));
+				return;
+			}
+			if (!o.restart)
+			{
+				ResetVRQuickMenuState();
+				ClosePauseMenu();
+				return;
+			}
+			Console.WriteLn("(VR) Mods menu: restarting the whole emulator to apply the switches.");
+			if (Host::RequestEmulatorRestart([](std::string text) {
+					Host::RunOnCPUThread([text = std::move(text)]() {
+						MTGS::RunOnGSThread([text]() {
+							if (IsInitialized())
+								ReportVRRestartRefused(text);
+						});
+					});
+				}))
+			{
+				s_current_main_window = MainWindowType::None;
+				s_current_pause_submenu = PauseSubMenu::None;
+				s_pause_menu_was_open = false;
+				ResetVRQuickMenuState();
+				QueueResetFocus(FocusResetType::WindowChanged);
+			}
+			else
+			{
+				Host::AddKeyedOSDMessage("VRModsRestart", "Your switches are saved. Restart the emulator to apply them.", 10.0f);
+				ResetVRQuickMenuState();
+				ClosePauseMenu();
+			}
+		}, false, "Proceed", "Cancel");
+		return;
+	}
+	if (d.write_now && !WriteHeldVRModChanges())
+		return;
+	s_vr_quick_page = VRQuickPage::Main;
+	if (via == VRQuickClose::CloseGame)
+	{
+		OpenPauseSubMenu(PauseSubMenu::Exit);
+		return;
+	}
+	ClosePauseMenu();
+	if (via == VRQuickClose::SystemButton)
+		Console.WriteLn("(VR) UiPanel: %s closed (system button).", "quick menu");
+}
+
+void FullscreenUI::DrawVRModsPage(bool just_focused)
+{
+	const float h = ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT;
+	BeginMenuButtons(0, 0.0f, ImGuiFullscreen::LAYOUT_MENU_BUTTON_X_PADDING, ImGuiFullscreen::LAYOUT_MENU_BUTTON_Y_PADDING,
+		ImGuiFullscreen::LAYOUT_MENU_BUTTON_HEIGHT_NO_SUMMARY);
+	if (just_focused)
+		ImGui::SetFocusID(ImGui::GetID(FSUI_ICONSTR(ICON_FA_ARROW_LEFT, "Back")), ImGui::GetCurrentWindow());
+	if (ActiveButton(FSUI_ICONSTR(ICON_FA_ARROW_LEFT, "Back"), false) || WantsToCloseMenu())
+	{
+		s_vr_quick_page = VRQuickPage::Main;
+		QueueResetFocus(FocusResetType::WindowChanged);
+	}
+	MenuHeading(VR::ModsMenu::kPageTitle);
+	const char* ellipsis = (g_large_font.first->IsGlyphInFont(0x2026) && g_medium_font.first->IsGlyphInFont(0x2026)) ? "\xE2\x80\xA6" : "...";
+	const std::vector<VR::Mods::Line>& lines = s_vr_mods_model.Lines();
+	if (!s_vr_mods_model.HasLines())
+		ActiveButton("Reading this game's mods...", false, false);
+	else if (lines.empty())
+		ActiveButton("No mods are installed for this game.", false, false);
+	for (const bool features : {false, true})
+	{
+		const bool any = std::any_of(lines.begin(), lines.end(), [features](const VR::Mods::Line& l) {
+			return (l.kind == static_cast<u8>(VR::ModFiles::Kind::Feature)) == features;
+		});
+		if (!any)
+			continue;
+		MenuHeading(features ? "Emulator features" : "Mods");
+		for (const VR::Mods::Line& l : lines)
+		{
+			if ((l.kind == static_cast<u8>(VR::ModFiles::Kind::Feature)) != features)
+				continue;
+			const bool shown = s_vr_mods_model.Shown(l.slug);
+			const std::string grey = s_vr_mods_model.Greyed(l.slug);
+			const VR::ModsMenu::LineText text = VR::ModsMenu::TextOf(s_vr_mods_model, l, ellipsis);
+			const std::string id = fmt::format("##vrmod-{}", l.slug);
+			if (DrawVRModLine(id.c_str(), text, shown, shown || grey.empty(), h))
+			{
+				const VR::ModsMenu::Proposal p = s_vr_mods_model.Toggle(l.slug);
+				if (p.kind == VR::ModsMenu::Proposal::Kind::Confirm)
+				{
+					s_vr_dialog_open = true;
+					ImGuiFullscreen::OpenConfirmMessageDialog("Mods", p.text, [p](bool yes) {
+						s_vr_dialog_open = false;
+						if (yes && s_current_main_window == MainWindowType::VRQuickMenu)
+							s_vr_mods_model.Confirm(p);
+					}, true, p.on ? "Switch on" : "Switch off", "Cancel");
+				}
+				else if (p.kind == VR::ModsMenu::Proposal::Kind::Refused)
+				{
+					s_vr_dialog_open = true;
+					ImGuiFullscreen::OpenInfoMessageDialog("Mods", p.text, []() { s_vr_dialog_open = false; });
+				}
+				break;
+			}
+		}
+	}
+	EndMenuButtons();
+}
+
+void FullscreenUI::VRArmRestartAfterGameCloses()
+{
+	VR::Relaunch::GameShutdownRequested(VRGameKey(CurrentVRMenuGame()));
+}
+
+void FullscreenUI::VRDisarmRestartAfterGameCloses()
+{
+	VR::Relaunch::CancelRestartAfterGameCloses();
+}
+
+bool FullscreenUI::VRQuickMenuBlocksLeave()
+{
+	if (s_current_main_window != MainWindowType::VRQuickMenu)
+		return false;
+	const VR::ModsMenu::CloseDecision d = VR::ModsMenu::DecideClose(s_vr_mods_model);
+	if (d.prompt)
+	{
+		Console.WriteLn("(VR) UiPanel: a window change over the quick menu was refused: its changes need a restart.");
+		RequestVRQuickMenuClose(VRQuickClose::SystemButton);
+		return true;
+	}
+	if (d.write_now && !WriteHeldVRModChanges())
+		return true;
+	ResetVRQuickMenuState();
+	return false;
+}
+#else
+bool FullscreenUI::VRQuickMenuBlocksLeave()
+{
+	return false;
+}
+#endif
 
 void FullscreenUI::DrawPauseMenu(MainWindowType type)
 {
@@ -3745,6 +4384,8 @@ bool FullscreenUI::IsAchievementsWindowOpen()
 
 void FullscreenUI::SwitchToAchievementsWindow()
 {
+	if (VRQuickMenuBlocksLeave())
+		return;
 	if (!VMManager::HasValidVM())
 		return;
 
@@ -3789,6 +4430,8 @@ bool FullscreenUI::IsLeaderboardsWindowOpen()
 
 void FullscreenUI::SwitchToLeaderboardsWindow()
 {
+	if (VRQuickMenuBlocksLeave())
+		return;
 	if (!VMManager::HasValidVM())
 		return;
 

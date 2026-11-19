@@ -6,6 +6,7 @@
 #include "VR/VRProfileDB.h"
 #include "VR/SplitState.h"
 #include "VR/SeatSession.h"
+#include "VR/LagMatch.h"
 #include "VR/XRCompositor.h"
 #include "VR/XRSession.h"
 
@@ -17,12 +18,16 @@
 #include "VMManager.h"
 #include "Input/InputManager.h"
 #include "Input/VRInputSource.h"
+#include "VR/NearField.h"
+#include "VR/HandCapture.h"
 #include "USB/USB.h"
 
+#include "pcsx2/GS.h"
 #include "GS/Renderers/Common/GSTexture.h"
 #include "GS/Renderers/Vulkan/GSDeviceVK.h"
 
 #include "common/Console.h"
+#include "common/FileSystem.h"
 #include "common/StringUtil.h"
 
 #include "fmt/format.h"
@@ -195,6 +200,9 @@ namespace VR
 		std::mutex s_settings_mutex;
 		Pcsx2Config::VROptions s_settings;
 
+		u64 s_watchdog_last_consumed = 0;
+		u32 s_watchdog_starved_vsyncs = 0;
+
 		int s_scene_published = -1;
 		bool s_scene_memo_valid = false;
 		int s_scene_pending = -1;
@@ -220,6 +228,8 @@ namespace VR
 			dst.log_w0 = src.log_w0;
 			dst.log_w1 = src.log_w1;
 			dst.log_dfar = src.log_dfar;
+			dst.crossed_limit = src.crossed_limit;
+			dst.crossed_gain = src.crossed_gain;
 		}
 
 		void CopyCollimate(StereoState::Params& dst, const ProfileDB::StereoParams& src)
@@ -284,6 +294,13 @@ namespace VR
 
 	static void ApplySpatialControls(const ProfileDB::Profile* profile)
 	{
+		const ProfileDB::Profile* vr_profile = (profile && WantsVR()) ? profile : nullptr;
+		const bool game_recipe = vr_profile && vr_profile->game_hands.has_value();
+		HandCapture::Global().Configure(game_recipe ? &*vr_profile->game_hands : nullptr);
+		if (game_recipe)
+			HandCapture::Global().SetEnabled(Host::GetBoolSettingValue("VR", "GameHands", vr_profile->hands == NearField::Hands::Game));
+		NearField::SetProfileHands((game_recipe && HandCapture::Global().Enabled()) ? NearField::Hands::Game :
+								   vr_profile ? vr_profile->hands : NearField::Hands::Off);
 		std::vector<ProfileDB::SpatialControlSpec> specs;
 		if (profile && !profile->controls.empty() && WantsVR())
 			specs = profile->controls;
@@ -309,6 +326,23 @@ namespace VR
 		ApplySpatialControls(nullptr);
 	}
 
+	static void OfferProfileRequirements(const ProfileDB::Profile* profile)
+	{
+		if (!profile || !profile->requirements.Any())
+			return;
+		const u32 crc = VMManager::GetDiscCRC();
+		if (crc == 0)
+			return;
+		std::string path = VMManager::GetGameSettingsPath(VMManager::GetSerialForGameSettings(), crc);
+		if (!FileSystem::FileExists(path.c_str()))
+		{
+			std::string legacy = VMManager::GetGameSettingsPath({}, crc);
+			if (FileSystem::FileExists(legacy.c_str()))
+				path = std::move(legacy);
+		}
+		ProfileDB::OfferRequirements(profile, crc, EmuConfig.Cpu.ExtraMemory, path);
+	}
+
 	void UpdateSettings()
 	{
 		const Pcsx2Config::VROptions& new_settings = EmuConfig.VR;
@@ -325,6 +359,8 @@ namespace VR
 		const ProfileDB::Profile* profile =
 			serial.empty() ? nullptr : ProfileDB::Lookup(serial, VMManager::GetDiscCRC());
 
+		OfferProfileRequirements(profile);
+
 		ApplySpatialControls(profile);
 
 		float screen_distance = new_settings.ScreenDistance;
@@ -339,7 +375,64 @@ namespace VR
 			screen_follow_head = profile->screen_follow_head.value_or(false);
 		}
 		XRCompositor::UpdateScreenParams(screen_distance, screen_height, screen_arc,
-			new_settings.ScreenVerticalOffset, screen_follow_head);
+			new_settings.ScreenVerticalOffset, screen_follow_head, new_settings.DisplayFitFill);
+		XRCompositor::UpdateScreenAspectRule(new_settings.ScreenFollowsPatchAspect);
+
+		{
+			LagMatch::Lag lag;
+			u8 axes = 0;
+			if (profile && profile->camera.has_value())
+			{
+				lag = LagMatch::ResolveLag(*profile, GetVerticalFrequency());
+				axes = LagMatch::DrivenAxes(profile->camera.value());
+			}
+			if (lag.ns > 0 && axes == 0)
+			{
+				Console.Warning("(VR) screen.lagMs: the camera block steers no head axis, so there is nothing to match; off.");
+				lag.ns = 0;
+			}
+			static s64 s_logged_lag_ns = 0;
+			if (lag.ns != s_logged_lag_ns)
+			{
+				s_logged_lag_ns = lag.ns;
+				if (lag.ns > 0)
+				{
+					if (lag.from_frame_age)
+						Console.WriteLn("(VR) screen.lagMs: %.1f ms, from the measured frameAge (%u vsyncs; it wins over the profile's number).",
+							lag.ms, lag.frame_age);
+					else
+						Console.WriteLn("(VR) screen.lagMs: %.1f ms (the profile's number; no measured frameAge).", lag.ms);
+				}
+			}
+			XRCompositor::UpdateScreenLag(lag.ns, axes);
+		}
+
+		{
+			ScreenCurve::Fallback fallback = ScreenCurve::Fallback::Flat;
+			ScreenCurve::Force force = ScreenCurve::Force::None;
+			const std::optional<ScreenCurve::Fallback> fb = ScreenCurve::ParseFallback(new_settings.ScreenCurveFallback);
+			if (fb.has_value())
+				fallback = fb.value();
+			else
+				Console.Warning("(VR) VR/ScreenCurveFallback '%s' is not flat|facets|projector; using flat.",
+					new_settings.ScreenCurveFallback.c_str());
+			const std::optional<ScreenCurve::Force> fc = ScreenCurve::ParseForce(new_settings.ScreenForceFallback);
+			if (fc.has_value())
+				force = fc.value();
+			else
+				Console.Warning("(VR) VR/ScreenForceFallback '%s' is not none|facets|projector; ignoring it.",
+					new_settings.ScreenForceFallback.c_str());
+			float supersample = new_settings.ScreenProjectorSupersample;
+			bool depth = new_settings.ScreenProjectorDepth;
+			if (profile)
+			{
+				fallback = profile->screen_curve_fallback.value_or(fallback);
+				force = profile->screen_force_fallback.value_or(force);
+				supersample = profile->screen_projector_supersample.value_or(supersample);
+				depth = profile->screen_projector_depth.value_or(depth);
+			}
+			XRCompositor::UpdateScreenCurve(fallback, force, supersample, depth);
+		}
 
 		StereoState::Params stereo;
 		stereo.separation = new_settings.StereoSeparation;
@@ -564,6 +657,13 @@ namespace VR
 		return s_seatcast_target > 0;
 	}
 
+	static std::string s_launch_seat_runtime_dirs;
+
+	void SetLaunchSeatRuntimeDirs(std::string dirs)
+	{
+		s_launch_seat_runtime_dirs = std::move(dirs);
+	}
+
 	static std::string NthColonEntry(const std::string& reg, int idx)
 	{
 		size_t pos = 0;
@@ -580,25 +680,41 @@ namespace VR
 		return reg.substr(pos, end == std::string::npos ? std::string::npos : end - pos);
 	}
 
+	static std::string s_launch_seat_runtime_jsons;
+
+	void SetLaunchSeatRuntimeJsons(std::string jsons)
+	{
+		s_launch_seat_runtime_jsons = std::move(jsons);
+	}
+
 	std::string ResolveSeatRuntimeJson(int seat)
 	{
-		std::string json;
-		if (seat >= 2)
-			json = NthColonEntry(EmuConfig.VR.XrSeatRuntimeJsons, seat - 2);
+		const char* env = std::getenv("XR_RUNTIME_JSON");
+		const std::string fallback = env ? env : "";
+		if (seat < 2)
+			return fallback;
+		const bool from_launch = !s_launch_seat_runtime_jsons.empty();
+		const std::string json =
+			NthColonEntry(from_launch ? s_launch_seat_runtime_jsons : EmuConfig.VR.XrSeatRuntimeJsons, seat - 2);
 		if (json.empty())
-		{
-			const char* env = std::getenv("XR_RUNTIME_JSON");
-			if (env)
-				json = env;
-		}
-		return json;
+			return fallback;
+		if (FileSystem::FileExists(json.c_str()))
+			return json;
+		Console.Error("(VR) Seat %d runtime manifest '%s' (from %s) does not exist: seat %d is not started. "
+					  "Fix that entry (or drop it: with no entry the seat uses XR_RUNTIME_JSON, '%s').",
+			seat, json.c_str(), from_launch ? "--vr-seat-jsons" : "[VR] XrSeatRuntimeJsons", seat,
+			fallback.empty() ? "(unset)" : fallback.c_str());
+		return {};
 	}
 
 	std::string ResolveSeatRuntimeDir(int seat)
 	{
 		if (seat <= 1)
 			return {};
-		return NthColonEntry(EmuConfig.VR.XrSeatRuntimeDirs, seat - 2);
+		const std::string& reg = s_launch_seat_runtime_dirs.empty() ?
+									 EmuConfig.VR.XrSeatRuntimeDirs :
+									 s_launch_seat_runtime_dirs;
+		return NthColonEntry(reg, seat - 2);
 	}
 
 	bool LaunchRequestedVR()
@@ -652,6 +768,12 @@ namespace VR
 		GSDeviceVK::GetInstance()->ExecuteCommandBuffer(false);
 	}
 
+	void NoteGameVsync(bool new_frame)
+	{
+		if (XRSession::HasSession())
+			XRCompositor::NoteGameVsync(new_frame);
+	}
+
 	void EndOfFrame(GSTexture* current)
 	{
 		if (!XRSession::HasSession())
@@ -661,6 +783,34 @@ namespace VR
 			SeatSession::Start(SeatCastTarget());
 
 		XRSession::PumpEvents();
+
+		if (!XRSession::IsLost())
+		{
+			if (XRCompositor::RuntimeLossDetected())
+			{
+				Console.Error("(VR) Frame pacer reports the runtime is gone — treating the session as lost.");
+				XRSession::MarkLost();
+			}
+			else if (XRSession::IsSessionRunning())
+			{
+				const u64 consumed = XRCompositor::GetPacedFramesConsumed();
+				if (consumed != s_watchdog_last_consumed)
+				{
+					s_watchdog_last_consumed = consumed;
+					s_watchdog_starved_vsyncs = 0;
+				}
+				else if (++s_watchdog_starved_vsyncs >= 300)
+				{
+					Console.Error("(VR) No paced frames for ~5 s while the session is running — treating the runtime as lost.");
+					XRSession::MarkLost();
+					s_watchdog_starved_vsyncs = 0;
+				}
+			}
+			else
+			{
+				s_watchdog_starved_vsyncs = 0;
+			}
+		}
 
 		if (XRSession::IsLost())
 		{

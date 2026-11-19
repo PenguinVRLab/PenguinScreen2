@@ -241,6 +241,14 @@ endif()
 
 if(ENABLE_VR)
 	list(APPEND PCSX2_DEFS ENABLE_VR)
+	# Multi-seat (extra XR connections bound through XDG_RUNTIME_DIR swaps and
+	# dlopen of the seat's runtime) is POSIX-only by construction, and on Windows
+	# the supported runtime is SteamVR alone, single seat. The Windows VR build
+	# therefore compiles the seat code out (pcsx2/CMakeLists.txt lists the seat
+	# sources under the same condition) and --vr-seat/--vr-cast refuse there.
+	if(NOT WIN32)
+		list(APPEND PCSX2_DEFS ENABLE_VR_SEATS)
+	endif()
 endif()
 
 if(X11_API)

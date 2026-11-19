@@ -99,6 +99,10 @@ disable_compiler_warnings_for_target(cpuinfo)
 add_subdirectory(3rdparty/libzip EXCLUDE_FROM_ALL)
 add_subdirectory(3rdparty/rcheevos EXCLUDE_FROM_ALL)
 add_subdirectory(3rdparty/rapidjson EXCLUDE_FROM_ALL)
+# PCSX2-VR: the near-field hands' glTF loader (pcsx2/VR/HandsGltf.cpp), header-only, MIT.
+if(ENABLE_VR)
+	add_subdirectory(3rdparty/cgltf EXCLUDE_FROM_ALL)
+endif()
 add_subdirectory(3rdparty/discord-rpc EXCLUDE_FROM_ALL)
 add_subdirectory(3rdparty/freesurround EXCLUDE_FROM_ALL)
 

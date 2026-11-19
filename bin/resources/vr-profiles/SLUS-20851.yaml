@@ -52,3 +52,19 @@ SLUS-20851:
       - { address: 0xF0, relative: true, encoding: f32, source: head_pitch, axisSign: 1, clampMin: -1.5, clampMax: 1.5 }
       - { address: 0xF4, relative: true, encoding: f32, source: head_yaw,   axisSign: 1, clampMin: -2.8, clampMax: 2.8 }
       - { address: 0xF8, relative: true, encoding: f32, source: head_roll,  axisSign:  1, clampMin: -1.0, clampMax: 1.0 }
+  fov:
+    default: game
+    levers:
+      - name: cockpit-focal
+        address: 0x00440830
+        encoding: f32
+        calibration:
+          model: invtan
+          pairs: [[290.0, 105.64], [319.0, 99.66], [350.0, 94.67], [420.0, 84.23], [500.0, 74.39], [571.26, 67.22], [650.0, 60.68], [800.0, 50.87]]
+    scenes:
+      - label: cockpit
+        lever: cockpit-focal
+        target: screen
+        ramp: 0.0
+        when: [ { address: 0x00959C0C, equals: 2, width: 1 },
+                { address: 0x006CD49C, equals: 0x300, width: 4 } ]

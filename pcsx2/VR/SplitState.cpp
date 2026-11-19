@@ -106,16 +106,15 @@ namespace VR::SplitState
 			return;
 		}
 
-		const ProfileDB::SplitParams::Probe& probe = sp->active.value();
-		u32 value = 0;
-		switch (probe.width)
-		{
-			case 1: value = memRead8(probe.ee_address); break;
-			case 2: value = memRead16(probe.ee_address); break;
-			default: value = memRead32(probe.ee_address); break;
-		}
-		const bool hit = probe.at_least ? (value >= probe.threshold) : (value == probe.threshold);
-		const int match = hit ? 1 : -1;
+		const auto read = [](const ProfileDB::SplitParams::Probe& probe) -> u32 {
+			switch (probe.width)
+			{
+				case 1: return memRead8(probe.ee_address);
+				case 2: return memRead16(probe.ee_address);
+				default: return memRead32(probe.ee_address);
+			}
+		};
+		const int match = sp->ActiveHit(read) ? 1 : -1;
 
 		if (s_memo_valid)
 		{

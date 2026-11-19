@@ -25,6 +25,11 @@ namespace FullscreenUI
 	void OnVMDestroyed();
 	void GameChanged(std::string title, std::string path, std::string serial, u32 disc_crc, u32 crc);
 	void OpenPauseMenu();
+
+	void OpenVRQuickMenu();
+	bool IsVRQuickMenuOpen();
+	void CloseVRUi();
+	void ToggleVRQuickMenu();
 	bool OpenAchievementsWindow();
 	bool OpenLeaderboardsWindow();
 	void ReportStateLoadError(const std::string& message, std::optional<s32> slot, bool backup);

@@ -74,6 +74,8 @@ namespace Host
 
 	void RequestVMShutdown(bool allow_confirm, bool allow_save_state, bool default_save_state);
 
+	bool RequestEmulatorRestart(std::function<void(std::string)> on_refused = {});
+
 	std::string GetHTTPUserAgent();
 
 	std::string GetBaseStringSettingValue(const char* section, const char* key, const char* default_value = "");

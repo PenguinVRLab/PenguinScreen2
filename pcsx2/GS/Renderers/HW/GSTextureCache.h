@@ -120,6 +120,7 @@ public:
 		std::pair<u8, u8> alpha_minmax;
 		bool valid_alpha_minmax;
 		bool is_replacement;
+		bool pending_replacement;
 	};
 
 	using HashCacheMap = std::unordered_map<HashCacheKey, HashCacheEntry, HashCacheKeyHash>;

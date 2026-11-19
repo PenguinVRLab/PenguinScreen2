@@ -1,0 +1,185 @@
+# SPDX-FileCopyrightText: 2026 Patrick Carey
+# SPDX-License-Identifier: CC-BY-NC-4.0
+# PenguinScreen2 shipped profile — generated, data only.
+# Copyright (c) 2026 Patrick Carey. Licensed CC BY-NC 4.0 (non-commercial
+# use/share/adapt with attribution); COMMERCIAL RIGHTS RESERVED. This is
+# DATA, not part of the GPL emulator — see LICENSE.md in this folder.
+# To customize: COPY this file into your user profiles folder and edit
+# the copy — a user file for the same serial overrides this one at
+# launch. Do not edit here (read-only in flatpak installs).
+
+SLUS-20824:
+  name: "NASCAR Thunder 2004"
+  crcs: [0x612542D0]
+  tier: stereo
+  stereo:
+    separation: 0.015
+    convergence: 0.05
+    map: bands
+    splits: [0.23544, 3.27682, 45.6062]
+    bands:
+      - conv: 0.0169165
+        sep:  0.0040403
+      - conv: 0.23544
+        sep:  0.0040403
+      - conv: 3.27682
+        sep:  0.0040403
+      - conv: 45.6062
+        sep:  0.00375
+  camera:
+    guards:
+      - { address: 0x001A1654, equals: 0xC7AE0018, width: 4 }
+      - { address: 0x001A165C, equals: 0xC7AC0010, width: 4 }
+    matrixWrites:
+      - address: 0x000F1200
+        compose: anchored
+        order: pre
+        axisSignYaw: 1
+        axisSignPitch: 1
+        axisSignRoll: 0
+        yawMin: -90
+        yawMax: 90
+    silence:
+      - { address: 0x000F1300, on: 0x3C09000F, off: 0x00000000 }
+      - { address: 0x000F1304, on: 0x35291200, off: 0x00000000 }
+      - { address: 0x000F1308, on: 0x8D22003C, off: 0x00000000 }
+      - { address: 0x000F130C, on: 0x3C013F80, off: 0x00000000 }
+      - { address: 0x000F1310, on: 0x1441004D, off: 0x00000000 }
+      - { address: 0x000F1314, on: 0x248800F0, off: 0x00000000 }
+      - { address: 0x000F1318, on: 0xC5000000, off: 0x00000000 }
+      - { address: 0x000F131C, on: 0xC5010004, off: 0x00000000 }
+      - { address: 0x000F1320, on: 0xC5020008, off: 0x00000000 }
+      - { address: 0x000F1324, on: 0xC5030010, off: 0x00000000 }
+      - { address: 0x000F1328, on: 0xC5040014, off: 0x00000000 }
+      - { address: 0x000F132C, on: 0xC5050018, off: 0x00000000 }
+      - { address: 0x000F1330, on: 0xC5060020, off: 0x00000000 }
+      - { address: 0x000F1334, on: 0xC5070024, off: 0x00000000 }
+      - { address: 0x000F1338, on: 0xC5080028, off: 0x00000000 }
+      - { address: 0x000F133C, on: 0xC5290000, off: 0x00000000 }
+      - { address: 0x000F1340, on: 0xC52A0020, off: 0x00000000 }
+      - { address: 0x000F1344, on: 0x46005287, off: 0x00000000 }
+      - { address: 0x000F1348, on: 0xC52B0010, off: 0x00000000 }
+      - { address: 0x000F134C, on: 0x46004BC2, off: 0x00000000 }
+      - { address: 0x000F1350, on: 0x46035402, off: 0x00000000 }
+      - { address: 0x000F1354, on: 0x46107BC0, off: 0x00000000 }
+      - { address: 0x000F1358, on: 0x46065C02, off: 0x00000000 }
+      - { address: 0x000F135C, on: 0x46107BC0, off: 0x00000000 }
+      - { address: 0x000F1360, on: 0xE50F0000, off: 0x00000000 }
+      - { address: 0x000F1364, on: 0x46014BC2, off: 0x00000000 }
+      - { address: 0x000F1368, on: 0x46045402, off: 0x00000000 }
+      - { address: 0x000F136C, on: 0x46107BC0, off: 0x00000000 }
+      - { address: 0x000F1370, on: 0x46075C02, off: 0x00000000 }
+      - { address: 0x000F1374, on: 0x46107BC0, off: 0x00000000 }
+      - { address: 0x000F1378, on: 0xE50F0004, off: 0x00000000 }
+      - { address: 0x000F137C, on: 0x46024BC2, off: 0x00000000 }
+      - { address: 0x000F1380, on: 0x46055402, off: 0x00000000 }
+      - { address: 0x000F1384, on: 0x46107BC0, off: 0x00000000 }
+      - { address: 0x000F1388, on: 0x46085C02, off: 0x00000000 }
+      - { address: 0x000F138C, on: 0x46107BC0, off: 0x00000000 }
+      - { address: 0x000F1390, on: 0xE50F0008, off: 0x00000000 }
+      - { address: 0x000F1394, on: 0xC5290008, off: 0x00000000 }
+      - { address: 0x000F1398, on: 0x46004A47, off: 0x00000000 }
+      - { address: 0x000F139C, on: 0xC52A0028, off: 0x00000000 }
+      - { address: 0x000F13A0, on: 0xC52B0018, off: 0x00000000 }
+      - { address: 0x000F13A4, on: 0x46005AC7, off: 0x00000000 }
+      - { address: 0x000F13A8, on: 0x46004BC2, off: 0x00000000 }
+      - { address: 0x000F13AC, on: 0x46035402, off: 0x00000000 }
+      - { address: 0x000F13B0, on: 0x46107BC0, off: 0x00000000 }
+      - { address: 0x000F13B4, on: 0x46065C02, off: 0x00000000 }
+      - { address: 0x000F13B8, on: 0x46107BC0, off: 0x00000000 }
+      - { address: 0x000F13BC, on: 0xE50F0010, off: 0x00000000 }
+      - { address: 0x000F13C0, on: 0x46014BC2, off: 0x00000000 }
+      - { address: 0x000F13C4, on: 0x46045402, off: 0x00000000 }
+      - { address: 0x000F13C8, on: 0x46107BC0, off: 0x00000000 }
+      - { address: 0x000F13CC, on: 0x46075C02, off: 0x00000000 }
+      - { address: 0x000F13D0, on: 0x46107BC0, off: 0x00000000 }
+      - { address: 0x000F13D4, on: 0xE50F0014, off: 0x00000000 }
+      - { address: 0x000F13D8, on: 0x46024BC2, off: 0x00000000 }
+      - { address: 0x000F13DC, on: 0x46055402, off: 0x00000000 }
+      - { address: 0x000F13E0, on: 0x46107BC0, off: 0x00000000 }
+      - { address: 0x000F13E4, on: 0x46085C02, off: 0x00000000 }
+      - { address: 0x000F13E8, on: 0x46107BC0, off: 0x00000000 }
+      - { address: 0x000F13EC, on: 0xE50F0018, off: 0x00000000 }
+      - { address: 0x000F13F0, on: 0xC5290004, off: 0x00000000 }
+      - { address: 0x000F13F4, on: 0xC52A0024, off: 0x00000000 }
+      - { address: 0x000F13F8, on: 0x46005287, off: 0x00000000 }
+      - { address: 0x000F13FC, on: 0xC52B0014, off: 0x00000000 }
+      - { address: 0x000F1400, on: 0x46004BC2, off: 0x00000000 }
+      - { address: 0x000F1404, on: 0x46035402, off: 0x00000000 }
+      - { address: 0x000F1408, on: 0x46107BC0, off: 0x00000000 }
+      - { address: 0x000F140C, on: 0x46065C02, off: 0x00000000 }
+      - { address: 0x000F1410, on: 0x46107BC0, off: 0x00000000 }
+      - { address: 0x000F1414, on: 0xE50F0020, off: 0x00000000 }
+      - { address: 0x000F1418, on: 0x46014BC2, off: 0x00000000 }
+      - { address: 0x000F141C, on: 0x46045402, off: 0x00000000 }
+      - { address: 0x000F1420, on: 0x46107BC0, off: 0x00000000 }
+      - { address: 0x000F1424, on: 0x46075C02, off: 0x00000000 }
+      - { address: 0x000F1428, on: 0x46107BC0, off: 0x00000000 }
+      - { address: 0x000F142C, on: 0xE50F0024, off: 0x00000000 }
+      - { address: 0x000F1430, on: 0x46024BC2, off: 0x00000000 }
+      - { address: 0x000F1434, on: 0x46055402, off: 0x00000000 }
+      - { address: 0x000F1438, on: 0x46107BC0, off: 0x00000000 }
+      - { address: 0x000F143C, on: 0x46085C02, off: 0x00000000 }
+      - { address: 0x000F1440, on: 0x46107BC0, off: 0x00000000 }
+      - { address: 0x000F1444, on: 0xE50F0028, off: 0x00000000 }
+      - { address: 0x000F1448, on: 0x080B5A52, off: 0x00000000 }
+      - { address: 0x000F144C, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F1200, on: 0x3F800000, off: 0x00000000 }
+      - { address: 0x000F1204, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F1208, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F120C, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F1210, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F1214, on: 0x3F800000, off: 0x00000000 }
+      - { address: 0x000F1218, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F121C, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F1220, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F1224, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F1228, on: 0x3F800000, off: 0x00000000 }
+      - { address: 0x000F122C, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F1230, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F1234, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F1238, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F123C, on: 0x3F800000, off: 0x00000000 }
+      - { address: 0x001A1658, on: 0x0C03C4C0, off: 0x0C0B5A52 }
+  projection:
+    axes:
+      rotation:
+        drawn: { hook: { at: 0x000F1300, expect: 0x3C09000F, base: a0, offset: 0xF0, basis: [1, 3, -2], maxAge: 4 } }
+        body: { hook: rest, lever: 0 }
+    frustum: { model: constant, tanX: 0.9255, tanY: 0.5206 }
+    timing: { close: shown, latch: firstDraw, readToDraw: 3, frameAges: [6, 7] }
+    when:
+      - { address: 0x000F123C, equals: 0x3F800000, width: 4 }
+      - { address: 0x003770AC, equals: 0, width: 4 }
+  gameHands:
+    version: 2
+    route: extract
+    capture: gs_posed
+    selector:
+      texture: {tbp0: 0x3600, psm: 0x13, tw: 128, th: 128, cbp: 0x3640, cpsm: 0}
+      w_range: [0.0094, 0.026]
+      object:
+        uv_box: [-2.5, -2.5, 3.5, 2.5]
+        uv_min_coverage: 0.3
+      vu_program: 0x003699A0
+    gate: none
+    stable_frames: 30
+    max_wait_s: 120
+    max_frame_step: 4
+    fingerprint:
+      vertices: [440, 500]
+      triangles: [740, 800]
+      open_edges: [180, 280]
+      texture: {w: 128, h: 128}
+    projection: {fx: 345.7771, fy: 430.3004, cx: 320, cy: 224, w_source: q, k: 0.0098418}
+    side: {rule: centroid_x}
+    trim_box: none
+    fingers: rigid
+    rest_fix:
+      metres_per_unit: 21.56
+      wrist:
+        left:  {origin: [-0.01299, 0.011098, 0.013219], x: [0.878, 0.3851, -0.2842], y: [0.1824, -0.8183, -0.5451], back: middle}
+        right: {origin: [0.010907, 0.010469, 0.013238], x: [0.8509, -0.4415, 0.2849], y: [-0.2348, -0.8046, -0.5455], back: middle}
+    other_side: capture
+    hide: {mode: split}
+    texture: sample

@@ -57,6 +57,23 @@ namespace VR::StereoState
 		float log_w1 = 0.0f;
 		float log_dfar = 0.0f;
 
+		float crossed_limit = 0.0f;
+		float crossed_gain = 0.0f;
+
+		float FarField() const
+		{
+			if (!enabled)
+				return 0.0f;
+			if (map == Map::Log)
+				return log_dfar;
+			if (map == Map::Bands)
+			{
+				const u32 b = (band_count >= 1 && band_count <= 4) ? band_count - 1 : 3;
+				const float d = bias[b] + sep[b];
+				return d > 0.0f ? d : 0.0f;
+			}
+			return separation;
+		}
 	};
 
 	void Publish(const Params& params);

@@ -1,0 +1,82 @@
+# SPDX-FileCopyrightText: 2026 Patrick Carey
+# SPDX-License-Identifier: CC-BY-NC-4.0
+# PenguinScreen2 shipped profile — generated, data only.
+# Copyright (c) 2026 Patrick Carey. Licensed CC BY-NC 4.0 (non-commercial
+# use/share/adapt with attribution); COMMERCIAL RIGHTS RESERVED. This is
+# DATA, not part of the GPL emulator — see LICENSE.md in this folder.
+# To customize: COPY this file into your user profiles folder and edit
+# the copy — a user file for the same serial overrides this one at
+# launch. Do not edit here (read-only in flatpak installs).
+
+SCUS-97436:
+  name: "Gran Turismo 4 Spec II"
+  crcs: [0x646B2E29]
+  tier: stereo
+  separation_note: "see stereo.bands; the scalars below are the linear fallback"
+  stereo:
+    separation: 0.02
+    convergence: 0.5
+    pinUniformQ: true
+    map: bands
+    splits: [3.01, 18.1, 109]
+    bands:
+      - { conv: 0.5,    sep: 0.0059978 }
+      - { conv: 3.006,  sep: 0.0059978 }
+      - { conv: 18.07,  sep: 0.0059978 }
+      - { conv: 108.6,  sep: 0.005 }
+  camera:
+    base:
+      pointer: 0x00C662A0
+      derefOffsets: [0x4840, 0x18, 0x10, 0x44]
+      validate: { offset: 0x150, equals: 0xC2B40000 }
+    writes:
+      - { address: 0x250, relative: true, encoding: f32, source: head_yaw, compose: anchored, anchorHead: false, scale: 57.29578, axisSign: -1,
+          clampMin: -90, clampMax: 90,
+          angles: head,
+          when: [ { address: 0x00C66418, equals: 0xFFFFFFFF, width: 4 },
+                  { address: 0x00C66110, equals: 0x006B5728, width: 4 },
+                  { address: 0x00C66294, equals: 0x12, width: 4 },
+                  { address: 0x00C6644C, equals: 0x0, width: 4 } ] }
+      - { address: 0x24C, relative: true, encoding: f32, source: head_pitch, compose: anchored, anchorHead: false, scale: 57.29578, axisSign: -1,
+          clampMin: -32, clampMax: 28,
+          angles: head,
+          when: [ { address: 0x00C66418, equals: 0xFFFFFFFF, width: 4 },
+                  { address: 0x00C66110, equals: 0x006B5728, width: 4 },
+                  { address: 0x00C66294, equals: 0x12, width: 4 },
+                  { address: 0x00C6644C, equals: 0x0, width: 4 } ] }
+  fov:
+    levers:
+      - name: view-zoom
+        address: 0x258
+        encoding: f32
+        readback: 0x00C6611C
+        base:
+          pointer: 0x00C662A0
+          derefOffsets: [0x4840, 0x18, 0x10, 0x44]
+          validate: { offset: 0x150, equals: 0xC2B40000 }
+        calibration:
+          model: invtan
+          pairs: [[1.2, 113.71], [1.8, 91.69], [2.4, 75.42]]
+    scenes:
+      - label: cockpit
+        lever: view-zoom
+        target: screen
+        ramp: 0.0
+        when: [ { address: 0x00C66418, equals: 0xFFFFFFFF, width: 4 },
+                { address: 0x00C66110, equals: 0x006B5728, width: 4 },
+                { address: 0x00C66294, equals: 0x12, width: 4 },
+                { address: 0x00C6644C, equals: 0x0, width: 4 } ]
+  projection:
+    yaw: 0x00C6615C
+    pitch: 0x00C66160
+    fovReadback: 0x00C6611C
+    yawOp: 0
+    pitchOp: 1
+    yawSign: -1
+    pitchSign: -1
+    frustum: { tanX: 1.856, tanY: 1.090 }
+    frameAge: 2
+    when: [ { address: 0x00C66418, equals: 0xFFFFFFFF, width: 4 },
+            { address: 0x00C66110, equals: 0x006B5728, width: 4 },
+            { address: 0x00C66294, equals: 0x12, width: 4 },
+            { address: 0x00C6644C, equals: 0x0, width: 4 } ]

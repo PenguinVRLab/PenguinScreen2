@@ -21,6 +21,11 @@
 #include "GS/Renderers/HW/GSRendererHW.h"
 #include "GS/Renderers/HW/GSTextureReplacements.h"
 #include "VMManager.h"
+#ifdef ENABLE_VR
+#include "VR/WorldProjection.h"
+#include "VR/RendererRule.h"
+#include "VR/VRManager.h"
+#endif
 
 #ifdef ENABLE_OPENGL
 #include "GS/Renderers/OpenGL/GSDeviceOGL.h"
@@ -99,6 +104,18 @@ static RenderAPI GetAPIForRenderer(GSRendererType renderer)
 		default:
 			return GetAPIForRenderer(GSUtil::GetPreferredRenderer());
 	}
+}
+
+static GSRendererType ApplyVRRendererRule(GSRendererType renderer)
+{
+#ifdef ENABLE_VR
+	const VR::RendererRule::Choice c = VR::RendererRule::ForSession(renderer, VR::WantsVR(), VR::RendererRule::VulkanBuilt());
+	if (c.why)
+		Console.ErrorFmt("VR: renderer {}: {}", Pcsx2Config::GSOptions::GetRendererName(renderer), c.why);
+	return c.renderer;
+#else
+	return renderer;
+#endif
 }
 
 static bool OpenGSDevice(GSRendererType renderer, bool clear_state_on_fail, bool recreate_window,
@@ -238,8 +255,12 @@ bool GSreopen(bool recreate_device, bool recreate_renderer, GSRendererType new_r
 	std::optional<const Pcsx2Config::GSOptions*> old_config)
 {
 	Console.WriteLn("Reopening GS with %s device", recreate_device ? "new" : "existing");
+	new_renderer = ApplyVRRendererRule(new_renderer);
 
 	g_gs_renderer->Flush(GSState::GSFlushReason::GSREOPEN);
+#ifdef ENABLE_VR
+	VR::WorldProjection::OnRendererSwitch();
+#endif
 
 	if (recreate_device && !recreate_renderer)
 	{
@@ -333,13 +354,24 @@ bool GSreopen(bool recreate_device, bool recreate_renderer, GSRendererType new_r
 	return true;
 }
 
+static void GSApplyClassicDumpRules(Pcsx2Config::GSOptions& config)
+{
+	if (config.LoadTextureReplacements && config.ClassicTextureNames && config.HWMipmap)
+	{
+		config.HWMipmap = false;
+		Console.WriteLn("Classic Dump: HW mipmapping suppressed while pre-4034 replacements are loaded.");
+	}
+}
+
 bool GSopen(const Pcsx2Config::GSOptions& config, GSRendererType renderer, u8* basemem,
 	GSVSyncMode vsync_mode, bool allow_present_throttle)
 {
 	GSConfig = config;
+	GSApplyClassicDumpRules(GSConfig);
 
 	if (renderer == GSRendererType::Auto)
 		renderer = GSUtil::GetPreferredRenderer();
+	renderer = ApplyVRRendererRule(renderer);
 
 	bool res = OpenGSDevice(renderer, true, false, vsync_mode, allow_present_throttle);
 	if (res)
@@ -779,6 +811,7 @@ void GSUpdateConfig(const Pcsx2Config::GSOptions& new_config)
 {
 	Pcsx2Config::GSOptions old_config(std::move(GSConfig));
 	GSConfig = new_config;
+	GSApplyClassicDumpRules(GSConfig);
 	if (!g_gs_renderer)
 		return;
 
@@ -1331,6 +1364,7 @@ BEGIN_HOTKEY_LIST(g_gs_hotkeys){"Screenshot", TRANSLATE_NOOP("Hotkeys", "Graphic
 			{
 				const bool enabling = !EmuConfig.GS.ClassicTextureNames;
 				EmuConfig.GS.ClassicTextureNames = enabling;
+				VMManager::NotifyClassicTextureNamesToggled();
 				if (enabling && !EmuConfig.GS.DumpReplaceableTextures)
 				{
 					EmuConfig.GS.DumpReplaceableTextures = true;

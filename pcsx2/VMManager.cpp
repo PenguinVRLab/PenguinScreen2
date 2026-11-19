@@ -5,7 +5,12 @@
 #include "BuildVersion.h"
 #ifdef ENABLE_VR
 #include "VR/CameraDriver.h"
+#include "VR/FovDriver.h"
+#include "VR/PadXR.h"
+#include "VR/WorldProjection.h"
 #include "VR/SplitState.h"
+#include "VR/VRMods.h"
+#include "VR/VRProfileDB.h"
 #include "VR/VRManager.h"
 #endif
 #include "CDVD/CDVD.h"
@@ -102,6 +107,9 @@ namespace VMManager
 	static void CheckForEmulationSpeedConfigChanges(const Pcsx2Config& old_config);
 	static void CheckForPatchConfigChanges(const Pcsx2Config& old_config);
 	static void CheckForDEV9ConfigChanges(const Pcsx2Config& old_config);
+	static void UpdateOnlineLock();
+	static bool RefuseWhileOnline(const char* what);
+	static bool RefuseWhileVR(const char* what);
 	static void CheckForMemoryCardConfigChanges(const Pcsx2Config& old_config);
 	static void CheckForMiscConfigChanges(const Pcsx2Config& old_config);
 	static void EnforceAchievementsChallengeModeSettings();
@@ -173,6 +181,7 @@ static std::string s_disc_serial;
 static std::string s_disc_elf;
 static std::string s_disc_version;
 static std::string s_title;
+static bool s_classic_defaults_user_overridden = false;
 static std::string s_title_en_search;
 static std::string s_title_en_replace;
 static u32 s_disc_crc;
@@ -195,6 +204,12 @@ static float s_target_speed = 0.0f;
 static bool s_target_speed_can_sync_to_host = false;
 static bool s_target_speed_synced_to_host = false;
 static bool s_use_vsync_for_timing = false;
+
+static std::atomic<bool> s_online_locked{false};
+static std::atomic<bool> s_online_lock_forced{false};
+static std::atomic<u32> s_online_lock_refusals{0};
+static std::atomic<u32> s_vr_speed_refusals{0};
+static bool s_online_override_logged = false;
 
 static u64 s_session_resume_timestamp = 0;
 static u64 s_session_accumulated_playtime = 0;
@@ -695,6 +710,34 @@ void VMManager::WarnAboutUnconfiguredController()
 		TRANSLATE_STR("VMManager", "Controller 1 has no input bindings configured."), Host::OSD_WARNING_DURATION);
 }
 
+#ifdef ENABLE_VR
+static void ApplyProfileTextures()
+{
+	const VR::ProfileDB::Profile* p = s_disc_serial.empty() ? nullptr : VR::ProfileDB::Lookup(s_disc_serial, s_disc_crc);
+	GSTextureReplacements::SetWantedPack(p ? p->textures.pack : std::string());
+	if (!p || !p->textures.classic_names.value_or(false) || s_classic_defaults_user_overridden)
+		return;
+	const std::string dir = Path::Combine(Path::Combine(EmuFolders::Textures, s_disc_serial), "replacements");
+	if (!GSTextureReplacements::SelectPackDirectory(dir, p->textures.pack, nullptr).has_value())
+		return;
+	EmuConfig.GS.LoadTextureReplacements = true;
+	EmuConfig.GS.ClassicTextureNames = true;
+	static std::string s_logged;
+	const std::string key = fmt::format("{}:{:08X}", s_disc_serial, s_disc_crc);
+	if (s_logged != key)
+	{
+		s_logged = key;
+		Console.WriteLn(fmt::format("(VR) Textures: {} — the profile's textures.classicNames turns Classic (pre-4034) names and "
+									"replacements on (pack: {}).", s_disc_serial, p->textures.pack.empty() ? "the only one there" : p->textures.pack));
+	}
+}
+#endif
+
+void VMManager::NotifyClassicTextureNamesToggled()
+{
+	s_classic_defaults_user_overridden = true;
+}
+
 void VMManager::ApplyGameFixes()
 {
 	if (!HasBootedELF() && !GSDumpReplayer::IsReplayingDump())
@@ -704,6 +747,10 @@ void VMManager::ApplyGameFixes()
 		EmuConfig.GS.ManualUserHacks = false;
 		return;
 	}
+
+#ifdef ENABLE_VR
+	ApplyProfileTextures();
+#endif
 
 	const GameDatabaseSchema::GameEntry* game = GameDatabase::findGame(s_disc_serial);
 	if (!game)
@@ -1041,6 +1088,13 @@ void VMManager::UpdateDiscDetails(bool booting)
 		s_title_en_search.clear();
 		s_title_en_replace.clear();
 		std::string custom_title = GameList::GetCustomTitleForPath(CDVDsys_GetFile(CDVDsys_GetSourceType()));
+#ifdef ENABLE_VR
+		if (custom_title.empty())
+		{
+			if (std::optional<std::string> mod_title = VR::ProfileDB::ConversionTitle(s_disc_serial, s_disc_crc))
+				custom_title = std::move(mod_title.value());
+		}
+#endif
 		if (serial_is_valid)
 		{
 			if (const GameDatabaseSchema::GameEntry* game = GameDatabase::findGame(s_disc_serial))
@@ -1095,6 +1149,8 @@ void VMManager::UpdateDiscDetails(bool booting)
 	Console.WriteLn(Color_StrongGreen, fmt::format("  Serial: {}", s_disc_serial));
 	Console.WriteLn(Color_StrongGreen, fmt::format("  Version: {}", s_disc_version));
 	Console.WriteLn(Color_StrongGreen, fmt::format("  CRC: {:08X}", s_disc_crc));
+
+	s_classic_defaults_user_overridden = false;
 
 	UpdateGameSettingsLayer();
 	ApplySettings();
@@ -1444,12 +1500,7 @@ VMBootResult VMManager::Initialize(const VMBootParameters& boot_params, Error* e
 	if (Achievements::IsHardcoreModeActive() && (!state_to_load.empty() || DebugInterface::getPauseOnEntry()))
 		return VMBootResult::PromptDisableHardcoreMode;
 
-	if (boot_params.start_unlimited.value_or(false))
-		s_limiter_mode = LimiterModeType::Unlimited;
-	else if (boot_params.start_turbo.value_or(false))
-		s_limiter_mode = LimiterModeType::Turbo;
-	else
-		s_limiter_mode = LimiterModeType::Nominal;
+	s_limiter_mode = BootLimiterMode(boot_params.start_unlimited.value_or(false), boot_params.start_turbo.value_or(false));
 
 	s_target_speed = GetTargetSpeedForLimiterMode(s_limiter_mode);
 	s_use_vsync_for_timing = false;
@@ -1562,6 +1613,7 @@ VMBootResult VMManager::Initialize(const VMBootParameters& boot_params, Error* e
 	hwReset();
 
 	Console.WriteLn("VM subsystems initialized in %.2f ms", init_timer.GetTimeMilliseconds());
+	UpdateOnlineLock();
 	s_state.store(VMState::Paused, std::memory_order_release);
 	Host::OnVMStarted();
 	FullscreenUI::OnVMStarted();
@@ -1707,6 +1759,9 @@ void VMManager::Reset()
 	vu1Thread.WaitVU();
 	vu1Thread.Reset();
 	MTGS::WaitGS();
+#ifdef ENABLE_VR
+	VR::WorldProjection::OnReset();
+#endif
 
 	const bool elf_was_changed = (s_current_crc != 0);
 	ClearELFInfo();
@@ -1826,6 +1881,10 @@ bool VMManager::DoLoadState(const char* filename, Error* error)
 	Host::OnSaveStateLoaded(filename, true);
 #ifdef ENABLE_VR
 	VR::CameraDriver::OnStateLoaded();
+	VR::PadXR::OnStateLoaded();
+	VR::FovDriver::OnStateLoaded();
+	VR::WorldProjection::OnStateLoaded();
+	VR::Mods::OnStateLoaded();
 #endif
 	if (g_InputRecording.isActive())
 	{
@@ -1965,6 +2024,12 @@ u32 VMManager::DeleteSaveStates(const char* game_serial, u32 game_crc, bool also
 
 bool VMManager::LoadState(const char* filename, Error* error)
 {
+	if (RefuseWhileOnline("loading a save state"))
+	{
+		Error::SetString(error, TRANSLATE_STR("VMManager", "Cannot load a state while the network adapter is on."));
+		return false;
+	}
+
 	if (Achievements::IsHardcoreModeActive())
 	{
 		Error::SetString(error,
@@ -1990,6 +2055,12 @@ bool VMManager::LoadState(const char* filename, Error* error)
 
 bool VMManager::LoadStateFromSlot(s32 slot, bool backup, Error* error)
 {
+	if (RefuseWhileOnline("loading a save state"))
+	{
+		Error::SetString(error, TRANSLATE_STR("VMManager", "Cannot load a state while the network adapter is on."));
+		return false;
+	}
+
 	const std::string filename = GetCurrentSaveStateFileName(slot, backup);
 	if (filename.empty() || !FileSystem::FileExists(filename.c_str()))
 	{
@@ -2034,6 +2105,12 @@ bool VMManager::LoadStateFromSlot(s32 slot, bool backup, Error* error)
 void VMManager::SaveState(
 	const char* filename, bool zip_on_thread, bool backup_old_state, std::function<void(const std::string&)> error_callback)
 {
+	if (RefuseWhileOnline("saving a state"))
+	{
+		error_callback(TRANSLATE_STR("VMManager", "Cannot save a state while the network adapter is on."));
+		return;
+	}
+
 	if (MemcardBusy::IsBusy())
 	{
 		error_callback(TRANSLATE_STR("VMManager",
@@ -2046,6 +2123,12 @@ void VMManager::SaveState(
 
 void VMManager::SaveStateToSlot(s32 slot, bool zip_on_thread, std::function<void(const std::string&)> error_callback)
 {
+	if (RefuseWhileOnline("saving a state"))
+	{
+		error_callback(TRANSLATE_STR("VMManager", "Cannot save a state while the network adapter is on."));
+		return;
+	}
+
 	const std::string filename(GetCurrentSaveStateFileName(slot));
 	if (filename.empty())
 	{
@@ -2079,6 +2162,11 @@ LimiterModeType VMManager::GetLimiterMode()
 
 void VMManager::SetLimiterMode(LimiterModeType type)
 {
+	if (type != LimiterModeType::Nominal && RefuseWhileOnline("changing the emulation speed"))
+		return;
+	if (type != LimiterModeType::Nominal && RefuseWhileVR("changing the emulation speed"))
+		return;
+
 	if (s_limiter_mode == type)
 		return;
 
@@ -2120,11 +2208,17 @@ void VMManager::UpdateTargetSpeed()
 	const float frame_rate = GetFrameRate();
 	float target_speed = GetTargetSpeedForLimiterMode(s_limiter_mode);
 
+	const bool online_fixed = IsOnlineLocked() &&
+							  !(EmuConfig.EnableFastBootFastForward && VMManager::Internal::IsFastBootInProgress());
+	if (online_fixed)
+		target_speed = 1.0f;
+	target_speed = VRHeldTargetSpeed(target_speed);
+
 	s_target_speed_can_sync_to_host = false;
 	s_target_speed_synced_to_host = false;
 	s_use_vsync_for_timing = false;
 
-	if (EmuConfig.EmulationSpeed.SyncToHostRefreshRate)
+	if (EmuConfig.EmulationSpeed.SyncToHostRefreshRate && !online_fixed)
 	{
 		if (const std::optional<float> host_refresh_rate = GSGetHostRefreshRate(); host_refresh_rate.has_value())
 		{
@@ -2218,6 +2312,9 @@ void VMManager::Internal::FrameRateChanged()
 
 void VMManager::FrameAdvance(u32 num_frames )
 {
+	if (RefuseWhileOnline("frame advance"))
+		return;
+
 	if (!HasValidVM())
 		return;
 
@@ -2657,6 +2754,9 @@ void VMManager::IdlePollUpdate()
 
 void VMManager::SetPaused(bool paused)
 {
+	if (paused && RefuseWhileOnline("pausing"))
+		return;
+
 	if (!HasValidVM())
 		return;
 
@@ -2781,6 +2881,10 @@ void VMManager::Internal::VSyncOnCPUThread()
 
 #ifdef ENABLE_VR
 	VR::CameraDriver::Apply();
+	VR::PadXR::Tick();
+	VR::WorldProjection::OnEeVsync();
+	VR::FovDriver::Apply();
+	VR::Mods::OnVsync();
 	VR::ApplySceneStereo();
 	VR::SplitState::Apply();
 #endif
@@ -2895,6 +2999,119 @@ void VMManager::CheckForDEV9ConfigChanges(const Pcsx2Config& old_config)
 	DEV9CheckChanges(old_config);
 }
 
+void VMManager::UpdateOnlineLock()
+{
+	const bool adapter_on = EmuConfig.DEV9.EthEnable;
+	const bool locked = (adapter_on && EmuConfig.OnlineLock) || s_online_lock_forced.load(std::memory_order_acquire);
+	const bool was_locked = s_online_locked.exchange(locked, std::memory_order_acq_rel);
+
+	if (adapter_on && !EmuConfig.OnlineLock && !s_online_lock_forced.load(std::memory_order_acquire))
+	{
+		if (!s_online_override_logged)
+		{
+			s_online_override_logged = true;
+			Console.Warning("(VMManager) The network adapter is ON and the online lock is OFF (the default): pause, "
+							"speed changes, frame advance and save states can desync or drop an online session. "
+							"Set [EmuCore] OnlineLock = true to refuse them while online.");
+		}
+	}
+	else
+	{
+		s_online_override_logged = false;
+	}
+
+	if (locked && !was_locked)
+	{
+		Console.WriteLn("(VMManager) Online lock ON: the network adapter is enabled, so pause, speed changes, frame "
+						"advance and save-state load/save are refused until it is off.");
+		if (s_limiter_mode != LimiterModeType::Nominal)
+			s_limiter_mode = LimiterModeType::Nominal;
+		if (HasValidVM())
+			UpdateTargetSpeed();
+	}
+	else if (!locked && was_locked)
+	{
+		Console.WriteLn("(VMManager) Online lock off.");
+		if (HasValidVM())
+			UpdateTargetSpeed();
+	}
+}
+
+bool VMManager::IsOnlineLocked()
+{
+#ifdef VR_FORKBUGS_PLANTED_ONLINELOCK
+	return false;
+#else
+	return s_online_locked.load(std::memory_order_acquire);
+#endif
+}
+
+bool VMManager::RefuseWhileOnline(const char* what)
+{
+	if (!IsOnlineLocked())
+		return false;
+	s_online_lock_refusals.fetch_add(1, std::memory_order_relaxed);
+	Console.Warning("(VMManager) Online lock: %s refused while the network adapter is on.", what);
+	Host::AddIconOSDMessage("OnlineLock", ICON_FA_NETWORK_WIRED,
+		fmt::format(TRANSLATE_FS("VMManager", "Online: {} is disabled while the network adapter is on."), what),
+		Host::OSD_WARNING_DURATION);
+	return true;
+}
+
+bool VMManager::IsVRSpeedLocked()
+{
+#if defined(ENABLE_VR) && !defined(VR_GSHIP21_PLANTED_NOLOCK)
+	return VR::LaunchRequestedVR();
+#else
+	return false;
+#endif
+}
+
+bool VMManager::RefuseWhileVR(const char* what)
+{
+	if (!IsVRSpeedLocked())
+		return false;
+	s_vr_speed_refusals.fetch_add(1, std::memory_order_relaxed);
+	Console.Warning("(VMManager) %s refused while VR is on.", what);
+	Host::AddIconOSDMessage("VRSpeedLock", ICON_FA_CLOCK,
+		fmt::format(TRANSLATE_FS("VMManager", "VR: {} is disabled while VR is on."), what),
+		Host::OSD_WARNING_DURATION);
+	return true;
+}
+
+float VMManager::VRHeldTargetSpeed(float target_speed)
+{
+	if (IsVRSpeedLocked() && !(EmuConfig.EnableFastBootFastForward && VMManager::Internal::IsFastBootInProgress()))
+		return 1.0f;
+	return target_speed;
+}
+
+u32 VMManager::GetVRSpeedRefusalCount()
+{
+	return s_vr_speed_refusals.load(std::memory_order_relaxed);
+}
+
+LimiterModeType VMManager::BootLimiterMode(bool start_unlimited, bool start_turbo)
+{
+	const LimiterModeType asked = start_unlimited ? LimiterModeType::Unlimited :
+							   start_turbo     ? LimiterModeType::Turbo :
+												 LimiterModeType::Nominal;
+	if (asked != LimiterModeType::Nominal && RefuseWhileVR("starting at a changed emulation speed"))
+		return LimiterModeType::Nominal;
+	return asked;
+}
+
+u32 VMManager::GetOnlineLockRefusalCount()
+{
+	return s_online_lock_refusals.load(std::memory_order_relaxed);
+}
+
+void VMManager::SetOnlineLockForcedForTest(bool forced)
+{
+	s_online_lock_forced.store(forced, std::memory_order_release);
+	UpdateOnlineLock();
+}
+
 void VMManager::CheckForMemoryCardConfigChanges(const Pcsx2Config& old_config)
 {
 	bool changed = false;
@@ -2975,6 +3192,7 @@ void VMManager::CheckForConfigChanges(const Pcsx2Config& old_config)
 		CheckForPatchConfigChanges(old_config);
 		SPU2::CheckForConfigChanges(old_config);
 		CheckForDEV9ConfigChanges(old_config);
+		UpdateOnlineLock();
 		CheckForMemoryCardConfigChanges(old_config);
 		USB::CheckForConfigChanges(old_config);
 	}

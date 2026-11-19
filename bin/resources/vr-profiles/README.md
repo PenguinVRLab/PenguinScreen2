@@ -24,7 +24,7 @@ read-only in a flatpak install.
 To go back to the shipped profile, delete your copy. If you delete the seeded
 `SLUS-20851.yaml`, the emulator recreates it as a fresh copy of the shipped one,
 which gives the same result. While any copy of a game's profile is in your
-folder — including the untouched seed — updates to that game's shipped profile
+folder - including the untouched seed - updates to that game's shipped profile
 do not reach you until you delete it.
 
 Every profile is checked at launch. An invalid file is reported in a dialog
@@ -47,6 +47,33 @@ SLUS-20851:              # the disc serial; must match the file name
 screen, `stereo` adds per-eye depth, `immersive` adds a head-driven camera. It
 is a label: it does not switch anything on or off. A value outside those three
 rejects the profile.
+
+### Mods that share a serial
+
+A total-conversion mod usually boots with the serial of the game it was built
+from, so one serial can hold a list of variants instead of a single profile.
+Each entry in the list is a whole profile; the emulator picks the one whose
+`crcs` contains the running disc's CRC, and otherwise the one entry without
+`crcs`:
+
+```yaml
+SLUS-21214:
+  - name: "NCAA Football 06"   # no crcs: any other disc with this serial
+    tier: stereo
+  - name: "NCAA Next 26"       # only the disc with this CRC
+    crcs: [0x12345678]
+    basedOn: SLUS-21214        # which game it was built from (information only)
+    requires:
+      extraMemory: true        # needs Extended RAM to run
+    recommends:
+      textures: "SLUS-21214"   # the texture pack that belongs with it
+```
+
+At most one entry may leave out `crcs`, and a CRC may appear in only one entry;
+otherwise the file is reported as invalid at launch. `requires` never changes a
+setting by itself: when a disc needs something that is off, the emulator asks
+whether to turn it on for that game only, and the change is saved in that game's
+own settings.
 
 ## `screen`: the virtual screen
 
@@ -138,6 +165,33 @@ and values above `0.01815` make the emulator ignore the `hudCollimate` block;
 the rest of the profile still loads. The `rules` list selects which HUD
 draws are affected and is specific to each game; leave it as shipped. This
 feature works on the Vulkan renderer only.
+
+## `fov`: how wide the game itself draws
+
+Some profiles set the **game's own field of view** - how much of the world the
+game draws, per view. Matched to the screen's width, a turn of your head shows
+more world at its true size instead of the edge of a picture.
+
+Each lever names a number inside the game, and a calibration of at least two
+measured points says what that number means in degrees. Each scene says which
+view it applies to and what it should look like:
+
+| Key | Meaning |
+|---|---|
+| `target: screen` | match the screen you are being shown. This is the one to use |
+| `target: game` | leave the game's own view alone. This is also what happens in any view no scene covers |
+| `target: 90` | a field of view in degrees |
+| `target: { widen: 1.2 }` | widen whatever the game draws, keeping its own zooming |
+| `ramp` | seconds to ease from one view to the next; `0` changes instantly |
+
+The emulator gives the game its own value back when you leave a scene, when you
+switch VR off, and when the game changes. **VR, then Game field of view** in the
+settings window turns the whole feature off.
+
+Changing the addresses or the calibration needs the measuring tools; changing
+`target` and `ramp` is safe to try. A mistake anywhere in this block stops that
+profile from loading, with a message naming what is wrong - it never loads half
+a field of view.
 
 ## Everything else
 

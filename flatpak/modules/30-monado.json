@@ -1,0 +1,74 @@
+{
+  "name": "monado",
+  "buildsystem": "cmake-ninja",
+  "builddir": true,
+  "config-opts": [
+    "-DCMAKE_BUILD_TYPE=Release",
+    "-DCMAKE_PREFIX_PATH=\"${FLATPAK_DEST}\"",
+    "-DXRT_BUILD_DRIVER_PSVR2=ON",
+    "-DXRT_BUILD_DRIVER_SIMULATED=ON",
+    "-DXRT_FEATURE_SERVICE=ON",
+    "-DXRT_HAVE_OPENCV=OFF",
+    "-DXRT_HAVE_GST=OFF",
+    "-DXRT_IPC_MSG_SOCK_FILENAME=penguinscreen2-monado/comp_ipc",
+    "-DXRT_IPC_SERVICE_PID_FILENAME=penguinscreen2-monado/monado.pid",
+    "-DXRT_INSTALL_SYSTEMD_UNIT_FILES=OFF",
+    "-DXRT_BUILD_SAMPLES=OFF"
+  ],
+  "build-options": {
+    "strip": true
+  },
+  "sources": [
+    {
+      "type": "git",
+      "url": "https://gitlab.freedesktop.org/monado/monado.git",
+      "commit": "ded98428a572b264eaea6917895c85f7d131bcbe"
+    },
+    {
+      "type": "patch",
+      "path": "../common/monado-psvr2-dprx-log.patch",
+      "use-git": true
+    },
+    {
+      "type": "patch",
+      "path": "../common/monado-bindings-deterministic-merge.patch",
+      "use-git": true
+    }
+  ],
+  "post-install": [
+    "install -Dm644 ../LICENSE \"${FLATPAK_DEST}/share/licenses/${FLATPAK_ID}/MONADO-LICENSE\"",
+    "mkdir -p \"${FLATPAK_DEST}/share/penguinscreen2\"",
+    "echo ded98428a572b264eaea6917895c85f7d131bcbe > \"${FLATPAK_DEST}/share/penguinscreen2/monado.commit\""
+  ],
+  "cleanup": [
+    "/include",
+    "/lib/pkgconfig",
+    "/lib/cmake"
+  ],
+  "modules": [
+    {
+      "name": "eigen",
+      "buildsystem": "cmake-ninja",
+      "builddir": true,
+      "config-opts": [
+        "-DBUILD_TESTING=OFF",
+        "-DEIGEN_BUILD_DOC=OFF"
+      ],
+      "sources": [
+        {
+          "type": "archive",
+          "url": "https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.tar.gz",
+          "sha256": "8586084f71f9bde545ee7fa6d00288b264a2b7ac3607b974e54d13e7162c1c72"
+        }
+      ],
+      "post-install": [
+        "install -Dm644 ../COPYING.MPL2 \"${FLATPAK_DEST}/share/licenses/${FLATPAK_ID}/EIGEN-LICENSE\""
+      ],
+      "cleanup": [
+        "/include",
+        "/share/eigen3",
+        "/share/pkgconfig"
+      ]
+    }
+  ]
+}

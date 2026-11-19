@@ -3,9 +3,13 @@
 
 #include "VR/PadLook.h"
 
+#include "Config.h"
+#include "Counters.h"
 #include "Host.h"
 #include "Memory.h"
+#include "VMManager.h"
 #include "VR/CameraDriver.h"
+#include "VR/ExecHook.h"
 #include "VR/XRCompositor.h"
 #include "VR/XRSession.h"
 
@@ -20,6 +24,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -41,10 +46,22 @@ namespace VR::PadLook
 	}
 
 
-	u8 ApplyRx(u8 real)
+	int PublishedRxUnits()
+	{
+		return s_rx_offset.load(std::memory_order_relaxed);
+	}
+
+	bool RxLanes([[maybe_unused]] u8 real, [[maybe_unused]] u8* out)
 	{
 
-		const int offset = s_rx_offset.load(std::memory_order_relaxed);
+		return false;
+	}
+
+	u8 ApplyRx(u8 real)
+	{
+		if (u8 owned; RxLanes(real, &owned)) [[unlikely]]
+			return owned;
+		const int offset = PublishedRxUnits();
 		if (offset == 0)
 			return real;
 		return static_cast<u8>(std::clamp(static_cast<int>(real) + offset, 0, 255));

@@ -15,7 +15,9 @@ SLUS-20090:
   stereo: { separation: 0.02, convergence: 2.0, uvDraws: screen, pinUniformQ: true }
   split:
     layout: horizontal
-    active: { address: 0x003A2A34, atLeast: 2, width: 4 }
+    active:
+      - { address: 0x003A2A34, atLeast: 2, width: 4 }
+      - { address: 0x003A276C, equals: 3, width: 4 }
     localView: 0
     localPadPort: 0
     mode: local

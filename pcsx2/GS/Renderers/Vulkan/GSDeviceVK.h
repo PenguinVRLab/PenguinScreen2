@@ -23,6 +23,8 @@
 #include <thread>
 #include <vector>
 
+struct ImDrawData;
+
 class VKSwapChain;
 
 class GSDeviceVK final : public GSDevice
@@ -454,6 +456,10 @@ private:
 	VkPipelineLayout m_cas_pipeline_layout = VK_NULL_HANDLE;
 	std::array<VkPipeline, NUM_CAS_PIPELINES> m_cas_pipelines = {};
 	VkPipeline m_imgui_pipeline = VK_NULL_HANDLE;
+#ifdef ENABLE_VR
+	VkPipeline m_imgui_panel_pipeline = VK_NULL_HANDLE;
+	std::unique_ptr<GSTexture> m_vr_ui_panel;
+#endif
 
 	GSHWDrawConfig::VSConstantBuffer m_vs_cb_cache;
 	GSHWDrawConfig::PSConstantBuffer m_ps_cb_cache;
@@ -501,6 +507,11 @@ private:
 
 	bool CompileImGuiPipeline();
 	void RenderImGui();
+	void DrawImGuiData(const ImDrawData* draw_data, VkPipeline pipeline, float layout_w, float layout_h, float clip_sx,
+		float clip_sy);
+#ifdef ENABLE_VR
+	void RenderImGuiUiPanel();
+#endif
 	void RenderBlankFrame();
 
 	void DestroyResources();

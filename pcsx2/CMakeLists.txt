@@ -1063,19 +1063,38 @@ set(pcsx2VRSources
 	VR/CameraDriver.cpp
 	VR/ControlQuads.cpp
 	VR/SplitState.cpp
-	VR/SeatCast.cpp
-	VR/SeatSession.cpp
 	VR/SpatialControls.cpp
+	VR/DirectLook.cpp
+	VR/DisplayFit.cpp
+	VR/FovCore.cpp
+	VR/FovDriver.cpp
+	VR/FovMath.cpp
+	VR/GloveHaptics.cpp
+	VR/GuestPatch.cpp
+	VR/GuestRam.cpp
 	VR/HeadPose.cpp
+	VR/LegacyDataImport.cpp
+	VR/ExecHook.cpp
 	VR/PadLook.cpp
+	VR/ScreenCurveMode.cpp
+	VR/ScreenProjector.cpp
 	VR/StereoState.cpp
 	VR/VRInput.cpp
 	VR/VRManager.cpp
 	Input/VRInputSource.cpp
+	VR/VRMods.cpp
+	VR/NetplayModList.cpp
+	VR/VRModFiles.cpp
+	VR/VRModsMenu.cpp
+	VR/VROptionsReadout.cpp
+	VR/VRRelaunch.cpp
+	VR/WorldProjection.cpp
 	VR/VRProfileDB.cpp
 	VR/VRVulkanBridge.cpp
 	VR/XRCompositor.cpp
 	VR/XRSession.cpp
+	VR/XRSwapchainFormat.cpp
+	VR/UiPanel.cpp
 )
 
 set(pcsx2VRHeaders
@@ -1084,20 +1103,77 @@ set(pcsx2VRHeaders
 	VR/SplitState.h
 	VR/SeatCast.h
 	VR/SeatSession.h
+	VR/SpaceChange.h
 	VR/SpatialControls.h
+	VR/DisplayFit.h
+	VR/FovCore.h
+	VR/FovDriver.h
+	VR/FovMath.h
+	VR/GloveHaptics.h
+	VR/GuestPatch.h
+	VR/LagMatch.h
+	VR/RendererRule.h
+	VR/ScreenAspect.h
+	VR/GuestRam.h
 	VR/HeadPose.h
+	VR/LegacyDataImport.h
+	VR/ExecHook.h
 	VR/PadLook.h
+	VR/ScreenCurveMode.h
+	VR/ScreenProjector.h
+	VR/ScreenProjectorEyeRects.h
+	VR/screenproj/vr_screen_projector.h
 	VR/StereoState.h
+	VR/SwapchainWait.h
 	VR/VRInput.h
 	VR/VRInputState.h
 	Input/VRInputSource.h
 	VR/VRInternal.h
 	VR/VRManager.h
+	VR/VRMods.h
+	VR/NetplayModList.h
+	VR/VRModFiles.h
+	VR/VRModsMenu.h
+	VR/VROptionsReadout.h
+	VR/VRRelaunch.h
+	VR/FrameStamp.h
+	VR/WorldProjection.h
+	VR/WorldProjectionCore.h
 	VR/VRProfileDB.h
 	VR/VRVulkanBridge.h
 	VR/XRCompositor.h
+	VR/XRFrameHealth.h
+	VR/UiPanel.h
 	VR/XRSession.h
+	VR/XRSwapchainFormat.h
 )
+
+# PCSX2-VR: PadXR, the skeleton. The pure core is
+# PadXRCore.h; PadXR.cpp holds the skeleton and its thin emulator seams.
+list(APPEND pcsx2VRSources
+	VR/PadXR.cpp
+)
+list(APPEND pcsx2VRHeaders
+	VR/PadXR.h
+	VR/PadXRCore.h
+)
+
+# PCSX2-VR: PadXR gesture detectors: pure step functions, unit-tested in core_test
+# (VRPadXRGestures.*); not wired into the input path yet.
+list(APPEND pcsx2VRSources VR/PadXRGestures.cpp)
+list(APPEND pcsx2VRHeaders VR/PadXRGestures.h)
+# PCSX2-VR: AudioXR's PAD route, the voice-command core (VR/VoiceCommand.h): a pure module;
+# nothing calls it yet. Kept as one block.
+list(APPEND pcsx2VRSources VR/VoiceCommand.cpp)
+list(APPEND pcsx2VRHeaders VR/VoiceCommand.h)
+# PCSX2-VR: AudioXR's press glue (VR/VoiceGlue.h): a confirmed voice plan becomes chained counted presses.
+# Nothing calls it yet. One block, like the one above.
+list(APPEND pcsx2VRSources VR/VoiceGlue.cpp)
+list(APPEND pcsx2VRHeaders VR/VoiceGlue.h)
+# PCSX2-VR: vrui panels (VR/VrUiPanel.h): a Qt Designer form compiled to vrui/1, drawn with no Qt as one
+# more quad. One block, like the two above.
+list(APPEND pcsx2VRSources VR/VrUiPanel.cpp)
+list(APPEND pcsx2VRHeaders VR/VrUiPanel.h)
 
 # These ones benefit a lot from LTO
 set(pcsx2LTOSources
@@ -1173,9 +1249,60 @@ endif()
 
 target_sources(PCSX2 PRIVATE ${pcsx2USBSources} ${pcsx2USBHeaders})
 
+# PadXR's action layer (the bindings page's model, the wrist pinch). Pure files, unit-tested by core_test
+# (ctest -R vr_padxr_actions).
+if(ENABLE_VR)
+	target_sources(PCSX2 PRIVATE
+		VR/PadXRActions.cpp
+		VR/PadXRActions.h
+		VR/PadXRBindings.cpp
+		VR/PadXRBindings.h
+		VR/WristPinch.cpp
+		VR/WristPinch.h
+	)
+	# The wrist pinch's hand-joint source (XR_EXT_hand_tracking, optional).
+	target_sources(PCSX2 PRIVATE
+		VR/HandTracking.cpp
+		VR/HandTracking.h
+		VR/XRExtensions.h
+	)
+	# The near-field hands: the glove-v1 .glb loader and CPU skinning (cgltf, MIT, 3rdparty/cgltf), the placement and
+	# the CPU rasteriser. Pure files, unit-tested by core_test (ctest -R vr_nearfield).
+	target_sources(PCSX2 PRIVATE
+		VR/HandsGltf.cpp
+		VR/HandsGltf.h
+		VR/NearField.cpp
+		VR/NearField.h
+	)
+	# The game's own hands: the GS-draw capture, the build into a textured hand and the hand-off to the near-field
+	# layer. Unit-tested by core_test (ctest -R vr_handcap).
+	target_sources(PCSX2 PRIVATE
+		VR/HandCapture.cpp
+		VR/HandCapture.h
+	)
+	target_link_libraries(PCSX2 PRIVATE cgltf)
+endif()
 if(ENABLE_VR)
 	target_sources(PCSX2 PRIVATE ${pcsx2VRSources} ${pcsx2VRHeaders})
 	target_link_libraries(PCSX2_FLAGS INTERFACE openxr_loader)
+	# Seat code (dlfcn + setenv, POSIX-only): compiled only where ENABLE_VR_SEATS
+	# is defined (cmake/BuildParameters.cmake: ENABLE_VR AND NOT WIN32). The
+	# headers stay listed above: without the define they provide inert stubs.
+	if(NOT WIN32)
+		target_sources(PCSX2 PRIVATE
+			VR/SeatCast.cpp
+			VR/SeatSession.cpp
+		)
+	endif()
+
+	# PCSX2-VR: the curved-screen projector's fragment pass (VR/screenproj/screen_projector.glsl)
+	# is embedded as a string at configure time so the binary carries exactly those bytes and the GS
+	# Vulkan shader cache compiles them at run time like every other Vulkan shader here.
+	set(pcsx2ScreenProjectorGlsl "${CMAKE_CURRENT_SOURCE_DIR}/VR/screenproj/screen_projector.glsl")
+	file(READ "${pcsx2ScreenProjectorGlsl}" VRSP_GLSL_SOURCE)
+	set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${pcsx2ScreenProjectorGlsl}")
+	configure_file("${CMAKE_CURRENT_SOURCE_DIR}/VR/screenproj/screen_projector_glsl.h.in"
+		"${CMAKE_BINARY_DIR}/pcsx2/VR/screenproj/screen_projector_glsl.h" @ONLY)
 endif()
 
 if(APPLE OR BSD)
@@ -1516,9 +1643,26 @@ source_group(Resources REGULAR_EXPRESSION ${CMAKE_CURRENT_BINARY_DIR}/*)
 # C++ exceptions on connection loss, and containing a foreign throw requires
 # landing pads in the frames it unwinds through. Everything else stays
 # -fno-exceptions.
-set_source_files_properties(VR/SeatSession.cpp VR/XRSession.cpp PROPERTIES
-	COMPILE_OPTIONS "-fexceptions"
-	SKIP_PRECOMPILE_HEADERS ON) # the PCH was built -fno-exceptions and refuses to mix
+#
+# The flag is compiler-shaped: -fexceptions is a GCC/Clang driver flag, and the
+# MSVC-style driver (cl.exe, and clang-cl in the Windows cross-build) silently
+# drops it — the Windows VR build then failed on every try in XRSession.cpp
+# with "cannot use 'try' with exceptions disabled". /EHs is the same island
+# in that dialect (the global build strips /EHsc; this puts exceptions back
+# for these two files only). /EHs, NOT /EHsc: the 'c' lets the compiler
+# assume extern "C" functions never throw, and every try here wraps an
+# extern "C" xr* call whose runtime library throws through it — with 'c' the
+# catch could be dropped and the teardown throw would abort after all.
+if(MSVC)
+	set(_vr_exceptions_flag "/EHs")
+else()
+	set(_vr_exceptions_flag "-fexceptions")
+endif()
+# HandTracking joins it for the same reason: DestroyTrackers runs inside XRSession's teardown and contains a throw
+# from xrDestroyHandTrackerEXT on a dead connection.
+set_source_files_properties(VR/SeatSession.cpp VR/XRSession.cpp VR/HandTracking.cpp PROPERTIES
+	COMPILE_OPTIONS "${_vr_exceptions_flag}"
+	SKIP_PRECOMPILE_HEADERS ON) # the PCH was built without exceptions and refuses to mix
 # XRSession joins the island for its TEARDOWN paths: destroying a session whose
 # WiVRn connection already died makes the client library THROW mid-shutdown,
 # and -fno-exceptions frames turn that into an abort during an otherwise clean

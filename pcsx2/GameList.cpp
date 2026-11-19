@@ -16,6 +16,9 @@
 #include "common/HeterogeneousContainers.h"
 #include "common/Path.h"
 #include "common/ProgressCallback.h"
+#ifdef ENABLE_VR
+#include "VR/VRProfileDB.h"
+#endif
 #include "common/ScopedGuard.h"
 #include "common/StringUtil.h"
 
@@ -720,6 +723,19 @@ void GameList::ScanDirectory(const char* path, bool recursive, bool only_cache, 
 	progress->PopState();
 }
 
+#ifdef ENABLE_VR
+static void ApplyConversionTitle(GameList::Entry& entry)
+{
+	if (entry.type != GameList::EntryType::PS2Disc && entry.type != GameList::EntryType::ELF)
+		return;
+	if (std::optional<std::string> title = VR::ProfileDB::ConversionTitle(entry.serial, entry.crc))
+	{
+		entry.title_sort = title.value();
+		entry.title = std::move(title.value());
+	}
+}
+#endif
+
 bool GameList::AddFileFromCache(const std::string& path, std::time_t timestamp, const PlayedTimeMap& played_time_map)
 {
 	Entry entry;
@@ -728,6 +744,10 @@ bool GameList::AddFileFromCache(const std::string& path, std::time_t timestamp, 
 
 	if (entry.type == EntryType::Invalid)
 		return true;
+
+#ifdef ENABLE_VR
+	ApplyConversionTitle(entry);
+#endif
 
 	auto iter = played_time_map.find(entry.serial);
 	if (iter != played_time_map.end())
@@ -771,6 +791,10 @@ bool GameList::ScanFile(std::string path, std::time_t timestamp, std::unique_loc
 		entry.last_played_time = iter->second.last_played_time;
 		entry.total_played_time = iter->second.total_played_time;
 	}
+
+#ifdef ENABLE_VR
+	ApplyConversionTitle(entry);
+#endif
 
 	auto custom_title = custom_attributes_ini.GetOptionalStringValue(EncodeIniKey(entry.path).c_str(), "Title");
 	if (custom_title)

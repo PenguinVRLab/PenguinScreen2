@@ -3,6 +3,9 @@
 Play your PS2 library in VR - a head-tracked virtual screen for every game, with real
 geometric 3D depth and head-driven cameras on profiled titles, streamed to a headset from your own PC or Steam Deck.
 
+**Which games get what:** [`GAMES.md`](GAMES.md) lists every game with a VR profile in this release (head tracking,
+stereoscopic 3D, and more), and where each game stands.
+
 PenguinScreen2 is **built on [PCSX2](https://pcsx2.net)**, the long-running
 open-source PlayStation 2 emulator. The emulation is PCSX2's work and lineage;
 PenguinScreen2 adds the VR presentation layer, per-game 3D tuning, and the
@@ -15,10 +18,24 @@ are the author's own work, provided under a separate non-commercial license
 
 - A PC (SteamOS or desktop Linux) and a standalone headset served by
   [WiVRn](https://github.com/WiVRn/WiVRn) or another OpenXR runtime - see
-  `STACK.md` for the exact versions this release was built and validated
-  against.
+  `STACK.md` for the exact versions this release was built
+  against. Every headset and host we know about, and how to connect each one:
+  [`DEVICES.md`](DEVICES.md).
+- **A PlayStation VR2 instead?** It connects by cable through Sony's PC adapter, with no WiVRn and no phone app. Follow
+  [`PSVR2.md`](PSVR2.md): the flatpak uses Monado, the AppImage uses SteamVR on Linux.
 - **Your own PS2 BIOS, dumped from your own console.** No BIOS, game images,
   or copyrighted game data are included or downloaded - ever.
+
+**Two downloads, two headset paths.** `launch-vr-session.sh` is the flatpak's launcher: it serves Quest-class headsets
+over WiVRn and the PlayStation VR2 through Monado, and players 2 to 4 are always WiVRn. (Display glasses will need
+PenguinLens, a separate install that is not out yet: see [`DEVICES.md`](DEVICES.md).) It never
+uses SteamVR. The **AppImage** is the SteamVR path: it uses whichever OpenXR runtime is active on your PC, so start it with
+`--vr` while SteamVR is running, and it is the build to add to Steam as a non-Steam game (a flatpak is not the thing to put
+in Steam). One headset per path; [`DEVICES.md`](DEVICES.md) lists every headset, [`PSVR2.md`](PSVR2.md) both PS VR2 routes.
+
+**Multi-seat VR multiplayer (experimental, Linux).** Several players, each in their own headset. **Split split screen**:
+one game, and each player gets their own half of its split screen. **Multi emulator**: each player runs their own
+emulator with their own game file. [`DEVICES.md`](DEVICES.md) has the setup.
 
 ## Fully offline by design
 
@@ -72,8 +89,8 @@ client from the store (Meta Horizon Store for Quest).
 
 **3. Drop in your own files** - found automatically at next launch:
 
-    BIOS (dumped from your console)  ->  ~/PS2-BIOS
-    games (.iso/.chd/.bin+.cue ...)  ->  ~/PS2-Games
+    BIOS (dumped from your console)  goes in  ~/PS2-BIOS
+    games (.iso/.chd/.bin+.cue ...)  goes in  ~/PS2-Games
 
 **4. Play in VR:**
 
@@ -89,11 +106,25 @@ Docked Ethernet is the desktop-class path.
 
 **5. No headset handy?**
 
-    flatpak run org.penguinvr.penguinscreen2
+    flatpak run com.penguinvrlabs.penguinscreen2
 
 runs it as a normal flat PS2 emulator.
 
+## Windows
+
+Windows is supported, and supported less than Linux. Linux and SteamOS come first; Windows gets what carries over,
+one release behind.
+
+- **Today's Windows download is the flat emulator.** It plays on a monitor with VR off. It is the same tree as the Linux
+  download, so the Linux scripts are in it; they do nothing on Windows.
+- **VR on Windows is a separate `.exe`**, built from the same source with VR on. It talks to **SteamVR only**: no WiVRn,
+  no Monado, no PS VR2 driver, and no multi-seat (one headset, one player in VR). It is not in this release.
+- Expect less hand-holding: the guides, the launcher's checks and the games list are written against Linux. If something
+  is wrong on Windows, open an issue with the game and the log, and we fix Windows after Linux.
+
 The full guided walkthrough, per-game expectations, and known issues:
-`QUICKSTART.md` and `KNOWN-ISSUES.md`, shipped alongside this file. (USB
+`QUICKSTART.md` and `KNOWN-ISSUES.md`, shipped alongside this file. Games and
+their VR features: `GAMES.md`. Headsets, the Steam Deck, the PS VR2 and how to
+connect each: `DEVICES.md`. (USB
 install-kit users also get a generated `INSTALL.txt` tailored to the exact
 kit contents.)

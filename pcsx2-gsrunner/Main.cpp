@@ -48,6 +48,11 @@
 #ifdef ENABLE_VR
 #include "pcsx2/VR/VRManager.h"
 #include "pcsx2/VR/VRProfileDB.h"
+#include "pcsx2/VR/HandCapture.h"
+#include "pcsx2/VR/HandsGltf.h"
+#include "pcsx2/VR/NearField.h"
+#include "pcsx2/GS/Renderers/Common/GSRenderer.h"
+#include <sstream>
 #endif
 
 #include "svnrev.h"
@@ -83,6 +88,12 @@ static std::string s_output_prefix;
 static s32 s_loop_count = 1;
 static std::optional<bool> s_use_window;
 static bool s_no_console = false;
+#ifdef ENABLE_VR
+static std::optional<VR::HandCapture::Recipe> s_handcap_recipe;
+static bool s_gsmemhash = false;
+static std::string s_handcap_trace_path;
+static std::FILE* s_handcap_trace = nullptr;
+#endif
 
 static u32 s_dump_frame_number = 0;
 static u32 s_loop_number = s_loop_count;
@@ -404,6 +415,12 @@ void Host::RequestExitBigPicture()
 {
 }
 
+bool Host::RequestEmulatorRestart(std::function<void(std::string)> on_refused)
+{
+	Console.Warning("(VR) Restart: the headless runner does not restart itself.");
+	return false;
+}
+
 void Host::RequestVMShutdown(bool allow_confirm, bool allow_save_state, bool default_save_state)
 {
 	VMManager::SetState(VMState::Stopping);
@@ -508,6 +525,15 @@ static void PrintCommandLineHelp(const char* progname)
 						 "    gsrunner already renders stereo by default (that is what the replay harness is\n"
 						 "    for). Pass this only from scripts that deliberately stand up a runtime; it is\n"
 						 "    the flag that makes a replay able to seize a live headset.\n");
+	std::fprintf(stderr, "  -handcap <recipe.yaml>: (VR) Arm the game-hands module from a gameHands recipe file (the\n"
+						 "    profile's gameHands: block, schema 2) for this replay, with the game-hands toggle on, and\n"
+						 "    print one \"(VR) HandCapture replay:\" line per GS batch of the recipe's texture plus an\n"
+						 "    end-of-run summary. Flag only -- there is no env-var equivalent, on purpose. A recipe the\n"
+						 "    module's parser drops is a nonzero exit.\n");
+	std::fprintf(stderr, "  -gsmemhash: (VR) Print an FNV-1a 64 hash of GS local memory at the end of the replay.\n");
+	std::fprintf(stderr, "  -handcaptrace <file>: (VR) With -handcap, write the game-hands module's per-triangle trace\n"
+						 "    (every kicked triangle of the recipe's texture, every batch's triangles, objects, tests and\n"
+						 "    the GRAB state) to <file>. Flag only. Changes nothing the module decides.\n");
 #endif
 	std::fprintf(stderr, "  --: Signals that no more arguments will follow and the remaining\n"
 						 "    parameters make up the filename. Use when the filename contains\n"
@@ -522,6 +548,151 @@ void GSRunner::InitializeConsole()
 	if (!s_no_console)
 		Log::SetConsoleOutputLevel(LOGLEVEL_DEBUG);
 }
+
+#ifdef ENABLE_VR
+static std::optional<VR::HandCapture::Recipe> LoadHandCaptureRecipe(const std::string& path, std::string* why)
+{
+	std::optional<std::string> text = FileSystem::ReadFileToString(path.c_str());
+	if (!text)
+	{
+		*why = fmt::format("cannot read '{}'", path);
+		return std::nullopt;
+	}
+	if (text->find("gameHands:") == std::string::npos)
+	{
+		*why = fmt::format("'{}' has no gameHands: block", path);
+		return std::nullopt;
+	}
+	static constexpr const char* serial = "TEST-00001";
+	std::string body = fmt::format("{}:\n  name: \"gsrunner -handcap\"\n  tier: stereo\n  stereo: {{ separation: 0.02, convergence: 0.5 }}\n", serial);
+	std::istringstream lines(*text);
+	for (std::string line; std::getline(lines, line);)
+		if (!line.empty() && line[0] != '#')
+			body += "  " + line + "\n";
+	const std::string dir = Path::Combine(EmuFolders::DataRoot, "handcap-recipe-tmp");
+	FileSystem::RecursiveDeleteDirectory(dir.c_str());
+	if (!FileSystem::CreateDirectoryPath(dir.c_str(), false) ||
+		!FileSystem::WriteStringToFile(Path::Combine(dir, fmt::format("{}.yaml", serial)).c_str(), body))
+	{
+		*why = fmt::format("cannot write the temporary catalog in '{}'", dir);
+		return std::nullopt;
+	}
+	const std::string saved = EmuFolders::VRProfiles;
+	EmuFolders::VRProfiles = dir;
+	VR::ProfileDB::Reset();
+	VR::ProfileDB::EnsureLoaded();
+	std::optional<VR::HandCapture::Recipe> out;
+	const VR::ProfileDB::Profile* p = VR::ProfileDB::Lookup(serial, 0);
+	if (p && p->game_hands)
+		out = *p->game_hands;
+	*why = fmt::format("'{}': the module's parser dropped the gameHands block", path);
+	for (const VR::ProfileDB::ProfileAdvisory& a : VR::ProfileDB::ProfileAdvisories())
+		if (a.serial == serial)
+			*why = fmt::format("'{}': {}", path, a.message);
+	EmuFolders::VRProfiles = saved;
+	VR::ProfileDB::Reset();
+	FileSystem::RecursiveDeleteDirectory(dir.c_str());
+	return out;
+}
+
+static bool ArmHandCaptureForReplay()
+{
+	using namespace VR;
+	HandsGltf::HandAsset glove[2];
+	for (int side = 0; side < 2; side++)
+	{
+		std::string err;
+		const std::string path = Path::Combine(EmuFolders::Resources, NearField::AssetRelativePath(NearField::Hands::GloveV1_1, side == 1));
+		if (!HandsGltf::LoadGlbFile(path, &glove[side], &err))
+		{
+			Console.ErrorFmt("(VR) -handcap: cannot load the reference glove '{}': {}", path, err);
+			return false;
+		}
+	}
+	HandCapture::Recipe r = *s_handcap_recipe;
+	r.serial = GSDumpReplayer::GetDumpSerial();
+	HandCapture::Module& m = HandCapture::Global();
+	m.SetReferenceHands(glove[0], glove[1]);
+	m.SetEnabled(true);
+	m.SetReplayLog(true);
+	if (!s_handcap_trace_path.empty())
+	{
+		s_handcap_trace = std::fopen(s_handcap_trace_path.c_str(), "w");
+		if (!s_handcap_trace)
+		{
+			Console.ErrorFmt("(VR) -handcaptrace: cannot open '{}' for writing.", s_handcap_trace_path);
+			return false;
+		}
+		m.SetTrace(s_handcap_trace);
+		Console.WriteLnFmt("(VR) -handcaptrace: writing the trace to '{}'.", s_handcap_trace_path);
+	}
+	m.Configure(&r);
+	return true;
+}
+
+static void CloseHandCaptureTrace()
+{
+	if (!s_handcap_trace)
+		return;
+	VR::HandCapture::Global().SetTrace(nullptr);
+	std::fflush(s_handcap_trace);
+	const long bytes = std::ftell(s_handcap_trace);
+	std::fclose(s_handcap_trace);
+	s_handcap_trace = nullptr;
+	Console.WriteLnFmt("(VR) -handcaptrace: wrote {} bytes to '{}'.", bytes, s_handcap_trace_path);
+}
+
+static void HandCaptureReplaySummary()
+{
+	using namespace VR;
+	HandCapture::Module& m = HandCapture::Global();
+	m.WaitForBuild();
+	static constexpr const char* kState[] = {"off", "watching", "building", "ready", "refused", "timed_out"};
+	const HandCapture::Stats st = m.GetStats();
+	std::string sides;
+	for (int side = 0; side < 2; side++)
+	{
+		const std::shared_ptr<const HandsGltf::HandAsset> h = m.Published(side);
+		if (!h)
+		{
+			sides += fmt::format(" {} none", side ? "right" : "left");
+			continue;
+		}
+		double c[3] = {0, 0, 0};
+		for (u32 v = 0; v < h->vertex_count; v++)
+			for (int k = 0; k < 3; k++)
+				c[k] += h->positions[v * 3 + k];
+		const double n = h->vertex_count ? h->vertex_count : 1;
+		sides += fmt::format(" {} {} triangles centroid ({:.6f},{:.6f},{:.6f})", side ? "right" : "left", h->TriangleCount(), c[0] / n,
+			c[1] / n, c[2] / n);
+	}
+	Console.WriteLnFmt("(VR) HandCapture replay: end state {} has_recipe {} draws_seen {} draws_selected {} batches_from_tap {} "
+					   "kicks_tapped {} draws_hidden {} triangles_hidden {} grabs {};{}",
+		kState[static_cast<int>(m.GetState())], m.HasRecipe() ? 1 : 0, st.draws_seen, st.draws_selected, st.batches_from_tap,
+		st.kicks_tapped, st.draws_hidden, st.triangles_hidden, st.grabs, sides);
+}
+
+static void GsMemHashLine()
+{
+	u64 h = 0;
+	bool have = false;
+	MTGS::RunOnGSThread([&h, &have]() {
+		if (!g_gs_renderer)
+			return;
+		const u8* p = g_gs_renderer->m_mem.vm8();
+		u64 x = 0xcbf29ce484222325ull;
+		for (int i = 0; i < GSLocalMemory::m_vmsize; i++)
+			x = (x ^ p[i]) * 0x100000001b3ull;
+		h = x;
+		have = true;
+	});
+	MTGS::WaitGS(false);
+	if (have)
+		Console.WriteLnFmt("(VR) gsrunner: GS local memory fnv1a64 {:016x} ({} bytes).", h, GSLocalMemory::m_vmsize);
+	else
+		Console.Error("(VR) gsrunner: GS local memory hash: no GS renderer.");
+}
+#endif
 
 bool GSRunner::ParseCommandLineArgs(int argc, char* argv[], VMBootParameters& params)
 {
@@ -660,6 +831,30 @@ bool GSRunner::ParseCommandLineArgs(int argc, char* argv[], VMBootParameters& pa
 			{
 				VR::SetLaunchRequestedVR(true);
 				Console.WriteLn("(VR) Armed for VR by -vr: this run may create an OpenXR session.");
+				continue;
+			}
+			else if (CHECK_ARG_PARAM("-handcap"))
+			{
+				std::string why;
+				s_handcap_recipe = LoadHandCaptureRecipe(std::string(StringUtil::StripWhitespace(argv[++i])), &why);
+				if (!s_handcap_recipe)
+				{
+					const std::string msg = fmt::format("(VR) -handcap: {}\n", why);
+					Console.Error(msg);
+					std::fputs(msg.c_str(), stderr);
+					return false;
+				}
+				Console.WriteLn("(VR) -handcap: recipe parsed; the game-hands module arms when the dump starts.");
+				continue;
+			}
+			else if (CHECK_ARG("-gsmemhash"))
+			{
+				s_gsmemhash = true;
+				continue;
+			}
+			else if (CHECK_ARG_PARAM("-handcaptrace"))
+			{
+				s_handcap_trace_path = StringUtil::StripWhitespace(argv[++i]);
 				continue;
 			}
 #endif
@@ -851,6 +1046,16 @@ bool GSRunner::ParseCommandLineArgs(int argc, char* argv[], VMBootParameters& pa
 		return false;
 	}
 
+#ifdef ENABLE_VR
+	if (!s_handcap_trace_path.empty() && !s_handcap_recipe)
+	{
+		const char* msg = "(VR) -handcaptrace needs -handcap <recipe.yaml>.\n";
+		Console.Error(msg);
+		std::fputs(msg, stderr);
+		return false;
+	}
+#endif
+
 	if (s_settings_interface.GetBoolValue("EmuCore/GS", "DumpGSData") && !dumpdir.empty())
 	{
 		if (s_settings_interface.GetStringValue("EmuCore/GS", "HWDumpDirectory").empty())
@@ -949,6 +1154,15 @@ static void CPUThreadMain(VMBootParameters* params, std::atomic<int>* ret)
 		if (VMManager::Initialize(*params) == VMBootResult::StartupSuccess)
 		{
 			GSDumpReplayer::SetLoopCount(s_loop_count);
+#ifdef ENABLE_VR
+			if (s_handcap_recipe && !ArmHandCaptureForReplay())
+			{
+				VMManager::Shutdown(false);
+				VMManager::Internal::CPUThreadShutdown();
+				GSRunner::StopPlatformMessagePump();
+				return;
+			}
+#endif
 			VMManager::SetState(VMState::Running);
 			if (s_perf_enable)
 			{
@@ -957,8 +1171,17 @@ static void CPUThreadMain(VMBootParameters* params, std::atomic<int>* ret)
 			}
 			while (VMManager::GetState() == VMState::Running)
 				VMManager::Execute();
+#ifdef ENABLE_VR
+			if (s_gsmemhash)
+				GsMemHashLine();
+			if (s_handcap_recipe)
+				HandCaptureReplaySummary();
+#endif
 			VMManager::Shutdown(false);
 			GSRunner::DumpStats();
+#ifdef ENABLE_VR
+			CloseHandCaptureTrace();
+#endif
 			ret->store(EXIT_SUCCESS);
 		}
 	}

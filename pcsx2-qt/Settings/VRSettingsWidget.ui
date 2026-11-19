@@ -240,6 +240,13 @@
         </property>
        </widget>
       </item>
+      <item>
+       <widget class="QCheckBox" name="gameFov">
+        <property name="text">
+         <string>Game Field of View</string>
+        </property>
+       </widget>
+      </item>
      </layout>
     </widget>
    </item>
@@ -278,6 +285,7 @@
   <tabstop>stereoConvergence</tabstop>
   <tabstop>profileBrowser</tabstop>
   <tabstop>headCamera</tabstop>
+  <tabstop>gameFov</tabstop>
  </tabstops>
  <resources/>
  <connections/>

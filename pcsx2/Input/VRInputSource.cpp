@@ -13,6 +13,7 @@
 
 #include "VR/CameraDriver.h"
 #include "VR/ControlQuads.h"
+#include "VR/PadXR.h"
 #include "VR/SplitState.h"
 #include "VR/VRInput.h"
 #include "VR/XRCompositor.h"
@@ -149,9 +150,17 @@ InputBindingKey VRInputSource::MakeMotorKey(u32 device_index)
 
 void VRInputSource::SetActiveControls(std::vector<VR::ProfileDB::SpatialControlSpec> specs)
 {
-	std::lock_guard lock(s_specs_mutex);
-	s_specs = std::move(specs);
-	s_specs_generation++;
+	const bool live = !specs.empty();
+	{
+		std::lock_guard lock(s_specs_mutex);
+#ifndef VR_FORKBUGS_PLANTED_B2_EQUAL
+		if (specs == s_specs)
+			return;
+#endif
+		s_specs = std::move(specs);
+		s_specs_generation++;
+	}
+	VR::PadXR::ReportAdapter(0, live);
 }
 
 std::vector<VR::ProfileDB::SpatialControlSpec> VRInputSource::GetActiveControls()
@@ -183,39 +192,22 @@ float VRInputSource::CompensateAxisScale(float value, float axis_scale)
 	return c;
 }
 
+namespace
+{
+	void SendSpatialCue(int hand, const VR::SpatialControls::HapticCue& cue)
+	{
+		VR::PadXR::Cue c;
+		c.hand = static_cast<u8>(hand);
+		c.locus = cue.locus;
+		c.amplitude = cue.amplitude;
+		c.ms = static_cast<u16>(std::lround(cue.seconds * 1000.0f));
+		VR::PadXR::SendCue(0, c);
+	}
+}
+
 bool VRInputSource::EvaluateGuards(const std::vector<VR::ProfileDB::CameraGuard>& guards, GuestReader reader)
 {
-	if (!reader)
-		reader = DefaultGuestReader;
-	for (const VR::ProfileDB::CameraGuard& g : guards)
-	{
-		u32 address = g.ee_address;
-		if (g.is_chain)
-		{
-			u32 deref = 0;
-			if (!reader(g.pointer_addr, 4, &deref) || deref == 0 || deref >= Ps2MemSize::MainRam || (deref & 3u) != 0)
-				return false;
-			for (const s32 hop : g.deref_offsets)
-			{
-				const s64 slot = static_cast<s64>(deref) + hop;
-				if (slot < 0 || slot + 4 > static_cast<s64>(Ps2MemSize::MainRam))
-					return false;
-				if (!reader(static_cast<u32>(slot), 4, &deref) || deref == 0 || deref >= Ps2MemSize::MainRam ||
-					(deref & 3u) != 0)
-					return false;
-			}
-			const s64 a = static_cast<s64>(deref) + g.offset;
-			if (a < 0 || a + g.width > static_cast<s64>(Ps2MemSize::MainRam))
-				return false;
-			address = static_cast<u32>(a);
-		}
-		u32 v = 0;
-		if (!reader(address, g.width, &v))
-			return false;
-		if ((v == g.equals) == g.not_equals)
-			return false;
-	}
-	return true;
+	return VR::PadXR::GatePass(reader ? reader : DefaultGuestReader, guards);
 }
 
 std::vector<InputManager::VRBindingOverlayEntry> VRInputSource::BuildBindingOverlay(
@@ -397,13 +389,13 @@ void VRInputSource::QueueHapticCues(Instance& in, const std::array<int, 2>& hand
 		const bool was = holds(hands_before, hand), now = holds(hands_after, hand);
 		if (now && !was)
 		{
-			VR::XRInput::QueuePulse(hand, SC::kHapticGrab.amplitude, SC::kHapticGrab.seconds);
+			SendSpatialCue(hand, SC::kHapticGrab);
 		}
 		else if (was && !now)
 		{
 			const bool by_break_away = (hands_before[0] == hand && broke[0]) || (hands_before[1] == hand && broke[1]);
 			const SC::HapticCue& cue = by_break_away ? SC::kHapticBreakAway : SC::kHapticRelease;
-			VR::XRInput::QueuePulse(hand, cue.amplitude, cue.seconds);
+			SendSpatialCue(hand, cue);
 		}
 	}
 	for (int k = 0; k < 2; ++k)
@@ -424,7 +416,7 @@ void VRInputSource::QueueHapticCues(Instance& in, const std::array<int, 2>& hand
 							   (i == 0 ? in.twin_state.left.axis.hand : in.twin_state.right.axis.hand) :
 							   in.throttle_state.lever.axis.hand;
 		if (at_stop && !at_stop_before[i] && holder >= 0)
-			VR::XRInput::QueuePulse(holder, SC::kHapticRailHit.amplitude, SC::kHapticRailHit.seconds);
+			SendSpatialCue(holder, SC::kHapticRailHit);
 		in.at_stop[i] = at_stop;
 	}
 }
@@ -583,6 +575,10 @@ void VRInputSource::SyncSpecs()
 	const bool had_instances = !m_instances.empty();
 	for (Instance& in : m_instances)
 	{
+#ifndef VR_FORKBUGS_PLANTED_B2_REST
+		if (in.ever_emitted)
+			Emit(in, SC::ControlValues{});
+#endif
 		if (in.announced)
 			Announce(in, false);
 	}
@@ -679,6 +675,9 @@ void VRInputSource::PollEvents()
 	if (m_instances.empty())
 		return;
 
+	if (snap.stale && VMManager::GetState() == VMState::Paused)
+		return;
+
 	if (live != m_session_live)
 	{
 		m_session_live = live;
@@ -716,7 +715,7 @@ void VRInputSource::PollEvents()
 			in.armed_logged = true;
 			Console.WriteLn("(VR) VRInputSource: %s (%s) %s%s.", DeviceName(in.spec.id).c_str(), in.spec.device.c_str(),
 				gate ? "ARMED" : "at rest",
-				gate ? "" : (!live ? " — no session" : (!snap.actions_active ? " — session not focused" : (split ? " — split-screen" : " — gate failed"))));
+				gate ? "" : (!live ? " — no session" : (snap.stale ? " — controller input stale (no XR frame)" : (!snap.actions_active ? " — session not focused" : (split ? " — split-screen" : " — gate failed")))));
 		}
 
 		if (recentered || chord_fired)
@@ -752,6 +751,11 @@ void VRInputSource::PollEvents()
 			publish_cards(SC::ControlValues{}, false);
 			continue;
 		}
+
+#ifndef VR_PADXR_PLANTED_LEVER_IGNORES_UI
+		if (VR::PadXR::UiOwnsInput()) [[unlikely]]
+			continue;
+#endif
 
 		const SC::Frame frame = SC::PlaceControl(a, in.placement);
 		const std::array<int, 2> hands_before = in.HoldingHands();

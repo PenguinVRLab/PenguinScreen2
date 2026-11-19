@@ -13,6 +13,8 @@
 #include "GS/Renderers/Common/GSDevice.h"
 #include "GS/GSVector.h"
 #include "GSAlignedClass.h"
+#include <array>
+#include <vector>
 
 class GSDumpBase;
 
@@ -38,8 +40,8 @@ private:
 	void GIFPackedRegHandlerSTQ(const GIFPackedReg* RESTRICT r);
 	void GIFPackedRegHandlerUV(const GIFPackedReg* RESTRICT r);
 	void GIFPackedRegHandlerUV_Hack(const GIFPackedReg* RESTRICT r);
-	template<u32 prim, u32 adc, bool auto_flush> void GIFPackedRegHandlerXYZF2(const GIFPackedReg* RESTRICT r);
-	template<u32 prim, u32 adc, bool auto_flush> void GIFPackedRegHandlerXYZ2(const GIFPackedReg* RESTRICT r);
+	template<u32 prim, u32 adc, bool auto_flush, bool tap = false> void GIFPackedRegHandlerXYZF2(const GIFPackedReg* RESTRICT r);
+	template<u32 prim, u32 adc, bool auto_flush, bool tap = false> void GIFPackedRegHandlerXYZ2(const GIFPackedReg* RESTRICT r);
 	void GIFPackedRegHandlerFOG(const GIFPackedReg* RESTRICT r);
 	void GIFPackedRegHandlerA_D(const GIFPackedReg* RESTRICT r);
 	void GIFPackedRegHandlerNOP(const GIFPackedReg* RESTRICT r);
@@ -54,9 +56,15 @@ private:
 	GIFPackedRegHandlerC m_fpGIFPackedRegHandlersC[2] = {};
 	GIFPackedRegHandlerC m_fpGIFPackedRegHandlerSTQRGBAXYZF2[8] = {};
 	GIFPackedRegHandlerC m_fpGIFPackedRegHandlerSTQRGBAXYZ2[8] = {};
+#ifdef ENABLE_VR
+	bool m_vr_handcap_tap = false;
+	bool m_vr_handcap_trace = false;
+	bool m_vr_handcap_tap_trace_only = false;
+	void VRRefreshLiveKick();
+#endif
 
-	template<u32 prim, bool auto_flush> void GIFPackedRegHandlerSTQRGBAXYZF2(const GIFPackedReg* RESTRICT r, u32 size);
-	template<u32 prim, bool auto_flush> void GIFPackedRegHandlerSTQRGBAXYZ2(const GIFPackedReg* RESTRICT r, u32 size);
+	template<u32 prim, bool auto_flush, bool tap = false> void GIFPackedRegHandlerSTQRGBAXYZF2(const GIFPackedReg* RESTRICT r, u32 size);
+	template<u32 prim, bool auto_flush, bool tap = false> void GIFPackedRegHandlerSTQRGBAXYZ2(const GIFPackedReg* RESTRICT r, u32 size);
 	void GIFPackedRegHandlerNOP(const GIFPackedReg* RESTRICT r, u32 size);
 
 	template<int i> void ApplyTEX0(GIFRegTEX0& TEX0);
@@ -68,8 +76,8 @@ private:
 	void GIFRegHandlerST(const GIFReg* RESTRICT r);
 	void GIFRegHandlerUV(const GIFReg* RESTRICT r);
 	void GIFRegHandlerUV_Hack(const GIFReg* RESTRICT r);
-	template<u32 prim, u32 adc, bool auto_flush> void GIFRegHandlerXYZF2(const GIFReg* RESTRICT r);
-	template<u32 prim, u32 adc, bool auto_flush> void GIFRegHandlerXYZ2(const GIFReg* RESTRICT r);
+	template<u32 prim, u32 adc, bool auto_flush, bool tap = false> void GIFRegHandlerXYZF2(const GIFReg* RESTRICT r);
+	template<u32 prim, u32 adc, bool auto_flush, bool tap = false> void GIFRegHandlerXYZ2(const GIFReg* RESTRICT r);
 	template<int i> void GIFRegHandlerTEX0(const GIFReg* RESTRICT r);
 	template<int i> void GIFRegHandlerCLAMP(const GIFReg* RESTRICT r);
 	void GIFRegHandlerFOG(const GIFReg* RESTRICT r);
@@ -102,7 +110,7 @@ private:
 	void GIFRegHandlerTRXDIR(const GIFReg* RESTRICT r);
 	void GIFRegHandlerHWREG(const GIFReg* RESTRICT r);
 
-	template<bool auto_flush> void SetPrimHandlers();
+	template<bool auto_flush, bool tap = false> void SetPrimHandlers();
 
 	struct GSTransferBuffer
 	{
@@ -189,7 +197,7 @@ protected:
 	void CheckCLUTValidity(u32 prim);
 	bool CheckOverlapVerts(u32 n);
 
-	template <u32 prim, bool auto_flush> void VertexKick(u32 skip);
+	template <u32 prim, bool auto_flush, bool tap = false> void VertexKick(u32 skip);
 
 	GSVertexTrace m_vt;
 	GSVertexTrace::VertexAlpha& GetAlphaMinMax()
@@ -247,6 +255,18 @@ protected:
 	static void GetQuadRasterizedPoints(GSVector4& xy, GSVector4& tex, bool keep_order = true);
 
 public:
+#ifdef ENABLE_VR
+	void VRSyncHandCaptureTap();
+	bool VRHandCaptureTapInstalled() const { return m_vr_handcap_tap; }
+	int VRDrawBuffersInUse() const { return m_used_buffers_idx; }
+	struct VRHandlerTable
+	{
+		std::vector<u8> bytes;
+		size_t entry = 0;
+	};
+	std::array<VRHandlerTable, 7> VRHandlerTables() const;
+#endif
+
 	enum EEGS_TransferType
 	{
 		EE_to_GS,
@@ -447,6 +467,9 @@ public:
 	} PCRTCDisplays;
 
 public:
+
+	u32 VRDisplayFbp() const;
+
 	static std::string GetDrawDumpPath(const char* format, ...);
 
 	static void ExpandDIMX(GSVector4i* dimx, const GIFRegDIMX DIMX);

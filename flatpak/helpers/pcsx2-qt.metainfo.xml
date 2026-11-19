@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Uses the AppStream standard https://www.freedesktop.org/software/appstream/docs/chap-Metadata.html -->
 <component type="desktop">
-  <id>org.penguinvr.penguinscreen2</id>
-  <launchable type="desktop-id">org.penguinvr.penguinscreen2.desktop</launchable>
+  <id>com.penguinvrlabs.penguinscreen2</id>
+  <launchable type="desktop-id">com.penguinvrlabs.penguinscreen2.desktop</launchable>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
   <name>PenguinScreen2</name>
-  <developer id="org.penguinvr">
+  <developer id="com.penguinvrlabs">
     <name>PenguinVR</name>
   </developer>
   <summary>PlayStation 2 emulator in VR</summary>

@@ -14,7 +14,7 @@
 
 #ifdef ENABLE_VR
 #include "VR/PadLook.h"
-#include "VR/SplitState.h"
+#include "VR/PadXR.h"
 #endif
 
 static const InputBindingInfo s_bindings[] = {
@@ -202,11 +202,28 @@ u8 PadDualshock2::ButtonQuery(u8 commandByte)
 
 u8 PadDualshock2::Poll(u8 commandByte)
 {
-	const u32 buttons = GetButtons();
+#ifdef ENABLE_VR
+	VR::PadXR::OnPollByte(this->unifiedSlot, this->commandBytesReceived);
+	const u32 pad_buttons = VR::PadXR::Word(this->unifiedSlot, GetButtons());
+#else
+	const u32 pad_buttons = GetButtons();
+#endif
+	const u32 buttons = pad_buttons;
 #ifdef ENABLE_VR
 	if (this->unifiedSlot == 0)
 		VR::PadLook::UpdateRecenterChord(IsButtonBitSet(buttons, 2), IsButtonBitSet(buttons, 3),
 			IsButtonBitSet(buttons, 9), IsButtonBitSet(buttons, 10));
+
+	if (this->commandBytesReceived >= 9 && this->commandBytesReceived <= 20 && VR::PadXR::PressureActive(this->unifiedSlot))
+	{
+		static constexpr Inputs kPressureInput[12] = {Inputs::PAD_RIGHT, Inputs::PAD_LEFT, Inputs::PAD_UP, Inputs::PAD_DOWN,
+			Inputs::PAD_TRIANGLE, Inputs::PAD_CIRCLE, Inputs::PAD_CROSS, Inputs::PAD_SQUARE, Inputs::PAD_L1, Inputs::PAD_R1,
+			Inputs::PAD_L2, Inputs::PAD_R2};
+		const int bit = VR::PadXR::PressureBitOfByte(this->commandBytesReceived);
+		const u8 real = IsButtonBitSet(buttons, bit) ? GetPressure(kPressureInput[this->commandBytesReceived - 9]) : 0;
+		if (const int pressure = VR::PadXR::Pressure(this->unifiedSlot, this->commandBytesReceived, real); pressure >= 0)
+			return static_cast<u8>(pressure);
+	}
 #endif
 	u8 largeMotor = 0x00;
 	u8 smallMotor = 0x00;
@@ -256,22 +273,29 @@ u8 PadDualshock2::Poll(u8 commandByte)
 			return buttons & 0xff;
 		case 5:
 #ifdef ENABLE_VR
-			if (this->unifiedSlot == 0)
-			{
-				u8 rx = VR::SplitState::Active()
-							? GetPressure(Inputs::PAD_R_RIGHT)
-							: VR::PadLook::ApplyRx(GetPressure(Inputs::PAD_R_RIGHT));
-				return rx;
-			}
-#endif
+			return VR::PadXR::PollStick(this->unifiedSlot, VR::PadXR::Axis::RX, GetPressure(Inputs::PAD_R_RIGHT));
+#else
 			return GetPressure(Inputs::PAD_R_RIGHT);
+#endif
 		case 6:
+#ifdef ENABLE_VR
+			return VR::PadXR::PollStick(this->unifiedSlot, VR::PadXR::Axis::RY, GetPressure(Inputs::PAD_R_UP));
+#else
 			return GetPressure(Inputs::PAD_R_UP);
+#endif
 		case 7:
+#ifdef ENABLE_VR
+			return VR::PadXR::PollStick(this->unifiedSlot, VR::PadXR::Axis::LX, GetPressure(Inputs::PAD_L_RIGHT));
+#else
 			return GetPressure(Inputs::PAD_L_RIGHT);
+#endif
 		case 8:
 			g_Sio0.SetAcknowledge(false);
+#ifdef ENABLE_VR
+			return VR::PadXR::PollStick(this->unifiedSlot, VR::PadXR::Axis::LY, GetPressure(Inputs::PAD_L_UP));
+#else
 			return GetPressure(Inputs::PAD_L_UP);
+#endif
 		case 9:
 			return IsButtonBitSet(buttons, 13) ? GetPressure(Inputs::PAD_RIGHT) : 0;
 		case 10:

@@ -20,6 +20,7 @@ has them, including around any edits made to wire this module in.
 ### `pcsx2/VR/` — VR module (original)
 - `CameraDriver.cpp` / `.h`
 - `ControlQuads.cpp` / `.h`
+- `HandCapture.cpp` / `.h`
 - `HeadPose.cpp` / `.h`
 - `PadLook.cpp` / `.h`
 - `SeatCast.cpp` / `.h`
@@ -39,4 +40,4 @@ has them, including around any edits made to wire this module in.
 That is every source file in this directory. The development tooling written for
 this module is likewise original work of the same author and carries its own note.
 
-_Last updated 2026-09-20._
+_Last updated 2026-11-06._

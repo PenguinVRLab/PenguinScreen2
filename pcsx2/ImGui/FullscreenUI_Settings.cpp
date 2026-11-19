@@ -1624,6 +1624,8 @@ void FullscreenUI::DrawSettingInfoSetting(SettingsInterface* bsi, const char* se
 
 void FullscreenUI::SwitchToSettings()
 {
+	if (VRQuickMenuBlocksLeave())
+		return;
 	s_game_settings_entry.reset();
 	s_game_settings_interface.reset();
 	s_game_patch_list = {};
@@ -1638,6 +1640,8 @@ void FullscreenUI::SwitchToSettings()
 
 void FullscreenUI::SwitchToGameSettings(const std::string_view serial, u32 crc)
 {
+	if (VRQuickMenuBlocksLeave())
+		return;
 	s_game_settings_entry.reset();
 	s_game_settings_interface = std::make_unique<INISettingsInterface>(VMManager::GetGameSettingsPath(serial, crc));
 	s_game_settings_interface->Load();

@@ -131,5 +131,5 @@ kit contents.)
 
 ## Credits
 
-- AudioXR (voice commands in VR): Johnathan Popa
-- README improvements: Ali Alam
+- AudioXR (voice commands in VR): Johnathan Popa ([@jpopo713](https://github.com/jpopo713))
+- README improvements: Ali Alam ([@AliAlamUTD](https://github.com/AliAlamUTD))

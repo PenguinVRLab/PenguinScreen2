@@ -57,6 +57,8 @@ using VMBootDoneCallback = std::function<void(VMBootResult result, const Error& 
 
 namespace VMManager
 {
+	void NotifyClassicTextureNamesToggled();
+
 	static constexpr s32 NUM_SAVE_STATE_SLOTS = 10;
 
 	static constexpr std::size_t EMU_THREAD_STACK_SIZE = 2 * 1024 * 1024;
@@ -103,6 +105,20 @@ namespace VMManager
 	void IdlePollUpdate();
 
 	void SetPaused(bool paused);
+
+	bool IsOnlineLocked();
+
+	u32 GetOnlineLockRefusalCount();
+
+	void SetOnlineLockForcedForTest(bool forced);
+
+	bool IsVRSpeedLocked();
+
+	u32 GetVRSpeedRefusalCount();
+
+	LimiterModeType BootLimiterMode(bool start_unlimited, bool start_turbo);
+
+	float VRHeldTargetSpeed(float target_speed);
 
 	void ApplySettings();
 

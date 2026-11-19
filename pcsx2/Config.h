@@ -1293,12 +1293,25 @@ struct Pcsx2Config
 
 		float ScreenArcDeg = 100.0f;
 
+		float DisplayFitFill = 0.85f;
+
+		bool ScreenFollowsPatchAspect = false;
+
+		std::string ScreenCurveFallback = "flat";
+		std::string ScreenForceFallback;
+		float ScreenProjectorSupersample = 1.5f;
+		bool ScreenProjectorDepth = false;
+
 		bool StereoMode = true;
 		bool StereoUseProfile = true;
 		float StereoSeparation = 0.02f;
 		float StereoConvergence = 20.0f;
 
 		bool HeadCamera = true;
+
+		bool GameFov = true;
+
+		bool WorldProjection = false;
 
 		VROptions();
 		void LoadSave(SettingsWrapper& wrap);
@@ -1328,6 +1341,7 @@ struct Pcsx2Config
 		BackupSavestate : 1,
 		ManuallySetRealTimeClock : 1,
 		UseSystemLocaleFormat : 1,
+		OnlineLock : 1,
 
 		HostFs : 1,
 
@@ -1421,6 +1435,7 @@ namespace EmuFolders
 	extern std::string DebuggerLayouts;
 	extern std::string DebuggerSettings;
 	extern std::string VRProfiles;
+	extern std::string VRMods;
 
 	void SetAppRoot();
 	bool SetResourcesDirectory();

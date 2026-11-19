@@ -248,6 +248,8 @@ namespace QtHost
 	bool DownloadFile(QWidget* parent, const QString& title, std::string url, const std::string& path);
 
 	bool IsVMValid();
+
+	void OnVMStoppedForRestart(bool app_exits);
 	bool IsVMPaused();
 
 	const QString& GetCurrentGameTitle();

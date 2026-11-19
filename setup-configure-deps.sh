@@ -107,16 +107,40 @@ if [ "$DEPS_OK" = "1" ]; then
 	echo "It starts the VR link and walks you through connecting the headset"
 	echo "(first time: a one-off PIN pairing; on SteamOS you'll connect by IP —"
 	echo "the launcher prints it)."
-	# Offer auto-discovery where it's actually blocked. Deliberately NOT run
-	# automatically: it needs admin rights and edits a system config, so it stays
-	# the user's explicit choice (everything else in this script is user-scope).
+	# The one admin step, enable-vr-discovery.sh. Deliberately NOT run
+	# automatically: it needs admin rights and edits system config (Avahi, a udev
+	# rule, a NetworkManager profile), so it stays the user's explicit choice
+	# (everything else in this script is user-scope).
+	# A USB-C cable on the headset's "USB networking" (WiVRn 26.9+) needs it on any
+	# PC whose network is run by NetworkManager, not only on SteamOS: the headset
+	# offers an IPv6 link-local address only, and NetworkManager, waiting for an
+	# IPv4 address that never comes, takes the link down and retries every ~45 s
+	# (on Ubuntu as on SteamOS). So the cable note prints wherever nmcli exists; the auto-discovery
+	# note only where the OS blocks discovery. Where both print (SteamOS), the
+	# second points back at the first instead of repeating the command. Only the
+	# USB networking route needs it: the Developer Mode (adb) cable route does not.
+	USB_NOTE=0
+	if command -v nmcli >/dev/null 2>&1; then
+		USB_NOTE=1
+		echo
+		echo "USB-C cable using the headset's USB networking? Run this once first"
+		echo "(it asks for your password):"
+		echo "      bash enable-vr-discovery.sh"
+		echo "  USB networking is in the headset's WiVRn app (Settings > System)."
+		echo "  Without this step this PC keeps dropping the cable link. Safe to run again."
+	fi
 	if grep -qsE '^[[:space:]]*disable-user-service-publishing[[:space:]]*=[[:space:]]*yes' \
 			/etc/avahi/avahi-daemon.conf; then
 		echo
 		echo "Optional — headset AUTO-DISCOVERY (so you never type an IP):"
 		echo "  This OS ships with the network announcement disabled, so the headset"
-		echo "  can't find this PC by itself. To turn it on (asks for your password):"
-		echo "      bash enable-vr-discovery.sh"
+		if [ "$USB_NOTE" = "1" ]; then
+			echo "  can't find this PC by itself. The same command as above"
+			echo "  (enable-vr-discovery.sh) turns it on."
+		else
+			echo "  can't find this PC by itself. To turn it on (asks for your password):"
+			echo "      bash enable-vr-discovery.sh"
+		fi
 		echo "  Re-run that once after a SteamOS update. Happy typing the IP? Skip it."
 	fi
 else

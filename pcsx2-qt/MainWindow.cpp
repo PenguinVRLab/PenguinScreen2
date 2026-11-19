@@ -377,6 +377,14 @@ void MainWindow::setupStatusBarWidgets()
 	m_status_speed_menu->addAction(tr("Normal"), []() { Host::RunOnCPUThread([]() { VMManager::SetLimiterMode(LimiterModeType::Nominal); }); });
 	m_status_speed_widget->setMenu(m_status_speed_menu);
 	m_status_speed_widget->hide();
+	connect(m_status_speed_menu, &QMenu::aboutToShow, this, [this]() {
+		const bool online = VMManager::IsOnlineLocked();
+		for (QAction* action : m_status_speed_menu->actions())
+		{
+			if (action != m_status_speed_menu->actions().back())
+				action->setEnabled(!online);
+		}
+	});
 
 	m_status_gpu_widget = new QLabel(m_ui.statusBar);
 	m_status_gpu_widget->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
@@ -477,6 +485,15 @@ void MainWindow::connectSignals()
 	connect(m_ui.actionPowerOff, &QAction::triggered, this, [this]() { requestShutdown(true, true, EmuConfig.SaveStateOnShutdown); });
 	connect(m_ui.actionPowerOffWithoutSaving, &QAction::triggered, this, [this]() { requestShutdown(false, false, false); });
 	connect(m_ui.actionStartFullscreenUI, &QAction::triggered, this, &MainWindow::onStartFullscreenUITriggered);
+#ifdef ENABLE_VR
+	m_vr_quick_menu_action = m_ui.menuSystem->addAction(QStringLiteral("VR Quick Menu"));
+	m_vr_quick_menu_action->setEnabled(false);
+	connect(m_vr_quick_menu_action, &QAction::triggered, this, []() {
+		if (!QtHost::IsVMValid())
+			return;
+		Host::RunOnCPUThread([]() { MTGS::RunOnGSThread([]() { FullscreenUI::ToggleVRQuickMenu(); }); });
+	});
+#endif
 	connect(m_ui.actionToolbarStartFullscreenUI, &QAction::triggered, this, &MainWindow::onStartFullscreenUITriggered);
 	connect(m_ui.actionToolbarStartFile, &QAction::triggered, this, &MainWindow::onStartFileActionTriggered);
 	connect(m_ui.actionToolbarStartDisc, &QAction::triggered, this, &MainWindow::onStartDiscActionTriggered);
@@ -1107,6 +1124,8 @@ void MainWindow::updateEmulationActions(bool starting, bool running, bool stoppi
 	m_ui.actionReset->setEnabled(running);
 	m_ui.actionPause->setEnabled(running);
 	m_ui.actionScreenshot->setEnabled(running);
+	if (m_vr_quick_menu_action)
+		m_vr_quick_menu_action->setEnabled(running);
 	m_ui.menuChangeDisc->setEnabled(running);
 	m_ui.menuLoadState->setEnabled(running && !Achievements::IsHardcoreModeActive());
 	m_ui.menuSaveState->setEnabled(running);
@@ -1662,6 +1681,28 @@ void MainWindow::requestExit(bool allow_confirm)
 		m_is_closing = true;
 	else
 		quit();
+}
+
+bool MainWindow::requestExitForRestart(QString* why)
+{
+	const bool vm_was_valid = QtHost::IsVMValid();
+	if (vm_was_valid && MemcardBusy::IsBusy() && !GSDumpReplayer::IsReplayingDump())
+	{
+		if (why)
+			*why = QStringLiteral("a memory card is still saving");
+		return false;
+	}
+	if (!requestShutdown(false, false, false))
+	{
+		if (why)
+			*why = QStringLiteral("the shutdown was refused");
+		return false;
+	}
+	if (vm_was_valid)
+		m_is_closing = true;
+	else
+		quit();
+	return true;
 }
 
 void MainWindow::checkForSettingChanges()
@@ -2391,6 +2432,8 @@ void MainWindow::onVMStopped()
 	updateWindowState();
 	updateStatusBarWidgetVisibility();
 	updateInputRecordingActions(false);
+
+	QtHost::OnVMStoppedForRestart(m_is_closing || Host::InBatchMode());
 
 	if (m_is_closing || Host::InBatchMode())
 	{

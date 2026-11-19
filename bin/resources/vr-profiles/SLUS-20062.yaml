@@ -1,0 +1,301 @@
+# SPDX-FileCopyrightText: 2026 Patrick Carey
+# SPDX-License-Identifier: CC-BY-NC-4.0
+# PenguinScreen2 shipped profile — generated, data only.
+# Copyright (c) 2026 Patrick Carey. Licensed CC BY-NC 4.0 (non-commercial
+# use/share/adapt with attribution); COMMERCIAL RIGHTS RESERVED. This is
+# DATA, not part of the GPL emulator — see LICENSE.md in this folder.
+# To customize: COPY this file into your user profiles folder and edit
+# the copy — a user file for the same serial overrides this one at
+# launch. Do not edit here (read-only in flatpak installs).
+
+SLUS-20062:
+  name: "Grand Theft Auto III"
+  crcs: [0x5E115FB6]
+  tier: stereo
+  camera:
+    requiresWorldProjection: true
+    guards:
+      - { address: 0x002539F4, equals: 0x27A40100, width: 4 }
+      - { address: 0x0024D914, equals: 0xC6010074, width: 4 }
+    matrixWrites:
+      - address: 0x000F1200
+        compose: anchored
+        order: pre
+        axisSignYaw: 1
+        axisSignPitch: 1
+        axisSignRoll: 1
+    silence:
+      - { address: 0x000F1000, on: 0x3C08000F, off: 0x00000000 }
+      - { address: 0x000F1004, on: 0x35081200, off: 0x00000000 }
+      - { address: 0x000F1008, on: 0x8D090040, off: 0x00000000 }
+      - { address: 0x000F100C, on: 0xAD000040, off: 0x00000000 }
+      - { address: 0x000F1010, on: 0x8D0A003C, off: 0x00000000 }
+      - { address: 0x000F1014, on: 0x3C0B3F80, off: 0x00000000 }
+      - { address: 0x000F1018, on: 0x154B0074, off: 0x00000000 }
+      - { address: 0x000F101C, on: 0x3C0C004E, off: 0x00000000 }
+      - { address: 0x000F1020, on: 0x11200072, off: 0x00000000 }
+      - { address: 0x000F1024, on: 0x918D3694, off: 0x00000000 }
+      - { address: 0x000F1028, on: 0x240E029C, off: 0x00000000 }
+      - { address: 0x000F102C, on: 0x01AE0018, off: 0x00000000 }
+      - { address: 0x000F1030, on: 0x00006812, off: 0x00000000 }
+      - { address: 0x000F1034, on: 0x01AC6821, off: 0x00000000 }
+      - { address: 0x000F1038, on: 0x85AD2EC0, off: 0x00000000 }
+      - { address: 0x000F103C, on: 0x240E0010, off: 0x00000000 }
+      - { address: 0x000F1040, on: 0x15AE006A, off: 0x00000000 }
+      - { address: 0x000F1044, on: 0xC4A90000, off: 0x00000000 }
+      - { address: 0x000F1048, on: 0xC4AA0004, off: 0x00000000 }
+      - { address: 0x000F104C, on: 0xC4AB0008, off: 0x00000000 }
+      - { address: 0x000F1050, on: 0xC4AC0010, off: 0x00000000 }
+      - { address: 0x000F1054, on: 0xC4AD0014, off: 0x00000000 }
+      - { address: 0x000F1058, on: 0xC4AE0018, off: 0x00000000 }
+      - { address: 0x000F105C, on: 0xC4AF0020, off: 0x00000000 }
+      - { address: 0x000F1060, on: 0xC4B00024, off: 0x00000000 }
+      - { address: 0x000F1064, on: 0xC4B10028, off: 0x00000000 }
+      - { address: 0x000F1068, on: 0x46004C87, off: 0x00000000 }
+      - { address: 0x000F106C, on: 0xE5120060, off: 0x00000000 }
+      - { address: 0x000F1070, on: 0x46005487, off: 0x00000000 }
+      - { address: 0x000F1074, on: 0xE5120064, off: 0x00000000 }
+      - { address: 0x000F1078, on: 0x46005C87, off: 0x00000000 }
+      - { address: 0x000F107C, on: 0xE5120068, off: 0x00000000 }
+      - { address: 0x000F1080, on: 0xE50C0070, off: 0x00000000 }
+      - { address: 0x000F1084, on: 0xE50D0074, off: 0x00000000 }
+      - { address: 0x000F1088, on: 0xE50E0078, off: 0x00000000 }
+      - { address: 0x000F108C, on: 0xE50F0080, off: 0x00000000 }
+      - { address: 0x000F1090, on: 0xE5100084, off: 0x00000000 }
+      - { address: 0x000F1094, on: 0xE5110088, off: 0x00000000 }
+      - { address: 0x000F1098, on: 0xAD0B0044, off: 0x00000000 }
+      - { address: 0x000F109C, on: 0x8D0F0048, off: 0x00000000 }
+      - { address: 0x000F10A0, on: 0x25EF0001, off: 0x00000000 }
+      - { address: 0x000F10A4, on: 0xAD0F0048, off: 0x00000000 }
+      - { address: 0x000F10A8, on: 0xC5000000, off: 0x00000000 }
+      - { address: 0x000F10AC, on: 0xC5010020, off: 0x00000000 }
+      - { address: 0x000F10B0, on: 0xC5020010, off: 0x00000000 }
+      - { address: 0x000F10B4, on: 0x46001087, off: 0x00000000 }
+      - { address: 0x000F10B8, on: 0xC5030008, off: 0x00000000 }
+      - { address: 0x000F10BC, on: 0xC5040028, off: 0x00000000 }
+      - { address: 0x000F10C0, on: 0xC5050018, off: 0x00000000 }
+      - { address: 0x000F10C4, on: 0x46002947, off: 0x00000000 }
+      - { address: 0x000F10C8, on: 0xC5060004, off: 0x00000000 }
+      - { address: 0x000F10CC, on: 0x46003187, off: 0x00000000 }
+      - { address: 0x000F10D0, on: 0xC5070024, off: 0x00000000 }
+      - { address: 0x000F10D4, on: 0x460039C7, off: 0x00000000 }
+      - { address: 0x000F10D8, on: 0xC5080014, off: 0x00000000 }
+      - { address: 0x000F10DC, on: 0x46090482, off: 0x00000000 }
+      - { address: 0x000F10E0, on: 0x460C0CC2, off: 0x00000000 }
+      - { address: 0x000F10E4, on: 0x46139480, off: 0x00000000 }
+      - { address: 0x000F10E8, on: 0x460F14C2, off: 0x00000000 }
+      - { address: 0x000F10EC, on: 0x46139480, off: 0x00000000 }
+      - { address: 0x000F10F0, on: 0xE4B20000, off: 0x00000000 }
+      - { address: 0x000F10F4, on: 0x460094C7, off: 0x00000000 }
+      - { address: 0x000F10F8, on: 0xE5130060, off: 0x00000000 }
+      - { address: 0x000F10FC, on: 0x460A0482, off: 0x00000000 }
+      - { address: 0x000F1100, on: 0x460D0CC2, off: 0x00000000 }
+      - { address: 0x000F1104, on: 0x46139480, off: 0x00000000 }
+      - { address: 0x000F1108, on: 0x461014C2, off: 0x00000000 }
+      - { address: 0x000F110C, on: 0x46139480, off: 0x00000000 }
+      - { address: 0x000F1110, on: 0xE4B20004, off: 0x00000000 }
+      - { address: 0x000F1114, on: 0x460094C7, off: 0x00000000 }
+      - { address: 0x000F1118, on: 0xE5130064, off: 0x00000000 }
+      - { address: 0x000F111C, on: 0x460B0482, off: 0x00000000 }
+      - { address: 0x000F1120, on: 0x460E0CC2, off: 0x00000000 }
+      - { address: 0x000F1124, on: 0x46139480, off: 0x00000000 }
+      - { address: 0x000F1128, on: 0x461114C2, off: 0x00000000 }
+      - { address: 0x000F112C, on: 0x46139480, off: 0x00000000 }
+      - { address: 0x000F1130, on: 0xE4B20008, off: 0x00000000 }
+      - { address: 0x000F1134, on: 0x460094C7, off: 0x00000000 }
+      - { address: 0x000F1138, on: 0xE5130068, off: 0x00000000 }
+      - { address: 0x000F113C, on: 0x46091C82, off: 0x00000000 }
+      - { address: 0x000F1140, on: 0x460C24C2, off: 0x00000000 }
+      - { address: 0x000F1144, on: 0x46139480, off: 0x00000000 }
+      - { address: 0x000F1148, on: 0x460F2CC2, off: 0x00000000 }
+      - { address: 0x000F114C, on: 0x46139480, off: 0x00000000 }
+      - { address: 0x000F1150, on: 0xE4B20010, off: 0x00000000 }
+      - { address: 0x000F1154, on: 0xE5120070, off: 0x00000000 }
+      - { address: 0x000F1158, on: 0x460A1C82, off: 0x00000000 }
+      - { address: 0x000F115C, on: 0x460D24C2, off: 0x00000000 }
+      - { address: 0x000F1160, on: 0x46139480, off: 0x00000000 }
+      - { address: 0x000F1164, on: 0x46102CC2, off: 0x00000000 }
+      - { address: 0x000F1168, on: 0x46139480, off: 0x00000000 }
+      - { address: 0x000F116C, on: 0xE4B20014, off: 0x00000000 }
+      - { address: 0x000F1170, on: 0xE5120074, off: 0x00000000 }
+      - { address: 0x000F1174, on: 0x460B1C82, off: 0x00000000 }
+      - { address: 0x000F1178, on: 0x460E24C2, off: 0x00000000 }
+      - { address: 0x000F117C, on: 0x46139480, off: 0x00000000 }
+      - { address: 0x000F1180, on: 0x46112CC2, off: 0x00000000 }
+      - { address: 0x000F1184, on: 0x46139480, off: 0x00000000 }
+      - { address: 0x000F1188, on: 0xE4B20018, off: 0x00000000 }
+      - { address: 0x000F118C, on: 0xE5120078, off: 0x00000000 }
+      - { address: 0x000F1190, on: 0x46093482, off: 0x00000000 }
+      - { address: 0x000F1194, on: 0x460C3CC2, off: 0x00000000 }
+      - { address: 0x000F1198, on: 0x46139480, off: 0x00000000 }
+      - { address: 0x000F119C, on: 0x460F44C2, off: 0x00000000 }
+      - { address: 0x000F11A0, on: 0x46139480, off: 0x00000000 }
+      - { address: 0x000F11A4, on: 0xE4B20020, off: 0x00000000 }
+      - { address: 0x000F11A8, on: 0xE5120080, off: 0x00000000 }
+      - { address: 0x000F11AC, on: 0x460A3482, off: 0x00000000 }
+      - { address: 0x000F11B0, on: 0x460D3CC2, off: 0x00000000 }
+      - { address: 0x000F11B4, on: 0x46139480, off: 0x00000000 }
+      - { address: 0x000F11B8, on: 0x461044C2, off: 0x00000000 }
+      - { address: 0x000F11BC, on: 0x46139480, off: 0x00000000 }
+      - { address: 0x000F11C0, on: 0xE4B20024, off: 0x00000000 }
+      - { address: 0x000F11C4, on: 0xE5120084, off: 0x00000000 }
+      - { address: 0x000F11C8, on: 0x460B3482, off: 0x00000000 }
+      - { address: 0x000F11CC, on: 0x460E3CC2, off: 0x00000000 }
+      - { address: 0x000F11D0, on: 0x46139480, off: 0x00000000 }
+      - { address: 0x000F11D4, on: 0x461144C2, off: 0x00000000 }
+      - { address: 0x000F11D8, on: 0x46139480, off: 0x00000000 }
+      - { address: 0x000F11DC, on: 0xE4B20028, off: 0x00000000 }
+      - { address: 0x000F11E0, on: 0xE5120088, off: 0x00000000 }
+      - { address: 0x000F11E4, on: 0x080604C4, off: 0x00000000 }
+      - { address: 0x000F11E8, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F11EC, on: 0x080604C4, off: 0x00000000 }
+      - { address: 0x000F11F0, on: 0xAD000044, off: 0x00000000 }
+      - { address: 0x000F1300, on: 0x3C01000F, off: 0x00000000 }
+      - { address: 0x000F1304, on: 0xAC201240, off: 0x00000000 }
+      - { address: 0x000F1308, on: 0x44020800, off: 0x00000000 }
+      - { address: 0x000F130C, on: 0x3C0340A0, off: 0x00000000 }
+      - { address: 0x000F1310, on: 0x14430013, off: 0x00000000 }
+      - { address: 0x000F1314, on: 0x8E0309B4, off: 0x00000000 }
+      - { address: 0x000F1318, on: 0x8C6202E4, off: 0x00000000 }
+      - { address: 0x000F131C, on: 0x2C420002, off: 0x00000000 }
+      - { address: 0x000F1320, on: 0x1040000F, off: 0x00000000 }
+      - { address: 0x000F1324, on: 0x3C020041, off: 0x00000000 }
+      - { address: 0x000F1328, on: 0x904269D8, off: 0x00000000 }
+      - { address: 0x000F132C, on: 0x1440000C, off: 0x00000000 }
+      - { address: 0x000F1330, on: 0x3C020051, off: 0x00000000 }
+      - { address: 0x000F1334, on: 0x8C420380, off: 0x00000000 }
+      - { address: 0x000F1338, on: 0x8C6301D0, off: 0x00000000 }
+      - { address: 0x000F133C, on: 0x14430008, off: 0x00000000 }
+      - { address: 0x000F1340, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F1344, on: 0x10400006, off: 0x00000000 }
+      - { address: 0x000F1348, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F134C, on: 0x90430358, off: 0x00000000 }
+      - { address: 0x000F1350, on: 0x10600003, off: 0x00000000 }
+      - { address: 0x000F1354, on: 0x24030001, off: 0x00000000 }
+      - { address: 0x000F1358, on: 0xAC231240, off: 0x00000000 }
+      - { address: 0x000F135C, on: 0x44800800, off: 0x00000000 }
+      - { address: 0x000F1360, on: 0x44800000, off: 0x00000000 }
+      - { address: 0x000F1364, on: 0x08093648, off: 0x00000000 }
+      - { address: 0x000F1368, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F1374, on: 0x3C01000F, off: 0x00000000 }
+      - { address: 0x000F1378, on: 0x8C211240, off: 0x00000000 }
+      - { address: 0x000F137C, on: 0x14200003, off: 0x00000000 }
+      - { address: 0x000F1380, on: 0x3C010001, off: 0x00000000 }
+      - { address: 0x000F1384, on: 0x02010821, off: 0x00000000 }
+      - { address: 0x000F1388, on: 0xA022EC97, off: 0x00000000 }
+      - { address: 0x000F138C, on: 0x08093E31, off: 0x00000000 }
+      - { address: 0x000F1390, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F139C, on: 0x3C01000F, off: 0x00000000 }
+      - { address: 0x000F13A0, on: 0x8C211240, off: 0x00000000 }
+      - { address: 0x000F13A4, on: 0x10200009, off: 0x00000000 }
+      - { address: 0x000F13A8, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F13AC, on: 0xC4620000, off: 0x00000000 }
+      - { address: 0x000F13B0, on: 0x8E410144, off: 0x00000000 }
+      - { address: 0x000F13B4, on: 0x8C2102E4, off: 0x00000000 }
+      - { address: 0x000F13B8, on: 0x14200002, off: 0x00000000 }
+      - { address: 0x000F13BC, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F13C0, on: 0x46001087, off: 0x00000000 }
+      - { address: 0x000F13C4, on: 0x080963DA, off: 0x00000000 }
+      - { address: 0x000F13C8, on: 0xE7A200A0, off: 0x00000000 }
+      - { address: 0x000F13CC, on: 0x080963DA, off: 0x00000000 }
+      - { address: 0x000F13D0, on: 0xAFA000A0, off: 0x00000000 }
+      - { address: 0x000F13DC, on: 0x14620004, off: 0x00000000 }
+      - { address: 0x000F13E0, on: 0x3C02000F, off: 0x00000000 }
+      - { address: 0x000F13E4, on: 0x8C421244, off: 0x00000000 }
+      - { address: 0x000F13E8, on: 0x10400003, off: 0x00000000 }
+      - { address: 0x000F13EC, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F13F0, on: 0x080A725C, off: 0x00000000 }
+      - { address: 0x000F13F4, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F13F8, on: 0x080A7267, off: 0x00000000 }
+      - { address: 0x000F13FC, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F1408, on: 0x3C03000F, off: 0x00000000 }
+      - { address: 0x000F140C, on: 0x8C631244, off: 0x00000000 }
+      - { address: 0x000F1410, on: 0x1060002D, off: 0x00000000 }
+      - { address: 0x000F1414, on: 0x3C030051, off: 0x00000000 }
+      - { address: 0x000F1418, on: 0x8C630380, off: 0x00000000 }
+      - { address: 0x000F141C, on: 0x1464002A, off: 0x00000000 }
+      - { address: 0x000F1420, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F1424, on: 0x8C8801EC, off: 0x00000000 }
+      - { address: 0x000F1428, on: 0x11000027, off: 0x00000000 }
+      - { address: 0x000F142C, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F1430, on: 0x8D080010, off: 0x00000000 }
+      - { address: 0x000F1434, on: 0x11000024, off: 0x00000000 }
+      - { address: 0x000F1438, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F143C, on: 0x27BDFFD0, off: 0x00000000 }
+      - { address: 0x000F1440, on: 0xAFBF0028, off: 0x00000000 }
+      - { address: 0x000F1444, on: 0x25090098, off: 0x00000000 }
+      - { address: 0x000F1448, on: 0x8D0A0098, off: 0x00000000 }
+      - { address: 0x000F144C, on: 0x03A0582D, off: 0x00000000 }
+      - { address: 0x000F1450, on: 0x27AC0020, off: 0x00000000 }
+      - { address: 0x000F1454, on: 0x1149000E, off: 0x00000000 }
+      - { address: 0x000F1458, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F145C, on: 0x116C000C, off: 0x00000000 }
+      - { address: 0x000F1460, on: 0x254DFFF8, off: 0x00000000 }
+      - { address: 0x000F1464, on: 0x91AF0000, off: 0x00000000 }
+      - { address: 0x000F1468, on: 0x24180001, off: 0x00000000 }
+      - { address: 0x000F146C, on: 0x15F80006, off: 0x00000000 }
+      - { address: 0x000F1470, on: 0x91AE0002, off: 0x00000000 }
+      - { address: 0x000F1474, on: 0xAD6D0000, off: 0x00000000 }
+      - { address: 0x000F1478, on: 0xAD6E0004, off: 0x00000000 }
+      - { address: 0x000F147C, on: 0x31CE00FB, off: 0x00000000 }
+      - { address: 0x000F1480, on: 0xA1AE0002, off: 0x00000000 }
+      - { address: 0x000F1484, on: 0x256B0008, off: 0x00000000 }
+      - { address: 0x000F1488, on: 0x1000FFF2, off: 0x00000000 }
+      - { address: 0x000F148C, on: 0x8D4A0000, off: 0x00000000 }
+      - { address: 0x000F1490, on: 0xAFAB0020, off: 0x00000000 }
+      - { address: 0x000F1494, on: 0x0C09A928, off: 0x00000000 }
+      - { address: 0x000F1498, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F149C, on: 0x8FAB0020, off: 0x00000000 }
+      - { address: 0x000F14A0, on: 0x117D0006, off: 0x00000000 }
+      - { address: 0x000F14A4, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F14A8, on: 0x256BFFF8, off: 0x00000000 }
+      - { address: 0x000F14AC, on: 0x8D6D0000, off: 0x00000000 }
+      - { address: 0x000F14B0, on: 0x8D6E0004, off: 0x00000000 }
+      - { address: 0x000F14B4, on: 0x1000FFFA, off: 0x00000000 }
+      - { address: 0x000F14B8, on: 0xA1AE0002, off: 0x00000000 }
+      - { address: 0x000F14BC, on: 0x8FBF0028, off: 0x00000000 }
+      - { address: 0x000F14C0, on: 0x03E00008, off: 0x00000000 }
+      - { address: 0x000F14C4, on: 0x27BD0030, off: 0x00000000 }
+      - { address: 0x000F14C8, on: 0x0809A928, off: 0x00000000 }
+      - { address: 0x000F14CC, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F1200, on: 0x3F800000, off: 0x00000000 }
+      - { address: 0x000F1204, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F1208, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F120C, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F1210, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F1214, on: 0x3F800000, off: 0x00000000 }
+      - { address: 0x000F1218, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F121C, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F1220, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F1224, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F1228, on: 0x3F800000, off: 0x00000000 }
+      - { address: 0x000F122C, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F1230, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F1234, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F1238, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F123C, on: 0x3F800000, off: 0x00000000 }
+      - { address: 0x000F1240, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F1244, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x000F1248, on: 0x00000000, off: 0x00000000 }
+      - { address: 0x001D7CF4, on: 0x0C03C502, off: 0x0C09A928 }
+      - { address: 0x00258F64, on: 0x0803C4E7, off: 0xAFA000A0 }
+      - { address: 0x0029C968, on: 0x0803C4F7, off: 0x1062000C }
+      - { address: 0x0024F8C0, on: 0x0803C4DD, off: 0xA022EC97 }
+      - { address: 0x0024D918, on: 0x0803C4C0, off: 0x44800000 }
+      - { address: 0x002539F8, on: 0x0C03C400, off: 0x0C0604C4 }
+  stereo: { separation: 0.02, convergence: 6.0, uvDraws: screen }
+  projection:
+    axes:
+      rotation:
+        drawn: { hook: { at: 0x000F10A4, expect: 0xAD0F0048, base: t0, offset: 0x60, basis: [1, 3, -2], maxAge: 4 } }
+        body: { hook: pre, lever: 0 }
+    frustum: { model: constant, tanX: 0.57735, tanY: 0.43301 }
+    timing: { close: drawn, latch: closing, frameAges: [1, 2, 3] }
+    when:
+      - { address: 0x000F1244, equals: 0x3F800000, width: 4 }
+      - { address: 0x004169CC, equals: 0, width: 1 }
+      - { address: 0x004169D0, equals: 0, width: 1 }
+      - { address: 0x00417080, equals: 0, width: 1 }
+      - { address: 0x004F1A60, equals: 0, width: 1 }
+      - { address: 0x004E2E64, equals: 0x40A00000, width: 4 }
+      - { address: 0x0041668C, equals: 0x10, width: 2 }

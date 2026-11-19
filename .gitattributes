@@ -6,3 +6,6 @@
 *.props text eol=crlf
 *.vcxproj text eol=crlf
 *.vcxproj.filters text eol=crlf
+
+# PCSX2-VR: the screen projector's files: never convert their line endings.
+pcsx2/VR/screenproj/* -text

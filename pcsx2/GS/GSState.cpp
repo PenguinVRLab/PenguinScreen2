@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0+
 
 #include "GS/GSState.h"
+#ifdef ENABLE_VR
+#include "VR/WorldProjection.h"
+#include "VR/HandCapture.h"
+#endif
 #include "GS/GSDump.h"
 #include "GS/GSGL.h"
 #include "GS/GSPerfMon.h"
@@ -194,20 +198,20 @@ void GSState::Reset(bool hardware_reset)
 	m_perfmon_frame.Reset();
 }
 
-template<bool auto_flush>
+template<bool auto_flush, bool tap>
 void GSState::SetPrimHandlers()
 {
 #define SetHandlerXYZ(P, auto_flush) \
-	m_fpGIFPackedRegHandlerXYZ[P][0] = &GSState::GIFPackedRegHandlerXYZF2<P, 0, auto_flush>; \
-	m_fpGIFPackedRegHandlerXYZ[P][1] = &GSState::GIFPackedRegHandlerXYZF2<P, 1, auto_flush>; \
-	m_fpGIFPackedRegHandlerXYZ[P][2] = &GSState::GIFPackedRegHandlerXYZ2<P, 0, auto_flush>; \
-	m_fpGIFPackedRegHandlerXYZ[P][3] = &GSState::GIFPackedRegHandlerXYZ2<P, 1, auto_flush>; \
-	m_fpGIFRegHandlerXYZ[P][0] = &GSState::GIFRegHandlerXYZF2<P, 0, auto_flush>; \
-	m_fpGIFRegHandlerXYZ[P][1] = &GSState::GIFRegHandlerXYZF2<P, 1, auto_flush>; \
-	m_fpGIFRegHandlerXYZ[P][2] = &GSState::GIFRegHandlerXYZ2<P, 0, auto_flush>; \
-	m_fpGIFRegHandlerXYZ[P][3] = &GSState::GIFRegHandlerXYZ2<P, 1, auto_flush>; \
-	m_fpGIFPackedRegHandlerSTQRGBAXYZF2[P] = &GSState::GIFPackedRegHandlerSTQRGBAXYZF2<P, auto_flush>; \
-	m_fpGIFPackedRegHandlerSTQRGBAXYZ2[P] = &GSState::GIFPackedRegHandlerSTQRGBAXYZ2<P, auto_flush>;
+	m_fpGIFPackedRegHandlerXYZ[P][0] = &GSState::GIFPackedRegHandlerXYZF2<P, 0, auto_flush, tap>; \
+	m_fpGIFPackedRegHandlerXYZ[P][1] = &GSState::GIFPackedRegHandlerXYZF2<P, 1, auto_flush, tap>; \
+	m_fpGIFPackedRegHandlerXYZ[P][2] = &GSState::GIFPackedRegHandlerXYZ2<P, 0, auto_flush, tap>; \
+	m_fpGIFPackedRegHandlerXYZ[P][3] = &GSState::GIFPackedRegHandlerXYZ2<P, 1, auto_flush, tap>; \
+	m_fpGIFRegHandlerXYZ[P][0] = &GSState::GIFRegHandlerXYZF2<P, 0, auto_flush, tap>; \
+	m_fpGIFRegHandlerXYZ[P][1] = &GSState::GIFRegHandlerXYZF2<P, 1, auto_flush, tap>; \
+	m_fpGIFRegHandlerXYZ[P][2] = &GSState::GIFRegHandlerXYZ2<P, 0, auto_flush, tap>; \
+	m_fpGIFRegHandlerXYZ[P][3] = &GSState::GIFRegHandlerXYZ2<P, 1, auto_flush, tap>; \
+	m_fpGIFPackedRegHandlerSTQRGBAXYZF2[P] = &GSState::GIFPackedRegHandlerSTQRGBAXYZF2<P, auto_flush, tap>; \
+	m_fpGIFPackedRegHandlerSTQRGBAXYZ2[P] = &GSState::GIFPackedRegHandlerSTQRGBAXYZ2<P, auto_flush, tap>;
 
 	SetHandlerXYZ(GS_POINTLIST, true);
 	SetHandlerXYZ(GS_LINELIST, auto_flush);
@@ -689,6 +693,13 @@ void GSState::ResetHandlers()
 		SetPrimHandlers<true>();
 	else
 		SetPrimHandlers<false>();
+#ifdef ENABLE_VR
+	if (m_vr_handcap_tap)
+	{
+		m_vr_handcap_tap = false;
+		VRRefreshLiveKick();
+	}
+#endif
 
 	std::fill(std::begin(m_fpGIFRegHandlers), std::end(m_fpGIFRegHandlers), &GSState::GIFRegHandlerNull);
 
@@ -1353,7 +1364,7 @@ void GSState::GIFPackedRegHandlerUV_Hack(const GIFPackedReg* RESTRICT r)
 	m_isPackedUV_HackFlag = true;
 }
 
-template <u32 prim, u32 adc, bool auto_flush>
+template <u32 prim, u32 adc, bool auto_flush, bool tap>
 void GSState::GIFPackedRegHandlerXYZF2(const GIFPackedReg* RESTRICT r)
 {
 	const bool skip = adc || r->XYZF2.Skip();
@@ -1369,10 +1380,10 @@ void GSState::GIFPackedRegHandlerXYZF2(const GIFPackedReg* RESTRICT r)
 
 	m_v.m[1] = xy.upl32(zf);
 
-	VertexKick<prim, auto_flush>(skip);
+	VertexKick<prim, auto_flush, tap>(skip);
 }
 
-template <u32 prim, u32 adc, bool auto_flush>
+template <u32 prim, u32 adc, bool auto_flush, bool tap>
 void GSState::GIFPackedRegHandlerXYZ2(const GIFPackedReg* RESTRICT r)
 {
 	const bool skip = adc || r->XYZ2.Skip();
@@ -1386,7 +1397,7 @@ void GSState::GIFPackedRegHandlerXYZ2(const GIFPackedReg* RESTRICT r)
 
 	m_v.m[1] = xyz.upl64(GSVector4i::loadl(&m_v.UV));
 
-	VertexKick<prim, auto_flush>(skip);
+	VertexKick<prim, auto_flush, tap>(skip);
 }
 
 void GSState::GIFPackedRegHandlerFOG(const GIFPackedReg* RESTRICT r)
@@ -1403,7 +1414,7 @@ void GSState::GIFPackedRegHandlerNOP(const GIFPackedReg* RESTRICT r)
 {
 }
 
-template <u32 prim, bool auto_flush>
+template <u32 prim, bool auto_flush, bool tap>
 void GSState::GIFPackedRegHandlerSTQRGBAXYZF2(const GIFPackedReg* RESTRICT r, u32 size)
 {
 	pxAssert(size > 0 && size % 3 == 0);
@@ -1429,7 +1440,7 @@ void GSState::GIFPackedRegHandlerSTQRGBAXYZF2(const GIFPackedReg* RESTRICT r, u3
 
 		m_v.m[1] = xy.upl32(zf);
 
-		VertexKick<prim, auto_flush>(r[2].XYZF2.Skip());
+		VertexKick<prim, auto_flush, tap>(r[2].XYZF2.Skip());
 
 		r += 3;
 	}
@@ -1437,7 +1448,7 @@ void GSState::GIFPackedRegHandlerSTQRGBAXYZF2(const GIFPackedReg* RESTRICT r, u3
 	m_q = r[-3].STQ.Q;
 }
 
-template <u32 prim, bool auto_flush>
+template <u32 prim, bool auto_flush, bool tap>
 void GSState::GIFPackedRegHandlerSTQRGBAXYZ2(const GIFPackedReg* RESTRICT r, u32 size)
 {
 	pxAssert(size > 0 && size % 3 == 0);
@@ -1462,7 +1473,7 @@ void GSState::GIFPackedRegHandlerSTQRGBAXYZ2(const GIFPackedReg* RESTRICT r, u32
 
 		m_v.m[1] = xyz.upl64(GSVector4i::loadl(&m_v.UV));
 
-		VertexKick<prim, auto_flush>(r[2].XYZ2.Skip());
+		VertexKick<prim, auto_flush, tap>(r[2].XYZ2.Skip());
 
 		r += 3;
 	}
@@ -1544,7 +1555,7 @@ void GSState::GIFRegHandlerUV_Hack(const GIFReg* RESTRICT r)
 	m_isPackedUV_HackFlag = false;
 }
 
-template <u32 prim, u32 adc, bool auto_flush>
+template <u32 prim, u32 adc, bool auto_flush, bool tap>
 void GSState::GIFRegHandlerXYZF2(const GIFReg* RESTRICT r)
 {
 	if (!adc || GSUtil::GetPrimClass(m_prev_env.PRIM.PRIM) != GSUtil::GetPrimClass(m_env.PRIM.PRIM) || (m_dirty_gs_regs & (1 << DIRTY_REG_XYOFFSET)))
@@ -1556,10 +1567,10 @@ void GSState::GIFRegHandlerXYZF2(const GIFReg* RESTRICT r)
 
 	m_v.m[1] = xyz.upl64(uvf);
 
-	VertexKick<prim, auto_flush>(adc);
+	VertexKick<prim, auto_flush, tap>(adc);
 }
 
-template <u32 prim, u32 adc, bool auto_flush>
+template <u32 prim, u32 adc, bool auto_flush, bool tap>
 void GSState::GIFRegHandlerXYZ2(const GIFReg* RESTRICT r)
 {
 	if (!adc || GSUtil::GetPrimClass(m_prev_env.PRIM.PRIM) != GSUtil::GetPrimClass(m_env.PRIM.PRIM) || (m_dirty_gs_regs & (1 << DIRTY_REG_XYOFFSET)))
@@ -1567,7 +1578,7 @@ void GSState::GIFRegHandlerXYZ2(const GIFReg* RESTRICT r)
 
 	m_v.m[1] = GSVector4i::load(&r->XYZ, &m_v.UV);
 
-	VertexKick<prim, auto_flush>(adc);
+	VertexKick<prim, auto_flush, tap>(adc);
 }
 
 template <int i>
@@ -2337,6 +2348,21 @@ u32 GSState::CalcMask(int exp, int max_exp)
 	return (1 << std::min(amount, 23)) - 1;
 }
 
+
+u32 GSState::VRDisplayFbp() const
+{
+#ifdef ENABLE_VR
+	return VR::WorldProjection::ShownFbp(m_regs->PMODE.EN1, m_regs->PMODE.EN2, m_regs->DISP[0].DISPFB.FBP,
+		m_regs->DISP[1].DISPFB.FBP);
+#else
+	const bool en1 = m_regs->PMODE.EN1;
+	const bool en2 = m_regs->PMODE.EN2;
+	if (en1 == en2)
+		return 0xFFFFFFFFu;
+	return en2 ? m_regs->DISP[1].DISPFB.FBP : m_regs->DISP[0].DISPFB.FBP;
+#endif
+}
+
 void GSState::FlushPrim()
 {
 	if (m_index->tail > 0)
@@ -2345,8 +2371,50 @@ void GSState::FlushPrim()
 
 		m_texflush_flag = PRIM->TME ? false : m_texflush_flag;
 
+#ifdef ENABLE_VR
+		bool vr_hide_hands = false;
+		if (VR::HandCapture::Global().Active())
+		{
+			VR::HandCapture::GsDraw vr_draw;
+			vr_draw.vertices = m_vertex->buff;
+			vr_draw.vertex_count = m_vertex->tail;
+			vr_draw.indices = m_index->buff;
+			vr_draw.index_count = m_index->tail;
+			vr_draw.edit_indices = m_index->buff;
+			vr_draw.edit_count = &m_index->tail;
+			vr_draw.prim = PRIM->PRIM;
+			vr_draw.tme = PRIM->TME;
+			vr_draw.fst = PRIM->FST;
+			vr_draw.tex0 = m_context->TEX0.U64;
+			vr_draw.texa = m_env.TEXA.U64;
+			vr_draw.clamp = m_context->CLAMP.U64;
+#ifdef VR_HANDCAP_PLANTED_OFXY_SWAP
+			vr_draw.ofx = m_context->XYOFFSET.OFY;
+			vr_draw.ofy = m_context->XYOFFSET.OFX;
+#else
+			vr_draw.ofx = m_context->XYOFFSET.OFX;
+			vr_draw.ofy = m_context->XYOFFSET.OFY;
+#endif
+			vr_draw.has_scissor = true;
+			vr_draw.sc_x0 = static_cast<s32>(m_context->SCISSOR.SCAX0);
+			vr_draw.sc_x1 = static_cast<s32>(m_context->SCISSOR.SCAX1);
+			vr_draw.sc_y0 = static_cast<s32>(m_context->SCISSOR.SCAY0);
+			vr_draw.sc_y1 = static_cast<s32>(m_context->SCISSOR.SCAY1);
+			vr_draw.mem = &m_mem;
+			vr_draw.frame = g_perfmon.GetFrame();
+			vr_hide_hands = VR::HandCapture::Global().OnGsDraw(vr_draw);
+		}
+#ifdef VR_HANDCAP_PLANTED_SWAP_IN_FLUSH
+		VRSyncHandCaptureTap();
+#endif
+#endif
+
 		{
 			const u32 FRAME_FBP = m_context->FRAME.FBP;
+#ifdef ENABLE_VR
+			if (VR::WorldProjection::GsActive())
+				VR::WorldProjection::OnGsDraw(FRAME_FBP, VRDisplayFbp());
+#endif
 			if ((m_regs->DISP[0].DISPFB.FBP == FRAME_FBP && m_regs->PMODE.EN1) ||
 				(m_regs->DISP[1].DISPFB.FBP == FRAME_FBP && m_regs->PMODE.EN2))
 			{
@@ -2446,7 +2514,10 @@ void GSState::FlushPrim()
 			}
 		}
 
-		const bool skip_draw = (m_context->TEST.ZTE && m_context->TEST.ZTST == ZTST_NEVER);
+		bool skip_draw = (m_context->TEST.ZTE && m_context->TEST.ZTST == ZTST_NEVER);
+#ifdef ENABLE_VR
+		skip_draw = skip_draw || vr_hide_hands;
+#endif
 		m_quad_check_valid = false;
 		m_quad_check_valid_shuffle = false;
 		m_drawlist.clear();
@@ -3135,6 +3206,9 @@ template void GSState::Transfer<3>(const u8* mem, u32 size);
 template <int index>
 void GSState::Transfer(const u8* mem, u32 size)
 {
+#ifdef ENABLE_VR
+	VRSyncHandCaptureTap();
+#endif
 	const u8* start = mem;
 
 	GIFPath& path = m_path[index];
@@ -3570,6 +3644,70 @@ void GSState::UpdateScissor()
 	m_xyof = m_context->scissor.xyof;
 	m_scissor_invalid = m_context->scissor.in.rempty();
 }
+
+#ifdef ENABLE_VR
+void GSState::VRSyncHandCaptureTap()
+{
+	VR::HandCapture::Module& hc = VR::HandCapture::Global();
+	const bool own = hc.TapWanted();
+	m_vr_handcap_tap_trace_only = !own && hc.TraceTapWanted();
+	m_vr_handcap_trace = hc.TraceOn();
+	const bool want = own || m_vr_handcap_tap_trace_only;
+	if (want == m_vr_handcap_tap)
+		return;
+	const bool af = IsAutoFlushEnabled();
+	if (want)
+		af ? SetPrimHandlers<true, true>() : SetPrimHandlers<false, true>();
+	else
+		af ? SetPrimHandlers<true>() : SetPrimHandlers<false>();
+	m_vr_handcap_tap = want;
+	VRRefreshLiveKick();
+}
+
+void GSState::VRRefreshLiveKick()
+{
+	const u32 prim = m_env.PRIM.PRIM;
+	auto packed = [this](int reg, GIFPackedRegHandler h) {
+		if (m_fpGIFPackedRegHandlers[reg] && m_fpGIFPackedRegHandlers[reg] != &GSState::GIFPackedRegHandlerNull)
+			m_fpGIFPackedRegHandlers[reg] = h;
+	};
+	auto ad = [this](int reg, GIFRegHandler h) {
+		if (m_fpGIFRegHandlers[reg] && m_fpGIFRegHandlers[reg] != &GSState::GIFRegHandlerNull)
+			m_fpGIFRegHandlers[reg] = h;
+	};
+	auto combined = [this](int reg, GIFPackedRegHandlerC h) {
+		if (m_fpGIFPackedRegHandlersC[reg])
+			m_fpGIFPackedRegHandlersC[reg] = h;
+	};
+	packed(GIF_REG_XYZF2, m_fpGIFPackedRegHandlerXYZ[prim][0]);
+	packed(GIF_REG_XYZF3, m_fpGIFPackedRegHandlerXYZ[prim][1]);
+	packed(GIF_REG_XYZ2, m_fpGIFPackedRegHandlerXYZ[prim][2]);
+	packed(GIF_REG_XYZ3, m_fpGIFPackedRegHandlerXYZ[prim][3]);
+	ad(GIF_A_D_REG_XYZF2, m_fpGIFRegHandlerXYZ[prim][0]);
+	ad(GIF_A_D_REG_XYZF3, m_fpGIFRegHandlerXYZ[prim][1]);
+	ad(GIF_A_D_REG_XYZ2, m_fpGIFRegHandlerXYZ[prim][2]);
+	ad(GIF_A_D_REG_XYZ3, m_fpGIFRegHandlerXYZ[prim][3]);
+	combined(GIF_REG_STQRGBAXYZF2, m_fpGIFPackedRegHandlerSTQRGBAXYZF2[prim]);
+	combined(GIF_REG_STQRGBAXYZ2, m_fpGIFPackedRegHandlerSTQRGBAXYZ2[prim]);
+}
+
+std::array<GSState::VRHandlerTable, 7> GSState::VRHandlerTables() const
+{
+	std::array<VRHandlerTable, 7> out;
+	auto put = [&out](size_t i, const void* p, size_t bytes, size_t entry) {
+		out[i].bytes.assign(static_cast<const u8*>(p), static_cast<const u8*>(p) + bytes);
+		out[i].entry = entry;
+	};
+	put(0, m_fpGIFPackedRegHandlers, sizeof(m_fpGIFPackedRegHandlers), sizeof(GIFPackedRegHandler));
+	put(1, m_fpGIFRegHandlers, sizeof(m_fpGIFRegHandlers), sizeof(GIFRegHandler));
+	put(2, m_fpGIFPackedRegHandlersC, sizeof(m_fpGIFPackedRegHandlersC), sizeof(GIFPackedRegHandlerC));
+	put(3, m_fpGIFPackedRegHandlerXYZ, sizeof(m_fpGIFPackedRegHandlerXYZ), sizeof(GIFPackedRegHandler));
+	put(4, m_fpGIFRegHandlerXYZ, sizeof(m_fpGIFRegHandlerXYZ), sizeof(GIFRegHandler));
+	put(5, m_fpGIFPackedRegHandlerSTQRGBAXYZF2, sizeof(m_fpGIFPackedRegHandlerSTQRGBAXYZF2), sizeof(GIFPackedRegHandlerC));
+	put(6, m_fpGIFPackedRegHandlerSTQRGBAXYZ2, sizeof(m_fpGIFPackedRegHandlerSTQRGBAXYZ2), sizeof(GIFPackedRegHandlerC));
+	return out;
+}
+#endif
 
 void GSState::UpdateVertexKick()
 {
@@ -5411,7 +5549,7 @@ bool GSState::CheckOverlapVerts(u32 n)
 	return false;
 }
 
-template <u32 prim, bool auto_flush>
+template <u32 prim, bool auto_flush, bool tap>
 __forceinline void GSState::VertexKick(u32 skip)
 {
 	constexpr u32 n = NumIndicesForPrim(prim);
@@ -5481,7 +5619,30 @@ __forceinline void GSState::VertexKick(u32 skip)
 		SetDrawBufferEnv();
 	}
 
+#ifdef ENABLE_VR
+	[[maybe_unused]] const u32 vr_adc = skip;
+	[[maybe_unused]] u32 vr_cull = 0;
+#endif
 	skip |= static_cast<u32>(m_scissor_invalid);
+
+#ifdef ENABLE_VR
+	if constexpr (tap && primclass == GS_TRIANGLE_CLASS)
+	{
+		if (!m_scissor_invalid)
+		{
+#ifdef VR_HANDCAP_PLANTED_STRIP_V0
+			const u32 v0 = (prim == GS_TRIANGLEFAN) ? head : (prim == GS_TRIANGLESTRIP ? tail - 2 : tail - 3);
+#else
+			const u32 v0 = (prim == GS_TRIANGLEFAN) ? head : tail - 3;
+#endif
+			if (m_vr_handcap_tap_trace_only)
+				VR::HandCapture::Global().OnTraceTapOnly();
+			else
+				VR::HandCapture::Global().OnKick(&m_vertex->buff[v0], &m_vertex->buff[tail - 2], &m_vertex->buff[tail - 1], vr_adc,
+					m_context->TEX0.U64, g_perfmon.GetFrame());
+		}
+	}
+#endif
 
 	GSVector4i bbox;
 	if (skip == 0)
@@ -5524,19 +5685,43 @@ __forceinline void GSState::VertexKick(u32 skip)
 		const GSVector4i bbox_ex = bbox + GSVector4i(0, 0, 1, 1);
 		const GSVector4i& scissor = m_context->scissor.cull;
 		u32 test = static_cast<u32>(!bbox_ex.rintersects(scissor));
+#ifdef ENABLE_VR
+		if constexpr (tap)
+			vr_cull = test ? 1u : 0u;
+#endif
 
 		if constexpr (primclass == GS_TRIANGLE_CLASS || primclass == GS_SPRITE_CLASS)
 		{
 			test |= static_cast<u32>(bbox.rempty());
 		}
+#ifdef ENABLE_VR
+		if constexpr (tap)
+			vr_cull = (vr_cull == 0 && test) ? 2u : vr_cull;
+#endif
 
 		if constexpr (primclass == GS_TRIANGLE_CLASS)
 		{
 			test |= static_cast<u32>(v0.eq(v1)) | static_cast<u32>(v1.eq(v2)) | static_cast<u32>(v0.eq(v2));
 		}
+#ifdef ENABLE_VR
+		if constexpr (tap)
+			vr_cull = (vr_cull == 0 && test) ? 3u : vr_cull;
+#endif
 
 		skip |= test;
 	}
+
+#ifdef ENABLE_VR
+	if constexpr (tap && primclass == GS_TRIANGLE_CLASS)
+	{
+		if (m_vr_handcap_trace)
+		{
+			const u32 t0 = (prim == GS_TRIANGLEFAN) ? head : tail - 3;
+			VR::HandCapture::Global().OnTraceKick(&m_vertex->buff[t0], &m_vertex->buff[tail - 2], &m_vertex->buff[tail - 1], prim, vr_adc,
+				static_cast<u32>(m_scissor_invalid), vr_cull, m_context->TEX0.U64, g_perfmon.GetFrame());
+		}
+	}
+#endif
 
 	if (skip != 0)
 	{

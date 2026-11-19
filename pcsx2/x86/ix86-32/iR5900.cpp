@@ -16,6 +16,9 @@
 #include "x86/BaseblockEx.h"
 #include "x86/iR5900.h"
 #include "x86/iR5900Analysis.h"
+#ifdef ENABLE_VR
+#include "VR/ExecHook.h"
+#endif
 
 #include "common/AlignedMalloc.h"
 #include "common/FastJmp.h"
@@ -1429,6 +1432,11 @@ void dynarecCheckBreakpoint()
 		CBreakPoints::ClearSkipFirst(BREAKPOINT_EE);
 		return;
 	}
+
+#ifdef ENABLE_VR
+	if (VR::ExecHookOnHit(pc))
+		return;
+#endif
 
 	const int bpFlags = isBreakpointNeeded(pc);
 	bool hit = false;

@@ -6123,6 +6123,8 @@ GSTextureCache::HashCacheEntry* GSTextureCache::LookupHashCache(const GIFRegTEX0
 		}
 	}
 
+	bool placeholder_for_pending = false;
+
 	auto it = m_hash_cache.find(key);
 
 	const bool needs_second_lookup = paltex && (dump || replace);
@@ -6133,6 +6135,38 @@ GSTextureCache::HashCacheEntry* GSTextureCache::LookupHashCache(const GIFRegTEX0
 	{
 		GL_CACHE("TC: HC Hit: %" PRIx64 " %" PRIx64 " R-%ux%u", key.TEX0Hash, key.CLUTHash, key.region_width, key.region_height);
 		HashCacheEntry* entry = &it->second;
+		if (replace && !entry->is_replacement && entry->pending_replacement)
+		{
+			bool retry_pending = false;
+			std::pair<u8, u8> retry_minmax = entry->alpha_minmax;
+			GSTexture* rtex = nullptr;
+			if (classic && TEX0.TCC != 0 && !region.HasEither())
+			{
+				rtex = GSTextureReplacements::LookupReplacementTexture(classic_key, lod != nullptr,
+					&retry_pending, &retry_minmax, true,
+					region, 1u << TEX0.TW, 1u << TEX0.TH);
+			}
+			if (!rtex && !retry_pending)
+				rtex = GSTextureReplacements::LookupReplacementTexture(key, lod != nullptr, &retry_pending, &retry_minmax);
+			if (rtex)
+			{
+				Console.WriteLnFmt("ISS042-HEALED key={:016X}/{:016X}",
+					static_cast<u64>(key.TEX0Hash), static_cast<u64>(key.CLUTHash));
+				m_hash_cache_memory_usage -= entry->texture->GetMemUsage();
+				m_hash_cache_replacement_memory_usage += rtex->GetMemUsage();
+				m_src.SwapTexture(entry->texture, rtex);
+				g_gs_device->Recycle(entry->texture);
+				entry->texture = rtex;
+				entry->alpha_minmax = retry_minmax;
+				entry->valid_alpha_minmax = true;
+				entry->is_replacement = true;
+				entry->pending_replacement = false;
+			}
+			else if (!retry_pending)
+			{
+				entry->pending_replacement = false;
+			}
+		}
 		paltex &= (entry->texture->GetFormat() == GSTexture::Format::UNorm8);
 		entry->refcount++;
 		return entry;
@@ -6144,18 +6178,36 @@ GSTextureCache::HashCacheEntry* GSTextureCache::LookupHashCache(const GIFRegTEX0
 	{
 		bool replacement_texture_pending = false;
 		std::pair<u8, u8> alpha_minmax;
-		GSTexture* replacement_tex = GSTextureReplacements::LookupReplacementTexture(key, lod != nullptr,
-			&replacement_texture_pending, &alpha_minmax);
-		if (!replacement_tex && !replacement_texture_pending && classic)
+		const bool classic_first = classic && TEX0.TCC != 0 && !region.HasEither();
+
+
+		GSTexture* replacement_tex = nullptr;
+		if (classic_first)
 		{
 			replacement_tex = GSTextureReplacements::LookupReplacementTexture(classic_key, lod != nullptr,
 				&replacement_texture_pending, &alpha_minmax, true,
 				region, 1u << TEX0.TW, 1u << TEX0.TH);
+			if (!replacement_tex && !replacement_texture_pending)
+			{
+				replacement_tex = GSTextureReplacements::LookupReplacementTexture(key, lod != nullptr,
+					&replacement_texture_pending, &alpha_minmax);
+			}
+		}
+		else
+		{
+			replacement_tex = GSTextureReplacements::LookupReplacementTexture(key, lod != nullptr,
+				&replacement_texture_pending, &alpha_minmax);
+			if (!replacement_tex && !replacement_texture_pending && classic)
+			{
+				replacement_tex = GSTextureReplacements::LookupReplacementTexture(classic_key, lod != nullptr,
+					&replacement_texture_pending, &alpha_minmax, true,
+					region, 1u << TEX0.TW, 1u << TEX0.TH);
+			}
 		}
 		if (replacement_tex)
 		{
 			paltex = false;
-			const HashCacheEntry entry{replacement_tex, 1u, 0u, alpha_minmax, true, true};
+			const HashCacheEntry entry{replacement_tex, 1u, 0u, alpha_minmax, true, true, false};
 			m_hash_cache_replacement_memory_usage += entry.texture->GetMemUsage();
 			return &m_hash_cache.emplace(key, entry).first->second;
 		}
@@ -6168,6 +6220,7 @@ GSTextureCache::HashCacheEntry* GSTextureCache::LookupHashCache(const GIFRegTEX0
 			paltex = false;
 
 			can_cache = true;
+			placeholder_for_pending = true;
 		}
 	}
 
@@ -6217,7 +6270,8 @@ GSTextureCache::HashCacheEntry* GSTextureCache::LookupHashCache(const GIFRegTEX0
 	if (paltex)
 		key.RemoveCLUTHash();
 
-	const HashCacheEntry entry{tex, 1u, 0u, alpha_minmax, compute_alpha_minmax, false};
+
+	const HashCacheEntry entry{tex, 1u, 0u, alpha_minmax, compute_alpha_minmax, false, placeholder_for_pending};
 	m_hash_cache_memory_usage += tex->GetMemUsage();
 	return &m_hash_cache.emplace(key, entry).first->second;
 }
@@ -7665,7 +7719,7 @@ void GSTextureCache::InjectHashCacheTexture(const HashCacheKey& key, GSTexture* 
 	auto it = m_hash_cache.find(key);
 	if (it == m_hash_cache.end())
 	{
-		const HashCacheEntry entry{tex, 1u, 0u, alpha_minmax, true, true};
+		const HashCacheEntry entry{tex, 1u, 0u, alpha_minmax, true, true, false};
 		m_hash_cache.emplace(key, entry);
 		return;
 	}

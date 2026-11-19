@@ -76,6 +76,8 @@
 		<file>icons/black/svg/negcon-line.svg</file>
 		<file>icons/black/svg/pause-line.svg</file>
 		<file>icons/black/svg/pencil-line.svg</file>
+		<file>icons/black/svg/penguin-vr-bust-line.svg</file>
+		<file>icons/black/svg/penguin-vr-line.svg</file>
 		<file>icons/black/svg/pin-filled.svg</file>
 		<file>icons/black/svg/play-line.svg</file>
 		<file>icons/black/svg/plus-line.svg</file>
@@ -190,6 +192,8 @@
 		<file>icons/white/svg/padlock-unlock.svg</file>
 		<file>icons/white/svg/pause-line.svg</file>
 		<file>icons/white/svg/pencil-line.svg</file>
+		<file>icons/white/svg/penguin-vr-bust-line.svg</file>
+		<file>icons/white/svg/penguin-vr-line.svg</file>
 		<file>icons/white/svg/pin-filled.svg</file>
 		<file>icons/white/svg/play-line.svg</file>
 		<file>icons/white/svg/plus-line.svg</file>

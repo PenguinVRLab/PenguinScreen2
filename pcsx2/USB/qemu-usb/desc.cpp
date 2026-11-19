@@ -420,6 +420,8 @@ int usb_desc_parse_config(const u8* data, int len, USBDescDevice& dev)
 
 	while (pos < len)
 	{
+		if (len - pos < 2 || data[pos] == 0)
+			break;
 		d = (USBDescriptor*)(data + pos);
 		switch (d->bDescriptorType)
 		{

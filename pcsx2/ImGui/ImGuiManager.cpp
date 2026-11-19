@@ -30,6 +30,10 @@
 #include "imgui_internal.h"
 #include "common/Image.h"
 
+#ifdef ENABLE_VR
+#include "VR/UiPanel.h"
+#endif
+
 #include <chrono>
 #include <cmath>
 #include <deque>
@@ -91,6 +95,15 @@ static std::vector<u8> s_icon_pf_font_data;
 
 static float s_window_width;
 static float s_window_height;
+
+static constexpr float VR_PANEL_LAYOUT_WIDTH = 1280.0f;
+static constexpr float VR_PANEL_LAYOUT_HEIGHT = 720.0f;
+static constexpr float VR_PANEL_UI_SCALE = 2.0f;
+static std::atomic_bool s_vr_layout_wanted{false};
+static bool s_vr_layout = false;
+static std::atomic<float> s_mouse_scale_x{1.0f};
+static std::atomic<float> s_mouse_scale_y{1.0f};
+static void ApplyDisplaySize(u32 window_width, u32 window_height);
 static Common::Timer s_last_render_time;
 
 static std::atomic_bool s_imgui_wants_keyboard{false};
@@ -179,10 +192,9 @@ bool ImGuiManager::Initialize()
 	g.ConfigNavWindowingKeyPrev = ImGuiKey_None;
 	g.ConfigNavWindowingWithGamepad = false;
 
-	s_window_width = static_cast<float>(g_gs_device->GetWindowWidth());
-	s_window_height = static_cast<float>(g_gs_device->GetWindowHeight());
 	io.DisplayFramebufferScale = ImVec2(1, 1);
-	io.DisplaySize = ImVec2(s_window_width, s_window_height);
+	s_vr_layout = false;
+	ApplyDisplaySize(g_gs_device->GetWindowWidth(), g_gs_device->GetWindowHeight());
 
 	SetKeyMap();
 	SetStyle();
@@ -251,14 +263,59 @@ float ImGuiManager::GetWindowHeight()
 	return s_window_height;
 }
 
+static void ApplyDisplaySize(u32 window_width, u32 window_height)
+{
+	if (s_vr_layout)
+	{
+		s_window_width = VR_PANEL_LAYOUT_WIDTH;
+		s_window_height = VR_PANEL_LAYOUT_HEIGHT;
+		s_mouse_scale_x.store(window_width ? VR_PANEL_LAYOUT_WIDTH / static_cast<float>(window_width) : 1.0f);
+		s_mouse_scale_y.store(window_height ? VR_PANEL_LAYOUT_HEIGHT / static_cast<float>(window_height) : 1.0f);
+	}
+	else
+	{
+		s_window_width = static_cast<float>(window_width);
+		s_window_height = static_cast<float>(window_height);
+		s_mouse_scale_x.store(1.0f);
+		s_mouse_scale_y.store(1.0f);
+	}
+	ImGui::GetIO().DisplaySize = ImVec2(s_window_width, s_window_height);
+}
+
+void ImGuiManager::SetVRPanelLayout(bool on)
+{
+	s_vr_layout_wanted.store(on, std::memory_order_release);
+}
+
+bool ImGuiManager::IsVRPanelLayout()
+{
+	return s_vr_layout;
+}
+
+void ImGuiManager::ProcessXrNavEvent(GenericInputBinding key, bool down)
+{
+	if (!ImGui::GetCurrentContext())
+		return;
+	ImGuiKey imkey = ImGuiKey_None;
+	switch (key)
+	{
+		case GenericInputBinding::DPadUp: imkey = ImGuiKey_GamepadDpadUp; break;
+		case GenericInputBinding::DPadDown: imkey = ImGuiKey_GamepadDpadDown; break;
+		case GenericInputBinding::DPadLeft: imkey = ImGuiKey_GamepadDpadLeft; break;
+		case GenericInputBinding::DPadRight: imkey = ImGuiKey_GamepadDpadRight; break;
+		case GenericInputBinding::Cross: imkey = ImGuiKey_GamepadFaceDown; break;
+		case GenericInputBinding::Circle: imkey = ImGuiKey_GamepadFaceRight; break;
+		default: return;
+	}
+	ImGui::GetIO().AddKeyAnalogEvent(imkey, down, down ? 1.0f : 0.0f);
+}
+
 void ImGuiManager::WindowResized()
 {
 	const u32 new_width = g_gs_device ? g_gs_device->GetWindowWidth() : 0;
 	const u32 new_height = g_gs_device ? g_gs_device->GetWindowHeight() : 0;
 
-	s_window_width = static_cast<float>(new_width);
-	s_window_height = static_cast<float>(new_height);
-	ImGui::GetIO().DisplaySize = ImVec2(s_window_width, s_window_height);
+	ApplyDisplaySize(new_width, new_height);
 
 	RequestScaleUpdate();
 
@@ -297,7 +354,7 @@ void ImGuiManager::ReloadFonts()
 void ImGuiManager::UpdateScale()
 {
 	const float window_scale = g_gs_device ? g_gs_device->GetWindowScale() : 1.0f;
-	const float scale = std::max(window_scale * (EmuConfig.GS.OsdScale / 100.0f), 0.5f);
+	const float scale = std::max(window_scale * (EmuConfig.GS.OsdScale / 100.0f), 0.5f) * (s_vr_layout ? VR_PANEL_UI_SCALE : 1.0f);
 
 	if ((!ImGuiFullscreen::UpdateLayoutScale()) && scale == s_global_scale)
 		return;
@@ -315,6 +372,15 @@ void ImGuiManager::NewFrame()
 {
 	ImGuiIO& io = ImGui::GetIO();
 	io.DeltaTime = s_last_render_time.GetTimeSecondsAndReset();
+
+	if (const bool want_vr = s_vr_layout_wanted.load(std::memory_order_acquire); want_vr != s_vr_layout)
+	{
+		s_vr_layout = want_vr;
+		ApplyDisplaySize(g_gs_device ? g_gs_device->GetWindowWidth() : 0, g_gs_device ? g_gs_device->GetWindowHeight() : 0);
+		s_scale_changed = true;
+		Console.WriteLn("(VR) UiPanel: ImGui layout %s.", want_vr ? "1280x720 for the headset panel (the mirror stretches it)" :
+																	"back to the window");
+	}
 
 	if (s_scale_changed)
 	{
@@ -780,6 +846,23 @@ static std::deque<OSDMessage> s_osd_active_messages;
 static std::deque<OSDMessage> s_osd_posted_messages;
 static std::mutex s_osd_messages_lock;
 
+static void VrMirrorOsdPost(std::string_view key, float duration)
+{
+#if defined(ENABLE_VR) && !defined(VR_UIPANEL_PLANTED_NO_OSD_FEED)
+	VR::UiPanel::PostOsdMessage(key, duration);
+#else
+	(void)key;
+	(void)duration;
+#endif
+}
+
+static void VrMirrorOsdClear()
+{
+#if defined(ENABLE_VR) && !defined(VR_UIPANEL_PLANTED_NO_OSD_FEED)
+	VR::UiPanel::ResetOsd();
+#endif
+}
+
 void Host::AddOSDMessage(std::string message, float duration )
 {
 	AddKeyedOSDMessage(std::string(), std::move(message), duration);
@@ -791,6 +874,7 @@ void Host::AddKeyedOSDMessage(std::string key, std::string message, float durati
 		Console.WriteLn(Color_StrongGreen, fmt::format("OSD [{}]: {}", key, message));
 	else
 		Console.WriteLn(Color_StrongGreen, fmt::format("OSD: {}", message));
+	VrMirrorOsdPost(key, duration);
 
 	const Common::Timer::Value current_time = Common::Timer::GetCurrentValue();
 
@@ -813,6 +897,7 @@ void Host::AddIconOSDMessage(std::string key, const char* icon, const std::strin
 		Console.WriteLn(Color_StrongGreen, fmt::format("OSD [{}]: {}", key, message));
 	else
 		Console.WriteLn(Color_StrongGreen, fmt::format("OSD: {}", message));
+	VrMirrorOsdPost(key, duration);
 
 	const Common::Timer::Value current_time = Common::Timer::GetCurrentValue();
 
@@ -832,6 +917,7 @@ void Host::AddIconOSDMessage(std::string key, const char* icon, const std::strin
 void Host::RemoveKeyedOSDMessage(std::string key)
 {
 	OSDMessage msg = {};
+	VrMirrorOsdPost(key, 0.0f);
 	msg.key = std::move(key);
 	msg.duration = 0.0f;
 
@@ -847,6 +933,7 @@ void Host::ClearOSDMessages()
 	}
 
 	s_osd_active_messages.clear();
+	VrMirrorOsdClear();
 }
 
 void ImGuiManager::AcquirePendingOSDMessages(Common::Timer::Value current_time)
@@ -1104,7 +1191,7 @@ void ImGuiManager::UpdateMousePosition(float x, float y)
 	if (!ImGui::GetCurrentContext())
 		return;
 
-	ImGui::GetIO().MousePos = ImVec2(x, y);
+	ImGui::GetIO().MousePos = ImVec2(x * s_mouse_scale_x.load(std::memory_order_relaxed), y * s_mouse_scale_y.load(std::memory_order_relaxed));
 	std::atomic_thread_fence(std::memory_order_release);
 }
 

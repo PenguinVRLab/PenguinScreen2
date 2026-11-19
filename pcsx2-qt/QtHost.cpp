@@ -37,6 +37,8 @@
 #ifdef ENABLE_VR
 #include "pcsx2/VR/VRManager.h"
 #include "pcsx2/VR/VRProfileDB.h"
+#include "pcsx2/VR/VRRelaunch.h"
+#include "pcsx2/VR/LegacyDataImport.h"
 #endif
 
 #include "common/Assertions.h"
@@ -51,6 +53,7 @@
 #include "common/Timer.h"
 
 #include <QtCore/QDir>
+#include <QtCore/QFileInfo>
 #include <QtCore/QTimer>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QMessageBox>
@@ -60,8 +63,19 @@
 
 #include "fmt/format.h"
 
+#include <cerrno>
 #include <cmath>
 #include <csignal>
+#include <cstdlib>
+#include <cstring>
+#include <mutex>
+#include <optional>
+#include <vector>
+#ifdef _WIN32
+#include <QtCore/QProcess>
+#else
+#include <unistd.h>
+#endif
 
 static constexpr u32 SETTINGS_SAVE_DELAY = 1000;
 static constexpr const char* RUNTIME_RESOURCES_URL =
@@ -89,6 +103,12 @@ static QTimer* s_settings_save_timer = nullptr;
 static std::unique_ptr<INISettingsInterface> s_base_settings_interface;
 static std::unique_ptr<INISettingsInterface> s_secrets_settings_interface;
 static bool s_batch_mode = false;
+static QStringList s_launch_arguments;
+static std::mutex s_last_boot_mutex;
+static std::optional<VMBootParameters> s_last_boot;
+#ifdef ENABLE_VR
+static VR::Relaunch::Pending s_restart;
+#endif
 static bool s_nogui_mode = false;
 static bool s_start_big_picture_mode = false;
 static bool s_start_fullscreen = false;
@@ -202,6 +222,10 @@ void EmuThread::startVM(std::shared_ptr<VMBootParameters> boot_params)
 		QMetaObject::invokeMethod(this, "startVM", Qt::QueuedConnection, Q_ARG(std::shared_ptr<VMBootParameters>, boot_params));
 		return;
 	}
+	{
+		std::unique_lock lock(s_last_boot_mutex);
+		s_last_boot = *boot_params;
+	}
 
 	m_is_rendering_to_main = shouldRenderToMain();
 	if (boot_params->fullscreen.has_value())
@@ -261,6 +285,9 @@ void EmuThread::setVMPaused(bool paused)
 	}
 
 	VMManager::SetPaused(paused);
+
+	if (paused && VMManager::IsOnlineLocked() && VMManager::GetState() == VMState::Running)
+		emit onVMResumed();
 }
 
 void EmuThread::shutdownVM(bool save_state )
@@ -778,7 +805,8 @@ void EmuThread::onApplicationStateChanged(Qt::ApplicationState state)
 	const bool focus_loss = (state != Qt::ApplicationActive);
 	if (focus_loss)
 	{
-		if (m_pause_on_focus_loss && !m_was_paused_by_focus_loss && VMManager::GetState() == VMState::Running)
+		if (m_pause_on_focus_loss && !m_was_paused_by_focus_loss && VMManager::GetState() == VMState::Running &&
+			!VMManager::IsOnlineLocked())
 		{
 			m_was_paused_by_focus_loss = true;
 			VMManager::SetPaused(true);
@@ -1249,6 +1277,111 @@ void Host::RequestExitBigPicture()
 	g_emu_thread->stopFullscreenUI();
 }
 
+#ifdef ENABLE_VR
+static void StartEmulatorRestart(bool to_game_list, const std::function<void(std::string)>& on_refused)
+{
+	std::vector<std::string> original;
+	for (qsizetype i = 1; i < s_launch_arguments.size(); i++)
+		original.push_back(s_launch_arguments[i].toStdString());
+	VR::Relaunch::Boot boot;
+	if (to_game_list)
+		boot.source = VR::Relaunch::Boot::Source::None;
+	else
+	{
+		std::unique_lock lock(s_last_boot_mutex);
+		if (s_last_boot.has_value())
+		{
+			const VMBootParameters& b = s_last_boot.value();
+			boot.elf_override = b.elf_override;
+			boot.path = b.filename;
+			boot.fast_boot = b.fast_boot;
+			if (b.source_type == CDVD_SourceType::Disc)
+				boot.source = VR::Relaunch::Boot::Source::Disc;
+			else if (b.source_type == CDVD_SourceType::NoDisc)
+				boot.source = VR::Relaunch::Boot::Source::NoDisc;
+			else if (!b.filename.empty() || !b.elf_override.empty())
+			{
+				boot.source = VR::Relaunch::Boot::Source::File;
+				const std::string now = VMManager::GetDiscPath();
+				if (!now.empty() && b.elf_override.empty())
+					boot.path = now;
+			}
+		}
+	}
+	std::vector<std::string> args = VR::Relaunch::BuildArgs(original, boot);
+	const size_t count = args.size();
+	QString why;
+	const bool proceeds = g_main_window->requestExitForRestart(&why);
+	const std::string refused = s_restart.Settle(proceeds, std::move(args), why.toStdString());
+	if (proceeds)
+	{
+		Console.WriteLn("(VR) Restart: shutting down; the emulator starts again with %zu argument(s).", count);
+		return;
+	}
+	Console.Warning("(VR) Restart: not restarting: %s", refused.c_str());
+	if (on_refused)
+		on_refused(refused);
+}
+#endif
+
+bool Host::RequestEmulatorRestart(std::function<void(std::string)> on_refused)
+{
+#ifdef ENABLE_VR
+	QtHost::RunOnUIThread([on_refused = std::move(on_refused)]() { StartEmulatorRestart(false, on_refused); });
+	return true;
+#else
+	return false;
+#endif
+}
+
+void QtHost::OnVMStoppedForRestart(bool app_exits)
+{
+#ifdef ENABLE_VR
+	const bool armed = VR::Relaunch::TakeRestartAfterGameCloses();
+	if (!VR::Relaunch::RestartAfterGameClosed(armed, app_exits))
+	{
+		if (armed)
+			Console.WriteLn("(VR) Restart: the game closed and the emulator closes with it; the next launch reads the new switches.");
+		return;
+	}
+	Console.WriteLn("(VR) Restart: the game closed; restarting the emulator to its game list to apply the switches.");
+	StartEmulatorRestart(true, {});
+#else
+	(void)app_exits;
+#endif
+}
+
+#ifdef ENABLE_VR
+static void RelaunchSelf(const std::vector<std::string>& args)
+{
+	std::string self_exe = QCoreApplication::applicationFilePath().toStdString();
+#ifdef __linux__
+	if (const QString target = QFileInfo(QStringLiteral("/proc/self/exe")).symLinkTarget(); !target.isEmpty())
+		self_exe = target.toStdString();
+#endif
+	const std::string program = VR::Relaunch::ChooseProgram(self_exe, std::getenv("APPIMAGE"), std::getenv("APPDIR"));
+	Console.WriteLn("(VR) Restart: starting %s again.", program.c_str());
+#ifdef _WIN32
+	QStringList qargs;
+	for (const std::string& a : args)
+		qargs << QString::fromStdString(a);
+	if (!QProcess::startDetached(QString::fromStdString(program), qargs))
+		Console.Error("(VR) Restart: the emulator could not be started again; start it yourself.");
+#else
+	std::vector<std::string> owned;
+	owned.reserve(args.size() + 1);
+	owned.push_back(program);
+	owned.insert(owned.end(), args.begin(), args.end());
+	std::vector<char*> argv;
+	for (std::string& a : owned)
+		argv.push_back(a.data());
+	argv.push_back(nullptr);
+	execv(program.c_str(), argv.data());
+	Console.Error("(VR) Restart: the emulator could not be started again (%s); start it yourself.", std::strerror(errno));
+#endif
+}
+#endif
+
 void Host::RequestVMShutdown(bool allow_confirm, bool allow_save_state, bool default_save_state)
 {
 	if (!VMManager::HasValidVM())
@@ -1331,6 +1464,10 @@ bool QtHost::InitializeConfig()
 	}
 
 	CrashHandler::SetWriteDirectory(EmuFolders::DataRoot);
+
+#ifdef ENABLE_VR
+	VR::LegacyDataImport::ImportFromRc2IfNeeded();
+#endif
 
 	const std::string path = Path::Combine(EmuFolders::Settings, "PenguinScreen2.ini");
 	const bool settings_exists = FileSystem::FileExists(path.c_str());
@@ -1756,7 +1893,7 @@ void Host::OnInputDeviceDisconnected(const InputBindingKey key, const std::strin
 	emit g_emu_thread->onInputDeviceDisconnected(identifier.empty() ? QString() : QString::fromUtf8(identifier.data(), identifier.size()));
 
 	if (VMManager::GetState() == VMState::Running && Host::GetBoolSettingValue("UI", "PauseOnControllerDisconnection", false) &&
-		InputManager::HasAnyBindingsForSource(key))
+		InputManager::HasAnyBindingsForSource(key) && !VMManager::IsOnlineLocked())
 	{
 		std::string message =
 			fmt::format(TRANSLATE_FS("QtHost", "System paused because controller {} was disconnected."), identifier);
@@ -2135,8 +2272,14 @@ void QtHost::PrintCommandLineHelp(const std::string_view progname)
 	std::fprintf(stderr, "  -raintegration: Use RAIntegration instead of built-in achievement support.\n");
 #endif
 #ifdef ENABLE_VR
+#ifdef ENABLE_VR_SEATS
 	std::fprintf(stderr, "  --vr-seat <n>: Arm VR bound to XR seat n (1..4; 1 = default runtime). Implies --vr.\n");
 	std::fprintf(stderr, "  --vr-cast <n>: Also show the other split-screen player's view on XR seat n (2..4).\n");
+	std::fprintf(stderr, "  --vr-seat-dirs <a:b:c>: Runtime dirs of XR seats 2..4 for this launch only\n"
+						 "    (replaces [VR] XrSeatRuntimeDirs for this run; never saved).\n");
+	std::fprintf(stderr, "  --vr-seat-jsons <a:b:c>: Runtime manifests of XR seats 2..4 for this launch only\n"
+						 "    (replaces [VR] XrSeatRuntimeJsons for this run; never saved).\n");
+#endif
 	std::fprintf(stderr, "  --vr: Arm VR for THIS launch (explicit per-invocation signal; no environment\n"
 						 "    variable ever arms VR). Without it the binary runs flat and never creates\n"
 						 "    an OpenXR instance. The shipped launch-vr-session.sh passes it.\n");
@@ -2159,6 +2302,7 @@ std::shared_ptr<VMBootParameters>& QtHost::AutoBoot(std::shared_ptr<VMBootParame
 bool QtHost::ParseCommandLineOptions(const QStringList& args, std::shared_ptr<VMBootParameters>& autoboot)
 {
 	bool no_more_args = false;
+	s_launch_arguments = args;
 
 	if (args.empty())
 	{
@@ -2188,6 +2332,17 @@ bool QtHost::ParseCommandLineOptions(const QStringList& args, std::shared_ptr<VM
 				VR::SetLaunchRequestedVR(true);
 				continue;
 			}
+#ifndef ENABLE_VR_SEATS
+			else if (CHECK_ARG(QStringLiteral("--vr-seat")) || CHECK_ARG(QStringLiteral("-vr-seat")) ||
+					 CHECK_ARG(QStringLiteral("--vr-cast")) || CHECK_ARG(QStringLiteral("-vr-cast")) ||
+					 CHECK_ARG(QStringLiteral("--vr-seat-dirs")) || CHECK_ARG(QStringLiteral("-vr-seat-dirs")) ||
+					 CHECK_ARG(QStringLiteral("--vr-seat-jsons")) || CHECK_ARG(QStringLiteral("-vr-seat-jsons")))
+			{
+				std::fprintf(stderr, "%s is not available on Windows: this build supports one headset through SteamVR. Use --vr.\n",
+					it->toUtf8().constData());
+				return false;
+			}
+#else
 			else if (CHECK_ARG_PARAM(QStringLiteral("--vr-seat")) || CHECK_ARG_PARAM(QStringLiteral("-vr-seat")))
 			{
 				bool seat_ok = false;
@@ -2214,6 +2369,29 @@ bool QtHost::ParseCommandLineOptions(const QStringList& args, std::shared_ptr<VM
 				VR::SetLaunchRequestedVR(true);
 				continue;
 			}
+			else if (CHECK_ARG_PARAM(QStringLiteral("--vr-seat-dirs")) || CHECK_ARG_PARAM(QStringLiteral("-vr-seat-dirs")))
+			{
+				const std::string dirs = (++it)->toStdString();
+				if (dirs.empty())
+				{
+					std::fprintf(stderr, "--vr-seat-dirs wants a colon-separated list of runtime dirs\n");
+					return false;
+				}
+				VR::SetLaunchSeatRuntimeDirs(dirs);
+				continue;
+			}
+			else if (CHECK_ARG_PARAM(QStringLiteral("--vr-seat-jsons")) || CHECK_ARG_PARAM(QStringLiteral("-vr-seat-jsons")))
+			{
+				const std::string jsons = (++it)->toStdString();
+				if (jsons.empty())
+				{
+					std::fprintf(stderr, "--vr-seat-jsons wants a colon-separated list of runtime manifests\n");
+					return false;
+				}
+				VR::SetLaunchSeatRuntimeJsons(jsons);
+				continue;
+			}
+#endif
 			else if (CHECK_ARG(QStringLiteral("-vr-info")))
 			{
 				PrintCommandLineVersion();
@@ -2469,6 +2647,54 @@ public:
 	}
 };
 
+#ifdef ENABLE_VR
+static void ShowVRRequirementOffer(const VR::ProfileDB::RequirementOffer& offer)
+{
+	QStringList needs;
+	bool needs_restart = false;
+	for (const VR::ProfileDB::RequirementGap& g : offer.gaps)
+	{
+		switch (g.kind)
+		{
+			case VR::ProfileDB::RequirementGap::Kind::ExtraMemory:
+				needs << qApp->translate("VRProfileOffer", "Extended RAM");
+				break;
+		}
+		needs_restart |= g.needs_restart;
+	}
+	const QString disc = offer.name.empty() ? QString::fromStdString(offer.serial) : QString::fromStdString(offer.name);
+
+	if (QMessageBox::question(g_main_window, qApp->translate("VRProfileOffer", "This Game Needs a Setting"),
+			qApp->translate("VRProfileOffer", "This disc is %1, which needs %2. Turn it on for this game?")
+				.arg(disc, needs.join(QStringLiteral(", "))),
+			QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes) != QMessageBox::Yes)
+	{
+		Console.WriteLn(fmt::format("(VR) The requirement offer for {} was declined; nothing was changed.", offer.serial));
+		return;
+	}
+
+	INISettingsInterface sif(offer.game_settings_path);
+	if (FileSystem::FileExists(offer.game_settings_path.c_str()))
+		sif.Load();
+	for (const VR::ProfileDB::RequirementGap& g : offer.gaps)
+		sif.SetBoolValue(g.section, g.key, g.value);
+	if (!QtHost::SaveGameSettings(&sif, false))
+		return;
+	Console.WriteLn(fmt::format("(VR) The requirement offer for {} was accepted; saved to {}.", offer.serial,
+		Path::GetFileName(offer.game_settings_path)));
+	g_emu_thread->reloadGameSettings();
+
+	if (needs_restart &&
+		QMessageBox::question(g_main_window, qApp->translate("VRProfileOffer", "Restart the Game?"),
+			qApp->translate("VRProfileOffer",
+				"The setting is saved for this game and takes effect when the game restarts. Restart it now?"),
+			QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes) == QMessageBox::Yes)
+	{
+		g_emu_thread->resetVM();
+	}
+}
+#endif
+
 int main(int argc, char* argv[])
 {
 	CrashHandler::Install();
@@ -2479,7 +2705,7 @@ int main(int argc, char* argv[])
 
 	QGuiApplication::setHighDpiScaleFactorRoundingPolicy(Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
 
-	QGuiApplication::setDesktopFileName(QStringLiteral("org.penguinvr.penguinscreen2"));
+	QGuiApplication::setDesktopFileName(QStringLiteral("com.penguinvrlabs.penguinscreen2"));
 	QtHost::RegisterTypes();
 
 	PCSX2MainApplication app(argc, argv);
@@ -2516,6 +2742,13 @@ int main(int argc, char* argv[])
 								  "exists for the same game, it is used instead. Fix or remove the "
 								  "listed files — this check runs at every launch.");
 			QMessageBox::critical(nullptr, QStringLiteral("Invalid VR profiles"), msg);
+		}
+
+		if (!s_batch_mode)
+		{
+			VR::ProfileDB::SetRequirementOfferHandler([](const VR::ProfileDB::RequirementOffer& offer) {
+				QtHost::RunOnUIThread([offer]() { ShowVRRequirementOffer(offer); });
+			});
 		}
 	}
 #endif
@@ -2578,6 +2811,11 @@ shutdown_and_exit:
 
 	if (s_base_settings_interface->IsDirty())
 		s_base_settings_interface->Save();
+
+#ifdef ENABLE_VR
+	if (s_restart.Armed())
+		RelaunchSelf(s_restart.Args());
+#endif
 
 	return result;
 }

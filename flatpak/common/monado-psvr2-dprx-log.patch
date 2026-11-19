@@ -1,0 +1,32 @@
+Monado PS VR2 driver: log the headset's DisplayPort receiver status when it changes.
+
+Why: the headset reports a `dprx_status` byte in every status packet (0 = DP link
+not ready; the driver's header guesses "2 = cinematic?"). Monado keeps it only as a
+debug-UI variable, so no run records what the headset thought of the stream it was
+driven with. One INFO line on change (and for the first packet, whatever its value)
+puts it in the service's log next to the mode and format lines a display test reads.
+
+Applies to Monado main at ded98428 (the build PenguinScreen2 ships) and at 8b259763:
+psvr2.c is identical in both. `git apply` it; `git apply -R` takes it out again.
+PSVR2_INFO prints only when the driver's log level allows it: the driver's default is
+WARN (`DEBUG_GET_ONCE_LOG_OPTION(psvr2_log, "PSVR2_LOG", U_LOGGING_WARN)`), so the
+service needs `PSVR2_LOG=info` to show the line. Revision 2.
+
+--- a/src/xrt/drivers/psvr2/psvr2.c
++++ b/src/xrt/drivers/psvr2/psvr2.c
+@@ -304,7 +304,14 @@
+ {
+ 	struct status_record_hdr *hdr = (struct status_record_hdr *)buf;
+
+-	hmd->dprx_status = hdr->dprx_status;
++	static bool dprx_seen = false; // the first packet is logged whatever its value (a run that stays at 0 says so)
++	if (!dprx_seen || hmd->dprx_status != hdr->dprx_status) {
++		// 0 = DP link not ready; the values seen with a picture are not yet named (psvr2.h: "2 = cinematic?").
++		// Logged on change so a run's headset-side display state is on record next to what the kernel drove.
++		PSVR2_INFO(hmd, "DP RX status %u -> %u", hmd->dprx_status, hdr->dprx_status);
++		dprx_seen = true;
++		hmd->dprx_status = hdr->dprx_status;
++	}
+ 	hmd->proximity_sensor = hdr->prox_sensor_flag;
+ 	hmd->function_button = hdr->function_button;
+

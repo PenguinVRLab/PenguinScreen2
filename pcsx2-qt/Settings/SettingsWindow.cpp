@@ -24,6 +24,7 @@
 #include "Settings/DebugSettingsWidget.h"
 #ifdef ENABLE_VR
 #include "Settings/VRSettingsWidget.h"
+#include "Settings/PadXRBindingsWidget.h"
 #endif
 #include "SettingsWindow.h"
 
@@ -199,11 +200,19 @@ void SettingsWindow::setupUi(const GameList::Entry* game)
 	}
 
 #ifdef ENABLE_VR
-	addWidget(new VRSettingsWidget(this, m_ui.settingsContainer), tr("VR"), QStringLiteral("headset-line"),
+	addWidget(new VRSettingsWidget(this, m_ui.settingsContainer), tr("VR"), QStringLiteral("penguin-vr-line"),
 		tr("<strong>VR Settings</strong><hr>These options control the experimental OpenXR virtual reality output, which mirrors the "
 		   "emulated display onto a virtual screen inside a headset. VR requires the Vulkan renderer and a running OpenXR runtime; "
 		   "enabling or disabling it takes effect when the emulator restarts.<br><br>Mouse over an option for additional information, "
 		   "and Shift+Wheel to scroll this panel."));
+	if (!isPerGameSettings())
+	{
+		addWidget(new PadXRBindingsWidget(this, m_ui.settingsContainer), tr("PadXR Bindings"),
+			QStringLiteral("penguin-vr-line"),
+			tr("<strong>PadXR Bindings</strong><hr>Which controller input opens PadXR's menu in the headset (hold it to "
+			   "recentre), selects, goes back, navigates and talks, per controller type and hand. These never reach the "
+			   "game. Changes apply the next time a VR session starts."));
+	}
 #endif
 
 	if (show_advanced_settings)
@@ -222,7 +231,8 @@ void SettingsWindow::setupUi(const GameList::Entry* game)
 	m_ui.settingsCategory->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
 	m_ui.settingsCategory->setCurrentRow(0);
 	m_ui.settingsContainer->setCurrentIndex(0);
-	m_ui.helpText->setText(m_category_help_text[0]);
+	pxAssert(m_ui.settingsCategory->count() == m_ui.settingsContainer->count());
+	m_ui.helpText->setText(categoryHelpText(0));
 	connect(m_ui.settingsCategory, &QListWidget::currentRowChanged, this, &SettingsWindow::onCategoryCurrentRowChanged);
 	connect(m_ui.closeButton, &QPushButton::clicked, this, &SettingsWindow::close);
 	if (m_ui.restoreDefaultsButton)
@@ -267,7 +277,7 @@ void SettingsWindow::setCategory(const char* category)
 void SettingsWindow::onCategoryCurrentRowChanged(int row)
 {
 	m_ui.settingsContainer->setCurrentIndex(row);
-	m_ui.helpText->setText(m_category_help_text[row]);
+	m_ui.helpText->setText(categoryHelpText(row));
 }
 
 void SettingsWindow::onRestoreDefaultsClicked()
@@ -359,16 +369,19 @@ void SettingsWindow::reopen(const QString& message)
 
 void SettingsWindow::addWidget(QWidget* widget, QString title, QString icon, QString help_text)
 {
-	const int index = m_ui.settingsCategory->count();
-
 	QListWidgetItem* item = new QListWidgetItem(m_ui.settingsCategory);
 	item->setText(title);
 	if (!icon.isEmpty())
 		item->setIcon(QIcon::fromTheme(icon));
+	item->setData(CategoryHelpTextRole, std::move(help_text));
 
 	m_ui.settingsContainer->addWidget(widget);
+}
 
-	m_category_help_text[index] = std::move(help_text);
+QString SettingsWindow::categoryHelpText(int row) const
+{
+	const QListWidgetItem* item = m_ui.settingsCategory->item(row);
+	return item ? item->data(CategoryHelpTextRole).toString() : QString();
 }
 
 void SettingsWindow::registerWidgetHelp(QObject* object, QString title, QString recommended_value, QString text)
@@ -406,7 +419,7 @@ bool SettingsWindow::eventFilter(QObject* object, QEvent* event)
 		if (m_current_help_widget)
 		{
 			m_current_help_widget = nullptr;
-			m_ui.helpText->setText(m_category_help_text[m_ui.settingsCategory->currentRow()]);
+			m_ui.helpText->setText(categoryHelpText(m_ui.settingsCategory->currentRow()));
 		}
 	}
 	else if (event->type() == QEvent::Wheel)

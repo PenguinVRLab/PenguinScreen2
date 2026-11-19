@@ -10,6 +10,9 @@
 #include "Input/InputManager.h"
 
 #include <thread>
+#ifdef ENABLE_VR
+#include "VR/VRModsMenu.h"
+#endif
 
 #define TR_CONTEXT "FullscreenUI"
 
@@ -152,6 +155,7 @@ namespace FullscreenUI
 		PauseMenu,
 		Achievements,
 		Leaderboards,
+		VRQuickMenu,
 	};
 
 	enum class PauseSubMenu
@@ -210,6 +214,8 @@ namespace FullscreenUI
 	void DrawStartGameWindow();
 	void DrawExitWindow();
 	void DrawPauseMenu(MainWindowType type);
+	void DrawVRQuickMenu();
+	bool VRQuickMenuBlocksLeave();
 	void ExitFullscreenAndOpenURL(const std::string_view url);
 	void CopyTextToClipboard(std::string title, const std::string_view text);
 	void DrawAboutWindow();
@@ -227,6 +233,9 @@ namespace FullscreenUI
 	void DrawListSvgTexture(ImDrawList* drawList, GSTexture* padded_texture, const ImVec2& p_min, const ImVec2& p_unpadded_max);
 
 	inline MainWindowType s_current_main_window = MainWindowType::None;
+#ifdef ENABLE_VR
+	inline VR::ModsMenu::Model s_vr_mods_model;
+#endif
 	inline PauseSubMenu s_current_pause_submenu = PauseSubMenu::None;
 	inline bool s_initialized = false;
 	inline bool s_tried_to_initialize = false;

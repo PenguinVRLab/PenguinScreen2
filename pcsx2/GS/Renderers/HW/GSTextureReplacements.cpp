@@ -26,6 +26,8 @@
 #include <deque>
 #include <functional>
 #include <mutex>
+#include <optional>
+#include <regex>
 #include <unordered_map>
 #include <unordered_set>
 #include <tuple>
@@ -258,6 +260,76 @@ std::optional<TextureName> GSTextureReplacements::ParseReplacementName(const std
 	return std::nullopt;
 }
 
+static std::mutex s_wanted_pack_mutex;
+static std::string s_wanted_pack;
+
+void GSTextureReplacements::SetWantedPack(std::string pack)
+{
+	std::lock_guard lock(s_wanted_pack_mutex);
+	s_wanted_pack = std::move(pack);
+}
+
+std::string GSTextureReplacements::GetWantedPack()
+{
+	std::lock_guard lock(s_wanted_pack_mutex);
+	return s_wanted_pack;
+}
+
+std::optional<std::string> GSTextureReplacements::SelectPackDirectory(const std::string& replacement_dir, std::string_view wanted, std::string* note)
+{
+	if (note)
+		note->clear();
+	if (!FileSystem::DirectoryExists(replacement_dir.c_str()))
+		return std::nullopt;
+	static const std::regex pack_re("^[a-z0-9]+(?:-[a-z0-9]+)*--v[0-9][0-9a-z.\\-]*$");
+	FileSystem::FindResultsArray entries;
+	FileSystem::FindFiles(replacement_dir.c_str(), "*", FILESYSTEM_FIND_FILES | FILESYSTEM_FIND_FOLDERS, &entries);
+	std::vector<std::string> packs;
+	size_t loose = 0;
+	for (const FILESYSTEM_FIND_DATA& fd : entries)
+	{
+		const std::string name(Path::GetFileName(fd.FileName));
+		if (name.empty() || name[0] == '.')
+			continue;
+#ifdef GS_TEXPACK_PLANTED_ANYFOLDER
+		if (fd.Attributes & FILESYSTEM_FILE_ATTRIBUTE_DIRECTORY)
+#else
+		if ((fd.Attributes & FILESYSTEM_FILE_ATTRIBUTE_DIRECTORY) && std::regex_match(name, pack_re))
+#endif
+			packs.push_back(name);
+		else
+			loose++;
+	}
+	std::sort(packs.begin(), packs.end());
+	const auto list = [&packs]() {
+		std::string out;
+		for (const std::string& p : packs)
+			out += (out.empty() ? "" : ", ") + p;
+		return out.empty() ? std::string("none") : out;
+	};
+	if (!wanted.empty())
+	{
+		if (std::find(packs.begin(), packs.end(), wanted) != packs.end())
+			return Path::Combine(replacement_dir, wanted);
+		if (note)
+			*note = fmt::format("The game's profile names the texture pack {}, which is not in {} (packs there: {}).", wanted, replacement_dir, list());
+		return std::nullopt;
+	}
+	if (packs.size() == 1)
+		return Path::Combine(replacement_dir, packs.front());
+	if (packs.size() > 1)
+	{
+		if (note)
+			*note = fmt::format("{} holds several texture packs ({}) and the game's profile names none, so none is loaded. "
+								"Keep one, or name it in the profile's textures.pack.", replacement_dir, list());
+		return std::nullopt;
+	}
+	if (loose > 0 && note)
+		*note = fmt::format("Texture replacements directly in {} are the old layout and are not loaded. Move them into "
+							"a versioned folder inside it, e.g. replacements/my-pack--v1/.", replacement_dir);
+	return std::nullopt;
+}
+
 std::string GSTextureReplacements::GetGameTextureDirectory()
 {
 	return Path::Combine(EmuFolders::Textures, s_current_serial);
@@ -406,7 +478,19 @@ void GSTextureReplacements::ReloadReplacementMap()
 			Host::OSD_WARNING_DURATION);
 	}
 
-	if (!FileSystem::FindFiles(replacement_dir.c_str(), "*", FILESYSTEM_FIND_FILES | FILESYSTEM_FIND_HIDDEN_FILES | FILESYSTEM_FIND_RECURSIVE, &files))
+	std::string pack_note;
+	const std::optional<std::string> pack_dir = SelectPackDirectory(replacement_dir, GetWantedPack(), &pack_note);
+	if (!pack_note.empty())
+	{
+		Console.Warning(fmt::format("Texture replacements: {}", pack_note));
+		Host::AddKeyedOSDMessage("TextureReplacementPack", pack_note, Host::OSD_WARNING_DURATION);
+	}
+	if (!pack_dir.has_value())
+		return;
+	Console.WriteLn(fmt::format("Texture replacements: loading the pack {}", Path::GetFileName(pack_dir.value())));
+
+	files.clear();
+	if (!FileSystem::FindFiles(pack_dir->c_str(), "*", FILESYSTEM_FIND_FILES | FILESYSTEM_FIND_HIDDEN_FILES | FILESYSTEM_FIND_RECURSIVE, &files))
 		return;
 
 	std::string filename;
@@ -515,6 +599,7 @@ GSTexture* GSTextureReplacements::LookupReplacementTexture(const GSTextureCache:
 {
 	const TextureName name(CreateTextureName(hash, 0));
 	*pending = false;
+
 
 	const auto classic_crop = [&](const ReplacementTexture& rtex) -> GSVector4i {
 		if (!classic_region.HasEither() || base_width == 0 || base_height == 0)
@@ -696,12 +781,17 @@ void GSTextureReplacements::QueueAsyncReplacementTextureLoad(const TextureName& 
 
 		std::unique_lock<std::mutex> lock(s_replacement_texture_cache_mutex);
 		auto it = s_pending_async_load_textures.find(name);
-		if (it == s_pending_async_load_textures.end() ||
-			s_replacement_texture_cache.find(name) != s_replacement_texture_cache.end())
+		if (it == s_pending_async_load_textures.end())
 		{
-			if (it != s_pending_async_load_textures.end())
-				s_pending_async_load_textures.erase(it);
-
+			Console.WriteLnFmt("ISS042-DROPPED-INJECT bits={:08X} TEX0={:016X} not_pending=true",
+				static_cast<u32>(name.bits), static_cast<u64>(name.TEX0Hash));
+			return;
+		}
+		if (s_replacement_texture_cache.find(name) != s_replacement_texture_cache.end())
+		{
+			Console.WriteLnFmt("ISS042-HEAL-QUEUED bits={:08X} TEX0={:016X}",
+				static_cast<u32>(name.bits), static_cast<u64>(name.TEX0Hash));
+			s_async_loaded_textures.emplace_back(name, mipmap);
 			return;
 		}
 
@@ -829,6 +919,7 @@ GSTexture* GSTextureReplacements::CreateReplacementTexture(const ReplacementText
 void GSTextureReplacements::ProcessAsyncLoadedTextures()
 {
 	std::unique_lock<std::mutex> lock(s_replacement_texture_cache_mutex);
+	std::vector<std::pair<TextureName, bool>> retry;
 	for (const auto& [name, mipmap] : s_async_loaded_textures)
 	{
 		const auto pit = s_pending_async_load_textures.find(name);
@@ -846,10 +937,14 @@ void GSTextureReplacements::ProcessAsyncLoadedTextures()
 			continue;
 
 		GSTexture* tex = CreateReplacementTexture(it->second, mipmap);
+		Console.WriteLnFmt("ISS042-INJECT bits={:08X} TEX0={:016X} tex_ok={}",
+			static_cast<u32>(name.bits), static_cast<u64>(name.TEX0Hash), tex != nullptr);
 		if (tex)
 			g_texture_cache->InjectHashCacheTexture(HashCacheKeyFromTextureName(name), tex, it->second.alpha_minmax);
+		else
+			retry.emplace_back(name, mipmap);
 	}
-	s_async_loaded_textures.clear();
+	s_async_loaded_textures = std::move(retry);
 }
 
 void GSTextureReplacements::DumpTexture(const GSTextureCache::HashCacheKey& hash, const GIFRegTEX0& TEX0,

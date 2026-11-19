@@ -1,0 +1,7 @@
+// GENERATED at configure time by pcsx2/CMakeLists.txt from pcsx2/VR/screenproj/screen_projector.glsl
+// -- do not edit.
+#pragma once
+namespace VR::ScreenProjectorShader
+{
+	inline constexpr const char kFragmentGlsl[] = R"vrspglsl(@VRSP_GLSL_SOURCE@)vrspglsl";
+}

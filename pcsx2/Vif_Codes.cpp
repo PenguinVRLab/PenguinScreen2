@@ -8,6 +8,9 @@
 #include "VUmicro.h"
 #include "Vif_Dma.h"
 #include "Vif_Dynarec.h"
+#ifdef ENABLE_VR
+#include "VR/VRMods.h"
+#endif
 
 #define vifOp(vifCodeName) _vifT int vifCodeName(int pass, const u32* data)
 #define pass1 if (pass == 0)
@@ -290,6 +293,12 @@ static __fi void _vifCode_MPG(int idx, u32 addr, const u32* data, int size)
 
 	vifExecQueue(idx);
 
+#ifdef ENABLE_VR
+	const u32 vr_mods_addr = addr;
+	const u32* const vr_mods_data = data;
+	const u32 vr_mods_bytes = static_cast<u32>(size) * 4;
+#endif
+
 	if (idx && THREAD_VU1)
 	{
 		if ((addr + size * 4) > vuMemSize)
@@ -305,6 +314,9 @@ static __fi void _vifCode_MPG(int idx, u32 addr, const u32* data, int size)
 			vu1Thread.WriteMicroMem(addr, (u8*)data, size * 4);
 			vifX.tag.addr += size * 4;
 		}
+#ifdef ENABLE_VR
+		VR::Mods::OnVU1Upload(vr_mods_addr, vr_mods_data, vr_mods_bytes);
+#endif
 		return;
 	}
 
@@ -332,6 +344,10 @@ static __fi void _vifCode_MPG(int idx, u32 addr, const u32* data, int size)
 
 		vifX.tag.addr += size * 4;
 	}
+#ifdef ENABLE_VR
+	if (idx)
+		VR::Mods::OnVU1Upload(vr_mods_addr, vr_mods_data, vr_mods_bytes);
+#endif
 }
 
 vifOp(vifCode_MPG)

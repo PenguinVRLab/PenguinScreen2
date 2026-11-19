@@ -6,6 +6,7 @@
 #include "Host.h"
 #include "IconsFontAwesome.h"
 #include "ImGui/FullscreenUI.h"
+#include "MTGS.h"
 #include "ImGui/ImGuiOverlays.h"
 #include "Input/InputManager.h"
 #include "Recording/InputRecording.h"
@@ -30,8 +31,31 @@ void VMManager::Internal::ResetVMHotkeyState()
 	s_limiter_mode_prior_to_hold_interaction.reset();
 }
 
+static bool OnlineLockRefuses(std::string_view what)
+{
+	if (!VMManager::IsOnlineLocked())
+		return false;
+	Host::AddIconOSDMessage("OnlineLock", ICON_FA_NETWORK_WIRED,
+		fmt::format(TRANSLATE_FS("Hotkeys", "Online: {} is disabled while the network adapter is on."), what),
+		Host::OSD_WARNING_DURATION);
+	return true;
+}
+
+static bool VRSpeedLockRefuses(std::string_view what)
+{
+	if (!VMManager::IsVRSpeedLocked())
+		return false;
+	Host::AddIconOSDMessage("VRSpeedLock", ICON_FA_CLOCK,
+		fmt::format(TRANSLATE_FS("Hotkeys", "VR: {} is disabled while VR is on."), what),
+		Host::OSD_WARNING_DURATION);
+	return true;
+}
+
 static void HotkeyAdjustTargetSpeed(double delta)
 {
+	if (OnlineLockRefuses(TRANSLATE_STR("Hotkeys", "changing the emulation speed")) ||
+		VRSpeedLockRefuses(TRANSLATE_STR("Hotkeys", "changing the emulation speed")))
+		return;
 	const double min_speed = Achievements::IsHardcoreModeActive() ? 1.0 : 0.1;
 	EmuConfig.EmulationSpeed.NominalScalar = std::max(min_speed, EmuConfig.EmulationSpeed.NominalScalar + delta);
 	if (VMManager::GetLimiterMode() != LimiterModeType::Nominal)
@@ -123,6 +147,9 @@ static bool CanPause()
 	static constexpr const float PAUSE_INTERVAL = 3.0f;
 	static Common::Timer::Value s_last_pause_time = 0;
 
+	if (VMManager::GetState() != VMState::Paused && OnlineLockRefuses(TRANSLATE_STR("Hotkeys", "pausing")))
+		return false;
+
 	if (!Achievements::IsHardcoreModeActive() || VMManager::GetState() == VMState::Paused)
 		return true;
 
@@ -160,6 +187,11 @@ DEFINE_HOTKEY("OpenPauseMenu", TRANSLATE_NOOP("Hotkeys", "Navigation"), TRANSLAT
 			FullscreenUI::OpenPauseMenu();
 	})
 #ifdef ENABLE_VR
+DEFINE_HOTKEY("OpenVRQuickMenu", TRANSLATE_NOOP("Hotkeys", "VR"), TRANSLATE_NOOP("Hotkeys", "VR: Open VR Quick Menu"),
+	[](s32 pressed) {
+		if (!pressed && VMManager::HasValidVM())
+			MTGS::RunOnGSThread([]() { FullscreenUI::ToggleVRQuickMenu(); });
+	})
 DEFINE_HOTKEY("VRRecenterHead", TRANSLATE_NOOP("Hotkeys", "VR"), TRANSLATE_NOOP("Hotkeys", "VR: Recenter Head Camera"),
 	[](s32 pressed) {
 		if (!pressed)
@@ -187,7 +219,7 @@ DEFINE_HOTKEY(
 	})
 DEFINE_HOTKEY(
 	"FrameAdvance", TRANSLATE_NOOP("Hotkeys", "Speed"), TRANSLATE_NOOP("Hotkeys", "Frame Advance"), [](s32 pressed) {
-		if (!pressed && VMManager::HasValidVM())
+		if (!pressed && VMManager::HasValidVM() && !OnlineLockRefuses(TRANSLATE_STR("Hotkeys", "frame advance")))
 			VMManager::FrameAdvance(1);
 	})
 DEFINE_HOTKEY("ToggleFrameLimit", TRANSLATE_NOOP("Hotkeys", "Speed"), TRANSLATE_NOOP("Hotkeys", "Toggle Frame Limit"),

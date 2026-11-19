@@ -288,11 +288,12 @@ namespace VR::SpatialControls
 	{
 		float amplitude;
 		float seconds;
+		u8 locus;
 	};
-	static constexpr HapticCue kHapticGrab{0.5f, 0.03f};
-	static constexpr HapticCue kHapticRelease{0.3f, 0.02f};
-	static constexpr HapticCue kHapticRailHit{1.0f, 0.06f};
-	static constexpr HapticCue kHapticBreakAway{0.8f, 0.10f};
+	static constexpr HapticCue kHapticGrab{0.5f, 0.03f, 0xDF};
+	static constexpr HapticCue kHapticRelease{0.3f, 0.02f, 0x1F};
+	static constexpr HapticCue kHapticRailHit{1.0f, 0.06f, 0xC0};
+	static constexpr HapticCue kHapticBreakAway{0.8f, 0.10f, 0xFF};
 
 	enum class DeviceKind : u8
 	{

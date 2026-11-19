@@ -70,6 +70,10 @@ namespace ImGuiManager
 
 	void UpdateMousePosition(float x, float y);
 
+	void SetVRPanelLayout(bool on);
+	bool IsVRPanelLayout();
+	void ProcessXrNavEvent(GenericInputBinding key, bool down);
+
 	bool ProcessPointerButtonEvent(InputBindingKey key, float value);
 
 	bool ProcessPointerAxisEvent(InputBindingKey key, float value);

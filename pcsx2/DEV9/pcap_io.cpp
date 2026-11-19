@@ -20,6 +20,12 @@
 #include "PacketReader/EthernetFrame.h"
 #include "PacketReader/EthernetFrameEditor.h"
 #include "PacketReader/ARP/ARP_PacketEditor.h"
+
+#ifdef ENABLE_VR
+#include "common/Console.h"
+#include "fmt/format.h"
+#include <chrono>
+#endif
 #ifndef PCAP_NETMASK_UNKNOWN
 #define PCAP_NETMASK_UNKNOWN 0xffffffff
 #endif
@@ -83,6 +89,11 @@ PCAPAdapter::PCAPAdapter()
 		return;
 	}
 
+#ifdef ENABLE_VR
+	if (!switched)
+		Console.WriteLn("DEV9: (Netplay) the mod-list exchange runs in PCAP Switched mode only: off in this mode.");
+#endif
+
 	if (switched && !SetMACSwitchedFilter(ps2MAC))
 	{
 		pcap_close(hpcap);
@@ -131,6 +142,22 @@ bool PCAPAdapter::recv(NetPacket* pkt)
 				continue;
 			}
 
+#ifdef ENABLE_VR
+			if (switched && VR::Netplay::IsRecordFrame(reinterpret_cast<const u8*>(pkt->buffer), static_cast<size_t>(pkt->size)))
+			{
+				NetplayRecv(pkt);
+				continue;
+			}
+			if (switched && pkt->size >= 14)
+			{
+				VR::Netplay::MAC src;
+				std::copy(pkt->buffer + 6, pkt->buffer + 12, src.begin());
+				const u64 now = static_cast<u64>(std::chrono::duration_cast<std::chrono::milliseconds>(
+					std::chrono::steady_clock::now().time_since_epoch()).count());
+				netplayPeers.OnHeard(src, now);
+			}
+#endif
+
 			InspectRecv(pkt);
 			return true;
 		}
@@ -145,6 +172,11 @@ bool PCAPAdapter::send(NetPacket* pkt)
 	InspectSend(pkt);
 	if (NetAdapter::send(pkt))
 		return true;
+
+#ifdef ENABLE_VR
+	if (switched)
+		NetplaySend(pkt);
+#endif
 
 	if (!switched)
 		SetMACBridgedSend(pkt);
@@ -179,6 +211,140 @@ bool PCAPAdapter::SendPCAPPacket(const NetPacket* pkt)
 {
 	return pcap_sendpacket(hpcap, reinterpret_cast<const u_char*>(pkt->buffer), pkt->size) == 0;
 }
+
+#ifdef ENABLE_VR
+namespace
+{
+	VR::Netplay::MAC ToMAC(const MAC_Address& m)
+	{
+		VR::Netplay::MAC out;
+		std::copy(std::begin(m.bytes), std::end(m.bytes), out.begin());
+		return out;
+	}
+
+	u64 NowMs()
+	{
+		return static_cast<u64>(std::chrono::duration_cast<std::chrono::milliseconds>(
+			std::chrono::steady_clock::now().time_since_epoch()).count());
+	}
+
+	bool IsPublicIPv4(const u8* ip)
+	{
+		if (ip[0] == 0 || ip[0] == 10 || ip[0] == 127 || ip[0] >= 224)
+			return false;
+		if (ip[0] == 172 && (ip[1] & 0xF0) == 16)
+			return false;
+		if (ip[0] == 192 && ip[1] == 168)
+			return false;
+		if (ip[0] == 169 && ip[1] == 254)
+			return false;
+		if (ip[0] == 100 && (ip[1] & 0xC0) == 64)
+			return false;
+		return true;
+	}
+
+	std::string ModsMissing(const VR::Netplay::Record& r, std::string_view mode)
+	{
+		std::string out;
+		for (const VR::Netplay::ModLine& m : r.mods)
+		{
+			if (m.runs_in.find(mode) == std::string::npos)
+				out += out.empty() ? m.id : fmt::format(", {}", m.id);
+		}
+		return out;
+	}
+}
+
+void PCAPAdapter::NetplaySendRecord(const VR::Netplay::MAC& to)
+{
+	VR::Netplay::Record ours = VR::Netplay::GetLocalRecord();
+	if (ours.serial.empty())
+		ours.serial = "-";
+	ours.session = netplaySession;
+	ours.seen = netplayPeers.SeenSession(to);
+	const std::vector<u8> frame = VR::Netplay::BuildFrame(to, ToMAC(ps2MAC), ours);
+	NetPacket out;
+	out.size = static_cast<int>(frame.size());
+	std::memcpy(out.buffer, frame.data(), frame.size());
+	const bool sent = SendPCAPPacket(&out);
+	netplayPeers.MarkSent(to, sent, NowMs());
+	Console.WriteLnFmt("DEV9: (Netplay) mod list {} to {}: {} {:08X}, {} mod(s), session {}.", sent ? "sent" : "NOT sent (pcap error; tried again on the next frame)",
+		VR::Netplay::FormatMAC(to), ours.serial, ours.crc, ours.mods.size(), netplaySession);
+}
+
+void PCAPAdapter::NetplaySend(const NetPacket* pkt)
+{
+	if (pkt->size < 34)
+		return;
+	const u8* f = reinterpret_cast<const u8*>(pkt->buffer);
+	VR::Netplay::MAC dst;
+	std::copy(f, f + 6, dst.begin());
+
+	if (f[12] == 0x08 && f[13] == 0x00 && IsPublicIPv4(f + 30) && !netplayOnlineSaid.exchange(true))
+	{
+		const std::string missing = ModsMissing(VR::Netplay::GetLocalRecord(), "online");
+		Console.WriteLnFmt("DEV9: (Netplay) the game sent to a public address ({}.{}.{}.{}): online play (or a public DNS "
+						   "server in the network settings). {}",
+			f[30], f[31], f[32], f[33],
+			missing.empty() ? std::string("Every applied mod lists online.") :
+							  fmt::format("Applied mods whose runs_in does not list online: {}.", missing));
+	}
+
+	for (const VR::Netplay::MAC& to : netplayPeers.OnGuestSend(dst, ToMAC(ps2MAC), ToMAC(internalMAC), ToMAC(hostMAC), NowMs()))
+		NetplaySendRecord(to);
+	for (const VR::Netplay::MAC& m : netplayPeers.Overdue(NowMs()))
+	{
+		Console.WriteLnFmt("DEV9: (Netplay) no mod list from {} in {} s (sent twice): stock PCSX2, a real PS2, a router or "
+						   "server, or not PenguinScreen2.",
+			VR::Netplay::FormatMAC(m), VR::Netplay::kAnswerWaitMs / 1000);
+		for (const VR::Netplay::ModLine& l : VR::Netplay::GetLocalRecord().mods)
+		{
+			if (l.runs_in.find("both-must-run") != std::string::npos)
+				Console.WarningFmt("DEV9: (Netplay) MUST RUN ON BOTH MACHINES: {} is on here and {} sent no mod list.", l.id,
+					VR::Netplay::FormatMAC(m));
+		}
+	}
+}
+
+void PCAPAdapter::NetplayRecv(const NetPacket* pkt)
+{
+	VR::Netplay::MAC src;
+	VR::Netplay::Record theirs;
+	const u8* f = reinterpret_cast<const u8*>(pkt->buffer);
+	if (!VR::Netplay::ParseFrame(f, static_cast<size_t>(pkt->size), &src, &theirs))
+	{
+		std::copy(f + 6, f + 12, src.begin());
+		if (netplayPeers.OnUnreadable(src, NowMs()))
+			Console.WriteLnFmt("DEV9: (Netplay) a mod-list record from {} that this build cannot read (another format?); "
+							   "dropped. It counts as PenguinScreen2.",
+				VR::Netplay::FormatMAC(src));
+		return;
+	}
+	const VR::Netplay::PeerTable::Heard h = netplayPeers.OnRecord(src, theirs.session, theirs.seen, netplaySession, NowMs());
+	if (!h.log_full)
+		return;
+	VR::Netplay::Record ours = VR::Netplay::GetLocalRecord();
+	if (ours.serial.empty())
+		ours.serial = "-";
+	ours.build = ours.build.empty() ? std::string("-") : ours.build;
+	Console.WriteLnFmt("DEV9: (Netplay) mod list from {} (session {}): {} {:08X}, build {}, {} mod(s).", VR::Netplay::FormatMAC(src),
+		theirs.session, theirs.serial, theirs.crc, theirs.build, theirs.mods.size());
+	for (const VR::Netplay::ModLine& m : theirs.mods)
+		Console.WriteLnFmt("DEV9: (Netplay)   theirs: {} [{}]", m.id, m.runs_in);
+	for (const VR::Netplay::ModLine& m : ours.mods)
+		Console.WriteLnFmt("DEV9: (Netplay)   ours:   {} [{}]", m.id, m.runs_in);
+	const std::vector<std::string> diff = VR::Netplay::Compare(ours, theirs);
+	if (diff.empty())
+		Console.WriteLnFmt("DEV9: (Netplay)   the two lists agree.");
+	for (const std::string& d : diff)
+		Console.WriteLnFmt("DEV9: (Netplay)   differs: {}", d);
+	const std::string missing = ModsMissing(ours, "lan");
+	if (!missing.empty())
+		Console.WriteLnFmt("DEV9: (Netplay)   a LAN peer is talking to this game; applied mods whose runs_in does not "
+						   "list lan: {}.",
+			missing);
+}
+#endif
 
 void PCAPAdapter::reloadSettings()
 {

@@ -166,6 +166,38 @@ fi
 
 # --- open LAN ports IF (and only if) a firewall is active — usually a no-op ---
 #   5353/udp = mDNS (discovery), 9757/tcp+udp = WiVRn stream.
+# The headset's USB NETWORK (WiVRn 26.9+ "USB networking" on Meta headsets, Horizon OS 2.6+: no adb, no developer
+# mode). The headset shows up as a USB network adapter (driver cdc_ncm) carrying IPv6 link-local only, and
+# NetworkManager drops such a link unless a profile allows it (WiVRn's own note: "make sure the server allows IPv6
+# link-local only connections"; it cannot ship this itself from a flatpak).
+# ONLY the headset's interface may get that profile: a USB-C Ethernet adapter or a tethered phone can use the same
+# cdc_ncm driver, and a profile matched by driver can switch a wired adapter to no IPv4.
+# So a udev rule names the headset's network interface by Meta's USB vendor id (2833) "questusb0",
+# and the profile matches that name alone. The broad driver-matched profile from before is removed if present.
+USBNET_CON="PenguinVR USB headset"
+USBNET_RULE=/etc/udev/rules.d/90-penguinvr-quest-usb.rules
+if command -v nmcli >/dev/null 2>&1; then
+	if nmcli -t -f NAME con show 2>/dev/null | grep -qx "$USBNET_CON" \
+			&& nmcli -t -f match.driver con show "$USBNET_CON" 2>/dev/null | grep -q cdc_ncm; then
+		nmcli con delete "$USBNET_CON" >/dev/null 2>&1 \
+			&& say "NetworkManager: removed the old '$USBNET_CON' profile (it matched EVERY cdc_ncm device, Ethernet adapters too)."
+	fi
+	printf '%s\n' '# PenguinScreen2 (enable-vr-discovery.sh): a Meta headset in WiVRn "USB networking" mode is a USB network' \
+		'# adapter; name it so the NetworkManager profile "PenguinVR USB headset" applies to it and to nothing else.' \
+		'SUBSYSTEM=="net", ACTION=="add", ATTRS{idVendor}=="2833", NAME="questusb0"' > "$USBNET_RULE" \
+		&& say "udev: $USBNET_RULE names a Meta headset's USB network interface questusb0 (vendor 2833 only)."
+	if command -v udevadm >/dev/null 2>&1; then udevadm control --reload >/dev/null 2>&1 || true; fi
+	if nmcli -t -f NAME con show 2>/dev/null | grep -qx "$USBNET_CON"; then
+		say "NetworkManager: the '$USBNET_CON' profile (questusb0, IPv6 link-local) is already there."
+	elif nmcli con add type ethernet con-name "$USBNET_CON" match.interface-name questusb0 ipv4.method disabled \
+			ipv6.method link-local connection.autoconnect yes >/dev/null 2>&1; then
+		say "NetworkManager: added '$USBNET_CON' for questusb0 only (IPv6 link-local, auto-connect)."
+		say "  Unplug and replug the headset's cable so it comes up under the new name."
+	else
+		warn "NetworkManager refused the '$USBNET_CON' profile; the USB networking mode of the headset's WiVRn app
+!! will not hold a link on this PC until one exists (the cable still works through adb)."
+	fi
+fi
 if command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
 	firewall-cmd --permanent --add-port=5353/udp >/dev/null 2>&1 || true
 	firewall-cmd --permanent --add-port=9757/tcp >/dev/null 2>&1 || true

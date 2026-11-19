@@ -1,0 +1,39 @@
+# SPDX-FileCopyrightText: 2026 Patrick Carey
+# SPDX-License-Identifier: CC-BY-NC-4.0
+# PenguinScreen2 shipped profile — generated, data only.
+# Copyright (c) 2026 Patrick Carey. Licensed CC BY-NC 4.0 (non-commercial
+# use/share/adapt with attribution); COMMERCIAL RIGHTS RESERVED. This is
+# DATA, not part of the GPL emulator — see LICENSE.md in this folder.
+# To customize: COPY this file into your user profiles folder and edit
+# the copy — a user file for the same serial overrides this one at
+# launch. Do not edit here (read-only in flatpak installs).
+
+SLUS-20268:
+  name: "Star Wars: Racer Revenge"
+  crcs: [0xA7F6E4C8]
+  tier: stereo
+  stereo:
+    separation: 0.02
+    convergence: 10.0
+  camera:
+    base:
+      pointer: 0x0043372C
+      derefOffsets: [0x48, 0x6C, 0x20]
+      validate: { offset: 0x08, equals: 0x003CE000 }
+    writes:
+      - { address: 0xA4, relative: true, encoding: f32, source: head_yaw,
+          compose: absolute, scale: 3.81972, axisSign: -1,
+          clampMin: -2.0, clampMax: 2.0,
+          angles: head,
+          when: [ { pointer: 0x0043372C, derefOffsets: [0x48], offset: 0x44, equals: 0x5, width: 4 } ] }
+  controls:
+    - device: TwinThrottles
+      id: pod
+      placement: { side: 0.25, height: -0.35, forward: 0.30 }
+      params: { sweep: 60, armLength: 0.20, grabRadius: 0.05, grabLength: 0.12, grabMode: toggle, breakAway: 0.25,
+                release: latch, power: sum, engage: 0.25,
+                steerFullLock: 1.0, steerDeadband: 0.05, steerCurve: 1.0, steerSign: 1,
+                outputFloor: 0.30 }
+      when: [ { address: 0x0043372C, notEquals: 0x0, width: 4 } ]
+      bind: { Power: Cross, Steer: LeftStickX }
+  hands: glove-v1.1

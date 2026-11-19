@@ -13,9 +13,10 @@ software never includes: your own PS2 BIOS and your own game discs/images.**
 ## 1. What you need
 
 - A PC running **SteamOS or desktop Linux**, and a **standalone VR headset**
-  (Quest-class) reachable over your network.
+  (Quest-class) reachable over your network. (A **PlayStation VR2** works
+  too, by cable: see `PSVR2.md` and skip the WiVRn parts.)
 - **[WiVRn](https://github.com/WiVRn/WiVRn)** as the OpenXR runtime — the
-  wireless link between the PC and the headset. Exact validated version:
+  wireless link between the PC and the headset. The version this release uses:
   see `STACK.md`.
 - **Your own PS2 BIOS**, dumped from a console you own.
 - **Your own PS2 games** — dumped disc images (`.iso`, `.bin`, `.chd`,
@@ -45,7 +46,32 @@ flatpak install --user -y ./PenguinScreen2-<version>.flatpak
 First install pulls about 1 GB of shared runtime from Flathub — let it
 finish. If the install reports a missing runtime, install it explicitly and
 retry: `flatpak install --user flathub org.kde.Platform//6.10`.
-Reinstalling the same version (retesting)? Add `--reinstall`.
+Reinstalling the same version? Add `--reinstall`.
+
+**Upgrading from 1.0-rc2? Read this before you play.** This release has a new
+app ID, `com.penguinvrlabs.penguinscreen2` (1.0-rc2 was
+`org.penguinvr.penguinscreen2`). Flatpak treats them as **two separate apps**:
+installing this one does **not** remove rc2, and you will see two
+PenguinScreen2 icons.
+
+- The **first** time you start the new version, it copies your rc2 settings,
+  memory cards, BIOS and headset setup across. It does this **once**, and it
+  never changes or deletes anything in rc2's copy.
+- After that the two apps keep **separate** saves. Anything you save in rc2
+  from then on stays in rc2 and never comes across.
+
+So, once:
+
+1. Start the new version, open your game, and check that your saves are
+   there.
+2. Then remove rc2, so you can't open the old one by mistake:
+
+```
+flatpak uninstall --user org.penguinvr.penguinscreen2
+```
+
+Uninstalling keeps rc2's data folder (`~/.var/app/org.penguinvr.penguinscreen2/`).
+Delete that folder yourself only when you are sure you no longer need it.
 
 Then run the one-time VR setup below.
 
@@ -93,10 +119,12 @@ Two cases where you'll see a screen anyway:
 
 ## 4. Headset — connect over WiVRn
 
+> **Have a PlayStation VR2?** It connects by cable and does not use WiVRn. Skip this section and follow `PSVR2.md`.
+
 1. On the **PC**, start the VR session launcher:
 
    ```
-   ./launch-vr-session.sh
+   bash launch-vr-session.sh
    ```
 
    It brings the WiVRn server up on the PC — **on the right GPU** — and
@@ -123,18 +151,37 @@ You should now be looking at the game on a virtual screen in the headset,
 tracking with your head.
 
 **Steam Deck (and Deck-class hardware): use the USB-C cable.** One machine
-emulating, encoding, *and* running the Wi-Fi radio cannot sustain the stream —
-this is measured, not cautious. Plug a **data-capable USB-C cable** from the
+emulating, encoding, *and* running the Wi-Fi radio cannot sustain the stream.
+Plug a **data-capable USB-C cable** from the
 Deck to the headset instead; the launcher detects it and routes the stream
 over the cable (no Wi-Fi involved):
 
-1. One-time: enable **Developer Mode** on the headset (required for USB data),
-   and run `bash setup-configure-deps.sh` online once so it fetches `adb`
-   (no root needed).
-2. Plug in, run `./launch-vr-session.sh`, and accept the headset's
-   "Allow USB debugging?" prompt (tick *always*).
-3. In the headset's WiVRn app: **Add server / Connect by IP → `127.0.0.1`**,
-   port 9757 (one-time; it persists as "localhost").
+1. One-time, on the headset, **one of two ways**:
+   - **Easiest (WiVRn app 26.9 or newer on Horizon OS 2.6 or newer, no
+     developer account):** in the headset's WiVRn app, Settings → System →
+     **USB networking** → On. Then run `bash enable-vr-discovery.sh` once on
+     the Deck (it asks for your password; it lets the headset find the Deck
+     over the cable and adds the network profile the link needs).
+   - **Otherwise:** turn on **Developer Mode** (Meta Horizon phone app →
+     Devices → your headset → Headset settings → Developer Mode; it needs a
+     free developer account) and run `bash setup-configure-deps.sh` online
+     once so it fetches `adb` (no root needed).
+   The launcher tells you which of the two it sees, or that it sees neither.
+2. Plug in and run `bash launch-vr-session.sh`. On the Developer Mode route the
+   headset shows "Allow USB debugging?" the first time: put it on, tick
+   *Always allow*, OK. The launcher waits for that; no need to run it again.
+3. First connect only: the launcher prints a **PIN**. Its WiVRn app opens on
+   the headset by itself; type the PIN when it asks. Paired for good.
+   If the app shows its server list instead, connect by hand:
+   **Add server / Connect by IP → `127.0.0.1`**, port 9757, and
+   turn on **TCP only** (the cable carries TCP only; without it the connection
+   times out). It persists as "localhost". Not connecting? Turn the headset's
+   Wi-Fi off while it is on the cable.
+
+To connect the headset **without starting a game** (to check the cable, or
+before you pick a game), run `bash launch-vr-session.sh --headset-only`: it
+does steps 2-3 and stops. A later `bash launch-vr-session.sh` finds WiVRn
+already running.
 
 On a desktop PC with a proper GPU, Wi-Fi streaming works well — the cable is
 the *Deck* answer, not a general requirement.
@@ -154,7 +201,7 @@ change:
 
 ```
 pkill -f wivrn-server     # take the headset off first
-./launch-vr-session.sh
+bash launch-vr-session.sh
 ```
 
 After that the PC appears in the headset's server list by name — no IP typing.
@@ -165,6 +212,27 @@ the IP each time? You never need this script.
 > WiVRn's own window (`flatpak run io.github.wivrn.wivrn`) is where codec,
 > bitrate and unpair live. It attaches to the running link — it won't start a
 > second one.
+
+**When WiVRn updates — keep both sides on the same version.** The headset's
+WiVRn app updates itself through its store; the PC side is a plain Flathub
+install that only updates when you tell it to. A newer app refuses an older
+server ("incompatible version" on connect), so whenever the headset app has
+updated, update the PC too:
+
+```
+flatpak update --user io.github.wivrn.wivrn
+```
+
+Then **take the headset off, stop the old server, and launch again** — a server
+that was already running keeps the old code until it is restarted:
+
+```
+pkill -f wivrn-server     # headset off first
+bash launch-vr-session.sh
+```
+
+The launcher prints the installed server version every time it runs, next to
+the update command, so a mismatch is visible before you put the headset on.
 
 **If the picture goes bad** — smearing or corrupted blocks, especially right
 after a connection drop or a "connection reset" — **restart the WiVRn app on
@@ -210,7 +278,7 @@ at the universal Screen tier out of the box.
 - **To customize one, copy its file into your user profiles folder and edit
   the copy** — a user file overrides the shipped one for that game. Your
   folder:
-  `~/.var/app/org.penguinvr.penguinscreen2/config/PenguinScreen2/vrprofiles/`
+  `~/.var/app/com.penguinvrlabs.penguinscreen2/config/PenguinScreen2/vrprofiles/`
   (a `README.txt` appears there on first run explaining the same).
 - One file per game. Every profile is checked at launch; a broken file is
   reported by name so you know exactly what to fix.
@@ -223,7 +291,7 @@ at the universal Screen tier out of the box.
   the PC, and did the headset's WiVRn app connect? Both must be up.
 - **WiVRn's own window says "Server failed to start"** — expected on SteamOS:
   the OS blocks the mDNS announcement and WiVRn treats that refusal as fatal.
-  Start VR with `./launch-vr-session.sh` instead (it starts the server in a mode
+  Start VR with `bash launch-vr-session.sh` instead (it starts the server in a mode
   that doesn't announce, then tells you the IP to connect to). To make the
   dashboard work — and get auto-discovery — run `enable-vr-discovery.sh` once
   (§4).

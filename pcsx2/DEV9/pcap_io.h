@@ -5,6 +5,10 @@
 #include "pcap.h"
 #include "net.h"
 #include "PacketReader/MAC_Address.h"
+#ifdef ENABLE_VR
+#include "VR/NetplayModList.h"
+#include <atomic>
+#endif
 
 #ifdef _WIN32
 bool load_pcap();
@@ -45,4 +49,12 @@ private:
 
 	void HandleFrameCheckSequence(NetPacket* pkt);
 	bool ValidateEtherFrame(NetPacket* pkt);
+#ifdef ENABLE_VR
+	VR::Netplay::PeerTable netplayPeers;
+	std::string netplaySession = VR::Netplay::NewSession();
+	std::atomic<bool> netplayOnlineSaid{false};
+	void NetplaySendRecord(const VR::Netplay::MAC& to);
+	void NetplaySend(const NetPacket* pkt);
+	void NetplayRecv(const NetPacket* pkt);
+#endif
 };

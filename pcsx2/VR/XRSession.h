@@ -7,6 +7,9 @@
 
 #include <openxr/openxr.h>
 
+#include <string>
+#include <vector>
+
 #ifdef ENABLE_VULKAN
 #include "GS/Renderers/Vulkan/VKLoader.h"
 #endif
@@ -14,6 +17,8 @@
 namespace VR::XRSession
 {
 	bool CreateInstanceAndSystem();
+
+	bool UsesVulkanEnable1();
 
 	void DestroyInstance();
 
@@ -44,7 +49,25 @@ namespace VR::XRSession
 
 	bool HasCylinderLayer();
 
+	struct RuntimeLimits
+	{
+		u32 max_swapchain_width = 0;
+		u32 max_swapchain_height = 0;
+		u32 max_layer_count = 0;
+		bool fov_mutable = false;
+		bool fov_mutable_known = false;
+	};
+	const RuntimeLimits& GetRuntimeLimits();
+
 	bool IsLost();
 
+	bool ConsumeLocalSpaceChange(XrTime display_time);
+
+	void MarkLost();
+
+	void ParkHandlesForAbandonedPacer();
+
 	const char* GetStateName();
+
+	const std::vector<std::string>& EnabledExtensions();
 }

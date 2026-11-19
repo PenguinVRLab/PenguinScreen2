@@ -3,6 +3,10 @@
 
 #pragma once
 
+#include <optional>
+#include <string>
+#include <string_view>
+
 #include "GS/Renderers/HW/GSTextureCache.h"
 
 #include <utility>
@@ -32,6 +36,10 @@ namespace GSTextureReplacements
 	void Initialize();
 	void GameChanged();
 	void ReloadReplacementMap();
+
+	std::optional<std::string> SelectPackDirectory(const std::string& replacement_dir, std::string_view wanted, std::string* note);
+	void SetWantedPack(std::string pack);
+	std::string GetWantedPack();
 	void UpdateConfig(Pcsx2Config::GSOptions& old_config);
 	void Shutdown();
 

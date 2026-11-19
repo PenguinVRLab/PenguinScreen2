@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: 2026 Patrick Carey
+# SPDX-License-Identifier: CC-BY-NC-4.0
+# PenguinScreen2 shipped profile — generated, data only.
+# Copyright (c) 2026 Patrick Carey. Licensed CC BY-NC 4.0 (non-commercial
+# use/share/adapt with attribution); COMMERCIAL RIGHTS RESERVED. This is
+# DATA, not part of the GPL emulator — see LICENSE.md in this folder.
+# To customize: COPY this file into your user profiles folder and edit
+# the copy — a user file for the same serial overrides this one at
+# launch. Do not edit here (read-only in flatpak installs).
+
+SLUS-20318:
+  name: "King's Field IV - The Ancient City"
+  crcs: [0x36E02E91]
+  tier: stereo
+  stereo: { separation: 0.02, convergence: 2.0, uvDraws: screen, pinUniformQ: true }
+  screen: { follow: world }
+  camera:
+    guards:
+      - { address: 0x01E5461C, equals: 0x002224C8, width: 4 }
+    writes:
+      - { address: 0x00413F90, encoding: f32, source: head_pitch, compose: anchored, scale: 1.0, axisSign: 1, clampMin: -1.012, clampMax: 1.012, angles: head }
+      - { address: 0x00413F94, encoding: f32, source: head_yaw,   compose: anchored, scale: 1.0, axisSign: -1, angles: head }

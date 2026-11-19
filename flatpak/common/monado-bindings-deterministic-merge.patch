@@ -1,0 +1,28 @@
+Monado bindings generator: merge parent profiles in a fixed order (reproducible builds).
+
+Why: Profile.__get_merged_identifiers_helper walks `self.parent_profiles`, a Python set of Profile objects.
+Profile defines no __hash__, so the set iterates in an order set by the objects' memory addresses, which
+changes with how the interpreter was started. The merged components then reach a STABLE sort by steamvr_path,
+so ties (oculus/touch_controller's /input/trigger/proximity and the proximity_fb path) keep that varying order,
+and the generated oxr_generated_bindings.c, and libopenxr_monado.so, differ from build to build.
+
+The effect: two builds of the same sources differ in lib/libopenxr_monado.so alone, exactly those two table
+entries swapped, because the unpatched generator's output depends on how it is started; patched, it gives
+one output. Line 542 of the same file
+already sorts the same set by name; this does the same at line 472.
+
+Applies to Monado main at ded98428 (the build PenguinScreen2 ships). `git apply` it; `git apply -R` takes it out.
+
+diff --git a/src/xrt/auxiliary/bindings/bindings.py b/src/xrt/auxiliary/bindings/bindings.py
+index d5f79d3bd..0e8e62d2c 100755
+--- a/src/xrt/auxiliary/bindings/bindings.py
++++ b/src/xrt/auxiliary/bindings/bindings.py
+@@ -469,7 +469,7 @@ class Profile:
+         if parent_profiles is None or len(parent_profiles) == 0:
+             return identifier_map
+         else:
+-            for parent in parent_profiles:
++            for parent in sorted(parent_profiles, key=attrgetter("name")):
+                 parent.__get_merged_identifiers_helper(identifier_map)
+             return identifier_map
+ 

@@ -167,6 +167,7 @@ namespace EmuFolders
 	std::string InputProfiles;
 	std::string Videos;
 	std::string VRProfiles;
+	std::string VRMods;
 
 	static bool ShouldUsePortableMode();
 	static std::string GetPortableModePath();
@@ -1924,11 +1925,19 @@ void Pcsx2Config::VROptions::LoadSave(SettingsWrapper& wrap)
 	SettingsWrapEntry(ScreenHeight);
 	SettingsWrapEntry(ScreenVerticalOffset);
 	SettingsWrapEntry(ScreenArcDeg);
+	SettingsWrapEntry(DisplayFitFill);
+	SettingsWrapEntry(ScreenFollowsPatchAspect);
+	SettingsWrapEntry(ScreenCurveFallback);
+	SettingsWrapEntry(ScreenForceFallback);
+	SettingsWrapEntry(ScreenProjectorSupersample);
+	SettingsWrapEntry(ScreenProjectorDepth);
 	SettingsWrapEntry(StereoMode);
 	SettingsWrapEntry(StereoUseProfile);
 	SettingsWrapEntry(StereoSeparation);
 	SettingsWrapEntry(StereoConvergence);
 	SettingsWrapEntry(HeadCamera);
+	SettingsWrapEntry(GameFov);
+	SettingsWrapEntry(WorldProjection);
 	SettingsWrapEntry(XrSeatRuntimeDirs);
 	SettingsWrapEntry(XrSeatRuntimeJsons);
 
@@ -1938,6 +1947,8 @@ void Pcsx2Config::VROptions::LoadSave(SettingsWrapper& wrap)
 		ScreenHeight = std::clamp(ScreenHeight, 0.3f, 6.0f);
 		ScreenVerticalOffset = std::clamp(ScreenVerticalOffset, -2.0f, 2.0f);
 		ScreenArcDeg = std::clamp(ScreenArcDeg, 0.0f, 270.0f);
+		DisplayFitFill = std::clamp(DisplayFitFill, 0.0f, 1.0f);
+		ScreenProjectorSupersample = std::clamp(ScreenProjectorSupersample, 0.5f, 2.0f);
 		StereoSeparation = std::clamp(StereoSeparation, 0.0f, 0.1f);
 		StereoConvergence = std::clamp(StereoConvergence, 0.0f, 200.0f);
 	}
@@ -1947,9 +1958,13 @@ bool Pcsx2Config::VROptions::operator==(const VROptions& right) const
 {
 	return OpEqu(Enable) && OpEqu(ScreenDistance) && OpEqu(ScreenHeight) &&
 	       OpEqu(ScreenVerticalOffset) &&
-	       OpEqu(ScreenArcDeg) && OpEqu(StereoMode) && OpEqu(StereoUseProfile) &&
+	       OpEqu(ScreenArcDeg) && OpEqu(DisplayFitFill) && OpEqu(ScreenFollowsPatchAspect) && OpEqu(ScreenCurveFallback) && OpEqu(ScreenForceFallback) &&
+	       OpEqu(ScreenProjectorSupersample) && OpEqu(ScreenProjectorDepth) &&
+	       OpEqu(StereoMode) && OpEqu(StereoUseProfile) &&
 	       OpEqu(StereoSeparation) && OpEqu(StereoConvergence) &&
-	       OpEqu(HeadCamera);
+	       OpEqu(HeadCamera) &&
+	       OpEqu(GameFov) &&
+	       OpEqu(WorldProjection);
 }
 
 bool Pcsx2Config::VROptions::operator!=(const VROptions& right) const
@@ -2016,6 +2031,7 @@ void Pcsx2Config::LoadSaveCore(SettingsWrapper& wrap)
 
 	SettingsWrapBitBool(ManuallySetRealTimeClock);
 	SettingsWrapBitBool(UseSystemLocaleFormat);
+	SettingsWrapBitBool(OnlineLock);
 
 	Speedhacks.LoadSave(wrap);
 	Cpu.LoadSave(wrap);
@@ -2290,6 +2306,7 @@ void EmuFolders::SetDefaults(SettingsInterface& si)
 	si.SetStringValue("Folders", "DebuggerLayouts", "debuggerlayouts");
 	si.SetStringValue("Folders", "DebuggerSettings", "debuggersettings");
 	si.SetStringValue("Folders", "VRProfiles", "vrprofiles");
+	si.SetStringValue("Folders", "VRMods", "vrmods");
 }
 
 static std::string LoadPathFromSettings(SettingsInterface& si, const std::string& root, const char* name, const char* def)
@@ -2319,6 +2336,7 @@ void EmuFolders::LoadConfig(SettingsInterface& si)
 	DebuggerLayouts = LoadPathFromSettings(si, Settings, "DebuggerLayouts", "debuggerlayouts");
 	DebuggerSettings = LoadPathFromSettings(si, Settings, "DebuggerSettings", "debuggersettings");
 	VRProfiles = LoadPathFromSettings(si, DataRoot, "VRProfiles", "vrprofiles");
+	VRMods = LoadPathFromSettings(si, DataRoot, "VRMods", "vrmods");
 
 	Console.WriteLn("BIOS Directory: %s", Bios.c_str());
 	Console.WriteLn("Snapshots Directory: %s", Snapshots.c_str());
@@ -2359,6 +2377,7 @@ bool EmuFolders::EnsureFoldersExist()
 	result = FileSystem::CreateDirectoryPath(DebuggerLayouts.c_str(), false) && result;
 	result = FileSystem::CreateDirectoryPath(DebuggerSettings.c_str(), false) && result;
 	result = FileSystem::CreateDirectoryPath(VRProfiles.c_str(), false) && result;
+	result = FileSystem::CreateDirectoryPath(VRMods.c_str(), false) && result;
 	return result;
 }
 

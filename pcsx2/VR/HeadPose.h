@@ -27,5 +27,11 @@ namespace VR::HeadPose
 
 	void Invalidate();
 
+	constexpr int kStalePoseMs = 1500;
+
 	Snapshot Get();
+
+	void AdvanceClockForTest(s64 milliseconds);
+	void ResetForTest();
+
 }

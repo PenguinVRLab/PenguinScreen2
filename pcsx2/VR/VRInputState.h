@@ -48,7 +48,10 @@ struct VRInputSnapshot
   VRPose head_pose;
   bool actions_active = false;
   std::uint64_t generation = 0;
+  bool stale = false;
 };
+
+constexpr int kStaleSnapshotMs = 500;
 
 VRInputSnapshot GetInputSnapshot();
 

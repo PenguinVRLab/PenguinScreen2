@@ -5837,6 +5837,13 @@ void GSRendererHW::DetermineVSConfig(GSTextureCache::Target* rt, float rtscale, 
 		{
 			for (u32 i = 0; i < 4; i++)
 				m_conf.cb_vs.vr_band[i] = GSVector4(st.conv[i], st.sep[i], st.bias[i], 0.0f);
+			if (st.map == VR::StereoState::Params::Map::Bands && st.crossed_limit > 0.0f && st.crossed_gain > 0.0f)
+			{
+#ifndef VR_CROSSED_PLANTED_MODE1
+				m_conf.cb_vs.vr_map_mode = 3u;
+				m_conf.cb_vs.vr_stereo = GSVector2(st.crossed_gain, st.crossed_limit);
+#endif
+			}
 		}
 	}
 	else
@@ -5965,8 +5972,8 @@ void GSRendererHW::DetermineVSConfig(GSTextureCache::Target* rt, float rtscale, 
 		if (!s_logged_mv_draw)
 		{
 			s_logged_mv_draw = true;
-			DevCon.WriteLn("(VR) First multiview draw: vr_stereo = {%.4f, %.3f}.",
-				m_conf.cb_vs.vr_stereo.x, m_conf.cb_vs.vr_stereo.y);
+			DevCon.WriteLn("(VR) First multiview draw: vr_stereo = {%.4f, %.3f} far=%.6f.",
+				m_conf.cb_vs.vr_stereo.x, m_conf.cb_vs.vr_stereo.y, st.FarField());
 		}
 	}
 #else

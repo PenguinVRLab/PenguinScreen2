@@ -30,7 +30,9 @@ namespace VR
 	int SeatCastTarget();
 	bool SeatCastArmed();
 	int GetLaunchSeat();
+	void SetLaunchSeatRuntimeDirs(std::string dirs);
 	std::string ResolveSeatRuntimeDir(int seat);
+	void SetLaunchSeatRuntimeJsons(std::string jsons);
 	std::string ResolveSeatRuntimeJson(int seat);
 
 	void SetStereoRenderArmed(bool armed);
@@ -57,4 +59,6 @@ namespace VR
 	void EnsureFrameSubmitted();
 
 	void EndOfFrame(GSTexture* current);
+
+	void NoteGameVsync(bool new_frame);
 }

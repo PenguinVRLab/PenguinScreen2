@@ -10,7 +10,6 @@
 #include <QtCore/QMap>
 #include <QtCore/QString>
 #include <QtWidgets/QWidget>
-#include <array>
 #include <memory>
 
 class QWheelEvent;
@@ -114,15 +113,13 @@ protected:
 	void wheelEvent(QWheelEvent* event) override;
 
 private:
-	enum : u32
-	{
-		MAX_SETTINGS_WIDGETS = 14
-	};
+	static constexpr int CategoryHelpTextRole = Qt::UserRole + 1;
 
 	void setupUi(const GameList::Entry* game);
 
 	void addWidget(QWidget* widget, QString title, QString icon, QString help_text);
 	bool handleWheelEvent(QWheelEvent* event);
+	QString categoryHelpText(int row) const;
 
 	void reopen(const QString& message);
 
@@ -146,8 +143,6 @@ private:
 	AchievementSettingsWidget* m_achievement_settings = nullptr;
 	AdvancedSettingsWidget* m_advanced_settings = nullptr;
 	DebugSettingsWidget* m_debug_settings = nullptr;
-
-	std::array<QString, MAX_SETTINGS_WIDGETS> m_category_help_text;
 
 	QObject* m_current_help_widget = nullptr;
 	QMap<QObject*, QString> m_widget_help_text_map;

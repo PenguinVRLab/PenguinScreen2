@@ -4,6 +4,9 @@
 #include "ImGui/FullscreenUI.h"
 #include "ImGui/ImGuiManager.h"
 #include "GS/Renderers/Common/GSRenderer.h"
+#ifdef ENABLE_VR
+#include "VR/WorldProjection.h"
+#endif
 #include "GS/GSCapture.h"
 #include "GS/GSDump.h"
 #include "GS/GSGL.h"
@@ -551,6 +554,11 @@ void GSRenderer::EndPresentFrame()
 
 void GSRenderer::VSync(u32 field, bool registers_written, bool idle_frame)
 {
+#ifdef ENABLE_VR
+	if (VR::WorldProjection::GsActive())
+		VR::WorldProjection::OnGsPresent(VRDisplayFbp());
+	VR::NoteGameVsync(registers_written);
+#endif
 	if (GSConfig.ShouldDump(s_n, g_perfmon.GetFrame()))
 	{
 		if (GSConfig.SaveInfo)

@@ -19,6 +19,26 @@ SLUS-20919:
     pinUniformQ: true
     zDrivenDepth: true
     scenes:
-      - { when: { address: 0x00A97884, equals: 1, width: 1 }, convergence: 16.0, label: menu }
+      - { when: { address: 0x00CB8534, equals: 1, width: 1 }, convergence: 16.0, label: menu }
   camera:
     padLook: { maxLookDeg: 18, engageDeg: 6, releaseDeg: 4, curve: 1.6, stickFloor: 0.4016 }
+    directLook:
+      aim:  { hook: 0x001EA2C8, expect: 0x27A20090, direction: fp, axes: yaw, yawSign: 1, pitchSign: 1, maxYawDeg: 80, maxPitchDeg: 45 }
+      when:
+        - { address: 0x00B2EE30, equals: 4, width: 4 }
+  fov:
+    default: game
+    levers:
+      - name: lens
+        address: 0x00B2EE50
+        encoding: f32
+        readback: 0x00B2ECB0
+        calibration:
+          model: invtan
+          pairs: [[12.6, 107.0], [18.0, 89.2], [27.0, 66.7]]
+    scenes:
+      - label: first-person
+        lever: lens
+        target: screen
+        ramp: 0.0
+        when: [ { address: 0x00B2EE30, equals: 4, width: 4 } ]

@@ -17,13 +17,15 @@ here so a quirk you notice has an explanation instead of a surprise.
 
 ## VR connection
 
-- **Steam Deck: wireless VR streaming is NOT supported — use the USB-C cable.**
-  Field-tested: the Deck can run the emulator and the VR session, but one
+- **Steam Deck: streaming over the Deck's own Wi-Fi is NOT supported — use the
+  USB-C cable, or dock the Deck on wired Ethernet.**
+  The Deck can run the emulator and the VR session, but one
   machine emulating, encoding, and driving the Wi-Fi radio at once cannot
-  sustain a usable stream. The supported Deck path is a **data-capable USB-C
-  cable** to the headset (see the Quickstart §4 — the launcher handles it).
-  Wireless works well from desktop-class PCs; on the Deck it will disappoint,
-  and we would rather say so here than let you discover it.
+  sustain a usable stream. The supported Deck paths are a **data-capable USB-C
+  cable** to the headset (see the Quickstart §4 — the launcher handles it), or
+  the Deck **docked on wired Ethernet** with the headset on Wi-Fi (see
+  `DEVICES.md`). Undocked wireless from the Deck will disappoint, and we would
+  rather say so here than let you discover it.
 
 - **VR only starts when you launch with the VR launch script — by design.**
   Running the emulator directly (a plain `pcsx2-qt`, or launching it from a
@@ -40,6 +42,11 @@ here so a quirk you notice has an explanation instead of a surprise.
   which is why the headset then connects **by IP**. Want the PC to appear in the
   headset's list by itself instead? Run `enable-vr-discovery.sh` once — see the
   Quickstart, §4. This is an OS/WiVRn interaction, not an emulator fault.
+- **"Incompatible version" when the headset connects.** The headset's WiVRn
+  app updates itself; the PC's server is a Flathub install that updates only
+  when asked. Run `flatpak update --user io.github.wivrn.wivrn`, take the
+  headset off, `pkill -f wivrn-server`, launch again (a server that was already
+  running keeps the old code). The launcher prints the installed version.
 - **The PC's address can change.** Home networks hand out addresses that change
   after a reboot or a lease expiry, so a headset entry that worked yesterday can
   fail today. The launcher prints the current address every time — re-add the
@@ -51,9 +58,8 @@ here so a quirk you notice has an explanation instead of a surprise.
 - **ESPN NFL 2K5 — brief flicker just after a scene loads.** On-field detail
   can flicker for a moment the first time a scene is shown, and settles once
   that scene has been displayed once. The fingerprint (it goes away when warm)
-  points at shader/pipeline compilation rather than anything VR-specific — but
-  we have not proven that, and we don't label a bug as somebody else's without
-  evidence. Not harmful, just visible. *(A separate and much sharper
+  points at shader/pipeline compilation rather than anything VR-specific.
+  Not harmful, just visible. *(A separate and much sharper
   field-geometry flicker in this game was a synchronization bug; it is **fixed**
   in this build.)*
 - **A game can boot "flat" if the headset was asleep when it started.** VR

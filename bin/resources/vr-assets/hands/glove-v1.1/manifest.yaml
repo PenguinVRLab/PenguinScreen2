@@ -1,0 +1,14 @@
+asset: glove-v1.1
+license: MIT
+copyright: 2026 Patrick Carey
+files:
+  - file: glove-v1.1_left.glb
+    sha256: 87e8b858717b1aa7af9239029c055711e0b7408dbc5c2204fae77569f2b06632
+    bytes: 309872
+  - file: glove-v1.1_right.glb
+    sha256: df5fd25e615b8fbb3337a9d5051681d2359e41e051c11e4060b8703cc819abcd
+    bytes: 309888
+poses: the open, fist and pinch angles in the loader are the set's poses.json
+  (sha256 5cc33683bb1601c57ca3ddef96f188b5b1f7488b1b215447623bbfaedac7af7b; the same angles as glove-v1's)
+checked_by: the sha256 of each shipped file, listed above
+used_by: "the near-field layer, selected by a profile's `hands: glove-v1.1`"

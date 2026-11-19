@@ -2,15 +2,22 @@
 // SPDX-License-Identifier: GPL-3.0
 
 #include "VR/VRInput.h"
+#include "VR/GloveHaptics.h"
+#include "VR/HandTracking.h"
+#include "VR/PadXRActions.h"
+#include "VR/PadXRBindings.h"
 #include "VR/XRSession.h"
 
 #include "common/Console.h"
+#include "Host.h"
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstring>
 #include <mutex>
+#include <optional>
 #include <vector>
 
 namespace VR
@@ -19,23 +26,50 @@ namespace VR
 	{
 		constexpr const char* HAND_PATH[2] = {"/user/hand/left", "/user/hand/right"};
 
-		constexpr const char* TOUCH_PROFILE = "/interaction_profiles/oculus/touch_controller";
-		constexpr const char* SIMPLE_PROFILE = "/interaction_profiles/khr/simple_controller";
+		namespace PA = PadXRActions;
 
 		std::mutex s_snapshot_mutex;
 		VRInputSnapshot s_snapshot;
+		std::chrono::steady_clock::time_point s_snapshot_time{};
+		PA::ActionState s_padxr_state;
+		std::atomic<s64> s_test_clock_offset_ms{0};
 
-		void PublishSnapshot(VRInputSnapshot snapshot)
+		std::chrono::steady_clock::time_point SnapshotNow()
+		{
+			return std::chrono::steady_clock::now() +
+				   std::chrono::milliseconds(s_test_clock_offset_ms.load(std::memory_order_relaxed));
+		}
+
+		void PublishSnapshot(VRInputSnapshot snapshot, PA::ActionState padxr = PA::ActionState{})
 		{
 			std::lock_guard lock{s_snapshot_mutex};
 			snapshot.generation = s_snapshot.generation + 1;
+			snapshot.stale = false;
 			s_snapshot = snapshot;
+			padxr.generation = snapshot.generation;
+			padxr.stale = false;
+			s_padxr_state = padxr;
+			s_snapshot_time = SnapshotNow();
+		}
+
+		void PublishNeutralIfActive()
+		{
+#ifdef VR_FORKBUGS_PLANTED_B1
+			return;
+#endif
+			{
+				std::lock_guard lock{s_snapshot_mutex};
+				if (s_snapshot.generation == 0 || !s_snapshot.actions_active)
+					return;
+			}
+			PublishSnapshot(VRInputSnapshot{});
 		}
 
 		void ResetSnapshot()
 		{
 			std::lock_guard lock{s_snapshot_mutex};
 			s_snapshot = VRInputSnapshot{};
+			s_padxr_state = PA::ActionState{};
 		}
 
 		VRInput* s_publisher = nullptr;
@@ -43,9 +77,21 @@ namespace VR
 		std::atomic<int> s_haptic_request[2] = {-1, -1};
 		int s_haptic_applied[2] = {0, 0};
 
-		std::atomic<int> s_pulse_request[2] = {-1, -1};
+		std::atomic<long long> s_pulse_request[2] = {-1, -1};
 
-		int PackPulse(float amplitude, float seconds)
+		bool s_frame_extension_enabled = false;
+		bool s_hand_interaction_enabled = false;
+		std::atomic<bool> s_profile_changed{true};
+		std::atomic<std::uint32_t> s_padxr_events{0};
+		std::atomic<bool> s_ui_open{false};
+		std::atomic<bool> s_ui_open_reported{false};
+		static_assert(std::atomic<long long>::is_always_lock_free, "the pulse queue must stay lock-free");
+
+		constexpr int PulseAmp(long long p) { return static_cast<int>(p & 0xFFFF); }
+		constexpr int PulseMs(long long p) { return static_cast<int>((p >> 16) & 0xFFFF); }
+		constexpr u8 PulseLocus(long long p) { return static_cast<u8>((p >> 32) & 0xFF); }
+
+		long long PackPulse(float amplitude, float seconds, u8 locus)
 		{
 			if (!std::isfinite(amplitude))
 				amplitude = 0.f;
@@ -53,7 +99,11 @@ namespace VR
 				seconds = 0.f;
 			const int permille = static_cast<int>(std::lround(std::clamp(amplitude, 0.f, 1.f) * 1000.f));
 			const int ms = static_cast<int>(std::lround(std::clamp(seconds, 0.f, 10.f) * 1000.f));
-			return permille | (ms << 16);
+#ifdef VR_GLOVES_PLANTED_LOCUS_DROP
+			locus = 0;
+#endif
+			return static_cast<long long>(permille) | (static_cast<long long>(ms) << 16) |
+				   (static_cast<long long>(locus) << 32);
 		}
 
 		bool CheckXR(XrResult res, const char* what)
@@ -129,7 +179,23 @@ namespace VR
 	VRInputSnapshot GetInputSnapshot()
 	{
 		std::lock_guard lock{s_snapshot_mutex};
+#ifndef VR_FORKBUGS_PLANTED_B1
+		if (s_snapshot.generation != 0 && SnapshotNow() - s_snapshot_time > std::chrono::milliseconds(kStaleSnapshotMs))
+		{
+			VRInputSnapshot neutral;
+			neutral.generation = s_snapshot.generation;
+			neutral.stale = true;
+			return neutral;
+		}
+#endif
 		return s_snapshot;
+	}
+
+	PadXRActions::ActionState GetPadXRActionState()
+	{
+		std::lock_guard lock{s_snapshot_mutex};
+		const auto age = std::chrono::duration_cast<std::chrono::milliseconds>(SnapshotNow() - s_snapshot_time).count();
+		return PA::ApplyStaleRule(s_padxr_state, static_cast<std::int64_t>(age));
 	}
 
 	VRScreenTransform GetScreenTransform()
@@ -144,8 +210,8 @@ namespace VR
 		Shutdown();
 	}
 
-	bool VRInput::CreateAction(XrInstance instance, XrActionType type, const char* name,
-		const char* localized_name, XrAction* out)
+	bool VRInput::CreateAction(XrActionSet set, XrActionType type, const char* name, const char* localized_name,
+		XrAction* out)
 	{
 		XrActionCreateInfo create_info = {XR_TYPE_ACTION_CREATE_INFO};
 		create_info.actionType = type;
@@ -154,7 +220,7 @@ namespace VR
 		create_info.countSubactionPaths = static_cast<uint32_t>(m_hand_paths.size());
 		create_info.subactionPaths = m_hand_paths.data();
 
-		const XrResult res = xrCreateAction(m_action_set, &create_info, out);
+		const XrResult res = xrCreateAction(set, &create_info, out);
 		if (XR_FAILED(res))
 		{
 			char what[64];
@@ -183,100 +249,159 @@ namespace VR
 		}
 
 		// clang-format off
-		return CreateAction(instance, XR_ACTION_TYPE_POSE_INPUT,       "aim_pose",         "Aim Pose",         &m_aim_pose) &&
-		       CreateAction(instance, XR_ACTION_TYPE_POSE_INPUT,       "grip_pose",        "Grip Pose",        &m_grip_pose) &&
-		       CreateAction(instance, XR_ACTION_TYPE_BOOLEAN_INPUT,    "button_a",         "A Button",         &m_button_a) &&
-		       CreateAction(instance, XR_ACTION_TYPE_BOOLEAN_INPUT,    "button_b",         "B Button",         &m_button_b) &&
-		       CreateAction(instance, XR_ACTION_TYPE_BOOLEAN_INPUT,    "button_x",         "X Button",         &m_button_x) &&
-		       CreateAction(instance, XR_ACTION_TYPE_BOOLEAN_INPUT,    "button_y",         "Y Button",         &m_button_y) &&
-		       CreateAction(instance, XR_ACTION_TYPE_BOOLEAN_INPUT,    "button_menu",      "Menu Button",      &m_button_menu) &&
-		       CreateAction(instance, XR_ACTION_TYPE_BOOLEAN_INPUT,    "thumbstick_click", "Thumbstick Click", &m_thumbstick_click) &&
-		       CreateAction(instance, XR_ACTION_TYPE_FLOAT_INPUT,      "trigger",          "Trigger",          &m_trigger) &&
-		       CreateAction(instance, XR_ACTION_TYPE_FLOAT_INPUT,      "grip",             "Grip",             &m_grip) &&
-		       CreateAction(instance, XR_ACTION_TYPE_VECTOR2F_INPUT,   "thumbstick",       "Thumbstick",       &m_thumbstick) &&
-		       CreateAction(instance, XR_ACTION_TYPE_VIBRATION_OUTPUT, "haptic",           "Haptic Feedback",  &m_haptic);
+		return CreateAction(m_action_set, XR_ACTION_TYPE_POSE_INPUT,       "aim_pose",         "Aim Pose",         &m_aim_pose) &&
+		       CreateAction(m_action_set, XR_ACTION_TYPE_POSE_INPUT,       "grip_pose",        "Grip Pose",        &m_grip_pose) &&
+		       CreateAction(m_action_set, XR_ACTION_TYPE_BOOLEAN_INPUT,    "button_a",         "A Button",         &m_button_a) &&
+		       CreateAction(m_action_set, XR_ACTION_TYPE_BOOLEAN_INPUT,    "button_b",         "B Button",         &m_button_b) &&
+		       CreateAction(m_action_set, XR_ACTION_TYPE_BOOLEAN_INPUT,    "button_x",         "X Button",         &m_button_x) &&
+		       CreateAction(m_action_set, XR_ACTION_TYPE_BOOLEAN_INPUT,    "button_y",         "Y Button",         &m_button_y) &&
+		       CreateAction(m_action_set, XR_ACTION_TYPE_BOOLEAN_INPUT,    "button_menu",      "Menu Button",      &m_button_menu) &&
+		       CreateAction(m_action_set, XR_ACTION_TYPE_BOOLEAN_INPUT,    "thumbstick_click", "Thumbstick Click", &m_thumbstick_click) &&
+		       CreateAction(m_action_set, XR_ACTION_TYPE_FLOAT_INPUT,      "trigger",          "Trigger",          &m_trigger) &&
+		       CreateAction(m_action_set, XR_ACTION_TYPE_FLOAT_INPUT,      "grip",             "Grip",             &m_grip) &&
+		       CreateAction(m_action_set, XR_ACTION_TYPE_VECTOR2F_INPUT,   "thumbstick",       "Thumbstick",       &m_thumbstick) &&
+		       CreateAction(m_action_set, XR_ACTION_TYPE_VIBRATION_OUTPUT, "haptic",           "Haptic Feedback",  &m_haptic) &&
+		       CreateAction(m_action_set, XR_ACTION_TYPE_POSE_INPUT,       "hand_aim_pose",    "Hand Aim Pose",    &m_hand_aim_pose) &&
+		       CreateAction(m_action_set, XR_ACTION_TYPE_FLOAT_INPUT,      "pinch_value",      "Pinch",            &m_pinch_value) &&
+		       CreateAction(m_action_set, XR_ACTION_TYPE_BOOLEAN_INPUT,    "pinch_ready",      "Pinch Ready",      &m_pinch_ready);
 		// clang-format on
+	}
+
+	void VRInput::CreatePadXRSet(XrInstance instance)
+	{
+		XrActionSetCreateInfo set_info = {XR_TYPE_ACTION_SET_CREATE_INFO};
+		std::strncpy(set_info.actionSetName, PA::kActionSetName, XR_MAX_ACTION_SET_NAME_SIZE - 1);
+		std::strncpy(set_info.localizedActionSetName, PA::kActionSetLocalizedName, XR_MAX_LOCALIZED_ACTION_SET_NAME_SIZE - 1);
+		set_info.priority = PA::kActionSetPriority;
+		if (!CheckXR(xrCreateActionSet(instance, &set_info, &m_padxr_set), "xrCreateActionSet(padxr)"))
+		{
+			m_padxr_set = XR_NULL_HANDLE;
+			Console.Warning("(VR) PadXR: no padxr action set; the controllers run on the core set alone.");
+			return;
+		}
+		for (int i = 0; i < PA::ActionCount; i++)
+		{
+			const PA::ActionDef& def = PA::Actions()[i];
+			const XrActionType type =
+				def.type == PA::ActionType::Vector2 ? XR_ACTION_TYPE_VECTOR2F_INPUT : XR_ACTION_TYPE_BOOLEAN_INPUT;
+			if (!CreateAction(m_padxr_set, type, def.name, def.localized, &m_padxr_actions[i]))
+			{
+				Console.Warning("(VR) PadXR: action %s could not be created; the padxr set is dropped.", def.name);
+				DestroyPadXRSet(true);
+				return;
+			}
+		}
+	}
+
+	void VRInput::DestroyPadXRSet(bool instance_alive)
+	{
+		for (XrAction& action : m_padxr_actions)
+		{
+			if (action != XR_NULL_HANDLE && instance_alive)
+				xrDestroyAction(action);
+			action = XR_NULL_HANDLE;
+		}
+		if (m_padxr_set != XR_NULL_HANDLE)
+		{
+			if (instance_alive)
+				xrDestroyActionSet(m_padxr_set);
+			m_padxr_set = XR_NULL_HANDLE;
+		}
+	}
+
+	XrAction VRInput::CoreAction(const char* name) const
+	{
+		// clang-format off
+		const struct { const char* name; XrAction action; } table[] = {
+			{"aim_pose", m_aim_pose}, {"grip_pose", m_grip_pose}, {"button_a", m_button_a}, {"button_b", m_button_b},
+			{"button_x", m_button_x}, {"button_y", m_button_y}, {"button_menu", m_button_menu},
+			{"thumbstick_click", m_thumbstick_click}, {"trigger", m_trigger}, {"grip", m_grip},
+			{"thumbstick", m_thumbstick}, {"haptic", m_haptic},
+			{"hand_aim_pose", m_hand_aim_pose}, {"pinch_value", m_pinch_value}, {"pinch_ready", m_pinch_ready},
+		};
+		// clang-format on
+		for (const auto& e : table)
+		{
+			if (std::strcmp(e.name, name) == 0)
+				return e.action;
+		}
+		return XR_NULL_HANDLE;
+	}
+
+	XrAction VRInput::PadXRAction(const char* name) const
+	{
+		const int id = PA::FindAction(name);
+		return id < PA::ActionCount ? m_padxr_actions[id] : XR_NULL_HANDLE;
 	}
 
 	bool VRInput::SuggestBindings(XrInstance instance)
 	{
-		struct Suggestion
-		{
-			XrAction action;
-			const char* path;
-		};
-
-		const auto suggest = [&](const char* profile, const std::vector<Suggestion>& suggestions) {
-			std::vector<XrActionSuggestedBinding> bindings;
-			bindings.reserve(suggestions.size());
-			for (const Suggestion& suggestion : suggestions)
-			{
-				XrPath path = XR_NULL_PATH;
-				if (XR_FAILED(xrStringToPath(instance, suggestion.path, &path)))
+		const auto submit_for = [&](const std::string& profile) -> PA::SubmitFn {
+			return [&, profile](const std::vector<PA::Binding>& list) {
+				std::vector<XrActionSuggestedBinding> bindings;
+				bindings.reserve(list.size());
+				for (const PA::Binding& b : list)
 				{
-					Console.Warning("(VR) xrStringToPath failed for %s", suggestion.path);
-					continue;
+					XrAction action = CoreAction(b.action.c_str());
+					if (action == XR_NULL_HANDLE)
+						action = PadXRAction(b.action.c_str());
+					XrPath path = XR_NULL_PATH;
+					if (action == XR_NULL_HANDLE || XR_FAILED(xrStringToPath(instance, b.path.c_str(), &path)))
+					{
+						Console.Warning("(VR) xrStringToPath failed for %s", b.path.c_str());
+						continue;
+					}
+					bindings.push_back({action, path});
 				}
-				bindings.push_back({suggestion.action, path});
-			}
 
-			XrPath profile_path = XR_NULL_PATH;
-			if (!CheckXR(xrStringToPath(instance, profile, &profile_path), "xrStringToPath(profile)"))
-				return false;
+				XrPath profile_path = XR_NULL_PATH;
+				if (!CheckXR(xrStringToPath(instance, profile.c_str(), &profile_path), "xrStringToPath(profile)"))
+					return false;
 
-			XrInteractionProfileSuggestedBinding suggested = {XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING};
-			suggested.interactionProfile = profile_path;
-			suggested.countSuggestedBindings = static_cast<uint32_t>(bindings.size());
-			suggested.suggestedBindings = bindings.data();
+				XrInteractionProfileSuggestedBinding suggested = {XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING};
+				suggested.interactionProfile = profile_path;
+				suggested.countSuggestedBindings = static_cast<uint32_t>(bindings.size());
+				suggested.suggestedBindings = bindings.data();
 
-			if (XR_FAILED(xrSuggestInteractionProfileBindings(instance, &suggested)))
-			{
-				Console.Warning("(VR) Runtime rejected the suggested bindings for %s", profile);
-				return false;
-			}
+				if (XR_FAILED(xrSuggestInteractionProfileBindings(instance, &suggested)))
+				{
+					Console.Warning("(VR) Runtime rejected the suggested bindings for %s", profile.c_str());
+					return false;
+				}
 
-			Console.WriteLn("(VR) Suggested %u controller bindings for %s", static_cast<unsigned>(bindings.size()), profile);
-			return true;
+				Console.WriteLn("(VR) Suggested %u controller bindings for %s", static_cast<unsigned>(bindings.size()),
+					profile.c_str());
+				return true;
+			};
 		};
 
-		const bool touch_ok = suggest(TOUCH_PROFILE, {
-			{m_aim_pose,         "/user/hand/left/input/aim/pose"},
-			{m_aim_pose,         "/user/hand/right/input/aim/pose"},
-			{m_grip_pose,        "/user/hand/left/input/grip/pose"},
-			{m_grip_pose,        "/user/hand/right/input/grip/pose"},
-			{m_button_a,         "/user/hand/right/input/a/click"},
-			{m_button_b,         "/user/hand/right/input/b/click"},
-			{m_button_x,         "/user/hand/left/input/x/click"},
-			{m_button_y,         "/user/hand/left/input/y/click"},
-			{m_button_menu,      "/user/hand/left/input/menu/click"},
-			{m_thumbstick_click, "/user/hand/left/input/thumbstick/click"},
-			{m_thumbstick_click, "/user/hand/right/input/thumbstick/click"},
-			{m_trigger,          "/user/hand/left/input/trigger/value"},
-			{m_trigger,          "/user/hand/right/input/trigger/value"},
-			{m_grip,             "/user/hand/left/input/squeeze/value"},
-			{m_grip,             "/user/hand/right/input/squeeze/value"},
-			{m_thumbstick,       "/user/hand/left/input/thumbstick"},
-			{m_thumbstick,       "/user/hand/right/input/thumbstick"},
-			{m_haptic,           "/user/hand/left/output/haptic"},
-			{m_haptic,           "/user/hand/right/output/haptic"},
-		});
+		PadXRBindings::Model model;
+		if (m_padxr_set != XR_NULL_HANDLE)
+		{
+			const PadXRBindings::LoadReport report = model.Load([](const std::string& key) -> std::optional<std::string> {
+				std::string v = Host::GetBaseStringSettingValue(PadXRBindings::kSettingsSection, key.c_str(), "");
+				if (v.empty())
+					return std::nullopt;
+				return v;
+			});
+			for (const std::string& r : report.rejected)
+				Console.Warning("(VR) PadXR: ignored [%s] %s (the default is kept)", PadXRBindings::kSettingsSection, r.c_str());
+			if (report.overridden > 0)
+				Console.WriteLn("(VR) PadXR: %d binding(s) from the settings.", report.overridden);
+		}
 
-		const bool simple_ok = suggest(SIMPLE_PROFILE, {
-			{m_aim_pose,    "/user/hand/left/input/aim/pose"},
-			{m_aim_pose,    "/user/hand/right/input/aim/pose"},
-			{m_grip_pose,   "/user/hand/left/input/grip/pose"},
-			{m_grip_pose,   "/user/hand/right/input/grip/pose"},
-			{m_trigger,     "/user/hand/left/input/select/click"},
-			{m_trigger,     "/user/hand/right/input/select/click"},
-			{m_button_a,    "/user/hand/left/input/select/click"},
-			{m_button_a,    "/user/hand/right/input/select/click"},
-			{m_button_menu, "/user/hand/left/input/menu/click"},
-			{m_button_menu, "/user/hand/right/input/menu/click"},
-			{m_haptic,      "/user/hand/left/output/haptic"},
-			{m_haptic,      "/user/hand/right/output/haptic"},
-		});
+		bool any_ok = false;
+		for (const std::string& profile : PA::ProfilesToSuggest(s_frame_extension_enabled, s_hand_interaction_enabled))
+		{
+			const std::vector<PA::Binding> padxr =
+				m_padxr_set != XR_NULL_HANDLE ? model.BindingsFor(profile) : std::vector<PA::Binding>{};
+			const PA::SuggestResult r = PA::SuggestWithRetry(profile, PA::CoreBindings(profile), padxr, submit_for(profile));
+			if (!r.log.empty())
+				Console.Warning("(VR) %s", r.log.c_str());
+			any_ok = any_ok || r.outcome != PA::SuggestOutcome::Refused;
+		}
 
-		if (!touch_ok && !simple_ok)
+		if (!any_ok)
 		{
 			Console.Error("(VR) No interaction profile bindings were accepted; controllers will produce nothing.");
 			return false;
@@ -287,9 +412,10 @@ namespace VR
 
 	bool VRInput::AttachAndCreateSpaces(XrInstance instance, XrSession session)
 	{
+		const XrActionSet sets[2] = {m_action_set, m_padxr_set};
 		XrSessionActionSetsAttachInfo attach_info = {XR_TYPE_SESSION_ACTION_SETS_ATTACH_INFO};
-		attach_info.countActionSets = 1;
-		attach_info.actionSets = &m_action_set;
+		attach_info.countActionSets = m_padxr_set != XR_NULL_HANDLE ? 2u : 1u;
+		attach_info.actionSets = sets;
 		if (!CheckXR(xrAttachSessionActionSets(session, &attach_info), "xrAttachSessionActionSets"))
 			return false;
 
@@ -306,6 +432,10 @@ namespace VR
 			space_info.action = m_grip_pose;
 			if (!CheckXR(xrCreateActionSpace(session, &space_info, &m_grip_spaces[hand]), "xrCreateActionSpace(grip)"))
 				return false;
+
+			space_info.action = m_hand_aim_pose;
+			if (XR_FAILED(xrCreateActionSpace(session, &space_info, &m_hand_aim_spaces[hand])))
+				m_hand_aim_spaces[hand] = XR_NULL_HANDLE;
 		}
 
 		XrReferenceSpaceCreateInfo rsci = {XR_TYPE_REFERENCE_SPACE_CREATE_INFO};
@@ -334,7 +464,10 @@ namespace VR
 		}
 
 		const XrInstance instance = XRSession::GetInstance();
-		if (!CreateActionSetAndActions(instance) || !SuggestBindings(instance) ||
+		const bool core_ok = CreateActionSetAndActions(instance);
+		if (core_ok)
+			CreatePadXRSet(instance);
+		if (!core_ok || !SuggestBindings(instance) ||
 			!AttachAndCreateSpaces(instance, XRSession::GetSession()))
 		{
 			Shutdown();
@@ -344,6 +477,13 @@ namespace VR
 		m_attached = true;
 		m_locate_warned = false;
 		m_last_actions_active = -1;
+		m_profile_latch = PA::ProfileLogLatch{};
+		m_profile_names = HandTracking::ProfilesAtSessionStart();
+		m_profile_schedule.Reset();
+		m_profile_fail_warned = false;
+		s_profile_changed.store(true, std::memory_order_relaxed);
+		if (m_padxr_set != XR_NULL_HANDLE)
+			Console.WriteLn("(VR) PadXR action set attached beside the core set.");
 		s_publisher = this;
 		ResetSnapshot();
 		Console.WriteLn("(VR) Controller action set attached (spatial controls can read the hands).");
@@ -369,6 +509,12 @@ namespace VR
 					xrDestroySpace(m_grip_spaces[hand]);
 				m_grip_spaces[hand] = XR_NULL_HANDLE;
 			}
+			if (m_hand_aim_spaces[hand] != XR_NULL_HANDLE)
+			{
+				if (session_alive)
+					xrDestroySpace(m_hand_aim_spaces[hand]);
+				m_hand_aim_spaces[hand] = XR_NULL_HANDLE;
+			}
 		}
 		if (m_view_space != XR_NULL_HANDLE)
 		{
@@ -378,7 +524,8 @@ namespace VR
 		}
 
 		for (XrAction* action : {&m_aim_pose, &m_grip_pose, &m_button_a, &m_button_b, &m_button_x, &m_button_y,
-				 &m_button_menu, &m_thumbstick_click, &m_trigger, &m_grip, &m_thumbstick, &m_haptic})
+				 &m_button_menu, &m_thumbstick_click, &m_trigger, &m_grip, &m_thumbstick, &m_haptic,
+				 &m_hand_aim_pose, &m_pinch_value, &m_pinch_ready})
 		{
 			if (*action != XR_NULL_HANDLE)
 			{
@@ -387,6 +534,8 @@ namespace VR
 				*action = XR_NULL_HANDLE;
 			}
 		}
+
+		DestroyPadXRSet(instance_alive);
 
 		if (m_action_set != XR_NULL_HANDLE)
 		{
@@ -468,6 +617,75 @@ namespace VR
 		return ok;
 	}
 
+	void VRInput::ReadRuntimeHand(XrSession session, int hand, XrTime time, HandTracking::RuntimeHand* out)
+	{
+		*out = HandTracking::RuntimeHand{};
+		const XrPath hand_path = m_hand_paths[hand];
+		out->pinch_value = ReadFloat(session, m_pinch_value, hand_path);
+		out->pinch_ready = ReadBool(session, m_pinch_ready, hand_path);
+		if (time == 0 || m_hand_aim_spaces[hand] == XR_NULL_HANDLE)
+			return;
+		constexpr XrSpaceLocationFlags POSE_VALID =
+			XR_SPACE_LOCATION_POSITION_VALID_BIT | XR_SPACE_LOCATION_ORIENTATION_VALID_BIT;
+		XrSpaceLocation loc = {XR_TYPE_SPACE_LOCATION};
+		if (XR_SUCCEEDED(xrLocateSpace(m_hand_aim_spaces[hand], XRSession::GetSpace(), time, &loc)) &&
+			(loc.locationFlags & POSE_VALID) == POSE_VALID)
+		{
+			CopyPose(loc.pose, &out->aim);
+			out->aim.valid = true;
+		}
+	}
+
+	void VRInput::ReadPadXR(XrSession session, PA::ActionState* out)
+	{
+		if (m_padxr_set == XR_NULL_HANDLE)
+			return;
+		for (int hand = 0; hand < HAND_COUNT; ++hand)
+		{
+			const XrPath hand_path = m_hand_paths[hand];
+			PA::HandActions& h = out->hands[hand];
+			h.system = ReadBool(session, m_padxr_actions[PA::System], hand_path);
+			h.menu_select = ReadBool(session, m_padxr_actions[PA::MenuSelect], hand_path);
+			h.menu_back = ReadBool(session, m_padxr_actions[PA::MenuBack], hand_path);
+			h.talk = ReadBool(session, m_padxr_actions[PA::Talk], hand_path);
+			const XrVector2f nav = ReadVector2(session, m_padxr_actions[PA::MenuNavigate], hand_path);
+			h.navigate_x = nav.x;
+			h.navigate_y = nav.y;
+		}
+	}
+
+	void VRInput::LogInteractionProfileIfChanged(XrInstance instance, XrSession session)
+	{
+		HandTracking::ProfileProbe probe;
+		probe.get = [&](int hand, XrPath* out) {
+			XrInteractionProfileState state = {XR_TYPE_INTERACTION_PROFILE_STATE};
+			const XrResult r = xrGetCurrentInteractionProfile(session, m_hand_paths[hand], &state);
+			*out = XR_SUCCEEDED(r) ? state.interactionProfile : XR_NULL_PATH;
+			return r;
+		};
+		probe.to_string = [&](XrPath path, std::string* out) {
+			char buf[XR_MAX_PATH_LENGTH] = {};
+			u32 len = 0;
+			const XrResult r = xrPathToString(instance, path, sizeof(buf), &len, buf);
+			if (XR_SUCCEEDED(r))
+				out->assign(buf, len > 0 ? len - 1 : 0);
+			return r;
+		};
+		const HandTracking::ProfileCheckResult r = HandTracking::CheckProfiles(m_profile_names, probe);
+		m_profile_names = r.names;
+		m_profile_schedule.Done(r.AnyFailed());
+		if (r.AnyFailed() && !m_profile_fail_warned)
+		{
+			m_profile_fail_warned = true;
+			Console.Warning("(VR) Interaction profile check failed (left %d, right %d); keeping the last profile, "
+							"retrying (next frame, then about once a second). Logged once.", static_cast<int>(r.failure[0]), static_cast<int>(r.failure[1]));
+		}
+		const std::array<std::string, 2>& names = m_profile_names;
+		std::string line;
+		if (m_profile_latch.Changed(names[0], names[1], &line))
+			Console.WriteLn("%s", line.c_str());
+	}
+
 	bool VRInput::Update(XrTime display_time)
 	{
 		if (m_action_set == XR_NULL_HANDLE || !m_attached)
@@ -475,15 +693,21 @@ namespace VR
 
 		const XrSession session = XRSession::GetSession();
 		if (session == XR_NULL_HANDLE || !XRSession::IsSessionRunning())
+		{
+			PublishNeutralIfActive();
 			return false;
+		}
 
-		XrActiveActionSet active_set = {m_action_set, XR_NULL_PATH};
+		const XrActiveActionSet active_sets[2] = {{m_action_set, XR_NULL_PATH}, {m_padxr_set, XR_NULL_PATH}};
 		XrActionsSyncInfo sync_info = {XR_TYPE_ACTIONS_SYNC_INFO};
-		sync_info.countActiveActionSets = 1;
-		sync_info.activeActionSets = &active_set;
+		sync_info.countActiveActionSets = m_padxr_set != XR_NULL_HANDLE ? 2u : 1u;
+		sync_info.activeActionSets = active_sets;
 		const XrResult sync_result = xrSyncActions(session, &sync_info);
 		if (!CheckXR(sync_result, "xrSyncActions"))
+		{
+			PublishNeutralIfActive();
 			return false;
+		}
 		const bool actions_active = sync_result == XR_SUCCESS;
 		if (m_last_actions_active != static_cast<int>(actions_active))
 		{
@@ -492,6 +716,11 @@ namespace VR
 				actions_active ? "active" : "inactive", actions_active ? "" : "not ");
 		}
 
+		if (m_profile_schedule.Due(s_profile_changed.exchange(false, std::memory_order_acq_rel),
+				actions_active && m_last_actions_active_for_profile != 1))
+			LogInteractionProfileIfChanged(XRSession::GetInstance(), session);
+		m_last_actions_active_for_profile = actions_active ? 1 : 0;
+
 		const XrTime time = display_time;
 
 		VRInputSnapshot snapshot;
@@ -499,6 +728,8 @@ namespace VR
 		bool located = true;
 		for (int hand = 0; hand < HAND_COUNT; ++hand)
 			located = ReadHand(session, hand, time, &snapshot.hands[hand]) && located;
+		for (int hand = 0; hand < HAND_COUNT; ++hand)
+			ReadRuntimeHand(session, hand, time, &m_runtime_hands[hand]);
 
 		if (time != 0 && m_view_space != XR_NULL_HANDLE)
 		{
@@ -535,7 +766,10 @@ namespace VR
 			}
 		}
 
-		PublishSnapshot(snapshot);
+		PA::ActionState padxr;
+		padxr.active = actions_active && m_padxr_set != XR_NULL_HANDLE;
+		ReadPadXR(session, &padxr);
+		PublishSnapshot(PA::CoreSnapshotToPublish(snapshot, padxr), padxr);
 		return true;
 	}
 
@@ -581,15 +815,49 @@ namespace VR
 		{
 			VRInput s_input;
 			constexpr float kHapticPulseSeconds = 0.05f;
+
+			PA::EventMachine s_events;
+
+			std::optional<std::array<std::string, 2>> s_profiles_for_test;
+
+			void StepPadXREvents()
+			{
+				const PA::ActionState state = GetPadXRActionState();
+				const bool live = state.generation != 0 && !state.stale && state.active;
+				const std::int64_t now_ms =
+					std::chrono::duration_cast<std::chrono::milliseconds>(SnapshotNow().time_since_epoch()).count();
+				const std::uint32_t events = s_events.Step(HandTracking::SystemForEvents(state, HandTracking::SystemHeld()), live, s_ui_open.load(std::memory_order_acquire), now_ms);
+				if (events == PA::EventNone)
+					return;
+				for (const std::uint32_t e : {PA::EventMenuOpen, PA::EventMenuClose, PA::EventRecentre})
+				{
+					if (!(events & e))
+						continue;
+					Console.WriteLn("(VR) PadXR: %s", PA::EventName(e));
+					if (!s_ui_open_reported.load(std::memory_order_acquire) && e != PA::EventRecentre)
+						s_ui_open.store(e == PA::EventMenuOpen, std::memory_order_release);
+				}
+				s_padxr_events.fetch_or(events, std::memory_order_acq_rel);
+			}
+		}
+
+		static void FirePulse(int hand, long long pulse)
+		{
+			const float seconds = static_cast<float>(PulseMs(pulse)) / 1000.f;
+			const float amplitude = static_cast<float>(PulseAmp(pulse)) / 1000.f;
+			s_input.TriggerHaptic(hand, seconds, 0.f, amplitude);
+			GloveHaptics::Send(hand, PulseLocus(pulse), amplitude, seconds);
 		}
 
 		bool Initialize()
 		{
 			for (std::atomic<int>& r : s_haptic_request)
 				r.store(-1, std::memory_order_relaxed);
-			for (std::atomic<int>& r : s_pulse_request)
+			for (std::atomic<long long>& r : s_pulse_request)
 				r.store(-1, std::memory_order_relaxed);
 			s_haptic_applied[0] = s_haptic_applied[1] = 0;
+			s_events.Reset();
+			s_padxr_events.store(0, std::memory_order_relaxed);
 			return s_input.Initialize();
 		}
 
@@ -598,6 +866,8 @@ namespace VR
 			if (!s_input.IsInitialized())
 				return;
 			s_input.Update(display_time);
+			HandTracking::Update(display_time);
+			StepPadXREvents();
 
 			for (int hand = 0; hand < 2; ++hand)
 			{
@@ -609,9 +879,9 @@ namespace VR
 				else if (requested == 0)
 					s_input.StopHaptic(hand);
 
-				const int pulse = s_pulse_request[hand].exchange(-1, std::memory_order_acq_rel);
+				const long long pulse = s_pulse_request[hand].exchange(-1, std::memory_order_acq_rel);
 				if (pulse >= 0)
-					s_input.TriggerHaptic(hand, static_cast<float>(pulse >> 16) / 1000.f, 0.f, static_cast<float>(pulse & 0xFFFF) / 1000.f);
+					FirePulse(hand, pulse);
 			}
 		}
 
@@ -625,6 +895,26 @@ namespace VR
 			return s_input.IsInitialized();
 		}
 
+		std::string CurrentInteractionProfile(int hand)
+		{
+			if (s_profiles_for_test)
+				return (*s_profiles_for_test)[hand & 1];
+			return s_input.IsInitialized() ? s_input.ProfileName(hand) : std::string();
+		}
+
+		void SetProfilesForTest(const std::array<std::string, 2>* profiles)
+		{
+			if (profiles)
+				s_profiles_for_test = *profiles;
+			else
+				s_profiles_for_test.reset();
+		}
+
+		HandTracking::RuntimeHand RuntimeHandState(int hand)
+		{
+			return s_input.IsInitialized() ? s_input.RuntimeHandAt(hand) : HandTracking::RuntimeHand{};
+		}
+
 		void QueueHaptic(int hand, float amplitude)
 		{
 			if (hand < 0 || hand >= 2)
@@ -635,24 +925,53 @@ namespace VR
 			s_haptic_request[hand].store(permille, std::memory_order_release);
 		}
 
-		void QueuePulse(int hand, float amplitude, float seconds)
+		void QueuePulse(int hand, float amplitude, float seconds, u8 locus)
 		{
 			if (hand < 0 || hand >= 2)
 				return;
-			s_pulse_request[hand].store(PackPulse(amplitude, seconds), std::memory_order_release);
+			const long long packed = PackPulse(amplitude, seconds, locus);
+#ifdef VR_FORKBUGS_PLANTED_B3
+			s_pulse_request[hand].store(packed, std::memory_order_release);
+#else
+			long long current = s_pulse_request[hand].load(std::memory_order_acquire);
+			for (;;)
+			{
+				if (current >= 0)
+				{
+					const int cur_amp = PulseAmp(current), new_amp = PulseAmp(packed);
+					if (cur_amp > new_amp || (cur_amp == new_amp && PulseMs(current) >= PulseMs(packed)))
+						return;
+				}
+				if (s_pulse_request[hand].compare_exchange_weak(current, packed, std::memory_order_acq_rel,
+						std::memory_order_acquire))
+					return;
+			}
+#endif
 		}
 
-		bool TakePendingPulseForTest(int hand, float* amplitude, float* seconds)
+		void DrainPulsesForTest()
+		{
+			for (int hand = 0; hand < 2; ++hand)
+			{
+				const long long pulse = s_pulse_request[hand].exchange(-1, std::memory_order_acq_rel);
+				if (pulse >= 0)
+					FirePulse(hand, pulse);
+			}
+		}
+
+		bool TakePendingPulseForTest(int hand, float* amplitude, float* seconds, u8* locus)
 		{
 			if (hand < 0 || hand >= 2)
 				return false;
-			const int pulse = s_pulse_request[hand].exchange(-1, std::memory_order_acq_rel);
+			const long long pulse = s_pulse_request[hand].exchange(-1, std::memory_order_acq_rel);
 			if (pulse < 0)
 				return false;
 			if (amplitude)
-				*amplitude = static_cast<float>(pulse & 0xFFFF) / 1000.f;
+				*amplitude = static_cast<float>(PulseAmp(pulse)) / 1000.f;
 			if (seconds)
-				*seconds = static_cast<float>(pulse >> 16) / 1000.f;
+				*seconds = static_cast<float>(PulseMs(pulse)) / 1000.f;
+			if (locus)
+				*locus = PulseLocus(pulse);
 			return true;
 		}
 
@@ -661,9 +980,51 @@ namespace VR
 			PublishSnapshot(snapshot);
 		}
 
+		void PublishSnapshotForTest(const VRInputSnapshot& snapshot, const PadXRActions::ActionState& padxr)
+		{
+			PublishSnapshot(PA::CoreSnapshotToPublish(snapshot, padxr), padxr);
+		}
+
+		void SetFrameControllerExtensionEnabled(bool enabled)
+		{
+			s_frame_extension_enabled = enabled;
+		}
+
+		void SetHandInteractionExtensionEnabled(bool enabled)
+		{
+			s_hand_interaction_enabled = enabled;
+		}
+
+		void NoteInteractionProfileChanged()
+		{
+			s_profile_changed.store(true, std::memory_order_release);
+		}
+
+		std::uint32_t TakePadXREvents()
+		{
+			return s_padxr_events.exchange(0, std::memory_order_acq_rel);
+		}
+
+		void NoteUiOpen(bool open)
+		{
+			s_ui_open_reported.store(true, std::memory_order_release);
+			s_ui_open.store(open, std::memory_order_release);
+		}
+
 		void ResetSnapshotForTest()
 		{
 			ResetSnapshot();
+			s_test_clock_offset_ms.store(0, std::memory_order_relaxed);
+		}
+
+		void PublishNeutralIfActiveForTest()
+		{
+			PublishNeutralIfActive();
+		}
+
+		void AdvanceClockForTest(s64 milliseconds)
+		{
+			s_test_clock_offset_ms.fetch_add(milliseconds, std::memory_order_relaxed);
 		}
 	}
 }

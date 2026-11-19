@@ -128,3 +128,8 @@ their VR features: `GAMES.md`. Headsets, the Steam Deck, the PS VR2 and how to
 connect each: `DEVICES.md`. (USB
 install-kit users also get a generated `INSTALL.txt` tailored to the exact
 kit contents.)
+
+## Credits
+
+- AudioXR (voice commands in VR): Johnathan Popa
+- README improvements: Ali Alam
